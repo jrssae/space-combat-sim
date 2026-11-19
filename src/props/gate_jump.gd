@@ -29,8 +29,14 @@ const LINE_UP_DONE_M: float = 200.0
 ## The run-in starts only once the ship is no longer flying away from the gate faster than this: one that has just come out of
 ## the gate crosses the departure point outbound, and must turn round first (M7-T28).
 const LINE_UP_RECEDE_MAX_MPS: float = 10.0
-## From 10 km at the autopilot's 300 m/s the line-up takes well under a minute; past this something is in the way.
+## The run-in starts only at a speed it can carry down to its own through the mouth (M8-T18): a faster ship passes the point,
+## turns and comes back as one that overshot.
+const RUN_IN_ENTRY_MAX_MPS: float = 300.0
+## From 10 km the line-up takes well under a minute from rest; past this something is in the way. A jump asked at speed gets
+## more (`line_up_timeout_for`): it may first overshoot and come back.
 const LINE_UP_TIMEOUT_S: float = 120.0
+## Extra line-up time per m/s of the ship's speed at the request, at its braking: stop, come back, slow again.
+const LINE_UP_PER_SPEED: float = 4.0
 ## The run-in is 1 440 m to the mouth and 1 200 m on down the funnel; at the slowest it waits for the vortex and then flies it in
 ## about 20 s.
 const RUN_IN_TIMEOUT_S: float = 45.0
@@ -64,6 +70,8 @@ var black_level: float = 0.0
 
 ## Gate-local z of the mouth (CLEARING measures from it).
 var arrival_z: float = 0.0
+## This jump's line-up limit, s (`start`).
+var line_up_timeout_s: float = LINE_UP_TIMEOUT_S
 
 var _out_s: float = 0.0  # seconds since the ship left the mouth, while clearing
 
@@ -76,12 +84,18 @@ func is_active() -> bool:
 	return state != State.IDLE
 
 
-## Starts a jump. False when one is under way.
-func start() -> PackedStringArray:
+## The line-up's limit for a ship asking at `speed_mps` that brakes at `decel_mps2`.
+static func line_up_timeout_for(speed_mps: float, decel_mps2: float) -> float:
+	return LINE_UP_TIMEOUT_S + LINE_UP_PER_SPEED * absf(speed_mps) / maxf(decel_mps2, 0.1)
+
+
+## Starts a jump, its line-up given `p_line_up_timeout_s`. Nothing when one is under way.
+func start(p_line_up_timeout_s: float = LINE_UP_TIMEOUT_S) -> PackedStringArray:
 	var out := PackedStringArray()
 	if state != State.IDLE:
 		return out
 	ended_why = ""
+	line_up_timeout_s = maxf(p_line_up_timeout_s, LINE_UP_TIMEOUT_S)
 	_enter(State.LINE_UP)
 	out.append(EV_START)
 	return out
@@ -103,11 +117,12 @@ func step(dt: float, local: Vector3, departure: Vector3, alive: bool, went_throu
 		State.LINE_UP:
 			if went_through:
 				return _abort("went through before lining up")
-			if local.distance_to(departure) <= LINE_UP_DONE_M and closing_mps >= -LINE_UP_RECEDE_MAX_MPS:
+			if local.distance_to(departure) <= LINE_UP_DONE_M and closing_mps >= -LINE_UP_RECEDE_MAX_MPS \
+					and closing_mps <= RUN_IN_ENTRY_MAX_MPS:
 				_enter(State.RUN_IN)
 				out.append(EV_RUN_IN)
-			elif state_s > LINE_UP_TIMEOUT_S:
-				return _abort("could not line up in %.0f s" % LINE_UP_TIMEOUT_S)
+			elif state_s > line_up_timeout_s:
+				return _abort("could not line up in %.0f s" % line_up_timeout_s)
 		State.RUN_IN:
 			if went_through:
 				_enter(State.FLASH)

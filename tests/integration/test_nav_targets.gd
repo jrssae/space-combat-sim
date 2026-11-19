@@ -276,3 +276,29 @@ func test_a_bay_prompts_and_holds_only_within_its_reach() -> void:
 	var near: Dictionary = await _hold_x(125)
 	assert_gt(near["peak"], 0.9, "the bar fills within reach")
 	assert_eq(near["runs"], 1)
+
+
+# M8-T18 (D84, AC14): the approach cue shows on the gate and both bays: on the status line (closing speed and state) and on the
+# target's box and panel (one HUD frame feeds both views).
+func test_the_gate_and_both_bays_show_the_approach_cue() -> void:
+	await _start()
+	var gate: Jumpgate = main.gates.gate()
+	for point: Targetable in [gate.targetable, station.docking_bay.targetable, station.cargo_bay.targetable]:
+		var basis: Basis = gate.global_basis if point == gate.targetable else station.global_basis
+		var at: Vector3 = point.global_position + basis * Vector3(0.0, 0.0, -6000.0)
+		main.ship.reset_to(Transform3D(Basis.looking_at(point.global_position - at, basis.y), at))
+		await _ticks(2)
+		assert_true(main.ship.targeting.select_id(point.get_instance_id()))
+		var inbound: Vector3 = (point.global_position - main.ship.global_position).normalized()  # the frame has moved to the ship
+		main.ship.linear_velocity = main.world.anchored_velocity() + inbound * 300.0
+		await _ticks(1)
+		var cue: ApproachCue = main.interactions.cue()
+		assert_not_null(cue, "%s: the cue" % point.display_name)
+		if cue == null:
+			continue
+		assert_almost_eq(cue.closing_mps, 300.0, 15.0, "%s: closing at 300 m/s against its rest" % point.display_name)
+		assert_string_contains(main.interactions.prompt_line(), "m/s  %s" % cue.state_name(), "%s: on the status line" % point.display_name)
+		var frame: HudFrame = HudLayout.compute(main._build_hud_input())
+		assert_true(frame.cue_present, "%s: on the target's box and panel" % point.display_name)
+		assert_eq(DebugConsole.registry.read("interact.cue")["value"], cue.state_name(), "%s: the interact provider" % point.display_name)
+		assert_gt(float(DebugConsole.registry.read("interact.reach_m")["value"]), 0.0)

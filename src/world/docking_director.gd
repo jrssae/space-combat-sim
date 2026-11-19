@@ -794,6 +794,13 @@ func _ready_plan() -> String:
 	return ""
 
 
+## The lane's direction into the bay, World (M8-T18: the approach cue judges a bay's approach by it); zero with no lane.
+func lane_axis() -> Vector3:
+	if not _ready_plan().is_empty():
+		return Vector3.ZERO
+	return (station().global_basis * _axis()).normalized()
+
+
 # The lane's direction into the bay, in the station's frame.
 func _axis() -> Vector3:
 	return (plan.mouth - (plan.dock_in[0]["at"] as Vector3)).normalized()

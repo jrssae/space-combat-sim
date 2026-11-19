@@ -5443,6 +5443,17 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   `can_request_jump` are the one rule for the hold of X and the console, and the refusal reads `out of range`). The autopilot
   leaves the ship's roll alone unless the ship is too wide for the mouth (`GateAutopilot.roll_up`), and the debug readout's
   target square is not drawn during a cinematic.
+- **At speed (M8-T18, D84).** The request range grows with the closing speed: `GateJumpRequest.range_m(closing, decel)` is the
+  base 2 km plus the 2 s hold flown at that speed plus the autopilot's slowdown to its 250 m/s run-in (planned at
+  `StoppingDistance.PLAN_MARGIN`), capped at 10 km (`data/jump/gate_request.json`); `JumpgateHost.request_range_m` feeds it the
+  ship's speed toward the gate against the anchor's velocity and its mains, and the gate's `TargetInteraction.reach` is that live
+  range. `GateAutopilot` takes the ship as it comes: the line-up brakes from any speed (up to `APPROACH_MPS`, 1.5 km/s, on the way
+  back from an overshoot), and a ship already lined up with the mouth (`lined_up`: in front of the departure point, within 150 m of
+  the axis, heading in within 15 degrees) arrives at the point at the run-in's speed instead of 80 m/s. The run-in starts only below
+  300 m/s (`GateJump.RUN_IN_ENTRY_MAX_MPS`): a faster ship passes the point, turns and comes back round the arms as M7-T28's does,
+  and the line-up's limit grows with the speed at the request (`GateJump.line_up_timeout_for`). The departure shot's keys come from
+  the predicted arrival at the mouth (`GateAutopilot.predicted_arrival_s` flies the run-in's pacing from the ship's speed, no sooner
+  than the vortex opens; `departure_shot_keys` closes in 2 s before it); `gate.run_in_eta_s` shows it.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
   acceptance pose of the still), `vortex [status|open|close|view]`; providers `gate`, `vortex`.
 - GPU (RX 6950 XT, headless gamescope): the vortex costs about 0.23 ms and one draw call, even filling the screen from inside; the
@@ -6211,6 +6222,16 @@ data/station/traffic.json        the run's ships and spacing, its kinds' weights
   request range (`GateJumpRequest.range_m()`, 2 km, M7-T28), each bay `Station.BAY_REACH_M` (2 km). Out of reach nothing is
   offered: no button prompt, no bar, and X is auto-track alone; the prompt line is a plain status (`JUMPGATE: 3.4 km — CLOSE TO
   2.0 km TO JUMP`, `InteractionHost.status_text`). Within reach it is `HOLD X / SHIFT / MOUSE 4: JUMP`.
+  The gate's reach is live (`TargetInteraction.reach`, `current_range_m`): farther out closing fast (M8-T18, §19.10).
+- **The approach cue (M8-T18, D84).** `ApproachCue` (pure, `src/hud/approach_cue.gd`) reads the ship against the selected
+  interaction target's rest (the anchor's velocity), its live reach, the ship's retros (`StoppingDistance`, a second's reaction)
+  and, for the docking bay, its lane (`DockingDirector.lane_axis`, a 60-degree cone): closing speed, time to reach, stopping
+  distance, the closest approach on the present course and one state, `ON COURSE`, `BRAKE` (the stopping distance is within two
+  seconds' flight of the room left), `OVERSHOOT` (it can no longer stop inside the reach) or `ADJUST COURSE` (the course misses the
+  reach or the lane). `InteractionHost.cue()` makes it once a frame for the HUD: the prompt or status line gets
+  `— +450 m/s  BRAKE: HOLD <brake keys>` while the ship moves; `HudFrame.cue_*` draws the readout and a bar (fill: stopping distance,
+  tick: room left) under the navigation diamond and on the cockpit's target panel. Providers: `interact.cue`, `cue_*`, `reach_m`;
+  `gate.cue`, `gate.reach_m`.
 - **Picking one.** `TargetInfo.interaction_kind` carries the interaction's kind. In the target menu's NAVIGATION ring an entry
   that offers an interaction is a target pick (`ACTION_TARGET`), a plain nav buoy still the waypoint (M5-T25), and the ring
   lists the places that offer an interaction first, then the nearest buoys (`TargetCategories._priority`), so a crowd of

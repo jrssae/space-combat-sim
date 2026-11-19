@@ -357,13 +357,14 @@ func _physics_process(delta: float) -> void:
 
 
 # A gate's interaction is the player's jump through it (M6-T14): offered while it is targeted and no jump runs, within the gate's
-# request range (2 km, M7-T28); farther out the HUD says how close to come and the hold does nothing.
+# request range (2 km at rest, M7-T28; more closing fast, M8-T18); farther out the HUD says how close to come and the hold does nothing.
 func _offer_jump(gate: Jumpgate) -> void:
 	if gate == null:
 		return
 	gate.targetable.interaction = TargetInteraction.new(&"jump", GateJumpPrompt.LABEL,
 			func() -> String: return gates.start_jump(gate),
 			func() -> bool: return gates.targeted_gate() == gate and not gates.jump.is_active(), GateJumpRequest.range_m())
+	gate.targetable.interaction.reach = func() -> float: return gates.request_range_m(gate)  # farther out closing fast (M8-T18)
 
 
 # Auto-track needs a target: with none selected the nearest hostile is taken; with none in range it switches itself off.
@@ -708,6 +709,7 @@ func _build_hud_input() -> HudInput:
 	if not docking.notice_text().is_empty():
 		input.ack_line = docking.notice_text()  # a docking's line (Control's offer, a wingman's call) takes the same place
 	input.prompt_line = interactions.prompt_line()
+	input.approach_cue = interactions.cue()
 	input.interact_progress = adapter.last.ui.interact_progress
 	if route_active():
 		input.status_line = instructor_path.status_line(instructor.display_name)

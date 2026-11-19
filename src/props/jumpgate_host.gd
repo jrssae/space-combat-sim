@@ -62,6 +62,7 @@ var _went_through: bool = false
 var _placed: bool = false
 var _assist_before: bool = true
 var _capability: ShipCapability = null
+var _capability_ship: Ship = null
 var _fade: ColorRect = null
 var _flash_colour: Color = JumpVortex.DEFAULT_FLASH
 ## The stand-alone points `vortex open` shows.
@@ -71,6 +72,8 @@ var _transit_console: TransitConsole = null
 var _player_pose: Variant = null  # the player's pose while last in sight, for the shots
 var _view_gate: Jumpgate = null
 var _view_point: JumpVortex = null
+## When the departure shot expects the ship at the mouth, s after the run-in's start (M8-T18); -1 before the first run-in.
+var run_in_eta_s: float = -1.0
 
 
 func _ready() -> void:
@@ -177,7 +180,7 @@ func locks_controls() -> bool:
 
 
 ## Why the player cannot ask `through` (the targeted gate by default) for a jump now, or "" when the gate takes the request
-## (M7-T28): a gate answers only a ship within `GateJumpRequest.range_m()` of its mouth. The one rule for every way of asking
+## (M7-T28): a gate answers only a ship within `request_range_m` of its mouth, which grows with the closing speed (M8-T18). The one rule for every way of asking
 ## (the hold of X, the console); the HUD shows the answer after the gate's name.
 func jump_refusal(through: Jumpgate = null) -> String:
 	var g: Jumpgate = through if through != null else targeted_gate()
@@ -187,7 +190,38 @@ func jump_refusal(through: Jumpgate = null) -> String:
 		return "the player's ship is lost"
 	if jump.is_active():
 		return "a jump is under way (%s)" % jump.state_name()
-	return GateJumpRequest.refusal(main.ship.global_position.distance_to(g.global_position))
+	return GateJumpRequest.refusal(main.ship.global_position.distance_to(g.global_position), request_range_m(g))
+
+
+## How far out `through` (the targeted gate by default) takes the player's request now: 2 km at rest, farther closing fast
+## (`GateJumpRequest.range_m`, at the ship's own braking).
+func request_range_m(through: Jumpgate = null) -> float:
+	var g: Jumpgate = through if through != null else targeted_gate()
+	if g == null or main == null or main.ship == null or not is_instance_valid(main.ship):
+		return GateJumpRequest.range_m()
+	return GateJumpRequest.range_m(closing_mps(g), ship_capability().a_main)
+
+
+## The player's speed toward `g`'s centre against the gate's rest, m/s (negative opening).
+func closing_mps(g: Jumpgate) -> float:
+	var ship: Ship = main.ship
+	var to: Vector3 = g.global_position - ship.global_position
+	return (ship.linear_velocity - main.world.anchored_velocity()).dot(to.normalized()) if to.length() > 1e-3 else 0.0
+
+
+## The approach cue on `g` (M8-T18): against its rest, its live request range, the ship's brake.
+func approach_cue(g: Jumpgate) -> ApproachCue:
+	var ship: Ship = main.ship
+	return ApproachCue.between(ship.global_position, ship.linear_velocity, g.global_position, main.world.anchored_velocity(),
+			request_range_m(g), ship_capability().a_retro)
+
+
+## The player's ship's thrust and braking (cached for the ship).
+func ship_capability() -> ShipCapability:
+	if _capability == null or _capability_ship != main.ship:
+		_capability = ShipCapability.from_spec(main.ship.spec, main.ship.get_layout())
+		_capability_ship = main.ship
+	return _capability
 
 
 ## Whether `start_jump(through)` would start a jump now.
@@ -206,7 +240,8 @@ func start_jump(through: Jumpgate = null) -> String:
 	_went_through = false
 	_placed = false
 	_flash_colour = g.vortex.flash_colour
-	_handle(jump.start())
+	var speed: float = (main.ship.linear_velocity - main.world.anchored_velocity()).length()
+	_handle(jump.start(GateJump.line_up_timeout_for(speed, ship_capability().a_main)))
 	return ""
 
 
@@ -235,17 +270,19 @@ func step_player(delta: float) -> FlightCommand:
 		return null
 	if not jump.autopilot_on():
 		return FlightCommand.new()
-	if _capability == null:
-		_capability = ShipCapability.from_spec(ship.spec, ship.get_layout())
+	var capability: ShipCapability = ship_capability()
+	var velocity: Vector3 = ship.linear_velocity - main.world.anchored_velocity()  # against the gate's rest
 	if jump.state == GateJump.State.LINE_UP:
 		var target: Vector3 = jump_gate.global_transform * GateAutopilot.line_up_target(local, jump_gate.departure_point)
-		return GateAutopilot.line_up(ship.global_position, ship.linear_velocity, ship.global_basis, target, _capability)
+		var arrive: float = GateAutopilot.line_up_arrival(local, jump_gate.global_basis.inverse() * velocity,
+				jump_gate.departure_point, jump_gate.departure_forward)
+		return GateAutopilot.line_up(ship.global_position, velocity, ship.global_basis, target, capability, arrive)
 	var axis: Vector3 = (jump_gate.global_basis * jump_gate.departure_forward).normalized()
 	var damageable: Damageable = Damageable.of(ship)
 	var up: Vector3 = GateAutopilot.roll_up(jump_gate.global_basis.y, jump_gate.fit.mouth_radius_m,
 			damageable.bounding_radius if damageable != null else 0.0)
-	return GateAutopilot.run_in(ship.global_position, ship.linear_velocity, ship.global_basis, jump_gate.global_position, axis,
-			up, jump_gate.vortex.open_in_s(JumpVortex.Direction.DEPARTURE), _capability)
+	return GateAutopilot.run_in(ship.global_position, velocity, ship.global_basis, jump_gate.global_position, axis,
+			up, jump_gate.vortex.open_in_s(JumpVortex.Direction.DEPARTURE), capability)
 
 
 func _handle(events: PackedStringArray) -> void:
@@ -256,7 +293,8 @@ func _handle(events: PackedStringArray) -> void:
 				main.ship.assist_on = true
 			GateJump.EV_RUN_IN:
 				jump_gate.send_departure(main.ship, _on_player_through)
-				_play(_departure_shot())
+				run_in_eta_s = _predicted_arrival_s()
+				_play(_departure_shot(run_in_eta_s))
 			GateJump.EV_THROUGH:
 				_park_away()
 			GateJump.EV_ASK_ARRIVAL:
@@ -320,13 +358,23 @@ func _play(shot: CinematicShot) -> void:
 
 
 # Beside and behind the ship as it lines up on the axis, then close behind it all the way in, at a fixed distance, so it is seen
-# shrinking as the funnel narrows round it, down to the black ring and its flash (M6-T22).
-func _departure_shot() -> CinematicShot:
-	return _shot(&"gate_departure", [
-		{"t": 0.0, "position": {"actor": "player", "offset": [45, 18, 95]}, "look_at": {"actor": "player", "offset": [0, 0, -300]}, "fov": 62},
-		{"t": 4.0, "position": {"actor": "player", "offset": [22, 9, 62]}, "look_at": {"actor": "player", "offset": [0, 0, -40]}, "fov": 55},
-		{"t": 60.0, "position": {"actor": "player", "offset": [22, 9, 62]}, "look_at": {"actor": "player", "offset": [0, 0, -40]}, "fov": 55},
-	])
+# shrinking as the funnel narrows round it, down to the black ring and its flash (M6-T22); timed from when the ship is expected
+# at the mouth, so it frames the run-in at any approach speed (M8-T18).
+func _departure_shot(arrival_s: float) -> CinematicShot:
+	return _shot(&"gate_departure", GateAutopilot.departure_shot_keys(arrival_s))
+
+
+# When the run-in starting now brings the ship to the mouth: from its distance to the mouth's plane and its speed along the axis,
+# paced as the run-in flies, no sooner than the vortex can open (from closed: the arms' activation, the flash and the unfolding).
+func _predicted_arrival_s() -> float:
+	var axis: Vector3 = (jump_gate.global_basis * jump_gate.departure_forward).normalized()
+	var mouth: Vector3 = jump_gate.global_transform * Vector3(0.0, 0.0, jump_gate.fit.mouth_z_m)
+	var to_plane: float = (mouth - main.ship.global_position).dot(axis)
+	var open_in: float = jump_gate.vortex.open_in_s(JumpVortex.Direction.DEPARTURE)
+	if not jump_gate.vortex.is_active():
+		open_in = GateActivation.DURATION_S + VortexTiming.FLASH_S + VortexTiming.GROW_S
+	var speed: float = (main.ship.linear_velocity - main.world.anchored_velocity()).dot(axis)
+	return GateAutopilot.predicted_arrival_s(to_plane, open_in, speed, ship_capability())
 
 
 # From in front of the gate on the vortex opening, then in on the funnel's base, where the ship will come out of its ring.
@@ -392,7 +440,7 @@ func _register_console() -> void:
 	_transit_console = TransitConsole.new(self)
 	_transit_console.register(registry)
 	registry.register_command(ConsoleCommand.new(&"gate",
-			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from within 2 km), cancel (end the jump), target (select it), approach [km] (put the player 6 km in front of it, facing it, or that many km), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
+			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from within 2 km, farther closing fast: state gate.reach_m), cancel (end the jump), target (select it), approach [km] (put the player 6 km in front of it, facing it, or that many km), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
 			ConsoleArg.string_optional(&"option", null),
 			ConsoleArg.float_optional(&"hold_s", CONSOLE_HOLD_S, 0.0, 600.0)] as Array[ConsoleArg]), _cmd_gate, self)
@@ -456,6 +504,12 @@ func _register_console() -> void:
 		&"distance_km": {"get": _distance_km, "unit": "km", "doc": "From the player to the gate's centre (-1 with no gate)"},
 		&"targeted": {"get": func() -> bool: return targeted_gate() != null, "doc": "The player has the gate targeted"},
 		&"prompt": {"get": jump_offered, "doc": "The jump is offered: the HUD shows X: REQUEST JUMP and X asks for it"},
+		&"reach_m": {"get": func() -> float: return request_range_m(gate()) if gate() != null else 0.0, "unit": "m",
+				"doc": "How far out the gate takes the jump request now: 2 km at rest, farther closing fast (M8-T18)"},
+		&"cue": {"get": func() -> String: return approach_cue(gate()).state_name() if gate() != null else "none",
+				"doc": "The approach cue on the gate: ON COURSE, BRAKE, OVERSHOOT or ADJUST COURSE (M8-T18)"},
+		&"run_in_eta_s": {"get": func() -> float: return run_in_eta_s, "unit": "s",
+				"doc": "When the last run-in expected the ship at the mouth, after its start; the departure shot is timed from it (-1: none yet)"},
 		&"vortex": {"get": func() -> String: return gate().vortex.phase_name() if gate() != null else "none",
 				"doc": "The vortex: closed, activate (the arms' lamps), flash, grow, open, closing or end_flash (its closing flash)"},
 		&"vortex_direction": {"get": func() -> String: return String(gate().vortex.direction_name()) if gate() != null else "none",

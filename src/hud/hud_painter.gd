@@ -281,6 +281,9 @@ func _draw_target_marks(f: HudFrame, s: float, w: float, labelled: bool) -> void
 			_text(label, Vector2(box.position.x, bottom + 20.0 * s), 15.0 * s, color)
 			if f.target_hull >= 0.0:
 				_bar(Rect2(Vector2(box.position.x, bottom + 27.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
+			if f.cue_present:
+				_text(f.cue_text, Vector2(box.position.x, bottom + 42.0 * s), 14.0 * s, f.cue_color)
+				_cue_bar(Rect2(Vector2(box.position.x, bottom + 49.0 * s), Vector2(maxf(box.size.x, 120.0 * s), 6.0 * s)), f, w)
 	elif f.edge_arrow_visible:
 		var p: Vector2 = f.edge_arrow_pos
 		var a: float = f.edge_arrow_angle
@@ -291,6 +294,8 @@ func _draw_target_marks(f: HudFrame, s: float, w: float, labelled: bool) -> void
 		_canvas.draw_colored_polygon(PackedVector2Array([tip, left, right]), Color(color.r, color.g, color.b, 0.85))
 		if labelled:
 			_text(label, p + Vector2(0.0, 28.0 * s), 14.0 * s, color, HORIZONTAL_ALIGNMENT_CENTER)
+			if f.cue_present:
+				_text(f.cue_text, p + Vector2(0.0, 48.0 * s), 13.0 * s, f.cue_color, HORIZONTAL_ALIGNMENT_CENTER)
 	if f.lead_visible:
 		var l: Vector2 = f.lead_pos
 		var r: float = 9.0 * s
@@ -306,10 +311,25 @@ func _draw_target_panel(f: HudFrame, surface: HudSurface, s: float, w: float) ->
 		_text("NO TARGET", at, 18.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.5))
 		return
 	_fitted(f.target_name, at, 20.0 * s, f.target_color, surface.target_text_width)
+	if f.cue_present:
+		# A place with an interaction (M8-T18): the range, then the cue's closing speed and state, and its bar where a hull would be.
+		_fitted("%s  %s" % [_range_text(f.target_range_m), f.cue_text], at + Vector2(0.0, 26.0 * s), 16.0 * s, f.cue_color,
+				surface.target_text_width)
+		_cue_bar(surface.target_bar_rect, f, w)
+		return
 	_fitted("%s  %+.0f m/s" % [_range_text(f.target_range_m), f.target_closing_mps], at + Vector2(0.0, 26.0 * s), 16.0 * s, LINE_COLOR,
 			surface.target_text_width)
 	if f.target_hull >= 0.0:
 		_bar(surface.target_bar_rect, f.target_hull, f.target_color, w)
+
+
+# The approach cue's bar (M8-T18): filled to the stopping distance, a tick at the room left; braking is due when the fill meets
+# the tick.
+func _cue_bar(rect: Rect2, f: HudFrame, w: float) -> void:
+	_bar(rect, f.cue_fill, f.cue_color, w)
+	if f.cue_mark >= 0.0:
+		var x: float = rect.position.x + rect.size.x * f.cue_mark
+		_canvas.draw_line(Vector2(x, rect.position.y - rect.size.y * 0.75), Vector2(x, rect.end.y + rect.size.y * 0.75), f.cue_color, w)
 
 
 static func _target_line(f: HudFrame) -> String:

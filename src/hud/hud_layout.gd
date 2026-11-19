@@ -227,6 +227,8 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 		f.target_relation = Factions.Relation.NEUTRAL
 		f.target_color = Factions.UNIDENTIFIED_COLOR
 		f.target_nav = false
+	if f.target_nav and input.approach_cue != null:
+		_cue(input.approach_cue, f)
 	var shown: Dictionary = project(input, t.position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.target_on_screen = true
@@ -407,6 +409,22 @@ static func roster_tag(behaviour: String, target: String = "", down: bool = fals
 	if behaviour == "attack" and not target.is_empty():
 		tag += " " + target
 	return tag
+
+
+# The approach cue's readout and bar for the target's box and panel (M8-T18): calm while on course, amber to brake or turn, red
+# when it can no longer stop in reach.
+static func _cue(cue: ApproachCue, f: HudFrame) -> void:
+	f.cue_present = true
+	f.cue_text = cue.readout_text()
+	f.cue_fill = cue.bar_fill()
+	f.cue_mark = cue.bar_mark()
+	match cue.state:
+		ApproachCue.State.OVERSHOOT:
+			f.cue_color = RED
+		ApproachCue.State.BRAKE, ApproachCue.State.ADJUST_COURSE:
+			f.cue_color = AMBER
+		_:
+			f.cue_color = f.target_color
 
 
 static func _wing(input: HudInput, f: HudFrame) -> void:

@@ -4,6 +4,8 @@ extends Node
 ## hold of X completes, and the HUD's prompt (`HOLD X / SHIFT / MOUSE 4: REQUEST JUMP`, the live bindings) and answer (`BABYLON 5 DOCKING BAY: NOT AVAILABLE`). Main's
 ## child, a thin adapter: the hold is `HoldInteract`'s, the action the target's own `TargetInteraction`.
 ##
+## The selected target's approach cue (M8-T18, `ApproachCue`) rides on the same line and the HUD's target box.
+##
 ## Console: provider and command `interact`.
 
 const NODE_NAME: String = "Interactions"
@@ -31,7 +33,7 @@ static func prompt_text(interaction: TargetInteraction, buttons: String = "X") -
 ## The status for one out of reach: no button, only how far it is and how close to come (`JUMPGATE: 3.4 km — CLOSE TO 2.0 km
 ## TO JUMP`).
 static func status_text(target_name: String, distance_m: float, interaction: TargetInteraction) -> String:
-	return "%s: %s — CLOSE TO %s TO %s" % [target_name, range_text(distance_m), range_text(interaction.range_m), interaction.label]
+	return "%s: %s — CLOSE TO %s TO %s" % [target_name, range_text(distance_m), range_text(interaction.current_range_m()), interaction.label]
 
 
 ## A distance as the status reads it: metres under 1 km, else km with one decimal.
@@ -93,6 +95,19 @@ func _distance_to_selected() -> float:
 	return main.ship.global_position.distance_to(target.global_position)
 
 
+## The approach cue on the selected target while it offers an interaction (M8-T18), else null: against the target's rest (the
+## gate and the bays sit at the anchor's), its live reach, the ship's brake, and a docking bay's lane.
+func cue() -> ApproachCue:
+	var interaction: TargetInteraction = _offered_anywhere()
+	if interaction == null:
+		return null
+	var target: Targetable = selected()
+	var ship: Ship = main.ship
+	var lane: Vector3 = main.docking.lane_axis() if interaction.kind == &"dock" and main.docking != null else Vector3.ZERO
+	return ApproachCue.between(ship.global_position, ship.linear_velocity, target.global_position, main.world.anchored_velocity(),
+			interaction.current_range_m(), main.gates.ship_capability().a_retro, lane)
+
+
 ## Runs what the hold asked for. Returns "" or why it did not run, which the HUD shows for a few seconds.
 func run_offered() -> String:
 	var interaction: TargetInteraction = offer()
@@ -110,7 +125,7 @@ func run_offered() -> String:
 
 
 ## The HUD's prompt line: an answer while it shows, else the button prompt within reach, else a plain status saying how close to
-## come (no button: the maintainer's rule), else "".
+## come (no button: the maintainer's rule), else ""; the approach cue's closing speed and state after it while the ship moves.
 func prompt_line() -> String:
 	if _notice_left_s > 0.0:
 		return _notice
@@ -118,9 +133,11 @@ func prompt_line() -> String:
 	if interaction == null:
 		return ""
 	var distance: float = _distance_to_selected()
+	var approach: ApproachCue = cue()
+	var suffix: String = approach.status_suffix(BindingNames.of_action(InputAdapter.BRAKE)) if approach != null else ""
 	if interaction.in_reach(distance):
-		return prompt_text(interaction, BindingNames.of_action(InputAdapter.AUTOTRACK))
-	return status_text(selected().display_name, distance, interaction)
+		return prompt_text(interaction, BindingNames.of_action(InputAdapter.AUTOTRACK)) + suffix
+	return status_text(selected().display_name, distance, interaction) + suffix
 
 
 # --- console -----------------------------------------------------------------------------------------------------------
@@ -137,6 +154,20 @@ func _register_console() -> void:
 		&"hold_s": {"get": func() -> float: return main.adapter.interact_hold_s if main != null else 0.0, "unit": "s",
 				"doc": "How long the hold takes (settings.interact_hold_s)"},
 		&"prompt": {"get": prompt_line, "doc": "The HUD's prompt or answer line"},
+		&"reach_m": {"get": func() -> float: return _offered_anywhere().current_range_m() if _offered_anywhere() != null else 0.0,
+				"unit": "m", "doc": "The selected target's live reach: the bays 2 km, the gate farther out closing fast (M8-T18)"},
+		&"cue": {"get": func() -> String: return cue().state_name() if cue() != null else "none",
+				"doc": "The approach cue: ON COURSE, BRAKE, OVERSHOOT, ADJUST COURSE, or none with no interaction target (M8-T18)"},
+		&"cue_closing_mps": {"get": func() -> float: return cue().closing_mps if cue() != null else 0.0, "unit": "m/s",
+				"doc": "The cue's closing speed against the target's rest"},
+		&"cue_stop_m": {"get": func() -> float: return cue().stopping_m if cue() != null else 0.0, "unit": "m",
+				"doc": "The cue's stopping distance with the brake, a second's reaction included"},
+		&"cue_room_m": {"get": func() -> float: return cue().room_m() if cue() != null else 0.0, "unit": "m",
+				"doc": "The room the cue measures: to the reach on the present course, or inside it to where the ship would leave (INF: it misses)"},
+		&"cue_closest_m": {"get": func() -> float: return cue().closest_m if cue() != null else 0.0, "unit": "m",
+				"doc": "The closest approach to the target on the present course"},
+		&"cue_time_s": {"get": func() -> float: return cue().time_to_reach_s if cue() != null else 0.0, "unit": "s",
+				"doc": "Time to the reach on the present course (INF: it misses)"},
 		&"runs": {"get": func() -> int: return runs, "doc": "Interactions run"},
 		&"last": {"get": func() -> String: return "%s: %s" % [last_kind, last_result if not last_result.is_empty() else "ran"] \
 				if runs > 0 else "none", "doc": "The last interaction run and its answer"},

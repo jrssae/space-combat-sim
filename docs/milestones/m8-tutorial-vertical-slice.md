@@ -278,7 +278,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC11 | Cost: on the maintainer's GPU, the squadron launch, the tour and the raid: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; the tick inside the 60 Hz budget during the raid | A | |
 | AC12 | Docs and the suite: `docs/architecture.md` §21 as built, a `docs/playtest.md` M8 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
 | AC13 | (H) The maintainer plays it: the tutorial start to finish, the squadron launch, the approach cues and a fast gate jump, docking and relaunch, the escort with the strike carrier, the Battle Wagon, the audio, the release build | H | |
-| AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A | |
+| AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A |  **Met** (T18, 2026-11-19; whether the cue reads in time and a fast jump looks right is (H), `docs/playtest.md`) |
 | AC15 | Flights and orders (D85): the player commands only a flight of two wingmen where the mission says so; AI flights of three cover each other and stay within their cohesion distance through a seeded headless fight; ships in formation fire at targets in reach; the two hold-fire orders hold formation or position without firing and are lifted by any other order (tests for each, pad menu and keyboard), native kept 1 and 6 threads identical | A | **Met** (T19, 2026-11-18) |
 | AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | **Met** (T20, 2026-11-18) |
 | AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | **Met** (T21, 2026-11-19) |
@@ -327,7 +327,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | done |
 | T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | not started |
 | T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Opus | Measurement on the maintainer's machine; the budget call | not started |
-| T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Opus | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | in progress |
+| T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Opus | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | done |
 | T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | done |
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | done |
@@ -850,6 +850,18 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   several speeds; `docs/playtest.md` gets the (H) checks (the cue reads in time to brake; a fast jump looks right).
 - **Notes:** docking's own approach (T06) uses the same cue; if T06 has landed first, this task adds the cue to the bays.
 - **Done when:** AC14.
+- **Done (2026-11-19):** `ApproachCue` (pure, `src/hud/approach_cue.gd`): closing speed, time to reach, stopping distance
+  (`StoppingDistance`, retros, 1 s reaction), closest approach and ON COURSE / BRAKE / OVERSHOOT / ADJUST COURSE (the docking bay's
+  lane a 60-degree cone); `InteractionHost.cue()` puts it on the prompt/status line (`— +450 m/s  BRAKE: HOLD <brake keys>`) and
+  `HudFrame.cue_*` under the navigation diamond and on the cockpit's target panel (fill: stopping distance, tick: room left).
+  `GateJumpRequest.range_m(closing, decel)` (2 km + the 2 s hold + the slowdown to 250 m/s, capped at 10 km by data) is the gate's
+  live `TargetInteraction.reach`; `GateAutopilot` brakes from any speed (line-up up to 1.5 km/s back from an overshoot) and a lined-up
+  ship arrives at the run-in's speed; the run-in starts below 300 m/s, the line-up's limit grows with the speed; the departure shot is
+  keyed from `predicted_arrival_s` (the run-in's pacing from the ship's speed). Providers `interact.cue*`/`reach_m`,
+  `gate.reach_m`/`cue`/`run_in_eta_s`; `info.md`, architecture §19.10/§20.5, `docs/playtest.md` (H) checks. Tests (staged scratch
+  copy): 145/145 over the cue, reach, gate jump, HUD layout, nav, docking and jumpgate files, with `test_gate_jump_at_speed` jumps
+  at 200 m/s, 1 km/s and 3 km/s (slow file; overshoots to 152 km and back) arriving through the mouth within 0.1 s of the predicted
+  time; compile check clean.
 
 ### M8-T19 Flights of three and the hold-fire orders
 - **Goal:** AC15 (D85).

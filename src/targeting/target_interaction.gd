@@ -12,6 +12,9 @@ var kind: StringName = &""
 var label: String = ""
 ## How close the ship must be to the target for the hold to be offered, m (maintainer: no button prompt out of range). INF = any.
 var range_m: float = INF
+## The live reach when it changes with the approach (M8-T18: the gate's grows with the closing speed): `func() -> float`. Unset =
+## `range_m`.
+var reach: Callable = Callable()
 ## Whether it is offered now, its reach aside (the jump's state): `func() -> bool`. Unset = whenever the target is selected.
 var offered: Callable = Callable()
 ## Runs it: `func() -> String`, "" or why it could not. Unset = a placeholder.
@@ -32,9 +35,14 @@ func is_offered() -> bool:
 	return not offered.is_valid() or bool(offered.call())
 
 
+## How close the ship must be now, m.
+func current_range_m() -> float:
+	return float(reach.call()) if reach.is_valid() else range_m
+
+
 ## Whether a ship `distance_m` from the target is close enough to hold for it.
 func in_reach(distance_m: float) -> bool:
-	return distance_m <= range_m
+	return distance_m <= current_range_m()
 
 
 ## Whether it does anything yet (false for the bays' placeholders).

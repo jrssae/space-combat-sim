@@ -760,3 +760,28 @@ func test_the_speed_and_its_direction_are_read_against_the_reference() -> void:
 	assert_eq(HudPainter.altitude_text(HudLayout.compute(input)), "")
 	input.has_reference = false
 	assert_almost_eq(HudLayout.compute(input).speed_mps, input.own_velocity.length(), 1e-2, "no reference: the frame's speed")
+
+
+# --- Approach cue (M8-T18) -------------------------------------------------------------------------------------------
+
+
+func test_a_navigation_target_with_a_cue_carries_its_readout_bar_and_colour() -> void:
+	var input := _hud_input()
+	var gate: TargetReadout = _target(Vector3(0.0, 0.0, -19000.0))
+	gate.role = Targetable.Role.BEACON
+	gate.hull_fraction = -1.0
+	input.target = gate
+	input.approach_cue = ApproachCue.read(Vector3(0.0, 0.0, -19000.0), Vector3(0.0, 0.0, -1000.0), 2000.0, 30.0)
+	var f: HudFrame = HudLayout.compute(input)
+	assert_true(f.cue_present)
+	assert_eq(f.cue_text, "+1000 m/s  BRAKE")
+	assert_eq(f.cue_color, HudLayout.AMBER, "brake reads amber")
+	assert_between(f.cue_mark, 0.0, 1.0)
+	assert_gt(f.cue_fill, 0.0)
+	input.approach_cue = ApproachCue.read(Vector3(0.0, 0.0, -5000.0), Vector3(0.0, 0.0, -1000.0), 2000.0, 30.0)
+	assert_eq(HudLayout.compute(input).cue_color, HudLayout.RED, "overshoot reads red")
+	input.approach_cue = ApproachCue.read(Vector3(0.0, 0.0, -40000.0), Vector3(0.0, 0.0, -100.0), 2000.0, 30.0)
+	assert_eq(HudLayout.compute(input).cue_color, TargetCategories.COLORS[TargetCategories.Category.NAVIGATION], "on course: the target's own")
+	var raider: TargetReadout = _target(Vector3(0.0, 0.0, -500.0))
+	input.target = raider
+	assert_false(HudLayout.compute(input).cue_present, "a ship never shows the cue")

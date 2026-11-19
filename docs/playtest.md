@@ -1289,3 +1289,22 @@ wagon/` (`look_sheet_final.png` beside the reference, `option_sheet.png`, `weapo
 - [ ] **Free flight (H):** about a quarter of the raids come with it (`data/encounters/free_flight.json`, `wagon_share`).
 - [ ] **The escort (H, AC8):** the last wave (10 raiders) comes with it instead of a third strike carrier; destroying it
       counts for "Destroy a raider carrier". Say if its missiles make the end of the escort too hard.
+
+# Play-testing approach cues and fast gate jumps (M8-T18)
+
+A navigation target that offers an action (the jumpgate, the docking and cargo bays) now carries an approach cue: under its
+diamond (and on the cockpit's right screen) the closing speed and one of `ON COURSE`, `BRAKE` (amber), `OVERSHOOT` (red) or
+`ADJUST COURSE` (amber), with a bar whose fill is your stopping distance and whose tick is the room left to the target's reach;
+braking is due when the fill meets the tick. The HUD's line under the status says the same (`— +450 m/s  BRAKE: HOLD` and the brake's
+live keys). `state interact` shows the numbers (`cue`, `cue_stop_m`, `cue_room_m`, `cue_closest_m`). The gate offers the jump
+farther out the faster you close (`state gate.reach_m`: 2 km at rest, about 9 km at 500 m/s, at most 10 km).
+
+- [ ] **(H) The cue reads in time to brake:** `goto jumpgate`, target it, fly at it at 300 to 500 m/s and brake when the cue says
+      BRAKE: you should stop inside the reach without guessing. Do the same at both bays (`goto` a bay, back off 8 km, come in).
+      Say if BRAKE comes too early or too late, and if the bar and its tick read at a glance in both views (chase and cockpit).
+- [ ] **(H) Overshoot and adjust:** come in too fast (1 km/s and more): the cue reads OVERSHOOT. Fly past the target's side: it reads
+      ADJUST COURSE. A bay approached from round the station's side reads ADJUST COURSE until you are in front of its lane.
+- [ ] **(H) A fast jump looks right:** ask for the jump at 200 m/s, 1 km/s and 3 km/s (`gate approach 10`, then full mains on
+      the gate). Slow: the ship carries its speed straight down the axis into the run-in. Fast: it flies past the gate, turns, comes
+      back round the arms and lines up. Every time the departure shot closes in behind the ship just before the mouth; say if any
+      run-in looks odd or the shot misses the moment.
