@@ -32,6 +32,14 @@ extends AiBehaviour
 ## leader turned about) is come round to over the leader's top from its left and under it from its right (`_swing`), the aim
 ## keeps off the line a leader burning back toward the ship comes along (`_clear_of_burn`), and every friendly ship is kept
 ## off the wish (`_kept_apart`).
+##
+## Shooting from the slot (M8-T19, D85): within `ALIGN_RANGE_M` of its slot a pilot that attacks (`gunner`, its attack
+## behaviour; not a passive one) turns its nose on the nearest hostile ship inside its guns' range and within `FIRE_ARC_DEG`
+## of the leader's nose, leads it as an attack does and holds the trigger on the attack's own gate (the lead inside the cone,
+## no friend in the lane), while the thrusters keep the slot. A hold-fire order (`AiContext.holds_fire`) stops it.
+##
+## Hold position (M8-T19): under that order the behaviour scores with or without a leader and brakes, so the ship stops
+## against the reference where it is and stays.
 
 const SCORE: float = 0.25
 const STAND_BY_SCORE: float = 0.1
@@ -64,13 +72,24 @@ const SWING_DONE_RAD: float = 0.35
 const SWING_REACH: float = 3.0
 const SWING_CLEAR_M: float = 50.0
 const SWING_BURN_MPS2: float = 8.0
+## A ship in its slot turns its guns on a hostile this far off its leader's nose at most.
+const FIRE_ARC_DEG: float = 40.0
 
 ## The closure cap beyond `FAR_RANGE_M`: the profile's cruise + `FAR_EXTRA_MPS`.
 var far_closure_mps: float = 200.0
 ## Distance from the slot (from the leader on the link) at the last `think`, m; -1 before it.
 var slot_error_m: float = -1.0
 
+## The pilot's attack behaviour, whose fire gate and aim error a shot from the slot uses (`AiPilot.add_behaviour` sets it);
+## null for a pilot that never attacks.
+var gunner: BehaviourAttack = null
+## Whether the trigger is held from the slot, and whether the ship is stopped under the order to hold position.
+var firing: bool = false
+var holding: bool = false
+
 var _on_link: bool = false
+# The hostile the nose follows from the slot (0 none).
+var _fire_target_id: int = 0
 # The axis the ship comes round its leader about, kept until it is round (`_swinging`).
 var _swing_axis: Vector3 = Vector3.ZERO
 var _swinging: bool = false
@@ -94,6 +113,9 @@ func reset() -> void:
 	_last_leader_id = 0
 	_last_s = -INF
 	_swinging = false
+	_fire_target_id = 0
+	firing = false
+	holding = false
 
 
 func enter() -> void:
@@ -101,6 +123,8 @@ func enter() -> void:
 
 
 func score(ctx: AiContext) -> float:
+	if ctx.order == AiContext.Order.HOLD_POSITION:
+		return SCORE  # no leader needed: the ship stops where it is
 	if not ctx.has_slot or (ctx.leader == null and ctx.leader_link_position == null):
 		return 0.0
 	return STAND_BY_SCORE if ctx.has_attackable() else SCORE
@@ -115,6 +139,12 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 	var slot_accel := Vector3.ZERO
 	var leader_accel := Vector3.ZERO
 	_on_link = false
+	_fire_target_id = 0
+	firing = false
+	holding = ctx.order == AiContext.Order.HOLD_POSITION
+	if holding:
+		cmd.flight.brake = true  # the brake stops the ship against the reference and keeps it there
+		return cmd
 	if leader != null:
 		slot = Formation.slot_point(leader.position, leader.forward, leader.up, ctx.slot_offset)
 		slot_velocity = leader.velocity
@@ -156,17 +186,59 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 		var a_need: Vector3 = (v_des - p.velocity) / PilotSteering.HORIZON_S
 		var nose: Vector3 = PilotSteering.lean_toward(leader.forward, a_need, minf(p.capability.a_rcs.x, p.capability.a_rcs.y),
 				_max_lean_rad)
-		var rot: Vector3 = PilotSteering.face(p.basis, nose, rate)
+		var shot: Variant = _shot(ctx, leader.forward)
+		var rot: Vector3 = PilotSteering.face(p.basis, shot as Vector3 if shot != null else nose, rate)
 		rot.z = PilotSteering.align_roll(p.basis, leader.up, rate)
 		cmd.flight.rot = rot
 		seek_velocity(cmd.flight, p, v_des, true)  # the nose is the leader's: every axis works at once
+		cmd.combat.fire = firing
 	else:
 		cmd.flight.rot = PilotSteering.face(p.basis, _heading(p.velocity, v_des, leader), rate)
 		seek_velocity(cmd.flight, p, v_des)
 	return cmd
 
 
+func target_id() -> int:
+	return _fire_target_id if _fire_target_id != 0 else PilotBrain.TARGET_NONE
+
+
+# Where the nose goes for a shot from the slot (see the class notes), or null with no hostile in reach and in the arc
+# about the leader's nose `forward`; `firing` says whether the trigger is held.
+func _shot(ctx: AiContext, forward: Vector3) -> Variant:
+	if gunner == null or gunner._passive or ctx.holds_fire():
+		return null
+	var p: Perception = ctx.perception
+	var tactics: RaiderTactics = gunner.brain.tactics
+	var cos_arc: float = cos(deg_to_rad(FIRE_ARC_DEG))
+	var best: int = -1
+	var best_m: float = INF
+	for i: int in ctx.hostiles.size():
+		var range_m: float = ctx.hostile_ranges[i]
+		if range_m < 1e-3 or range_m >= tactics.fire_range_m or range_m >= best_m:
+			continue
+		if ctx.hostile_offsets[i].dot(forward) < range_m * cos_arc:
+			continue
+		best = i
+		best_m = range_m
+	if best < 0:
+		return null
+	var c: Contact = ctx.hostiles[best]
+	var lead: Dictionary = InterceptMath.solve(p.position + p.muzzle_offset, p.velocity, c.position, c.velocity,
+			p.muzzle_speed_mps, p.weapon_lifetime_s)
+	var lead_dir: Vector3 = (lead["aim_dir"] as Vector3) if bool(lead["ok"]) else ctx.hostile_offsets[best] / best_m
+	var aim: Vector2 = gunner.aim_offset_at(p.now_s)
+	if aim != Vector2.ZERO:
+		var right: Vector3 = lead_dir.cross(Vector3.UP if absf(lead_dir.dot(Vector3.UP)) < 0.95 else Vector3.RIGHT).normalized()
+		lead_dir = (lead_dir + right * tan(aim.x) + right.cross(lead_dir) * tan(aim.y)).normalized()
+	var cone_deg: float = minf(tactics.fire_cone_deg, rad_to_deg(atan(tactics.fire_miss_m / best_m)))
+	_fire_target_id = c.id
+	firing = rad_to_deg(PilotSteering.angle_to(p.basis, lead_dir)) < cone_deg and FireLane.clear_seen(p, p.forward(), best_m, c.id)
+	return lead_dir
+
+
 func describe() -> Dictionary:
+	if holding:
+		return {"state": "holding"}
 	var state: String = "in slot"
 	if slot_error_m < 0.0 or slot_error_m > ALIGN_RANGE_M:
 		state = "joining"

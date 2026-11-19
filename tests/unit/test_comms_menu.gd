@@ -56,6 +56,32 @@ func test_the_wing_orders_sit_up_right_down_left_in_the_order_of_keys_1_to_4() -
 	assert_eq(without[6]["label"], "COVER ME")
 
 
+func test_the_hold_fire_orders_are_on_the_wing_orders_page_wherever_the_ring_puts_them() -> void:
+	# M8-T19 (D85). The page lists them; the ring lays them out, so the stick is pointed at the slice the ring gave each.
+	var menu := CommsMenu.new()
+	menu.set_root_page("WING ORDERS", CommsMenu.wing_orders())
+	var expected: Dictionary = {"FORM UP": AiContext.Order.FORM_HOLD_FIRE, "HOLD POSITION": AiContext.Order.HOLD_POSITION}
+	for label: String in expected:
+		menu.open()
+		var slots: Array[Dictionary] = menu.radial.slots()
+		var at: int = -1
+		for i: int in slots.size():
+			if str(slots[i].get("label", "")) == label:
+				at = i
+		assert_gt(at, -1, "%s is on the ring" % label)
+		assert_eq(slots[at]["sub"], "hold fire")
+		var angle: float = RadialMenu.slice_angle(at, menu.radial.slice_count())
+		menu.radial.point(Vector2(sin(angle), cos(angle)))
+		assert_eq(menu.radial.highlight(), at, "the stick finds %s" % label)
+		var picked: Dictionary = menu.select()
+		assert_eq(picked["payload"], expected[label], label)
+		assert_false(menu.is_open())
+	# The four orders of keys 1-4 are still found on the compass points.
+	menu.open()
+	menu.radial.point(Vector2.RIGHT)
+	assert_eq(menu.radial.highlighted()["payload"], AiContext.Order.FORM_ON_ME)
+
+
 func test_select_returns_the_lit_entry_and_closes() -> void:
 	var menu: CommsMenu = _menu()
 	menu.open()

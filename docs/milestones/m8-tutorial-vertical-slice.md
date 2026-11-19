@@ -279,7 +279,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC12 | Docs and the suite: `docs/architecture.md` §21 as built, a `docs/playtest.md` M8 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
 | AC13 | (H) The maintainer plays it: the tutorial start to finish, the squadron launch, the approach cues and a fast gate jump, docking and relaunch, the escort with the strike carrier, the Battle Wagon, the audio, the release build | H | |
 | AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A | |
-| AC15 | Flights and orders (D85): the player commands only a flight of two wingmen where the mission says so; AI flights of three cover each other and stay within their cohesion distance through a seeded headless fight; ships in formation fire at targets in reach; the two hold-fire orders hold formation or position without firing and are lifted by any other order (tests for each, pad menu and keyboard), native kept 1 and 6 threads identical | A | |
+| AC15 | Flights and orders (D85): the player commands only a flight of two wingmen where the mission says so; AI flights of three cover each other and stay within their cohesion distance through a seeded headless fight; ships in formation fire at targets in reach; the two hold-fire orders hold formation or position without firing and are lifted by any other order (tests for each, pad menu and keyboard), native kept 1 and 6 threads identical | A | **Met** (T19, 2026-11-18) |
 | AC16 | GPU memory (D86): the overlay shows VRAM used in GB and as a percentage of the card on the maintainer's GPU, matching `mem_info_vram_used` within a refresh; `state render` reports the three values; with no driver total it shows the game's share and `total unknown` (unit tests on fake sysfs files) | A | **Met** (T20, 2026-11-18) |
 | AC17 | Fonts (D87): both fonts in the repo with their `docs/third-party.md` entry; every UI text uses one of them (a test finds no other font); ASCII and the UI's symbols draw on the GPU; the maintainer approved the look sheet | A | |
 | AC18 | Gamepad detection (D88): the cause written down; joypads logged at start and hotplug, the connect, disconnect and none-found notices, `joypads` in `info.md`; the troubleshooting section; the maintainer's pad seen by the game in its working mode (H) | A | |
@@ -328,7 +328,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T15 | E | Linux x86_64 release build from the pinned export templates (Q9) | T14 | Sonnet | Templates by SHA-256, the native library and assets packed, an export smoke test | not started |
 | T16 | E | Performance and the GPU check: the squadron launch, the tour and the raid | T05, T09 | Opus | Measurement on the maintainer's machine; the budget call | not started |
 | T18 | B | Approach cues for navigation targets with an interaction (brake, overshoot, adjust course), and the jumpgate's reach, autopilot and cinematic scaled to the player's speed (D84; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | - (shared with T06) | Opus | Relative-motion maths on the HUD, and a gate run-in that starts from any speed with its shot timed to match | not started |
-| T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | in progress |
+| T19 | D | Flights of three: the player commands two wingmen, AI flights of three cover each other and stay together, every ship in formation may fire, and two new orders (form up and hold fire; hold position and hold fire) (D85; maintainer, 2026-11-18; numbered last because it was added after the others had numbers) | T13 | Fable | Native flight cohesion and mutual cover, two orders through the comms menu and keys, parity | done |
 | T20 | D | GPU memory in use on the debug overlay, in GB and as a percentage of the card (D86; maintainer 2026-11-18; numbered last because it was added after the others had numbers) | - | Fable | Driver sysfs reads off the frame path, a fallback, the overlay and `state render` | done |
 | T21 | D | The game's fonts: Babylon5 for titles and headlines, Babylon5Credits for body text and the HUD, on all UI text (D87; maintainer, 2026-11-18; numbered last) | - | Fable | A theme over every screen and the HUD's own drawing, a symbol-encoded cmap, a look sheet first | in progress |
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
@@ -751,6 +751,45 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   dialog's acknowledgements, `wing order`, `info.md`, Rust and GUT tests, a seeded fight.
 - **Notes:** after T13 (both change `Wing` slots). T05 depends on T19.
 - **Done when:** AC15.
+- **Done (2026-11-18):** M8-T19 flights of three and the hold-fire orders, as built in `docs/architecture.md` §21.2.
+  - **The player's flight.** A scenario's `wings[].flight: true` on the wing the player leads keeps it at two wingmen
+    (`WingDirector.command_flight`); orders, DOCK, the roster and the replenish reach those two only. The rest of the squadron,
+    a scenario's members or the nine `launch wing` sends, flies as flights from 2 on (`next_flight_place`, `take_place`).
+  - **AI flights.** A squadron of flights is several `Wing`s of one name (`Wing.flight`, `first_number`: ALPHA 4 leads 5 and 6),
+    so slots, gap closing, lead succession and docking work per flight. A station's own wings launch as four flights of
+    three (they were one wing of twelve); later leads hold a slot on the squadron's lead while there is nothing to fight.
+    Numbers in `data/wings/flights.json` (`FlightRules`): size 3, cohesion 2 500 m, rejoin 1 000 m.
+  - **Native (mirrored in the GDScript reference).** `Context.cover` (a hostile with a flight-mate selected outranks every
+    other target; a wingman otherwise takes its lead's target), `cohesion_m`/`rejoined_m` (a strayed wingman attacks nothing
+    and flies back to its slot), `ScsBrains.set_flight`. **Formation fires:** before, nothing let a ship in formation shoot
+    (FORM ON ME gated every attack and the formation behaviour never held the trigger); now a ship within 150 m of its slot
+    turns its guns on the nearest hostile in range and within 40 degrees of its leader's nose and fires on the attack's own
+    gate, the thrusters keeping the slot.
+  - **Two orders.** `AiContext.Order.FORM_HOLD_FIRE` (`form_hold`, key 7, FORM UP on the comms ring) and `HOLD_POSITION`
+    (`hold`, key 8, HOLD POSITION; the formation behaviour brakes, so the ship stops against the reference and stays); any
+    other order lifts them; acknowledged `FORMING UP, HOLDING FIRE` and `HOLDING POSITION, HOLDING FIRE`; a held wingman's
+    roster row reads HOLD. The comms page lists them by order and names no angle (M8-T24 can resize the ring).
+    `wing order form_hold|hold`, `wing.flights`, `info.md`, `docs/playtest.md` ((H) items for the look and feel).
+  - **Measured (`test_flight_fight`, two flights against six raiders, 120 s, seeded).** With the rules the farthest a wingman
+    got from its lead was 1.1 km and a mate under attack was covered 98 % of the time; the same ships as plain wings: 5.3 km
+    and 79 %. One thread equals six and threaded equals `delayed`, bit for bit over 2 400 ticks.
+  - **No parity recording moved**: `brain_tolerance`, `flight_parity_fight`, `weapon_rows_battle`, `bolt_rows`, `core_state`,
+    `driver_step` and `row_commands` pass unchanged (the new rules need a flight's flags, a hold order, or a ship on its slot
+    with a hostile in reach under an order that forbids attacking).
+  - **`test_wing_gaps`.** No ram in the wing on any seed (the ram M8-T06 saw on seed 2 did not recur). Since the wing shoots
+    back from its slots, seed 3's fight now runs to its time limit with ALPHA 9 chased 10.4 km off by one raider (evading the
+    whole time, as FORM ON ME always allowed); the test gives such a stray the time its way back takes before it checks slots.
+  - **Tests (staged copy, GUT_SLOW=1).** Rust 253 passed, 0 failed (five new in
+    `brain_behaviours::tests`); import clean, 944 scripts compile; GUT 58 files, 662 tests, 661 passing, 0 failing, 1 pending
+    (`test_dogfight`'s balance case). New: `test_flights` 4, `test_flight_fight` 3, `test_flight_rules` 3; grown:
+    `test_wing_orders` 14, `test_comms_menu_input` 14, `test_comms_menu` 10, `test_wing` 28, `test_brain_think_parity` 6 (the
+    native brain and its GDScript twin bit for bit on every new rule), `test_input_map` 13; kept green: `test_wing_gaps` 6,
+    `test_docking` 11, `test_wing_away` 7, `test_launch_bay` 16, `test_station_traffic` 7 (both updated for four flights),
+    `test_station_wing_follow` 11 and the recorded fights.
+  - **Open, for the maintainer.** (H) the look of shots from the slot, the spacing of a squadron's flights and the two ring
+    labels (`docs/playtest.md`). A wingman under FORM ON ME can be chased far off while it evades (seed 3 above): whether an
+    evading wingman should be pulled back toward its leader is a design question this task did not decide. The tutorial's
+    scenario (M8-T05) still has to declare `"flight": true` on the player's wing.
 
 ### M8-T20 GPU memory on the debug overlay
 - **Goal:** AC16 (D86).

@@ -432,10 +432,13 @@ func test_launch_wing_all_launches_every_wing() -> void:
 		var expected: int = 8 if launch["wing"] == "alpha" else LaunchDirector.WING_SIZE
 		assert_eq((launch["ships"] as Dictionary).size(), expected, "%s: Alpha fills the player's eight free slots" % launch["wing"])
 	for wing_name: String in ["BETA", "DELTA", "ZETA"]:
-		var wing: Wing = main.wings.wing_named(wing_name)
-		assert_not_null(wing)
-		assert_true(wing != null and wing.leader != null and not wing.leader.is_player, "%s keeps its own AI leader" % wing_name)
-		assert_eq(wing.members().size(), LaunchDirector.WING_SIZE - 1 if wing != null else -1)
+		# A station's own wing flies as four flights of three (M8-T19), each under its own AI lead.
+		var flights: Array[Wing] = main.wings.flights_of(wing_name)
+		assert_eq(flights.size(), 4, "%s: four flights" % wing_name)
+		for flight: Wing in flights:
+			assert_true(flight.leader != null and not flight.leader.is_player, "%s keeps its own AI leads" % wing_name)
+			assert_eq(flight.members().size(), 2)
+		assert_eq(main.wings.flight_strength(wing_name), LaunchDirector.WING_SIZE)
 	var again: ConsoleResult = DebugConsole.registry.execute("launch wing all")[0]
 	assert_false(again.ok, "nothing more to launch while every wing is on its way")
 

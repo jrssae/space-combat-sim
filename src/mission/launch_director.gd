@@ -18,6 +18,9 @@ extends Node
 ## - **Wing launches** (`launch wing <wing>`, `launch wing all`): twelve AI Starfuries from the ally pool (topped up when short),
 ##   named after the wing, launched in two waves. A wing the player leads (Alpha, with the player as Alpha 1) takes the launched
 ##   ships as its own wingmen, as many as its eleven slots have room for, so they answer the player's orders (M7-T58).
+##   Flights (M8-T19, D85): a wing nobody but the station commands flies as flights of three (`WingDirector.next_flight_place`:
+##   BETA 1 leads 2 and 3, BETA 4 leads 5 and 6, ...), and so does the rest of a wing the player leads when the scenario gives
+##   the player only its own flight (`wings[].flight`): two of the launched ships fill it, the others fly in flights from 2 on.
 ##
 ## Console: provider and command `launch`.
 
@@ -189,52 +192,70 @@ func launch_wing(wing: String, count: int = WING_SIZE) -> String:
 			return "wing %s is launching already" % wing
 	var pool: ShipPool = main.ships
 	count = clampi(count, 1, WING_SIZE)
-	var led: Wing = _player_led_wing(wing.to_upper())
+	var prefix: String = wing.to_upper()
+	var led: Wing = _player_led_wing(prefix)
+	# The player commands only its own flight (M8-T19): its two slots take the first ships, the rest fly in flights from 2 on.
+	var own_flight: bool = led != null and led.flight > 0
 	var size_before: int = led.size if led != null else 0
 	var slots := PackedInt32Array()
 	if led != null:
 		main.wings.refresh(led)  # a wingman down a moment ago frees its slot
-		led.resize(maxi(led.size, WING_SIZE - 1))  # the player flies number 1, the rest of the wing the other eleven
+		if not own_flight:
+			led.resize(maxi(led.size, WING_SIZE - 1))  # the player flies number 1, the rest of the wing the other eleven
 		slots = led.fill_order()  # the arms stay even if fewer launch
+	if led == null or own_flight:
+		count = mini(count, WING_SIZE - (main.wings.flight_strength(prefix) if main.wings != null else 0))
+	else:
 		count = mini(count, slots.size())
-		if count == 0:
-			return "wing %s is full: every slot of the player's wing is flown" % wing.to_upper()
+	if count <= 0:
+		return "wing %s is full: every %s is flown" % [prefix, "slot of the player's wing" if led != null and not own_flight
+				else "place of its flights"]
 	# A station scenario built these at load (`StationTraffic.reserve_pools`); a console launch elsewhere may hitch.
 	main.ensure_free(ShipPool.ALLY_TYPE, count)
 	var ships: Array[Combatant] = []
-	var prefix: String = wing.to_upper()
+	var flights: Array[Wing] = []  # the flight each ship of `ships` took, null for one in the player's wing
 	var at: UniversePos = main.world.to_universe(s.global_position)
-	var made_wing: bool = main.wings != null and main.wings.wing_named(prefix) == null
-	var squadron: Wing = _station_wing(prefix)
 	for i: int in count:
-		var callsign: String = main.wings.callsign_for(led, slots[i]) if led != null else pool.next_name(prefix, 1)
+		var to_led: bool = led != null and i < slots.size()
+		var place: Dictionary = {}  # empty without a wing director: the ship flies alone
+		if not to_led and main.wings != null:
+			place = main.wings.next_flight_place(prefix, 2 if own_flight else 1, s.home_id)  # the station's own: it docks here (M8-T06)
+		var callsign: String = pool.next_name(prefix, 1)
+		if to_led:
+			callsign = main.wings.callsign_for(led, slots[i])
+		elif not place.is_empty():
+			callsign = main.wings.place_callsign(place)
 		var behaviour: Dictionary = {"type": "ai", "profile": WING_PROFILE}
-		if led != null:
+		if to_led:
 			behaviour["orders"] = String(AiContext.order_word(led.order))
 		var made: Dictionary = BrainFactory.from_behaviour(behaviour, at, hash([callsign, main.scenario_seed]))
 		var ally: Combatant = pool.acquire(callsign, at, Basis.IDENTITY, main.world.anchored_velocity(),
 				made["brain"] as PilotBrain if bool(made["ok"]) else null, ShipPool.ALLY_TYPE)
 		if ally == null:
 			break
-		if led != null and main.wings.add_member(led, ally, slots[i]) != slots[i]:
+		if to_led and main.wings.add_member(led, ally, slots[i]) != slots[i]:
 			pool.release(ally)  # a ship the player's wing refuses would fly on deaf to its orders
 			break
+		if not place.is_empty() and main.wings.take_place(place, ally) == null:
+			pool.release(ally)
+			break
 		ships.append(ally)
-		if squadron != null:
-			main.wings.join(squadron.name, ally)  # the first leads, the rest take its slots (M7-T10)
+		flights.append(place.get("wing") as Wing)
+	if main.wings != null:
+		main.wings.drop_empty_flights(prefix)  # a flight made for a ship the pool could not give
 	var why: String = "no allied Starfury free" if ships.is_empty() else \
 			_start(wing, 1, ships, "", hash([main.scenario_seed, wing.to_lower(), "wing", SimClock.now()]))
 	if not why.is_empty():
-		for ally: Combatant in ships:
-			if squadron != null:
-				main.wings.leave(squadron, ally)
-			if led != null:
-				main.wings.remove_member(led, ally)
-			pool.release(ally)
-		if led != null:
+		for i: int in ships.size():
+			if flights[i] != null:
+				main.wings.leave(flights[i], ships[i])
+			elif led != null:
+				main.wings.remove_member(led, ships[i])
+			pool.release(ships[i])
+		if led != null and not own_flight:
 			led.resize(size_before)  # the player's wing as it was, so a replenish does not fill slots it never had
-		if made_wing and squadron != null and squadron.leader == null and squadron.members().is_empty():
-			main.wings.wings.erase(squadron)  # a retry starts from nothing, not from a wing of parked hulls
+		if main.wings != null:
+			main.wings.drop_empty_flights(prefix)  # a retry starts from nothing, not from flights of parked hulls
 		return why
 	var in_play: Array[Combatant] = main.ships.alive(ShipPool.ALLY_TYPE)
 	var sent: Array = _wing_ships.get(wing.to_lower(), []).filter(func(e: Dictionary) -> bool:
@@ -243,22 +264,6 @@ func launch_wing(wing: String, count: int = WING_SIZE) -> String:
 		sent.append({"combatant": ally, "name": ally.display_name})
 	_wing_ships[wing.to_lower()] = sent
 	return ""
-
-
-# The station's wing called `wing_name`, twelve strong and engaging at will, made on its first launch (M7-T10): its members
-# form on their leader when nothing is in reach and fight when something is. None when the player leads a wing of that name
-# (its own wingmen keep it), or without a wing director.
-func _station_wing(wing_name: String) -> Wing:
-	if main.wings == null:
-		return null
-	var wing: Wing = main.wings.wing_named(wing_name)
-	if wing != null:
-		return null if wing.leader != null and wing.leader.is_player else wing
-	wing = Wing.new(wing_name, null, 11)
-	wing.order = AiContext.Order.ENGAGE_AT_WILL
-	wing.home = station().home_id if station() != null else &""  # the station's own wing: it docks here (M8-T06)
-	main.wings.wings.append(wing)
-	return wing
 
 
 # The wing called `wing_name` when the player leads it, or null: its launched ships fly as the player's wingmen.

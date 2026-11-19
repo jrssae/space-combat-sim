@@ -14,12 +14,17 @@ extends RefCounted
 ## members behind an empty slot move up their arm and the arms are evened after. The director calls it when a member is
 ## destroyed, so losses leave no hole; a pilot keeps its callsign when it moves, and the callsign of the one that went down
 ## goes with the empty slot to the back (`lost_callsign`).
+##
+## Flights (M8-T19, D85): a squadron split into flights of three is several wings of one `name`, each with its `flight`
+## number (1 first) and the number its lead carries (`first_number`), so the callsigns run on through the squadron: the
+## second flight of ALPHA is ALPHA 4, 5 and 6. A wing that is no flight has `flight` 0.
 
 const DEFAULT_NAME: String = "ALPHA"
 ## Members besides the leader: three wingmen in a finger-four (maintainer Q4).
 const DEFAULT_SIZE: int = 3
 ## What a member says to each order (by `AiContext.Order` value); ATTACK MY TARGET names the target.
-const ORDER_PHRASES: Array[String] = ["ENGAGING AT WILL", "ATTACKING %s", "FORMING UP", "COVERING YOU"]
+const ORDER_PHRASES: Array[String] = ["ENGAGING AT WILL", "ATTACKING %s", "FORMING UP", "COVERING YOU",
+		"FORMING UP, HOLDING FIRE", "HOLDING POSITION, HOLDING FIRE"]
 
 var name: String = DEFAULT_NAME
 var leader: Combatant = null
@@ -29,6 +34,10 @@ var order: AiContext.Order = AiContext.Order.COVER_ME
 var engage_radius_m: float = AiContext.DEFAULT_ENGAGE_RADIUS_M
 ## Member slots (1..size).
 var size: int = DEFAULT_SIZE
+## Which flight of its squadron this wing is (1 first), 0 for a wing that is not one of a squadron's flights.
+var flight: int = 0
+## The number in the leader's callsign: 1, or a later flight's first (4, 7, ...).
+var first_number: int = 1
 
 # By slot - 1; null for an empty slot.
 var _by_slot: Array[Combatant] = []
@@ -318,9 +327,9 @@ func is_full() -> bool:
 	return empty_slots().is_empty()
 
 
-## The callsign of a slot: the wing's name and the slot counted from the leader (slot 0 = `ALPHA 1`).
+## The callsign of a slot: the wing's name and the slot counted from the leader (slot 0 = `ALPHA 1`, or `first_number`).
 func callsign(slot: int) -> String:
-	return "%s %d" % [name, slot + 1]
+	return "%s %d" % [name, slot + first_number]
 
 
 ## A slot's offset from the leader in the leader's body frame (`formation`, for this wing's size).

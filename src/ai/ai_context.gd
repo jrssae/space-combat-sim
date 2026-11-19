@@ -19,11 +19,17 @@ extends RefCounted
 ## - FORM_ON_ME: nothing, and no retreat (`may_retreat`). An evasion is still allowed.
 ## - COVER_ME: defend the leader: hostiles within `engage_radius_m` of it, while within `COVER_LEASH_M` of it. With no
 ##   leader at all, engage at will.
+## - FORM_HOLD_FIRE (M8-T19): as FORM_ON_ME, and no shot from the slot either (`holds_fire`).
+## - HOLD_POSITION (M8-T19): nothing is attacked, no shot, and the ship stops where it is (the formation behaviour brakes).
+##
+## Flights of three (M8-T19, D85): a pilot with `cover` goes first for whoever attacks a flight-mate (`wing_ids`); a wingman
+## with a `cohesion_m` that is farther than that from its lead has `strayed` and attacks nothing until it is back within
+## `rejoined_m`, so the flight fights as a group.
 
-enum Order { ENGAGE_AT_WILL, ATTACK_MY_TARGET, FORM_ON_ME, COVER_ME }
+enum Order { ENGAGE_AT_WILL, ATTACK_MY_TARGET, FORM_ON_ME, COVER_ME, FORM_HOLD_FIRE, HOLD_POSITION }
 
 ## Order words (scenario `orders`, the console's `wing order`), by `Order` value.
-const ORDER_WORDS: Array[StringName] = [&"engage", &"attack", &"form", &"cover"]
+const ORDER_WORDS: Array[StringName] = [&"engage", &"attack", &"form", &"cover", &"form_hold", &"hold"]
 const DEFAULT_ENGAGE_RADIUS_M: float = 2000.0
 ## Under COVER ME a ship farther than this from its leader breaks off and rejoins (the engage radius plus 1 km of room).
 const COVER_LEASH_M: float = 3000.0
@@ -97,6 +103,28 @@ var leader_link_velocity: Vector3 = Vector3.ZERO:
 			return
 		leader_link_velocity = value
 		_changed()
+## A flight of three's rules (M8-T19; `WingDirector` sets them for an AI flight): go first for whoever attacks a
+## flight-mate, and as a wingman stay within `cohesion_m` of the lead (0: no limit), back within `rejoined_m` before fighting again.
+var cover: bool = false:
+	set(value):
+		if value == cover:
+			return
+		cover = value
+		_changed()
+var cohesion_m: float = 0.0:
+	set(value):
+		if value == cohesion_m:
+			return
+		cohesion_m = value
+		_changed()
+var rejoined_m: float = 0.0:
+	set(value):
+		if value == rejoined_m:
+			return
+		rejoined_m = value
+		_changed()
+## Whether this wingman is too far from its lead to fight (`refresh` works it out every think).
+var strayed: bool = false
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
 var route: Route = null:
 	set(value):
@@ -198,6 +226,7 @@ func refresh(p: Perception) -> void:
 			if c.id == leader_id:
 				leader = c
 	_refresh_guard(p)
+	strayed = _strayed_now(p)
 	objective = null
 	objective_range_m = INF
 	if not objective_name.is_empty():
@@ -206,6 +235,21 @@ func refresh(p: Perception) -> void:
 			objective = _named(p.broadcasts, objective_name)
 		if objective != null:
 			objective_range_m = objective.position.distance_to(own_position)
+
+
+# Whether the pilot is past `cohesion_m` from its lead (in sight, else where the wing's link puts it), or was and is not
+# back within `rejoined_m` yet.
+func _strayed_now(p: Perception) -> bool:
+	if cohesion_m <= 0.0:
+		return false
+	var lead_at: Vector3
+	if leader != null:
+		lead_at = leader.position
+	elif leader_link_position != null:
+		lead_at = p.to_local(leader_link_position)
+	else:
+		return false
+	return p.position.distance_to(lead_at) > (rejoined_m if strayed else cohesion_m)
 
 
 func _refresh_guard(p: Perception) -> void:
@@ -272,6 +316,10 @@ func clear_wing() -> void:
 	leader_link_position = null
 	leader_link_velocity = Vector3.ZERO
 	wing_ids = PackedInt64Array()
+	cover = false
+	cohesion_m = 0.0
+	rejoined_m = 0.0
+	strayed = false
 
 
 ## The contexts changed since the last call, each once; the list starts afresh (M4-T35, `BrainBatch`).
@@ -292,12 +340,12 @@ func _changed() -> void:
 
 ## Whether the orders let this pilot attack `c` (a hostile ship).
 func may_attack(c: Contact) -> bool:
-	if c == null or not c.is_ship or c.relation != Factions.Relation.HOSTILE:
+	if strayed or c == null or not c.is_ship or c.relation != Factions.Relation.HOSTILE:
 		return false
 	if guarding and not in_guard_zone(c):
 		return false
 	match order:
-		Order.FORM_ON_ME:
+		Order.FORM_ON_ME, Order.FORM_HOLD_FIRE, Order.HOLD_POSITION:
 			return false
 		Order.ATTACK_MY_TARGET:
 			return leader_target_id != 0 and c.id == leader_target_id
@@ -312,8 +360,10 @@ func may_attack(c: Contact) -> bool:
 
 ## Whether the orders let this pilot attack a hostile it sees now (the formation stands aside then).
 func has_attackable() -> bool:
+	if strayed:
+		return false
 	match order:
-		Order.FORM_ON_ME:
+		Order.FORM_ON_ME, Order.FORM_HOLD_FIRE, Order.HOLD_POSITION:
 			return false
 		Order.ENGAGE_AT_WILL:
 			if not guarding:
@@ -324,9 +374,19 @@ func has_attackable() -> bool:
 	return false
 
 
-## Whether the orders let this pilot retreat: not under FORM_ON_ME (formation only; an evasion is still allowed).
+## Whether the orders let this pilot retreat: not under FORM_ON_ME or a hold-fire order (an evasion is still allowed).
 func may_retreat() -> bool:
-	return order != Order.FORM_ON_ME
+	return not stands_down()
+
+
+## Whether the order lets the pilot attack nothing: FORM_ON_ME and both hold-fire orders.
+func stands_down() -> bool:
+	return order == Order.FORM_ON_ME or holds_fire()
+
+
+## Whether the order forbids every shot (M8-T19).
+func holds_fire() -> bool:
+	return order == Order.FORM_HOLD_FIRE or order == Order.HOLD_POSITION
 
 
 ## Seconds since this hull was last hit (INF before the first hit).

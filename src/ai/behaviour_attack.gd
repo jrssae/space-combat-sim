@@ -31,6 +31,10 @@ const W_CLOSING: float = 0.2
 const W_ATTACKING_FRIEND: float = 0.3
 const W_DAMAGED: float = 0.1
 const KEEP_BONUS: float = 0.1
+## In a flight (M8-T19, `AiContext.cover`) whoever attacks a flight-mate outranks every other target, and a wingman
+## otherwise goes for its lead's target, so the three fight one enemy together.
+const W_COVER: float = 1.0
+const W_GROUP: float = 0.5
 const CLOSING_FULL_MPS: float = 200.0
 const SCORE_BASE: float = 0.3
 const SCORE_SPAN: float = 0.5
@@ -105,7 +109,9 @@ func score(ctx: AiContext) -> float:
 	_target = null
 	var best: float = -INF
 	# Engage at will with no guard post allows every hostile, so skip the per-contact check.
-	var at_will: bool = ctx.order == AiContext.Order.ENGAGE_AT_WILL and not ctx.guarding
+	var at_will: bool = ctx.order == AiContext.Order.ENGAGE_AT_WILL and not ctx.guarding and not ctx.strayed
+	# In a flight (M8-T19) a wingman goes for what its lead attacks.
+	var lead_target: int = ctx.leader.target_id if ctx.cover and ctx.cohesion_m > 0.0 and ctx.leader != null else 0
 	var own_velocity: Vector3 = p.velocity
 	var friendly_ids: PackedInt64Array = ctx.friendly_ids
 	var hostiles: Array[Contact] = ctx.hostiles
@@ -132,11 +138,16 @@ func score(ctx: AiContext) -> float:
 			value += W_DAMAGED * (1.0 - hull)
 		if c.id == keep_id:
 			value += KEEP_BONUS
+		if ctx.cover:
+			if ctx.wing_ids.has(c.target_id):
+				value += W_COVER
+			if lead_target > 0 and c.id == lead_target:
+				value += W_GROUP
 		if value > best:
 			best = value
 			_target = c
 	if _target == null:
-		if ctx.objective != null and ctx.order != AiContext.Order.FORM_ON_ME and not _passive:
+		if ctx.objective != null and not ctx.stands_down() and not ctx.strayed and not _passive:
 			_target = ctx.objective
 			return clampf(SCORE_BASE + SCORE_SPAN * OBJECTIVE_VALUE, 0.0, 1.0)
 		return 0.0

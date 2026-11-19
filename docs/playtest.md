@@ -83,9 +83,11 @@ maintainer (the fallback is Ctrl). Your own saved control profiles keep the keys
 loads layout B.
 
 Wing orders (keys 1-4, or `wing order <attack|form|engage|cover>`): **1** attack my target (your selected hostile only),
-**2** form on me (formation only, no attacks), **3** engage at will (anything they see, no leash), **4** cover me, the default:
+**2** form on me (they keep their slots and shoot from them at a hostile in reach ahead: M8-T19), **3** engage at will (anything
+they see, no leash), **4** cover me, the default:
 they hold formation and engage only hostiles within 2 km of you, and a wingman more than 3 km from you breaks off and rejoins.
-The acknowledgement line stays on screen 3.5 s.
+**7** form up, hold fire (`wing order form_hold`) and **8** hold position, hold fire (`wing order hold`: they stop where they are
+and you go on alone) are M8-T19's; any other order lifts them. The acknowledgement line stays on screen 3.5 s.
 
 The ` key opens the debug console; it frees the mouse while open. Hunting a hull "jump" under thrust: `throttle 1` holds both main
 pods, then try `set settings.physics_jitter_fix 0` (no frame-time smoothing) while it happens and note whether it stops. `window max` / `window normal` / `window 1800 900` resize the window from the console. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
@@ -348,7 +350,9 @@ free look. D-pad Right opens the comms menu (see Wing orders).
 
 Keys 1 to 4, or `wing order <attack|form|engage|cover>` in the console. The HUD names the order for 3.5 s, for example
 `ALPHA 2: COPY, FORMING UP`. Key 6 (M8-T06) sends the damaged wingmen to the main docking bay for repair (`dock wing`); on the
-comms menu it is DOCK, down-left, between the four orders, which stay up, right, down and left.
+comms menu it is DOCK, down-left, between the four orders, which stay up, right, down and left. Keys 7 and 8 (M8-T19) are form
+up and hold fire (`wing order form_hold`) and hold position and hold fire (`wing order hold`), on the ring as FORM UP and HOLD
+POSITION between the four orders.
 
 The comms menu (D-pad Right, or Ctrl) is a radial menu like the target menu: the same ring at the left, the game paused and the view
 blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
@@ -720,7 +724,9 @@ From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick
 D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS has ATTACK
 (my target) up, FORM ON ME right, ENGAGE (at will) down and COVER ME left. The left stick (arrow keys, mouse) points, A sends
 the order and the game resumes, B or D-pad Right closes it, Start hands over to the pause menu. There is no timeout. Keys 1 to
-4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
+4 still give the orders directly. Since M8 the ring has eight places: FORM UP (hold fire) and HOLD POSITION (hold fire) between
+the first orders (M8-T19, keys 7 and 8) and DOCK (M8-T06, key 6). Console: `commsmenu open`, `commsmenu pick "form on me"`,
+`state comms_menu`.
 
 ## Free-flight encounters (M5-T17)
 
@@ -1190,6 +1196,25 @@ with `damage 50` (hull points; `state ship` shows the hull) so the repair has so
 - [ ] **(H) No dock, no order:** in a scenario far from the station, or with wingmen that have no home (`combat_sandbox`), the comms
       ring has a blank slice where DOCK was and key 6 does nothing; a wingman below 25 % keeps fighting.
 - [ ] **(H) Control's offer:** below half hull the HUD's line offers the bay once (`BABYLON CONTROL: YOU ARE CLEARED TO DOCK ...`).
+
+## Flights of three and the hold-fire orders (M8-T19)
+
+The tutorial (M8-T05) will give you a flight of three; until it lands, any scenario shows the rest. `play station_showcase`, or
+free flight near the station, then `launch wing zeta` and `state wing`.
+
+- [ ] **(H) A wing in flights:** `launch wing zeta` sends twelve Starfuries that fly as four vics of three (ZETA 1, 4, 7 and 10
+      lead), the three later leads spread behind ZETA 1 while there is nothing to fight. Say if the spacing between the flights
+      (160 m steps) looks right. `traffic raid 6` then: each flight goes in together and its ships stay near their lead.
+- [ ] **(H) Shooting from the slot:** key 2 (form on me) with your wingmen on their slots, then fly at a raider (`spawn raider idle
+      900`): they keep their slots and fire once it is ahead of you within about 40 degrees and 1.8 km. Say if that reads as a
+      formation attacking, and if the noses turning toward the target while the ships hold their places looks right.
+- [ ] **(H) Form up, hold fire:** key 7 (or FORM UP on the comms ring, `wing order form_hold`): `ALPHA 2: COPY, FORMING UP,
+      HOLDING FIRE`; they keep their slots and do not fire at the same raider.
+- [ ] **(H) Hold position, hold fire:** key 8 (HOLD POSITION, `wing order hold`): `COPY, HOLDING POSITION, HOLDING FIRE`; they
+      brake to a stop where they are and stay while you fly off; their roster rows read HOLD. Any other order (key 2) brings
+      them back.
+- [ ] **(H) The comms ring:** FORM UP sits between ATTACK and FORM ON ME, HOLD POSITION between FORM ON ME and ENGAGE. Say if
+      the two labels with `hold fire` under them are clear enough to tell apart at a glance.
 
 # Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
 

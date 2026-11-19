@@ -14,6 +14,9 @@ var wing_engage: bool = false
 var wing_cover: bool = false
 ## Key 6 (M8-T06): the damaged wingmen dock in the main docking bay for repair (`DockingDirector.order_wing`).
 var wing_dock: bool = false
+## Keys 7 and 8 (M8-T19): the hold-fire orders, form up and hold fire, and hold position and hold fire.
+var wing_form_hold: bool = false
+var wing_hold: bool = false
 ## D-pad Left, key 5 (M3-T27): the player's running lights on or off.
 var toggle_running_lights: bool = false
 ## The comms menu (D54, M5-T46): D-pad Right (an edge) opens it, and closes it again while it is open; its stick, A and B are the
@@ -44,7 +47,7 @@ func to_dict() -> Dictionary:
 		"toggle_camera": toggle_camera, "reset": reset, "pause": pause,
 		"toggle_overlay": toggle_overlay, "screenshot": screenshot,
 		"wing_attack": wing_attack, "wing_form": wing_form, "wing_engage": wing_engage, "wing_cover": wing_cover,
-		"wing_dock": wing_dock,
+		"wing_dock": wing_dock, "wing_form_hold": wing_form_hold, "wing_hold": wing_hold,
 		"toggle_running_lights": toggle_running_lights,
 		"comms_open": comms_open,
 		"target_menu_open": target_menu_open, "radial_point": radial_point, "radial_select": radial_select,

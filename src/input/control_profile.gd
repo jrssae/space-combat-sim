@@ -32,6 +32,7 @@ const KEYBOARD_ONLY: Array[StringName] = [
 	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
 	InputAdapter.WING_COVER, InputAdapter.ROLL_LEFT, InputAdapter.ROLL_RIGHT, InputAdapter.TARGET_NEXT,
 	InputAdapter.TARGET_CYCLE, InputAdapter.TOGGLE_RUNNING_LIGHTS, InputAdapter.COMMS_MENU, InputAdapter.WING_DOCK,
+	InputAdapter.WING_FORM_HOLD, InputAdapter.WING_HOLD,
 ]
 ## The default pad layout before M3-T15 (action -> pad descriptors; actions without one are left out). A saved profile with
 ## exactly these pad bindings and no `target_cycle` gets the current default's pad bindings (`from_config`): its keys and

@@ -418,9 +418,11 @@ func scramble(wing: String, count: int = LaunchDirector.WING_SIZE) -> String:
 
 # A wing already out engages the raid at will (a wing the player leads keeps its own order).
 func _engage_at_will(wing_name: String) -> void:
-	var squadron: Wing = main.wings.wing_named(wing_name) if main.wings != null else null
-	if squadron != null and not (squadron.leader != null and squadron.leader.is_player):
-		squadron.order = AiContext.Order.ENGAGE_AT_WILL
+	if main.wings == null:
+		return
+	for flight: Wing in main.wings.flights_of(wing_name):  # the station's wings fly as flights of three (M8-T19)
+		if not (flight.leader != null and flight.leader.is_player):
+			flight.order = AiContext.Order.ENGAGE_AT_WILL
 
 
 ## Every traffic ship back to its pool. Returns how many.

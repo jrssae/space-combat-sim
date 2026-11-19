@@ -34,6 +34,7 @@ const ACTION_LABELS: Dictionary = {
 	&"autotrack": "Auto-track", &"camera_look": "Free look", &"screenshot": "Screenshot",
 	&"wing_attack": "Wing: attack", &"wing_form": "Wing: form on me", &"wing_engage": "Wing: engage", &"wing_cover": "Wing: cover me",
 	&"wing_dock": "Wing: dock for repair",
+	&"wing_form_hold": "Wing: form up, hold fire", &"wing_hold": "Wing: hold position, hold fire",
 	&"toggle_running_lights": "Running lights", &"comms_menu": "Comms menu",
 }
 

@@ -7,7 +7,8 @@ extends TestSteps
 ## with the physics rate and the time scale raised. The player leads on a fixed course under god mode with the wing on its
 ## slots under FORM ON ME, so the wingmen hold the formation while they are shot at.
 ## - The fights: raiders with seeded brains attack the wing from astern until it has lost `FIGHT_LOSSES` ships (or the time
-##   is up), then are taken away and the wing flies on.
+##   is up), then are taken away and the wing flies on. The wingmen shoot back from their slots at raiders that come into
+##   their guns' reach ahead (M8-T19).
 ## - The schedules: named wingmen are shot down at set times with nobody else about.
 ## Every tick the slots flown must be a shape without a hole; no ram between two ships of the wing may happen; at the end
 ## every survivor sits on its slot.
@@ -30,6 +31,9 @@ const RAIDERS: int = 6
 const RAIDER_RANGE_M: float = 1500.0
 ## The wing flies on this long after its last loss, s.
 const REFORM_S: float = 45.0
+## A wingman a raider chased far off during a fight (it may evade under FORM ON ME) gets the time its way back takes at this
+## speed on top, m/s: it rejoins at 200 m/s once it is up to speed.
+const REJOIN_MPS: float = 150.0
 ## Within this of its slot a wingman is formed up, m: half the V's spacing.
 const FORMED_M: float = 20.0
 ## The least two of the wing's centres may come to each other while it closes up with nobody shooting, m: two Starfury
@@ -141,12 +145,16 @@ func _fight(seed_value: int) -> void:
 		while lost_at.size() < before - wing.members().size():
 			lost_at.append(SimClock.now() - t0)
 	var lost: int = before - wing.members().size()
+	var raiders_left: int = main.ships.alive(RAIDER).size()
 	for raider: Combatant in main.ships.alive(RAIDER):
 		main.ships.release(raider)
-	await _fly(REFORM_S)
+	# Since M8-T19 the wing shoots back from its slots, so a fight may run to its time limit with a wingman chased far off.
+	var strayed_m: float = _worst_m()
+	var reform_s: float = REFORM_S + strayed_m / REJOIN_MPS
+	await _fly(reform_s)
 	_slow_down()
-	gut.p("seed %d: %d lost at %s s, flown slots %s, worst %.1f m off its slot %.0f s after the fight, rams in the wing %d"
-			% [seed_value, lost, lost_at, _slots_flown(), _worst_m(), REFORM_S, _rams.size()])
+	gut.p("seed %d: %d lost at %s s, %d of %d raiders left, the farthest wingman %.0f m off; flown slots %s, worst %.1f m off its slot %.0f s after the fight, rams in the wing %d"
+			% [seed_value, lost, lost_at, raiders_left, RAIDERS, strayed_m, _slots_flown(), _worst_m(), reform_s, _rams.size()])
 	assert_gte(lost, LEAST_LOSSES, "the raiders shot down at least %d of the wing within %.0f s" % [LEAST_LOSSES, FIGHT_LIMIT_S])
 	_assert_closed_up()
 

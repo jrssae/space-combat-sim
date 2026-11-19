@@ -36,8 +36,9 @@ func test_dpad_right_opens_the_menu_with_the_wing_orders_and_pauses_the_game() -
 	assert_true(get_tree().paused, "the game is paused while it is open")
 	assert_eq(main.comms.menu.page_title(), "WING ORDERS")
 	assert_true(_read("comms_menu.open"))
-	assert_eq(_read("comms_menu.entries"), PackedStringArray(["attack", "-", "form on me", "-", "engage", "-", "cover me", "-"]),
-			"the four orders on the compass points; DOCK (down-left, M8-T06) is left out with no home dock in range: test_docking")
+	assert_eq(_read("comms_menu.entries"),
+			PackedStringArray(["attack", "form up", "form on me", "hold position", "engage", "-", "cover me", "-"]),
+			"the four orders on the compass points, the hold-fire orders (M8-T19) between them; DOCK (M8-T06) is left out with no home dock in range: test_docking")
 	assert_true(main.comms.view.visible)
 
 
@@ -67,6 +68,34 @@ func test_the_stick_points_and_a_sends_each_of_the_four_orders_through_the_wing_
 		else:
 			assert_eq(wing.order, AiContext.Order.COVER_ME, "slot 0: refused, the order is unchanged")
 		assert_eq(main.comms.menu.closed_by(), &"pick")
+
+
+func test_the_stick_and_a_send_the_two_hold_fire_orders_and_another_order_lifts_them() -> void:
+	# M8-T19 (D85). The stick points where the ring put each entry: the test names no angle of its own.
+	var wing: Wing = main.wings.player_wing()
+	var expected: Dictionary = {"FORM UP": AiContext.Order.FORM_HOLD_FIRE, "HOLD POSITION": AiContext.Order.HOLD_POSITION}
+	for label: String in expected:
+		main.wings.give_order(AiContext.Order.COVER_ME)
+		await _press(InputAdapter.COMMS_MENU)
+		assert_true(main.comms.is_open(), label)
+		var slots: Array[Dictionary] = main.comms.menu.radial.slots()
+		var at: int = -1
+		for i: int in slots.size():
+			if str(slots[i].get("label", "")) == label:
+				at = i
+		assert_gt(at, -1, "%s is on the ring" % label)
+		await _point(rad_to_deg(RadialMenu.slice_angle(at, main.comms.menu.radial.slice_count())))
+		assert_eq(main.comms.menu.radial.highlight(), at, "the stick lit %s" % label)
+		assert_eq(wing.order, AiContext.Order.COVER_ME, "nothing is sent while it is only pointed at")
+		await _press(InputAdapter.RADIAL_SELECT)
+		assert_false(main.comms.is_open(), "a pick closes it")
+		assert_eq(wing.order, expected[label], label)
+		assert_eq(_read("comms_menu.last_pick"), label)
+	# Any other order lifts the hold: FORM ON ME from the ring.
+	await _press(InputAdapter.COMMS_MENU)
+	await _point(RIGHT)
+	await _press(InputAdapter.RADIAL_SELECT)
+	assert_eq(wing.order, AiContext.Order.FORM_ON_ME)
 
 
 func test_b_closes_it_without_giving_an_order_or_targeting() -> void:
@@ -185,7 +214,7 @@ func test_the_ring_is_the_target_menus_size_and_side_and_the_highlight_follows_t
 	var size: Vector2 = get_viewport().get_visible_rect().size
 	assert_gt(view.draws, 0)
 	assert_eq(view.layer, target_view.layer, "the same layer as the target menu")
-	assert_eq(view.drawn_labels, ["ATTACK", "", "FORM ON ME", "", "ENGAGE", "", "COVER ME", ""] as Array[String],
+	assert_eq(view.drawn_labels, ["ATTACK", "FORM UP", "FORM ON ME", "HOLD POSITION", "ENGAGE", "", "COVER ME", ""] as Array[String],
 			"the entries sit on the ring, the orders on the compass points")
 	assert_eq(view.drawn_heading, "WING ORDERS")
 	assert_almost_eq(view.drawn_radius, RadialLayout.outer_radius(size), 0.5, "as big as the target menu")

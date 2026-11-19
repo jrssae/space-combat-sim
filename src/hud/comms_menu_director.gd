@@ -167,8 +167,8 @@ func _register_console() -> void:
 		&"focus": {"get": func() -> float: return view.focus_amount(), "doc": "The focus pull on the view behind the menu, 0 sharp to 1 full"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"commsmenu",
-			"The comms menu: open (pauses the game), pick <entry> (a slice 0-7 clockwise from the top, or its label: attack, form on me, "
-			+ "engage, cover me, dock), highlight <entry> (points at it without sending), back, close",
+			"The comms menu: open (pauses the game), pick <entry> (a slice 0-7 clockwise from the top, or its label: attack, form up, "
+			+ "form on me, hold position, engage, dock, cover me), highlight <entry> (points at it without sending), back, close",
 			[ConsoleArg.enum_required(&"action", ACTIONS), ConsoleArg.string_optional(&"entry", "").with_suggestions(_console_entries)]),
 			_cmd_commsmenu, self)
 

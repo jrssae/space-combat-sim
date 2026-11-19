@@ -36,6 +36,13 @@ extends Node
 ##
 ## Running lights (M3-T27): the members of the player's wing copy the player's, every tick.
 ##
+## Flights of three (M8-T19, D85; `FlightRules`, `data/wings/flights.json`): a squadron split into flights is several wings
+## of one name, numbered by `Wing.flight` (`flights_of`). Newcomers take the next place (`next_flight_place`, `take_place`):
+## the first flight without a lead, then its empty slots, then a new flight. The pilots of an AI-led flight get the flight's
+## rules each tick (`AiContext.cover`; a wingman's `cohesion_m`), and the leads of a squadron's later flights hold a slot on
+## its first AI lead while there is nothing to fight. A wing declared `flight` that the player leads is the player's own
+## flight: it has two slots, only they take the player's orders, and the rest of the squadron flies in flights from 2 on.
+##
 ## Console (§16.4), for the player's wing (`player_wing`): provider `wing` (`name`, `order`, `formation`, `members`,
 ## `last_ack`) and `wing [order|formation|replenish] [value]`.
 
@@ -48,9 +55,9 @@ const WHAT_CHOICES: Array[StringName] = [&"order", &"formation", &"replenish"]
 ## Replacements enter this far behind the leader.
 const REPLENISH_DISTANCE_M: float = 1500.0
 const REPLENISH_PROFILE: String = "ally_starfury"
-## The orders in key order (1-4), as the console lists them.
+## The orders in key order (1-4, then 7 and 8: M8-T19's hold-fire orders), as the console lists them.
 const ORDERS_BY_KEY: Array[AiContext.Order] = [AiContext.Order.ATTACK_MY_TARGET, AiContext.Order.FORM_ON_ME,
-		AiContext.Order.ENGAGE_AT_WILL, AiContext.Order.COVER_ME]
+		AiContext.Order.ENGAGE_AT_WILL, AiContext.Order.COVER_ME, AiContext.Order.FORM_HOLD_FIRE, AiContext.Order.HOLD_POSITION]
 
 var world: WorldFrame = null
 ## Where replacements come from (`ShipPool.ALLY_TYPE` ships); null: `replenish` launches nothing.
@@ -66,6 +73,8 @@ var _ack_age_s: float = INF
 var _declared: Dictionary = {}
 # Replacements launched so far; part of each brain seed so a run repeats.
 var _launched: int = 0
+## How flights fly (M8-T19); a test may set its own.
+var flight_rules: FlightRules = FlightRules.shared()
 
 
 func _init() -> void:
@@ -75,13 +84,15 @@ func _init() -> void:
 func _ready() -> void:
 	DebugConsole.registry.register_provider(&"wing", ConsoleVars.new({
 		&"name": {"get": func() -> String: return _player_wing_name(), "doc": "The player's wing"},
-		&"order": {"get": _console_order, "doc": "Its order: attack (my target), form (on me), engage (at will) or cover (me)"},
+		&"order": {"get": _console_order,
+				"doc": "Its order: attack (my target), form (on me), engage (at will), cover (me), form_hold (form up, hold fire) or hold (hold position, hold fire)"},
 		&"formation": {"get": _console_formation, "doc": "Its formation: finger_four, wedge or line_abreast"},
 		&"members": {"get": _console_members, "doc": "Each member: callsign, hull %, behaviour (state)"},
 		&"last_ack": {"get": func() -> String: return last_ack, "doc": "The latest acknowledgement line"},
+		&"flights": {"get": _console_flights, "doc": "The flights of the player's squadron (M8-T19): number, lead, wingmen"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"wing",
-			"Order the player's wing (wing order attack|form|engage|cover), change its formation (wing formation finger_four|wedge|line_abreast) or launch replacements for its empty slots from the pool (wing replenish); alone, show the wing",
+			"Order the player's wing (wing order attack|form|engage|cover|form_hold|hold: the last two are form up and hold fire, and hold position and hold fire), change its formation (wing formation finger_four|wedge|line_abreast) or launch replacements for its empty slots from the pool (wing replenish); alone, show the wing",
 			[ConsoleArg.enum_optional(&"what", WHAT_CHOICES), ConsoleArg.string_optional(&"value").with_suggestions(_value_words)]),
 			_cmd_wing, self)
 
@@ -114,6 +125,8 @@ func declare(declarations: Array[Dictionary]) -> void:
 			wing.formation.shape = int(d["formation"]) as Formation.Shape
 			if not String(d.get("home", "")).is_empty():
 				wing.home = StringName(d["home"])
+			if bool(d.get("flight", false)):
+				command_flight(wing)
 
 
 ## The wing called `wing_name` (case-insensitive), or null.
@@ -136,6 +149,20 @@ func join(wing_name: String, ship: Combatant) -> Wing:
 		return null
 	var d: Dictionary = _declared.get(wing_name.to_lower(), {})
 	var wing: Wing = wing_named(wing_name)
+	if bool(d.get("flight", false)):
+		# A squadron of flights (M8-T19): the player's own flight first while it has room, then the AI flights.
+		var own: Wing = wing if wing != null and wing.leader != null and wing.leader.is_player else null
+		if own != null:
+			refresh(own)
+			if not own.is_full():
+				give_home(own, ship)
+				return _add_joining(own, ship)
+		# Behind the player's own flight the others fly under their own AI: the declared order is the player's wing's.
+		var order: AiContext.Order = AiContext.Order.ENGAGE_AT_WILL if own != null \
+				else int(d.get("order", AiContext.Order.ENGAGE_AT_WILL)) as AiContext.Order
+		var place: Dictionary = next_flight_place(String(d.get("name", wing_name)), 2 if own != null else 1,
+				StringName(d.get("home", "")), order, int(d.get("formation", Formation.Shape.FINGER_FOUR)) as Formation.Shape)
+		return take_place(place, ship)
 	if wing == null:
 		wing = create_wing(String(d.get("name", wing_name)), null)
 		wing.order = int(d.get("order", AiContext.Order.ENGAGE_AT_WILL)) as AiContext.Order
@@ -183,8 +210,10 @@ func _lead(wing: Wing, ship: Combatant) -> void:
 	if pilot != null:
 		pilot.context.clear_wing()
 		_give_rally(pilot)
+		if wing.flight > 0 and pilot.behaviour(&"formation") == null:
+			pilot.add_behaviour(BehaviourFormation.new(pilot.profile))  # a flight's lead forms on its squadron's (M8-T19)
 	wing.leader = ship
-	_paint(wing, ship, 1)
+	_paint(wing, ship, 1 if wing.flight == 0 else _wing_number(wing, ship.display_name, wing.first_number))
 	if old != null and old != ship and not old.is_player and old.damageable != null and old.damageable.is_active():
 		add_member(wing, old)
 
@@ -205,6 +234,104 @@ static func _give_rally(pilot: AiPilot) -> void:
 		pilot.add_behaviour(BehaviourRally.new(pilot.profile))
 
 
+## Makes `wing`, which the player leads, the player's own flight (M8-T19, D85): it keeps only a flight's slots, so only those
+## wingmen take the player's orders. Returns false, changing nothing, when a slot beyond them is flown.
+func command_flight(wing: Wing) -> bool:
+	if wing == null or not wing.resize(flight_rules.wingmen()):
+		return false
+	wing.flight = 1
+	return true
+
+
+## The flights of squadron `squadron_name` (any case), in flight order: every wing of that name that is a flight.
+func flights_of(squadron_name: String) -> Array[Wing]:
+	var out: Array[Wing] = []
+	for wing: Wing in wings:
+		if wing.flight > 0 and wing.name.to_lower() == squadron_name.to_lower():
+			out.append(wing)
+	out.sort_custom(func(a: Wing, b: Wing) -> bool: return a.flight < b.flight)
+	return out
+
+
+## How many ships fly in squadron `squadron_name`'s flights, leads and the player included.
+func flight_strength(squadron_name: String) -> int:
+	var n: int = 0
+	for wing: Wing in flights_of(squadron_name):
+		refresh(wing)
+		n += wing.members().size() + (1 if leader_alive(wing) else 0)
+	return n
+
+
+## Where the next newcomer to squadron `squadron_name` flies, among its AI flights from number `first_flight` on (2 when the
+## player commands the first): `{"wing", "slot"}`, slot 0 for a flight without a living lead, else its first empty slot
+## (`Wing.fill_order`), else a new flight, made here with `home`, `order` and `shape`.
+func next_flight_place(squadron_name: String, first_flight: int = 1, home: StringName = &"",
+		order: AiContext.Order = AiContext.Order.ENGAGE_AT_WILL, shape: Formation.Shape = Formation.Shape.FINGER_FOUR) -> Dictionary:
+	var next: int = first_flight
+	for wing: Wing in flights_of(squadron_name):
+		if wing.flight < first_flight or (wing.leader != null and wing.leader.is_player):
+			continue
+		refresh(wing)
+		if not leader_alive(wing):
+			return {"wing": wing, "slot": 0}
+		var free: PackedInt32Array = wing.fill_order()
+		if not free.is_empty():
+			return {"wing": wing, "slot": free[0]}
+		next = maxi(next, wing.flight + 1)
+	var made := Wing.new(squadron_name.to_upper(), null, flight_rules.wingmen())
+	made.flight = next
+	made.first_number = flight_rules.first_number(next)
+	made.order = order
+	made.formation.shape = shape
+	made.home = home
+	wings.append(made)
+	return {"wing": made, "slot": 0}
+
+
+## The callsign for the newcomer to `place` (`next_flight_place`): the place's own, or the lost wingman's, or the next free
+## number when a ship in play carries it.
+func place_callsign(place: Dictionary) -> String:
+	var wing: Wing = place["wing"]
+	var slot: int = place["slot"]
+	if slot > 0:
+		return callsign_for(wing, slot)
+	var callsign: String = wing.callsign(0)
+	return pool.next_name(wing.name, wing.first_number) if pool != null and _callsign_in_play(wing, callsign) else callsign
+
+
+## Puts `ship` in `place`: it leads the flight, or takes the slot. Returns the flight, or null with a warning.
+func take_place(place: Dictionary, ship: Combatant) -> Wing:
+	var wing: Wing = place["wing"]
+	if _pilot_of(ship) == null:
+		push_warning("WingDirector: %s could not join %s: it flies no AiPilot" % [ship.display_name if ship != null else "null",
+				wing.name])
+		return null
+	give_home(wing, ship)
+	if int(place["slot"]) == 0:
+		_lead(wing, ship)
+		refresh(wing)
+		return wing
+	if add_member(wing, ship, int(place["slot"])) > 0:
+		return wing
+	push_warning("WingDirector: %s could not join %s flight %d" % [ship.display_name, wing.name, wing.flight])
+	return null
+
+
+## Takes away the AI flights of squadron `squadron_name` that nobody flies (a launch that fell through).
+func drop_empty_flights(squadron_name: String) -> void:
+	for wing: Wing in flights_of(squadron_name):
+		if wing.leader == null and wing.members().is_empty():
+			wings.erase(wing)
+
+
+## The AI lead a squadron's flights form on (M8-T19): the lead of its first AI-led flight with a living lead, or null.
+func squadron_lead(squadron_name: String) -> Combatant:
+	for wing: Wing in flights_of(squadron_name):
+		if wing.leader != null and not wing.leader.is_player and leader_alive(wing):
+			return wing.leader
+	return null
+
+
 ## The wing the player leads, else the first wing, else null.
 func player_wing() -> Wing:
 	for wing: Wing in wings:
@@ -222,7 +349,7 @@ func add_member(wing: Wing, member: Combatant, slot: int = -1) -> int:
 	var at: int = wing.add_member(member, slot)
 	if at < 0:
 		return -1
-	_paint(wing, member, _wing_number(wing, member.display_name, at + 1))
+	_paint(wing, member, _wing_number(wing, member.display_name, at + wing.first_number))
 	if pilot.behaviour(&"formation") == null:
 		pilot.add_behaviour(BehaviourFormation.new(pilot.profile))
 	_give_rally(pilot)
@@ -413,10 +540,13 @@ func hud_roster(wing: Wing = null) -> Array[Dictionary]:
 
 
 # What a roster row says a member is doing: its pilot's behaviour, or `docking` on its way to the docking bay and `docked`
-# while it is inside (M8-T06), whatever the docking pilot flies meanwhile.
+# while it is inside (M8-T06), whatever the docking pilot flies meanwhile; `holding` while it is stopped under the order to
+# hold position (M8-T19).
 static func _activity(wing: Wing, member: Combatant, described: Dictionary) -> String:
 	var docking: String = wing.dock_status(member)
-	return docking if not docking.is_empty() else str(described.get("behaviour", "none"))
+	if not docking.is_empty():
+		return docking
+	return "holding" if str(described.get("state", "")) == "holding" else str(described.get("behaviour", "none"))
 
 
 func _physics_process(delta: float) -> void:
@@ -477,8 +607,39 @@ func refresh(wing: Wing) -> void:
 		ctx.slot_offset = wing.slot_offset(wing.slot_of(member))
 		ctx.leader_link_position = link
 		ctx.leader_link_velocity = link_velocity
+		# An AI flight's wingmen cover their flight and stay near their lead; the player's own follow its orders.
+		var ai_flight: bool = wing.flight > 0 and alive and not wing.leader.is_player
+		ctx.cover = ai_flight
+		ctx.cohesion_m = flight_rules.cohesion_m if ai_flight else 0.0
+		ctx.rejoined_m = flight_rules.rejoined_m if ai_flight else 0.0
 		if alive and wing.leader.is_player:
 			member.ship.running_lights = wing.leader.ship.running_lights
+	if leader_pilot != null and wing.flight > 0:
+		_brief_flight_lead(wing, leader_pilot.context)
+
+
+# A flight's AI lead (M8-T19): it covers its flight, and unless it is the squadron's own lead it holds a slot on that one
+# while there is nothing to fight, so a squadron's flights form up together.
+func _brief_flight_lead(wing: Wing, ctx: AiContext) -> void:
+	ctx.cover = true
+	ctx.order = wing.order
+	var lead: Combatant = squadron_lead(wing.name)
+	if lead == null or lead == wing.leader or lead.targetable == null:
+		ctx.leader_id = 0
+		ctx.has_slot = false
+		ctx.leader_link_position = null
+		return
+	var first: int = 0
+	for other: Wing in flights_of(wing.name):
+		if other.leader == lead:
+			first = other.flight
+	var spread := Formation.new(wing.formation.shape, wing.formation.spacing_m * flight_rules.lead_spacing)
+	ctx.leader_id = lead.targetable.get_instance_id()
+	ctx.leader_target_id = lead.ship.targeting.selected_id()
+	ctx.has_slot = true
+	ctx.slot_offset = spread.offset(wing.flight - first)
+	ctx.leader_link_position = world.to_universe(lead.ship.global_position) if world != null else null
+	ctx.leader_link_velocity = lead.ship.linear_velocity
 
 
 # `ids` without `self_ship`'s own.
@@ -505,7 +666,11 @@ func callsign_for(wing: Wing, slot: int) -> String:
 	if not lost.is_empty() and not _callsign_in_play(wing, lost):
 		return lost
 	var callsign: String = wing.callsign(slot)
-	return pool.next_name(wing.name, wing.size + ShipPool.ALLY_FIRST_NUMBER) if _callsign_in_play(wing, callsign) else callsign
+	if not _callsign_in_play(wing, callsign):
+		return callsign
+	# An AI flight looks through its own numbers first; a wing the player leads past its own (the player is number 1).
+	var ai_flight: bool = wing.flight > 0 and not (wing.leader != null and wing.leader.is_player)
+	return pool.next_name(wing.name, wing.first_number if ai_flight else wing.size + ShipPool.ALLY_FIRST_NUMBER)
 
 
 func _callsign_in_play(wing: Wing, callsign: String) -> bool:
@@ -545,6 +710,18 @@ func _console_order() -> String:
 func _console_formation() -> String:
 	var wing: Wing = player_wing()
 	return String(wing.formation.shape_name()) if wing != null else ""
+
+
+func _console_flights() -> PackedStringArray:
+	var out := PackedStringArray()
+	var own: Wing = player_wing()
+	for wing: Wing in (flights_of(own.name) if own != null else [] as Array[Wing]):
+		var names := PackedStringArray()
+		for member: Combatant in wing.members():
+			names.append(member.display_name)
+		out.append("%d: %s + %s" % [wing.flight, wing.leader.display_name if wing.leader != null else "no lead",
+				", ".join(names) if not names.is_empty() else "none"])
+	return out
 
 
 func _console_members() -> PackedStringArray:

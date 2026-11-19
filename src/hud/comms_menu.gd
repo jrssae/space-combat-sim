@@ -23,16 +23,17 @@ var _root_entries: Array[Dictionary] = []
 const PAYLOAD_DOCK: StringName = &"dock"
 
 ## The wing orders page, a ring of eight: the four orders of keys 1-4 stay on the compass points (up, right, down, left;
-## payload an `AiContext.Order`), so the stick picks them as before; later orders take the diagonals between them. DOCK
-## (key 6, M8-T06) is down-left. A `{}` is a blank slice.
+## payload an `AiContext.Order`), so the stick picks them as before; later orders take the places between them, in the page's
+## order: the hold-fire orders (keys 7 and 8, M8-T19) after ATTACK and after FORM ON ME, DOCK (key 6, M8-T06) after ENGAGE.
+## A `{}` is a blank slice. The ring lays the page out; nothing here names an angle.
 ## Without `dock` (no wingman has its home dock in range) DOCK's slice is blank: the order cannot be given then.
 static func wing_orders(dock: bool = true) -> Array[Dictionary]:
 	var dock_entry: Dictionary = {"label": "DOCK", "sub": "for repair", "payload": PAYLOAD_DOCK} if dock else {}
 	return [
 		{"label": "ATTACK", "sub": "my target", "payload": AiContext.Order.ATTACK_MY_TARGET},
-		{},
+		{"label": "FORM UP", "sub": "hold fire", "payload": AiContext.Order.FORM_HOLD_FIRE},
 		{"label": "FORM ON ME", "sub": "", "payload": AiContext.Order.FORM_ON_ME},
-		{},
+		{"label": "HOLD POSITION", "sub": "hold fire", "payload": AiContext.Order.HOLD_POSITION},
 		{"label": "ENGAGE", "sub": "at will", "payload": AiContext.Order.ENGAGE_AT_WILL},
 		dock_entry,
 		{"label": "COVER ME", "sub": "", "payload": AiContext.Order.COVER_ME},

@@ -497,3 +497,28 @@ func test_a_downed_members_slot_stays_lost_until_someone_takes_it() -> void:
 	assert_false(wing.is_lost(0) or wing.is_lost(4), "out of range")
 	assert_eq(wing.add_member(_member("ALPHA 2")), 1)
 	assert_false(wing.is_lost(1), "a replacement clears it")
+
+
+func test_the_hold_fire_orders_are_acknowledged_in_their_own_words() -> void:
+	# M8-T19 (D85).
+	var wing := Wing.new("ALPHA", _member("ALPHA 1"))
+	wing.add_member(_member("ALPHA 2"))
+	assert_eq(wing.ack_for(AiContext.Order.FORM_HOLD_FIRE), "ALPHA 2: COPY, FORMING UP, HOLDING FIRE")
+	assert_eq(wing.ack_for(AiContext.Order.HOLD_POSITION), "ALPHA 2: COPY, HOLDING POSITION, HOLDING FIRE")
+	assert_eq(Wing.ORDER_PHRASES.size(), AiContext.Order.size(), "a phrase for every order")
+	assert_eq(AiContext.ORDER_WORDS.size(), AiContext.Order.size(), "and a word")
+	assert_eq(AiContext.order_from_word("form_hold"), AiContext.Order.FORM_HOLD_FIRE)
+	assert_eq(AiContext.order_from_word("HOLD"), AiContext.Order.HOLD_POSITION)
+
+
+func test_a_later_flights_callsigns_run_on_from_its_first_number() -> void:
+	# M8-T19: the second flight of three of ALPHA is ALPHA 4, 5 and 6.
+	var wing := Wing.new("ALPHA", null, 2)
+	assert_eq(wing.flight, 0, "a wing is no flight until it is made one")
+	wing.flight = 2
+	wing.first_number = 4
+	assert_eq(wing.callsign(0), "ALPHA 4")
+	assert_eq(wing.callsign(1), "ALPHA 5")
+	assert_eq(wing.callsign(2), "ALPHA 6")
+	wing.mark_lost(2)
+	assert_eq(wing.lost_callsign(2), "ALPHA 6")

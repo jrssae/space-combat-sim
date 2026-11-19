@@ -66,6 +66,9 @@ const WING_ENGAGE := &"wing_engage"
 const WING_COVER := &"wing_cover"
 ## The wing order to dock for repair (M8-T06): key 6, and the comms menu's DOCK.
 const WING_DOCK := &"wing_dock"
+## The hold-fire orders (M8-T19): key 7 forms the wing up with its guns silent, key 8 stops it where it is; both on the comms menu.
+const WING_FORM_HOLD := &"wing_form_hold"
+const WING_HOLD := &"wing_hold"
 const TOGGLE_RUNNING_LIGHTS := &"toggle_running_lights"
 const COMMS_MENU := &"comms_menu"
 const RADIAL_UP := &"radial_up"
@@ -81,7 +84,7 @@ const ACTIONS: Array[StringName] = [
 	STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, ROLL_LEFT, ROLL_RIGHT, TARGET_NEXT, WEAPON_NEXT,
 	TARGET_AHEAD, FIRE, TOGGLE_ASSIST, BRAKE, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TARGET_CYCLE,
-	TOGGLE_RUNNING_LIGHTS, COMMS_MENU, WING_DOCK,
+	TOGGLE_RUNNING_LIGHTS, COMMS_MENU, WING_DOCK, WING_FORM_HOLD, WING_HOLD,
 ]
 
 ## A radial menu's own actions: declared in project.godot, read only while one is open, never rebound by a profile.
@@ -93,7 +96,7 @@ const RADIAL_ACTIONS: Array[StringName] = [RADIAL_UP, RADIAL_DOWN, RADIAL_LEFT, 
 const EDGE_ACTIONS: Array[StringName] = [
 	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, SCREENSHOT, AUTOTRACK, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TOGGLE_RUNNING_LIGHTS,
-	COMMS_MENU, WING_DOCK,
+	COMMS_MENU, WING_DOCK, WING_FORM_HOLD, WING_HOLD,
 ]
 
 const AIM_EXPO := 1.5
@@ -246,6 +249,8 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.ui.wing_engage = edges[WING_ENGAGE]
 	cmd.ui.wing_cover = edges[WING_COVER]
 	cmd.ui.wing_dock = edges[WING_DOCK]
+	cmd.ui.wing_form_hold = edges[WING_FORM_HOLD]
+	cmd.ui.wing_hold = edges[WING_HOLD]
 	cmd.ui.toggle_running_lights = edges[TOGGLE_RUNNING_LIGHTS]
 	cmd.ui.comms_open = edges[COMMS_MENU]
 	cmd.ui.look_active = looking

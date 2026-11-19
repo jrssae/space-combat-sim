@@ -475,6 +475,17 @@ impl ScsBrains {
         }
     }
 
+    /// A flight of three's rules for the pilot (M8-T19; `AiContext.cover`, `cohesion_m`, `rejoined_m`): cover its
+    /// flight-mates, and as a wingman stay within `cohesion_m` of its lead (0: no limit).
+    #[func]
+    fn set_flight(&mut self, slot: i64, cover: bool, cohesion_m: f64, rejoined_m: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.cover = cover;
+            b.ctx.cohesion_m = cohesion_m;
+            b.ctx.rejoined_m = rejoined_m;
+        }
+    }
+
     /// `AiContext.clear_wing`.
     #[func]
     fn clear_wing(&mut self, slot: i64) {

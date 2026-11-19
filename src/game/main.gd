@@ -935,6 +935,10 @@ func _give_wing_orders(ui: UiCommand) -> void:
 		wings.give_order(AiContext.Order.ENGAGE_AT_WILL)
 	if ui.wing_cover:
 		wings.give_order(AiContext.Order.COVER_ME)
+	if ui.wing_form_hold:
+		wings.give_order(AiContext.Order.FORM_HOLD_FIRE)
+	if ui.wing_hold:
+		wings.give_order(AiContext.Order.HOLD_POSITION)
 	if ui.wing_dock and docking.order_available():  # with no home dock in range the key does nothing (maintainer, 2026-11-18)
 		docking.order_wing()
 

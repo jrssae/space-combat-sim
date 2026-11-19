@@ -39,7 +39,9 @@ extends RefCounted
 ##                                                  #       ("player", a spawn's name, or "" for its first ship), formation
 ##                                                  #       (Formation.Shape), order (AiContext.Order), home (StringName, M8-T06: the
 ##                                                  #       dock its ships belong to; a spawn's own `home` goes before it, and
-##                                                  #       `home_set` says the spawn gave one)}; may be empty
+##                                                  #       `home_set` says the spawn gave one), flight (bool, M8-T19: the wing
+##                                                  #       flies as flights of three; led by the player, only the player's own
+##                                                  #       flight of two wingmen takes its orders)}; may be empty
 ##      "mission": Dictionary,                      # (M5-T05, D51) {} for none, else {title, briefing, script (a res://
 ##                                                  #       MissionScript path, loaded by the runner), dialog (a dialog file
 ##                                                  #       path), objectives: the raw `objectives[]`, already checked by
@@ -466,6 +468,11 @@ static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, 
 		var wing_home: Variant = wing.get("home", "")
 		if not (wing_home is String):
 			return "%s.home must be a dock's id (\"babylon5\", a capital ship's name) or \"none\"" % where
+		var flight: Variant = wing.get("flight", false)
+		if not (flight is bool):
+			return "%s.flight must be true or false" % where
+		if flight and leader != "player" and not (leader as String).is_empty():
+			return "%s: a wing of flights names no leader but \"player\": the first ship of each flight leads it" % where
 		var members_raw: Variant = wing.get("members", [])
 		if not (members_raw is Array):
 			return "%s.members must be an array" % where
@@ -493,7 +500,8 @@ static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, 
 		if leader != "player" and not (leader as String).is_empty() and not names.has((leader as String).to_lower()):
 			return "%s.leader '%s' is not a spawn of this scenario (\"player\", or the name of a spawn or member)" % [where, leader]
 		out.append({"name": (wing_name as String).strip_edges(), "faction": StringName(faction as String),
-				"leader": leader as String, "formation": shape_value, "order": order, "home": home_id(wing_home as String)})
+				"leader": leader as String, "formation": shape_value, "order": order, "home": home_id(wing_home as String),
+				"flight": flight as bool})
 	return out
 
 

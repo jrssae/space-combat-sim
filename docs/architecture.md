@@ -6482,3 +6482,71 @@ data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen,
 - **Tests.** `test_stopping_distance`, `test_dock_keep_out` (a grid of starts through the 2 km sphere arrives without entering a
   solid), `test_dock_autopilot`, `test_dock_repair`, `test_dock_visit`, `test_wing_away`, `test_docking` (the hold, the flight in,
   the state inside, repair, relaunch, a 450 m/s start, skip, cancel, respawn, rebase, the reach, wingmen by order and threshold).
+
+### 21.2 Flights of three and the hold-fire orders (D85, T19)
+
+```
+data/wings/flights.json          a flight's size, the cohesion and rejoin distances, the spacing of a squadron's flight leads
+src/ai/flight_rules.gd           FlightRules (pure): the file's numbers, `split` (which flight and place the nth fighter takes),
+                                 `first_number` (1, 4, 7, 10)
+src/ai/wing.gd                   + flight (0: not a flight; 1, 2, ...), first_number (the lead's callsign number), two order phrases
+src/game/wing_director.gd        + command_flight, flights_of, flight_strength, next_flight_place, place_callsign, take_place,
+                                 drop_empty_flights, squadron_lead; refresh briefs a flight's pilots; `wing.flights`
+src/ai/ai_context.gd             + Order.FORM_HOLD_FIRE, HOLD_POSITION (`form_hold`, `hold`); cover, cohesion_m, rejoined_m, strayed
+native/src/brain_behaviours.rs   the same in the brains: ORDER_FORM_HOLD_FIRE, ORDER_HOLD_POSITION, Context.cover / cohesion_m /
+                                 rejoined_m / strayed, ATTACK_W_COVER, ATTACK_W_GROUP, FormationState::shot and its hold
+native/src/brain.rs              + ScsBrains.set_flight
+```
+
+- **A squadron of flights is several wings of one name.** `Wing.flight` numbers them from 1 and `Wing.first_number` carries the
+  callsigns on (the second flight of ALPHA is ALPHA 4, 5 and 6), so everything that works on a wing (slots, `close_gaps`, the lead
+  handed to the lowest slot, away members, home docks, rosters, replenish) works on a flight unchanged, and a loss in one flight
+  moves nobody in another. `WingDirector.next_flight_place` gives the next newcomer its place: the first flight without a living
+  lead (slot 0), then its empty slots, then a new flight; `take_place` puts the ship there and `place_callsign` names it.
+- **The player's flight.** A scenario's `wings[].flight: true` on the wing the player leads (`WingDirector.command_flight`) keeps
+  that wing at a flight's two slots. The wing orders, the comms menu, DOCK, the roster and the replenish all work on
+  `player_wing()`, so they reach those two only. Further members of the scenario's wing, and the ships `launch wing` sends for
+  it (nine: twelve less the player's three), fly as flights from 2 on, engaging at will whatever the player orders. Without the
+  key a wing the player leads is as before (Alpha grown to eleven slots, M7-T58).
+- **A station's own wings** launch as four flights of three (`LaunchDirector.launch_wing`), where they were one wing of twelve.
+  A scenario's AI wing declared `flight` is split the same way as its ships join (it names no leader: each flight's first ship
+  leads it). A launch is capped at the places not flown (`flight_strength`).
+- **Briefing (`WingDirector.refresh`).** The wingmen of an AI-led flight get `cover` and the data's `cohesion_m` and
+  `rejoined_m`; its lead gets `cover` alone. The lead of a squadron's later flight also holds a slot on the squadron's lead (the
+  lead of its first AI-led flight with a living lead): the wing's shape at `lead_spacing` times its spacing, so with nothing to
+  fight a squadron forms up as vics of three behind the first; with a hostile in sight its order (engage at will) takes it
+  into the fight. The player's own wingmen get neither: they follow the orders.
+- **In the brains (native, mirrored in the GDScript reference; §17.13).** A think is still a pure function of the frozen rows
+  and the pilot's own state, so one thread equals six and the threaded step its delayed reference.
+  - **Cover.** With `cover`, the attack's target value adds `ATTACK_W_COVER` (1.0, as much as the raid's answer rule) for a
+    hostile that has a flight-mate selected (`rows.target_ids` among `wing_ids`), so whoever attacks one of the flight outranks
+    every other target; a wingman (a `cohesion_m` above 0) also adds `ATTACK_W_GROUP` (0.5) for its lead's target, so with
+    nobody under attack the three fight one enemy.
+  - **Cohesion.** A wingman farther than `cohesion_m` from its lead (its row, or the wing's link while it is out of sight) has
+    `strayed` until it is back within `rejoined_m`: `may_attack` and `has_attackable` say no, so the attack scores nothing,
+    the formation behaviour takes over and flies it back to its slot. An evasion is still allowed.
+  - **Shooting from the slot.** In the formation behaviour, within 150 m of its slot (where the nose is the leader's and
+    every thruster keeps the slot), a pilot that attacks at all turns its nose on the nearest hostile ship inside its guns'
+    range and within 40 degrees of the leader's nose, leads it as an attack does, and holds the trigger on the attack's own
+    gate (the lead inside the cone, no friend in the fire lane); its targeting computer shows that hostile. Before T19 no rule
+    let a ship in formation fire: FORM ON ME gated every attack and the formation behaviour never pulled the trigger. A
+    passive pilot does not shoot from its slot, a big hull is left to an attack run on its mounts, and avoidance still
+    filters the wish.
+  - **The hold-fire orders.** `ORDER_FORM_HOLD_FIRE` is FORM ON ME without the shot from the slot. `ORDER_HOLD_POSITION` makes
+    the formation behaviour score with or without a leader and command the brake, so the flight model stops the ship against
+    the reference (§19.5) and keeps it there; rally stands down. Both gate attack and retreat as FORM ON ME does. Any other
+    order replaces `Wing.order`, which is all it takes to lift them.
+- **Input.** `wing_form_hold` (key 7) and `wing_hold` (key 8) are keyboard-only edge actions like keys 1-4 and 6; the comms
+  menu's page lists FORM UP and HOLD POSITION after ATTACK and after FORM ON ME, and the ring lays the page out (nothing names
+  an angle, so a ring sized to its entries moves them without a change here). `wing order form_hold|hold`. The acknowledgements
+  are `Wing.ORDER_PHRASES`' `FORMING UP, HOLDING FIRE` and `HOLDING POSITION, HOLDING FIRE`; a held wingman's roster row reads HOLD.
+- **Measured (`test_flight_fight`, two flights of three against six raiders, 120 s, seeded).** With the rules a wingman was never
+  farther than 1.1 km from its lead and a pilot in an attack whose flight-mate was under attack was on one of the flight's
+  attackers 98 % of the time; the same ships as plain wings of three strayed to 5.3 km and covered 79 % of the time. With a
+  700 m cohesion distance (the default is 2.5 km) wingmen overran it five times, turned back within 350 m and were in an
+  attack on under 1 % of their strayed ticks.
+- **Tests.** Rust `brain_behaviours::tests` (the shot from the slot and its limits, the two holds, cover and the lead's target,
+  straying and rejoining); `test_brain_think_parity` (the native brain and its GDScript twin, bit for bit, on every new rule);
+  `test_flight_rules`, `test_wing`, `test_comms_menu`, `test_input_map`; `test_flights` (the split in a scenario and from a Cobra
+  arm, orders reaching two wingmen); `test_wing_orders` (keys 7 and 8, the console, shots from the slot, both holds lifted);
+  `test_comms_menu_input` (the pad ring); `test_flight_fight` (cohesion, cover, a short leash, threads).
