@@ -334,6 +334,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T22 | D | Gamepad detection: why Godot sometimes misses the maintainer's pad, joypad logging and notices, `joypads`, troubleshooting (D88; maintainer, 2026-11-18; numbered last) | - | Fable | Linux input stack diagnosis on the real device, small notices | in progress |
 | T23 | C | The civilian escort in its own star system: no Babylon 5, no nebula, a different planet (D89; maintainer, 2026-11-18; numbered last) | T08 | Opus | A second system in the data, its sky and planet, the escort moved onto it; a sheet first | done |
 | T24 | D | Radial menus fit their entries: equal slices for however many entries, no empty spots (D90; maintainer, 2026-11-18; numbered last) | - | Opus | The radial framework's layout and picking for every input | done |
+| T25 | E | Frame-rate regression: free flight at ~15 fps (66.7 ms frames, GPU ~1 ms) found 2026-11-19 by M8-T23; find the commit and fix it (numbered last) | - | Opus | Bisect from M7's merge with `state render` on the GPU; CPU-side cost per frame | in progress |
 | T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | not started |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
@@ -991,6 +992,13 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   real D-pad doing nothing in a ring, `test_comms_menu_input` 16, `test_target_menu` 33 with keys on rings of six, three and one,
   `test_radial_menu` 15, `test_comms_menu` 10, `test_keyboard_parity` 4, `test_cinematic_camera` 12, `test_control_lock` 10,
   `test_control_profile_store` 17).
+
+### M8-T25 Frame-rate regression
+
+- **Goal:** M8-T23 measured Epsilon free flight at 1600x900: `render.fps` 15 after 20-30 s, `frame_ms` 66.7, `gpu_ms` ~1, 202 draw
+  calls; M7 ran well above 60 fps on the same machine. Find the cause (bisect `1e7064dc`..HEAD with the real renderer and
+  `state render`), fix it, and add a guard where one fits.
+- **Done when:** free flight is back to M7's frame rate (numbers recorded here) and the cause and fix are written down.
 
 ### M8-T17 Integration, full suite, docs and acceptance
 
