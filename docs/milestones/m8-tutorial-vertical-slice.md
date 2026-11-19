@@ -333,7 +333,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T08 | C | The civilian escort's raids come with the strike carrier (D83, Q6) | T07 | Fable | Mission data and pacing on `CarrierJumps`; the escort's tests kept green | done |
 | T09 | C | Raider Battle Wagon (moved from M10-T20): from images, with weapons (M10 Q31) and four launch tubes; the escort's last wave comes with it (Q8) | T08, the maintainer on its weapons | Fable | No STL; a new hull with weapons and tube launches | done |
 | T10 | D | Interceptor muzzle at the drawn barrel tip, and the grid balance measured again (roadmap M7-2) | - | Fable | A placement fix in the turret rows with a balance check | done |
-| T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | in progress |
+| T11 | D | The walls beside the cargo bay stop flickering (roadmap M7-3) | - | Sonnet | Find the coplanar faces or shading cause in the station generator; a test | done |
 | T12 | D | Audio rework of every sound effect and the Starfury engines' steady level (roadmap M7-5) | - | Opus | One loudness reference, the mix, and a smoothed engine gain; a listening checklist | done |
 | T13 | D | Wingmen close the gaps losses leave in a formation (roadmap M7-6) | - | Fable | Native re-slotting with M7-T76's avoidance, 1 and 6 threads identical | done |
 | T14 | D | The bench writes to `user://` in an exported build (roadmap L15) | - | Fable | A path fix with a test | done |
@@ -773,6 +773,15 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 
 - **Goal:** roadmap M7-3: find the coplanar or overlapping faces, or the shading cause, and fix it in the station generator.
 - **Done when:** a Python test finds no coplanar overlap there; the maintainer sees no flicker (H).
+- **Done (2026-11-19):** the cause was the section skirts, not the hull. The station is cut into sections at planes (z 420 is the first); each section
+  carries a 6 m wall hung inward from its border in the cut plane so a crack shows hull, not space. The cargo bay's front (the spine's
+  front face, `ZG_FRONT_Z` 420) lies exactly in that plane, so the skirts of the prongs and ring lay over it facing the same way, up
+  to nine layers deep (`bow_ring`: 337 coplanar pairs, 11 000 m2 of the front's 15 800 doubled), with the border's UVs smeared
+  down each wall (the vertical streaks). Panning across the bay's front toggled which layer won. `skirts` now stands each wall
+  `SKIRT_INSET_M` (0.1 m) inside its section, so it never shares a plane with a hull face that ends there.
+  - **Tests:** `test_coplanar_overlaps.SectionTests` (every frame section's skirts against its own faces: 337 pairs before, 0 after),
+    `test_station_sections` updated for the inset. `scripts/flicker_pan_probe.tscn` films a lateral pan across the bay's front
+    (the earlier probe showed the drum); the pan is a (H) check as before.
 
 ### M8-T12 Audio rework
 

@@ -7,7 +7,8 @@ overlap, a texel lands where it did on the whole piece, and the shading is the s
 
 The importer simplifies each section on its own and does not hold a section's border still, so two neighbours drawn at different
 levels can open a hairline crack along their joint. Each section therefore carries a skirt: a short wall in the cut plane hanging
-inward from its border, painted and shaded as the border is, so a crack shows hull, not space.
+inward from its border (a hair behind the plane, so no hull face that ends there shares it), painted and shaded as the border is, so
+a crack shows hull, not space.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ EPS_M = 1e-6
 OPAQUE, GLASS, INTERIOR = 0, 1, 2  # a face's kind: which primitive, and which file, it is written to
 INTERIOR_SUFFIX = "_in"
 SKIRT_M = 6.0  # how far a skirt reaches into the hull: more than a level's chord error near the joint, less than a thin part
+SKIRT_INSET_M = 0.1  # and how far behind its cut plane it stands, so it never shares a plane with a hull face that ends there
 
 
 @dataclass(frozen=True)
@@ -137,6 +139,9 @@ def skirts(corners: SectionCorners, planes: Sequence[tuple[float, float]], depth
             if np.linalg.norm(da) < 0.3 or np.linalg.norm(db) < 0.3 or np.linalg.norm(pb - pa) < 1e-6:
                 continue  # a face lying in the plane, or a border running into it: no wall to hang
             qa, qb = pa + depth * da / np.linalg.norm(da), pb + depth * db / np.linalg.norm(db)
+            # A hull face lying in the cut plane (the cargo bay's front) would z-fight a wall standing in it, the border's UVs
+            # smeared down the wall (M8-T11): the wall stands just inside its section instead.
+            pa, pb, qa, qb = (q + np.array([0.0, 0.0, -side * SKIRT_INSET_M]) for q in (pa, pb, qa, qb))
             for tri, nrm, uv in (((pa, pb, qb), (na, nb, nb), (ua, ub, ub)), ((pa, qb, qa), (na, nb, na), (ua, ub, ua))):
                 facing = np.cross(tri[1] - tri[0], tri[2] - tri[0])[2] * side
                 order = (0, 1, 2) if facing > 0.0 else (0, 2, 1)
