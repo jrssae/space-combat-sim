@@ -361,7 +361,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T27 | C | Remove the Raider Battle Wagon everywhere: not from the show, and its source image's creator would not want it shared this way (maintainer, 2026-11-19; numbered last) | - | Fable | Undo M8-T09 across code, data, assets, tests and docs; the escort's last wave back on the strike carrier | done |
 | T28 | D | Free flight's encounters split into three switches: civilian traffic, allied patrols, enemy encounters (maintainer, 2026-11-19; numbered last) | - | Sonnet | Settings, the Free flight page and the encounter director's weights | done |
 | T33 | A | Tutorial update: only the instructor and the player until the raid; the wing-orders drill on the instructor; a two-ship opening launch; every other Starfury launches at the alarm (maintainer, 2026-11-19) | T05 | Fable | Mission script, scenario and dialog on the T05 agent's own work | done |
-| T30 | C | Cobra-bay launch: more camera angles (a pool, picked at random without repeats) and control back as soon as the launch thrusters cut (maintainer, 2026-11-19) | T03 | Opus | Launch shots and the hand-off timing | in progress |
+| T30 | C | Cobra-bay launch: more camera angles (a pool, picked at random without repeats) and control back as soon as the launch thrusters cut (maintainer, 2026-11-19) | T03 | Opus | Launch shots and the hand-off timing | done |
 | T29 | C | Jumpgate autopilot: more camera angles (wider trailing shots, the gate's base and side), picked at random without repeats (maintainer, 2026-11-19) | T18 | Opus | Gate shots on the autopilot's predicted path | in progress |
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | in progress |
 | T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | not started |
@@ -1334,6 +1334,17 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   never the same set as last time, skipping any that would clip the station; **control returns as soon as the launch thrusters
   cut** instead of after the cinematic's tail. Applies to every Cobra-bay launch (player, docking relaunch, squadron launch).
 - **Done when:** tests on the pool (no repeat, clearance) and on the hand-off moment; frames for the record; (H) the look.
+- **Done (2026-11-19):** the three launch pools (`data/launch/cobra_launch.json`, `exterior_launch.json`, `squadron_launch.json`)
+  have two or more shots a phase, each with a one-line `move`; no launch repeats the last one's set, and between the cut's phases
+  the director cuts to unplayed pool shots, so the cockpit never shows mid-launch. Every camera angle lasts 1 s to under 3 s, or
+  up to 5 s when flagged `feature` (`CinematicShot` takes and loops; `test_cinematic_shot_lengths` reads every shot in the data).
+  To keep that rule, the civilian escort's intro, the docking shots, the tour's stops and a mission fixture were cut into takes. Control returns the tick
+  the launch thrusters cut; `cut_shots()` is the one call that stops a launch's camera (for M8-T32); a skip still lands in the same
+  end state. New: `bay_fixed` and `fighter_fixed` camera anchors, a variant's `delay_s` and `until`, per-shot canopy lights,
+  M8-T29's `CinematicKeyLight` on every launch shot's subject, Furies lighting all four mains as their flip ends, `launch force
+  <variant>`, and `scripts/launch_shot_review.sh` (4 frames and a sheet per shot, muted, inert input). Reviewed against the show
+  over four rounds (frames in `references/screenshots/M8-T30 launch shots/review/`); the look stays (H). Tests (staged copy): see
+  the commit message.
 
 ### M8-T29 Jumpgate autopilot: camera variety
 

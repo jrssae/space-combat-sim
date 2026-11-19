@@ -36,6 +36,10 @@ var _last: Dictionary = {}
 
 
 ## The tour in `path`: `{ok: true, book}` or `{ok: false, error}`.
+## Moves cut together at each stop (each under `CinematicShot.MAX_TAKE_S`), so a stop keeps its length.
+const TAKES_PER_STOP: int = 3
+
+
 static func load_file(path: String = DEFAULT_PATH) -> Dictionary:
 	var text: String = FileAccess.get_file_as_string(path)
 	if text.is_empty():
@@ -171,6 +175,22 @@ func shot_for(point_name: String, variant: String, tour_point: Dictionary) -> Di
 	var aim: Vector3 = points[point_name]["aim"]
 	var reach: float = ((tour_point["look_at"] as Vector3) - (tour_point["position"] as Vector3)).length() \
 			* float(points[point_name]["scale"])
+	# Three moves cut together (maintainer: no camera angle 3 s or longer): the drawn one, then the next two of the stop's pool.
+	var pool: PackedStringArray = points[point_name]["templates"]
+	var moves := PackedStringArray([variant])
+	var at_pool: int = pool.find(variant)
+	for k: int in range(1, pool.size()):
+		if moves.size() >= TAKES_PER_STOP:
+			break
+		moves.append(pool[(at_pool + k) % pool.size()])
+	var takes: Array = []
+	for move: String in moves:
+		takes.append({"keys": _keys_for(point_name, move, stand, aim, reach)})
+	return CinematicShot.from_dict(StringName("tour_%s_%s" % [point_name, variant]), {"takes": takes})
+
+
+# One move's keys at a stop: the template's offsets scaled to the stop's reach.
+func _keys_for(point_name: String, variant: String, stand: Vector3, aim: Vector3, reach: float) -> Array:
 	var keys: Array = []
 	for raw: Dictionary in templates[variant]["keys"] as Array:
 		var at: Array = raw["at"]
@@ -182,7 +202,7 @@ func shot_for(point_name: String, variant: String, tour_point: Dictionary) -> Di
 					"offset": [aim.x + float(look[0]) * reach, aim.y + float(look[1]) * reach, aim.z + float(look[2]) * reach]},
 			"up": {"actor": stop_actor(point_name), "direction": [0.0, 1.0, 0.0]},
 			"fov": float(raw["fov"])})
-	return CinematicShot.from_dict(StringName("tour_%s_%s" % [point_name, variant]), {"keys": keys})
+	return keys
 
 
 static func stop_actor(point_name: String) -> String:

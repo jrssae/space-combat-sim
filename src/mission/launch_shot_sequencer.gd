@@ -7,12 +7,14 @@ extends RefCounted
 ## shots and the ejection count each tick, so a test can run a whole launch through it.
 
 var profile: LaunchProfile = null
+## `current` while a filler holds the screen (a pool shot between phases, M8-T30): held like any shot, never a row.
+const FILLER: int = -2
 ## The shot on screen (an index into the cut, -1 none), since when, and the ejections counted when it started.
 var current: int = -1
 var started_s: float = 0.0
 var _ejections_at_start: int = 0
 var _taken: Dictionary = {}  # cut indices played or superseded
-## Every shot played: `{index, start}`, in order.
+## Every shot played: `{index (FILLER for a filler), start, variant}`, in order.
 var log: Array[Dictionary] = []
 
 
@@ -35,18 +37,26 @@ func next(now: float, due: PackedInt32Array, cut: Array[Dictionary], ejections: 
 	current = pending
 	started_s = now
 	_ejections_at_start = ejections
-	log.append({"index": pending, "start": now})
+	log.append({"index": pending, "start": now, "variant": cut[pending]["variant"]})
 	return pending
+
+
+## A filler went on screen now (`variant`): it is held `min_shot_s` like a cut's shot.
+func note(now: float, variant: StringName, ejections: int) -> void:
+	current = FILLER
+	started_s = now
+	_ejections_at_start = ejections
+	log.append({"index": FILLER, "start": now, "variant": variant})
 
 
 ## Whether the shot on screen may give way now.
 func may_cut(now: float, cut: Array[Dictionary], ejections: int, left: int) -> bool:
-	if current < 0:
+	if current == -1:
 		return true
 	var held: float = now - started_s
 	if held < profile.min_shot_s - LaunchSequence.EPS_S:
 		return false
-	if bool(cut[current].get("row", false)) and held < profile.row_max_s - LaunchSequence.EPS_S:
+	if current >= 0 and bool(cut[current].get("row", false)) and held < profile.row_max_s - LaunchSequence.EPS_S:
 		return ejections - _ejections_at_start >= profile.row_ejections or left == 0
 	return true
 

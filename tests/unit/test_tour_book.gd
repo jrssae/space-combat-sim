@@ -110,7 +110,11 @@ func test_every_shot_holds_at_least_a_second_and_is_smooth() -> void:
 			assert_gte(shot.duration_s, 1.0, "%s / %s runs %.1f s" % [stop_name, variant, shot.duration_s])
 			assert_gte(shot.keys.size(), 2, "%s / %s moves" % [stop_name, variant])
 			for i: int in range(1, shot.keys.size()):
+				if shot.take_starts.has(i):
+					continue  # a cut to the next move (M8-T30: several moves a stop, each under 3 s)
 				assert_gte(shot.keys[i].t - shot.keys[i - 1].t, 1.0, "%s / %s: no key flick shorter than a second" % [stop_name, variant])
+			for k: int in shot.take_count():
+				assert_gte(shot.take_length_s(k), 1.0, "%s / %s: each move holds at least a second" % [stop_name, variant])
 
 
 func test_a_file_with_a_short_shot_or_a_missing_piece_is_refused() -> void:

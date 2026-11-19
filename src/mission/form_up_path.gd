@@ -5,10 +5,11 @@ extends RefCounted
 ##
 ## It lives in the station's frame and runs in radius, angle about the drum's axis and length along it, so the way never cuts
 ## back inside the drum whatever the arm's angle at the release, and it goes round the side away from the stationary frame's
-## spine (`avoid_deg`). Pure: given the seconds since the release it says the pose, velocity, turn rate and which engines burn.
+## spine (`avoid_deg`). Pure: given the seconds since the release it says the pose, velocity, turn rate and which engines burn: all four
+## mains light together as the flip ends (the show's launch, M8-T30), the retros before the slot.
 
 ## Seconds from the release to the slot, for the flip (nose out to the formation's heading), and the engines' burns: the mains
-## from the release, the retros before the slot.
+## from the flip's end, the retros before the slot.
 var duration_s: float = 7.0
 var flip_s: float = 2.5
 var main_s: float = 3.0
@@ -66,7 +67,7 @@ func state_at(t: float) -> Dictionary:
 	if t < duration_s:
 		velocity = radial * r.y + tangent * (r.x * a.y) + Vector3(0.0, 0.0, z.y)
 	return {"transform": Transform3D(Basis(_turn(t)), point), "velocity": velocity, "angular": _turn_rate(t),
-			"main": 1.0 if t < main_s else 0.0, "retro": 1.0 if t >= duration_s - retro_s and t < duration_s else 0.0}
+			"main": 1.0 if t >= flip_s and t < flip_s + main_s and t < duration_s - retro_s else 0.0, "retro": 1.0 if t >= duration_s - retro_s and t < duration_s else 0.0}
 
 
 ## Whether the ship is on its slot.

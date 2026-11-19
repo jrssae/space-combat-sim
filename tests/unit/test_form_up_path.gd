@@ -1,7 +1,7 @@
 extends GutTest
 ## A squadron Starfury's way from its hand-off to its slot (M8-T03, D81): it starts with the hand-off state, ends on the slot at
-## rest with the formation's heading, never dips back inside the drum, goes round the side away from the spine, burns its mains
-## first and its retros last.
+## rest with the formation's heading, never dips back inside the drum, goes round the side away from the spine, lights its mains after the flip
+## and its retros last.
 
 const PIVOT := Vector3(0.0, 0.0, -1000.0)
 const DRUM_R: float = 244.5
@@ -61,11 +61,11 @@ func test_it_never_dips_inside_the_drum_and_goes_round_away_from_the_spine() -> 
 			assert_false(at > 80.0 and at < 100.0 and r < 500.0, "released at %.0f deg: under the spine at %.1f s" % [angle, float(i) * 0.1])
 
 
-func test_the_mains_burn_first_and_the_retros_last() -> void:
+func test_the_mains_light_after_the_flip_and_the_retros_last() -> void:
 	var path := FormUpPath.create(_handoff(10.0), _slot(), PIVOT, 90.0, 7.0, 2.5, 3.0, 2.0)
-	assert_eq(path.state_at(0.5)["main"], 1.0)
-	assert_eq(path.state_at(0.5)["retro"], 0.0)
-	assert_eq(path.state_at(4.0)["main"], 0.0)
+	assert_eq(path.state_at(0.5)["main"], 0.0, "cold while it flips")
+	assert_eq(path.state_at(2.6)["main"], 1.0, "the mains light as the flip ends")
+	assert_eq(path.state_at(4.0)["main"], 1.0)
 	assert_eq(path.state_at(4.0)["retro"], 0.0)
 	assert_eq(path.state_at(6.0)["retro"], 1.0)
 	assert_eq(path.state_at(7.5)["retro"], 0.0, "on the slot: everything cold")

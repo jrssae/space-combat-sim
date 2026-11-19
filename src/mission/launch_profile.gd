@@ -53,13 +53,15 @@ var launch_up: Vector3 = Vector3(0.0, 0.0, -1.0)
 var min_shot_s: float = 1.0
 ## A row shot (a variant with `row`) is held until this many fighters were let go during it, the wave has none left, or `row_max_s`.
 var row_ejections: int = 3
-var row_max_s: float = 4.0
+var row_max_s: float = 2.8
 ## A launch with at least this many fighters in its first wave films the drop with a row shot and leaves the exit out.
 var row_wave_min: int = 3
 ## The camera's phases, in order: each `{phase: String, step: StringName, at_s, optional (0 to 1: the chance it is left out),
 ## follows (`FOLLOWS`), variants}`; each variant `{id: StringName, shot: CinematicShot, weight, fill, row: bool, subject: "fighter" or "row"}`: a row
 ## variant films the door row (subject `row`: the wave's doors in frame) and is held for several ejections. `fill` (empty for none) is a light lit for the
-## shot's length: `actor`, `offset` (Vector3 in its frame), `energy`, `range_m`, `color`.
+## shot's length: `actor`, `offset` (Vector3 in its frame), `energy`, `range_m`, `color`. `delay_s` (optional) plays a variant that
+## much later than its phase (M8-T30: a shot that opens too early in the step). `until` (optional, a step) ends a shot, once held
+## its least, when its fighter reaches that step: a camera in the hall cuts as the ship leaves through the door.
 var phases: Array[Dictionary] = []
 
 
@@ -91,8 +93,9 @@ static func from_dict(data: Variant, source: String = "launch profile") -> Dicti
 		return {"ok": false, "error": "%s: drop_s and row_move_s must be more than 0" % source}
 	for key: String in ["min_shot_s", "row_max_s"]:
 		var v: Variant = raw.get(key, made.get(key))
-		if not (v is float or v is int) or float(v) < MIN_SHOT_FLOOR_S:
-			return {"ok": false, "error": "%s: %s must be %.1f s or more" % [source, key, MIN_SHOT_FLOOR_S]}
+		if not (v is float or v is int) or float(v) < MIN_SHOT_FLOOR_S or float(v) >= CinematicShot.MAX_TAKE_S:
+			return {"ok": false, "error": "%s: %s must be %.1f s or more and under %.1f s" % [source, key, MIN_SHOT_FLOOR_S,
+					CinematicShot.MAX_TAKE_S]}
 		made.set(key, float(v))
 	for key: String in ["row_ejections", "row_wave_min"]:
 		var n: Variant = raw.get(key, made.get(key))
@@ -122,6 +125,10 @@ static func from_dict(data: Variant, source: String = "launch profile") -> Dicti
 		# Every shot lasts its least hold (a row shot its longest), so the camera never drops back to the cockpit before the cut.
 		for variant: Dictionary in (phase as Dictionary)["variants"]:
 			_extend(variant["shot"], made.row_max_s if bool(variant["row"]) else made.min_shot_s)
+			if not (variant["shot"] as CinematicShot).keeps_length_rule():
+				return {"ok": false, "error": "%s: %s lasts %.1f s: an angle stays under %.0f s (%.0f s for a feature shot)" % [source,
+						variant["id"], (variant["shot"] as CinematicShot).longest_take_s(), CinematicShot.MAX_TAKE_S,
+						CinematicShot.MAX_FEATURE_S]}
 		made.phases.append(phase)
 	return {"ok": true, "profile": made}
 
@@ -233,10 +240,20 @@ static func _phase(raw: Variant, where: String) -> Variant:
 		var subject: String = str((v as Dictionary).get("subject", "row" if row else "fighter"))
 		if subject != "fighter" and subject != "row":
 			return "%s.subject must be fighter or row" % vw
+		var delay: Variant = (v as Dictionary).get("delay_s", 0.0)
+		if not _is_num(delay) or float(delay) < 0.0:
+			return "%s.delay_s must be seconds, 0 or more" % vw
+		var until := StringName(str((v as Dictionary).get("until", "")))
+		if until != &"" and not STEPS.has(until):
+			return "%s.until must be one of %s" % [vw, STEPS]
 		variants.append({"id": StringName((v as Dictionary)["id"]), "shot": shot["shot"], "weight": float(weight), "fill": fill,
-				"row": row, "subject": subject})
+				"row": row, "subject": subject, "delay_s": float(delay), "until": until})
 	var follows: String = str(e.get("follows", "lead"))
 	if not FOLLOWS.has(follows):
 		return "%s.follows must be one of %s" % [where, FOLLOWS]
 	return {"phase": str(e.get("phase", step)), "step": step, "at_s": float(at), "optional": float(optional), "variants": variants,
 			"follows": follows}
+
+
+static func _is_num(v: Variant) -> bool:
+	return v is float or v is int

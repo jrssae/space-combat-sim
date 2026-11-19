@@ -38,8 +38,8 @@ var _avoid_deg: float = 90.0
 var _player_stowed: Combatant = null
 
 
-## The cinematic's settings from `path`: `{ok, flights, player_door, form_up: Dictionary, fallback: CinematicShot, profile:
-## LaunchProfile (its camera phases)}` or `{ok: false, error}`.
+## The cinematic's settings from `path`: `{ok, flights, player_door, form_up: Dictionary, profile: LaunchProfile (its camera
+## phases)}` or `{ok: false, error}`.
 static func load_settings(path: String = DEFAULT_PATH) -> Dictionary:
 	var made: Dictionary = LaunchProfile.load_file(path)
 	if not bool(made["ok"]):
@@ -47,10 +47,7 @@ static func load_settings(path: String = DEFAULT_PATH) -> Dictionary:
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(path))
 	var raw: Dictionary = data if data is Dictionary else {}
 	var form: Dictionary = raw.get("form_up", {}) if raw.get("form_up") is Dictionary else {}
-	var fallback: Dictionary = CinematicShot.from_dict(&"sq_fallback", raw.get("fallback", {}))
-	if not bool(fallback["ok"]):
-		return {"ok": false, "error": "%s: fallback: %s" % [path, fallback["error"]]}
-	var out: Dictionary = {"ok": true, "profile": made["profile"], "fallback": fallback["shot"],
+	var out: Dictionary = {"ok": true, "profile": made["profile"],
 			"flights": clampi(int(raw.get("flights", 4)), 1, 4), "player_door": maxi(int(raw.get("player_door", 1)), 1), "form_up": {}}
 	for key: String in ["angle_deg", "radius_m", "duration_s", "flip_s", "main_s", "retro_s"]:
 		var defaults: Dictionary = {"angle_deg": 270.0, "radius_m": 650.0, "duration_s": 7.0, "flip_s": 2.5, "main_s": 3.0, "retro_s": 2.0}

@@ -5886,9 +5886,26 @@ data/scenarios/station_launch.json  the player on Alpha 3 with three wingmen
   the AI flights where their pilots keep them, M8-T19, the player's flight on the next flight's place). Its engines show the burn
   (`Ship.set_clamped_command`). When that launch is over (doors shut) the player launches alone, filmed by `exterior_launch.json`;
   its hand-off lets everyone go at rest on their slots. Camera phases may follow another fighter than the lead (`follows`: lead,
-  wave2, last) and use the actors `formation` and `station`; a fallback shot covers the gaps. The skip puts every squadron ship on
+  wave2, last) and use the actors `formation` and `station`; pool shots fill the gaps (M8-T30). The skip puts every squadron ship on
   its slot, ends the launch with its doors shut and skips the player's launch, so it lands in the full run's end state. A skip
   held under the spine still counts as a skip at its release (no burn).
+- **Camera variety and the quicker hand-off (M8-T30).** Every launch pool (`cobra_launch.json`, `exterior_launch.json`,
+  `squadron_launch.json`) has two or more variants a phase (wider trailing shots, beside the arm, below the bay, the station behind
+  the fighter), each with a one-line `move`; `LaunchCut` never repeats a phase's last variant, so no launch plays the set before it.
+  A shot that clips the station is kept out of the pools by `test_launch_shot_clearance` (every bay/fighter variant, 54 launches).
+  The controls return the tick the launch thrusters cut (`step_player`'s burn ends and calls `cut_shots`); `cut_shots()` is the one
+  call that stops a launch's camera while the launch goes on (M8-T32's abort). `launch force <variant>` and
+  `scripts/launch_shot_review.sh` render every variant for review. A variant's `until` (a step) ends an inside-the-hall shot once
+  its fighter is out of the door; `bay_fixed` is the door where it was as the shot began (a camera fixed in space). While one of
+  its shots plays, the director puts M8-T29's `CinematicKeyLight` on the shot's subject.
+- **No angle 3 s or longer (maintainer, 2026-11-19).** `CinematicShot.MAX_TAKE_S` (3 s) bounds every camera angle; a shot
+  flagged `feature: true` (an interesting one: the drop seen from inside, a flip and ignition, a pan along the arm) may run to
+  `MAX_FEATURE_S` (5 s), and the guard lists the flagged ones for review; a shot may be
+  several `takes` cut together (`{takes: [{keys}, ...]}`, with `loop` for a shot held until an event); `LaunchProfile` refuses a
+  variant or a row hold that long. Between the cut's phases the director fills with other shots of the launch's pool
+  (`LaunchDirector._fill`: the latest phase its fighter has reached, unplayed first; a hold shot only while held), replacing a shot
+  in the tick it ends so the cockpit never shows between. `test_cinematic_shot_lengths` reads every shot written as data
+  (`data/**.json`, the mission fixtures, the launch pools as held, the tour's built stops).
 
 ### 20.3 The defense grid (D75, T07)
 

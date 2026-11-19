@@ -289,3 +289,29 @@ func test_an_up_key_keeps_the_picture_upright_against_its_actor() -> void:
 	assert_almost_eq(_eval(plain, 0.0).transform.basis.y, Vector3.UP, Vector3.ONE * TOL, "no up key: the world's up")
 	_assert_parse_error({"keys": [key.merged({"up": {"actor": "arm"}}, true)]}, "up must be")
 	_assert_parse_error({"keys": [key.merged({"up": {"actor": "arm", "direction": [0, 0, 0]}}, true)]}, "up must be")
+
+
+# M8-T30: a shot of several takes cuts between camera angles: each take curves only between its own keys, the camera jumps at
+# the cut, the lengths add up, and a looping shot starts its takes again.
+func test_takes_cut_between_angles_and_a_loop_starts_again() -> void:
+	var raw: Dictionary = {"takes": [
+		{"keys": [{"t": 0, "position": {"origin": [0, 0, 0]}, "look_at": {"origin": [0, 0, -10]}},
+				{"t": 2, "position": {"origin": [10, 0, 0]}, "look_at": {"origin": [0, 0, -10]}}]},
+		{"keys": [{"t": 0, "position": {"origin": [100, 0, 0]}, "look_at": {"origin": [0, 0, -10]}},
+				{"t": 1.5, "position": {"origin": [100, 20, 0]}, "look_at": {"origin": [0, 0, -10]}}]}]}
+	var made: Dictionary = CinematicShot.from_dict(&"two", raw)
+	assert_true(bool(made["ok"]), str(made.get("error", "")))
+	var shot: CinematicShot = made["shot"]
+	var none := func(_a: String) -> Variant: return null
+	var here := func(o: PackedFloat64Array) -> Vector3: return Vector3(o[0], o[1], o[2])
+	assert_eq(shot.take_count(), 2)
+	assert_almost_eq(shot.duration_s, 3.5, 1e-6, "the takes run one after another")
+	assert_almost_eq(shot.longest_take_s(), 2.0, 1e-6)
+	assert_almost_eq(shot.pose_at(1.999, none, here).transform.origin.x, 10.0, 0.05, "the first angle to its end")
+	assert_almost_eq(shot.pose_at(2.0, none, here).transform.origin, Vector3(100, 0, 0), Vector3.ONE * 1e-3, "then a cut")
+	assert_almost_eq(shot.pose_at(3.5, none, here).transform.origin, Vector3(100, 20, 0), Vector3.ONE * 1e-3)
+	raw["loop"] = true
+	var looped: CinematicShot = CinematicShot.from_dict(&"loop", raw)["shot"]
+	assert_almost_eq(looped.pose_at(3.5 + 0.0, none, here).transform.origin, Vector3(0, 0, 0), Vector3.ONE * 1e-3, "and again")
+	raw["takes"][1]["keys"] = [{"t": 0, "position": {"origin": [0, 0, 0]}, "look_at": {"origin": [0, 0, -10]}}]
+	assert_false(bool(CinematicShot.from_dict(&"bad", raw)["ok"]), "a take of no length is refused")

@@ -80,6 +80,19 @@ var fill: LightEmitter = null
 var _fill_shot: CinematicShot = null
 var _fill_spec: Dictionary = {}
 var _fill_id: String = ""
+## The shot this director put on screen last (null none): `cut_shots` stops only its own.
+var _playing: CinematicShot = null
+## A variant pinned for the review sheets (`launch force`, M8-T30): the next launch plays it in its phase and holds it to its end.
+var review_variant: StringName = &""
+var _review_holding: bool = false
+## The `bay_fixed` actor: the followed fighter's door in the station's frame as the shot began, so a camera stays put in space
+## while the drum turns on (M8-T30).
+var _fixed_bay: Transform3D = Transform3D.IDENTITY
+## The shot on screen ends early once its fighter reaches this step (a variant's `until`), and that fighter.
+var _playing_until: StringName = &""
+var _playing_subject: String = ""
+## The shared key light on the subject of the launch shot playing (M8-T30: the show kept a hard key light on its fighters).
+var _key_light: CinematicKeyLight = CinematicKeyLight.new()
 ## The player's launch filmed from outside (the squadron launch's last, a relaunch after a repair): its profile and shuffle bags.
 var exterior_profile: LaunchProfile = null
 var exterior_cut: LaunchCut = null
@@ -121,10 +134,12 @@ func _ready() -> void:
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 	_drop_fill()
+	_key_light.detach()
 
 
 # The fill follows its actor as drawn, and goes out with its shot.
 func _process(_delta: float) -> void:
+	_light_subject()
 	if fill == null:
 		return
 	if main == null or main.camera_rig == null or main.camera_rig.playing_shot() != _fill_shot:
@@ -171,6 +186,8 @@ func launch_player(wing: String, door: int, with_wingmen: bool = true, exterior:
 func _film(launch: Dictionary, bag: LaunchCut, seed_value: int, size: int) -> void:
 	_launch_shot = launch
 	launch["cut"] = bag.pick(seed_value, mini(size, (launch["seq"] as LaunchSequence).bays.size()))
+	launch["pool"] = bag.profile
+	launch["used"] = {}
 	launch["cut_seed"] = seed_value
 	_step_starts.clear()
 	sequencer = LaunchShotSequencer.new(bag.profile)
@@ -430,10 +447,40 @@ func step_player(delta: float) -> FlightCommand:
 		_burn_left_s = 0.0
 		return null
 	_burn_left_s -= delta
+	if _burn_left_s <= 0.0:
+		_burn_left_s = 0.0
+		if not _review_holding:
+			cut_shots()  # the thrusters cut: the controls are the pilot's at once (M8-T30)
+		return null
 	var burn := FlightCommand.new()
 	burn.main_left = profile.burn_throttle
 	burn.main_right = profile.burn_throttle
 	return burn
+
+
+## Ends the launch's camera at once, the launch itself going on (the thrusters cutting, M8-T30; M8-T32's abort): the shot on screen
+## stops if it is one of this director's, and no more are played for this launch.
+func cut_shots() -> void:
+	_shots_cut = true
+	_review_holding = false
+	_drop_fill()
+	if main != null and main.camera_rig != null and _playing != null and main.camera_rig.playing_shot() == _playing:
+		main.camera_rig.stop_shot()
+	_playing = null
+
+
+## Pins variant `id` of any launch pool for the next launch that draws from it, held to its end (the review sheets); "" or why not.
+func force_variant(id: StringName) -> String:
+	for bag: LaunchCut in [cut, exterior_cut, squadron_cut]:
+		if bag == null:
+			continue
+		for phase: Dictionary in bag.profile.phases:
+			for variant: Dictionary in phase["variants"]:
+				if variant["id"] == id:
+					bag.force = id
+					review_variant = id
+					return ""
+	return "no launch shot variant '%s'" % id
 
 
 ## Every launch's state, one line each.
@@ -678,6 +725,12 @@ func _direct_camera(launch: Dictionary) -> void:
 		var step: StringName = seq.step_of(id) if not id.is_empty() else &""
 		if not step.is_empty() and not _step_starts.has("%s|%s" % [id, step]):
 			_step_starts["%s|%s" % [id, step]] = seq.time_s - seq.step_time(id)
+	if _review_holding:
+		if main != null and main.camera_rig != null and main.camera_rig.playing_shot() == _playing:
+			if not _until_reached(launch):
+				return  # a review shot plays to its end, whatever launch comes next
+			main.camera_rig.stop_shot()  # its own end: the ship has left the hall
+		_review_holding = false
 	if _shots_cut or main == null or main.camera_rig == null or sequencer == null:
 		return
 	var due := PackedInt32Array()
@@ -689,10 +742,85 @@ func _direct_camera(launch: Dictionary) -> void:
 	var play: int = sequencer.next(seq.time_s, due, shots, released_count(seq), wave_left(seq))
 	if play >= 0:
 		var subject: String = follow_id(launch, String(shots[play].get("follows", "lead")))
-		main.camera_rig.play_shot(shots[play]["shot"], _actor_pose_of.bind(subject), _origin_to_local)
+		_play(shots[play]["shot"], subject, shots[play].get("until", &""))
 		_light_fill(shots[play], subject)
-	elif squadron != null and squadron.running() and not main.camera_rig.is_playing_shot():
-		main.camera_rig.play_shot(squadron_settings["fallback"], _actor_pose_of.bind(follow_id(launch, "lead")), _origin_to_local)
+		if review_variant != &"" and shots[play]["variant"] == review_variant:
+			review_variant = &""
+			_review_holding = true
+			_shots_cut = true  # held to its end for the review sheet
+	if play >= 0:
+		(launch["used"] as Dictionary)[shots[play]["variant"]] = seq.time_s
+	elif _shot_ending(launch):
+		_fill(launch)
+
+
+# The director's shot ends this tick (its last key, or its `until`), or nothing is on screen: the next shot must go on now, so the
+# cockpit never shows between.
+func _shot_ending(launch: Dictionary) -> bool:
+	var rig: CameraRig = main.camera_rig
+	if not rig.is_playing_shot():
+		return true
+	if rig.playing_shot() != _playing:
+		return false
+	return rig.shot_time_s() + get_physics_process_delta_time() >= _playing.duration_s - 1e-6 or _until_reached(launch)
+
+
+# The shot on screen has had its least hold and its fighter has reached the variant's `until` step.
+func _until_reached(launch: Dictionary) -> bool:
+	if _playing_until == &"" or main.camera_rig.shot_time_s() < profile.min_shot_s - LaunchSequence.EPS_S:
+		return false
+	var seq: LaunchSequence = launch["seq"]
+	var step: int = LaunchProfile.STEPS.find(seq.step_of(_playing_subject))
+	return step >= LaunchProfile.STEPS.find(_playing_until)
+
+
+# Between the cut's phases, another shot of the launch's pool (M8-T30, maintainer: no angle 3 s or longer, the sequence keeps
+# its length): from the latest phase its fighter has reached, one not yet played in this launch, else the one played longest
+# ago; a hold shot only while its fighter holds. Seeded like the cut.
+func _fill(launch: Dictionary) -> void:
+	var seq: LaunchSequence = launch["seq"]
+	var pool: LaunchProfile = launch.get("pool")
+	var used: Dictionary = launch["used"]
+	if pool == null:
+		return
+	var best: Array[Dictionary] = []  # the latest eligible phase's unused variants
+	var oldest: Dictionary = {}
+	var oldest_at: float = INF
+	for p: int in range(pool.phases.size() - 1, -1, -1):
+		var phase: Dictionary = pool.phases[p]
+		var subject: String = follow_id(launch, String(phase.get("follows", "lead")))
+		var now: int = LaunchProfile.STEPS.find(seq.step_of(subject)) if not subject.is_empty() else -1
+		var at: int = LaunchProfile.STEPS.find(phase["step"])
+		if now < 0 or at > now or (phase["step"] == &"hold" and now != at):
+			continue
+		for variant: Dictionary in phase["variants"]:
+			var entry: Dictionary = {"variant": variant, "subject": subject}
+			if not used.has(variant["id"]):
+				if best.is_empty() or best[0]["phase"] == p:
+					entry["phase"] = p
+					best.append(entry)
+			elif float(used[variant["id"]]) < oldest_at:
+				oldest_at = float(used[variant["id"]])
+				oldest = entry
+	var chosen: Dictionary = oldest
+	if not best.is_empty():
+		chosen = best[mini(int(LaunchCut.unit(int(launch.get("cut_seed", 0)), "fill", used.size()) * best.size()), best.size() - 1)]
+	if chosen.is_empty():
+		return
+	var variant: Dictionary = chosen["variant"]
+	used[variant["id"]] = seq.time_s
+	_play(variant["shot"], chosen["subject"], variant.get("until", &""))
+	_light_fill(variant, chosen["subject"])
+	sequencer.note(seq.time_s, variant["id"], released_count(seq))
+
+
+func _play(shot: CinematicShot, subject: String, until: StringName = &"") -> void:
+	_playing = shot
+	_playing_until = until
+	_playing_subject = subject
+	var door: Variant = _door_in_station(subject, 1.0)
+	_fixed_bay = door if door != null else Transform3D.IDENTITY  # `bay_fixed`: the door where it was as the shot began
+	main.camera_rig.play_shot(shot, _actor_pose_of.bind(subject), _origin_to_local)
 
 
 ## The fighter a camera phase follows in `launch` (`LaunchProfile.FOLLOWS`), or "" when the launch has none.
@@ -758,8 +886,9 @@ func _actor_pose(actor: String) -> Variant:
 	return _actor_pose_of(actor, "")
 
 
-# The shots' actors as drawn: `fighter` (the followed fighter, `id`; "" the player), `bay` (its door as the drum turns), `station`,
-# and `formation` (the squadron launch's formation anchor).
+# The shots' actors as drawn: `fighter` (the followed fighter, `id`; "" the player), `bay` (its door as the drum turns), `bay_fixed`
+# (that door where it was as the shot began, fixed in space), `fighter_fixed` (the fighter's place with that door's axes: a camera that
+# follows the ship without turning with it, so its flip shows), `station`, and `formation` (the squadron launch's formation anchor).
 func _actor_pose_of(actor: String, id: String) -> Variant:
 	var s: Station = station()
 	if actor == "station":
@@ -774,14 +903,52 @@ func _actor_pose_of(actor: String, id: String) -> Variant:
 			return main.ship.get_global_transform_interpolated() if main != null and main.player_alive else null
 		var c: Combatant = (_launch_shot["ships"] as Dictionary).get(id)
 		return c.ship.get_global_transform_interpolated() if _alive(c) else null
-	if actor == "bay" and not _launch_shot.is_empty():
-		var seq: LaunchSequence = _launch_shot["seq"]
-		var f: Dictionary = seq.fighter(id)
-		if s == null or f.is_empty():
+	if actor == "bay":
+		var door: Variant = _door_in_station(id, Engine.get_physics_interpolation_fraction())
+		return s.get_global_transform_interpolated() * (door as Transform3D) if door != null else null
+	if actor == "bay_fixed":
+		return s.get_global_transform_interpolated() * _fixed_bay if s != null else null
+	if actor == "fighter_fixed":
+		var ship: Ship = _subject_ship(id)
+		if s == null or ship == null:
 			return null
-		var drum := Transform3D(Basis(Vector3.BACK, s.visual_angle(Engine.get_physics_interpolation_fraction())), s.drum_origin)
-		return s.get_global_transform_interpolated() * drum * LaunchSequence.door_frame(seq.bays[f["bay"]])
+		return Transform3D((s.get_global_transform_interpolated() * _fixed_bay).basis, ship.get_global_transform_interpolated().origin)
 	return null
+
+
+# The followed fighter's door in the station's frame as the drum is drawn (`fraction` of the way to this tick), or null.
+func _door_in_station(id: String, fraction: float) -> Variant:
+	var s: Station = station()
+	if s == null or _launch_shot.is_empty():
+		return null
+	var seq: LaunchSequence = _launch_shot["seq"]
+	var f: Dictionary = seq.fighter(id if not id.is_empty() else String(_launch_shot.get("player", "")))
+	if f.is_empty():
+		return null
+	var drum := Transform3D(Basis(Vector3.BACK, s.visual_angle(fraction)), s.drum_origin)
+	return drum * LaunchSequence.door_frame(seq.bays[f["bay"]])
+
+
+# The followed fighter carries the key light while one of this director's shots is on screen, and loses it after.
+func _light_subject() -> void:
+	var ship: Ship = null
+	if main != null and main.camera_rig != null and _playing != null and main.camera_rig.playing_shot() == _playing:
+		ship = _subject_ship(_playing_subject)
+	if ship == null:
+		_key_light.detach()
+		return
+	var to_sun: Vector3 = main.space_environment.key_star.global_basis.z \
+			if main.space_environment != null and main.space_environment.key_star != null else Vector3.ZERO
+	_key_light.attach(ship, to_sun)
+
+
+# The ship of the fighter `id` in the filmed launch ("" the player), or null.
+func _subject_ship(id: String) -> Ship:
+	var player: String = String(_launch_shot.get("player", "")) if not _launch_shot.is_empty() else ""
+	if id.is_empty() or id == player:
+		return main.ship if main.player_alive else null
+	var c: Combatant = (_launch_shot.get("ships", {}) as Dictionary).get(id)
+	return c.ship if _alive(c) else null
 
 
 func _origin_to_local(offset: PackedFloat64Array) -> Vector3:
@@ -806,7 +973,7 @@ func _register_console() -> void:
 				"doc": "The squadron-launch cinematic (M8-T03): its stage and how many of the squadron are on their slots"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Cobra-bay launches (M7-T08): launch <wing> <door> (the player and its wingmen), launch wing <wing> (twelve AI Starfuries in two waves; a wing the player leads takes them as its wingmen), launch wing all (every wing), launch squadron [wing] (the squadron-launch cinematic, M8-T03: the squadron's flights launch and form up filmed from outside, then the player), launch skip, launch status, launch cut (the last camera cut), launch seed <n|off> (pin the cuts' seed), launch preview <variant> (play one shot variant now, for look sheets)",
+			"Cobra-bay launches (M7-T08): launch <wing> <door> (the player and its wingmen), launch wing <wing> (twelve AI Starfuries in two waves; a wing the player leads takes them as its wingmen), launch wing all (every wing), launch squadron [wing] (the squadron-launch cinematic, M8-T03: the squadron's flights launch and form up filmed from outside, then the player), launch skip, launch status, launch cut (the last camera cut), launch seed <n|off> (pin the cuts' seed), launch preview <variant> (play one shot variant now, for look sheets), launch force <variant> (the next launch plays that variant in its phase and holds it to its end, for review sheets; M8-T30)",
 			[ConsoleArg.string_optional(&"a", "status"), ConsoleArg.string_optional(&"b")]), _cmd_launch, self)
 
 
@@ -834,6 +1001,10 @@ func _cmd_launch(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.line(describe())
 	if a == "cut":
 		return ConsoleResult.line(_cut_text())
+	if a == "force":
+		var why_force: String = force_variant(StringName(str(args[&"b"]) if args[&"b"] != null else ""))
+		return ConsoleResult.failure("launch force: %s" % why_force) if not why_force.is_empty() \
+				else ConsoleResult.line("the next launch plays %s in its phase, held to its end" % args[&"b"])
 	if a == "preview":
 		return _preview(str(args[&"b"]) if args[&"b"] != null else "")
 	if a == "seed":
@@ -878,14 +1049,19 @@ func _preview(id: String) -> ConsoleResult:
 	if _launch_shot.is_empty():
 		return ConsoleResult.failure("launch preview: no player launch to film")
 	var ids := PackedStringArray()
-	for phase: Dictionary in profile.phases:
-		for variant: Dictionary in phase["variants"]:
-			ids.append(String(variant["id"]))
-			if String(variant["id"]) == id:
-				_shots_cut = true  # the cut's own shots stand aside
-				main.camera_rig.play_shot(variant["shot"], _actor_pose, _origin_to_local)
-				_light_fill(variant)
-				return ConsoleResult.line("previewing %s (%s phase)" % [id, phase["phase"]])
+	for bag: LaunchCut in [cut, exterior_cut, squadron_cut]:
+		if bag == null:
+			continue
+		for phase: Dictionary in bag.profile.phases:
+			for variant: Dictionary in phase["variants"]:
+				ids.append(String(variant["id"]))
+				if String(variant["id"]) == id:
+					_shots_cut = true  # the cut's own shots stand aside
+					_review_holding = true  # and it plays to its end
+					var subject: String = follow_id(_launch_shot, String(phase.get("follows", "lead")))
+					_play(variant["shot"], subject, variant.get("until", &""))
+					_light_fill(variant, subject)
+					return ConsoleResult.line("previewing %s (%s phase)" % [id, phase["phase"]])
 	return ConsoleResult.failure("launch preview <%s>" % "|".join(ids))
 
 

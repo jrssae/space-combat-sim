@@ -123,7 +123,7 @@ func _physics_process(delta: float) -> void:
 		return
 	_shot_prev_time_s = _shot_time_s
 	_shot_time_s += delta
-	if _shot_time_s >= _shot.duration_s:
+	if _shot_time_s >= _shot.duration_s and not _shot.loop:  # a looping shot holds until its owner stops it
 		stop_shot()
 
 

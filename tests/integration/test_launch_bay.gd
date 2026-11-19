@@ -152,7 +152,7 @@ func test_the_player_is_handed_over_with_the_bays_velocity() -> void:
 	var played := PackedStringArray()
 	var log: Array[Dictionary] = main.launches.sequencer.log
 	for k: int in log.size():
-		played.append(String(main.launches._launch_shot["cut"][log[k]["index"]]["variant"]))
+		played.append(String(log[k]["variant"]))
 		if k > 0:
 			assert_gte(float(log[k]["start"]) - float(log[k - 1]["start"]), main.launches.profile.min_shot_s - 1e-6,
 					"each shot held at least a second")
@@ -634,3 +634,67 @@ func test_thrusters_stay_cold_in_the_clamp_and_fire_at_the_ejection() -> void:
 	assert_true(await _until(func() -> bool: return seq.fighter("ALPHA 2")["phase"] == LaunchSequence.Phase.RELEASED, 120))
 	await _ticks(2)
 	assert_false(_ship("ALPHA 2").ship.clamped, "a wingman leaves the clamp at its ejection too")
+
+
+func test_control_returns_as_the_launch_thrusters_cut() -> void:
+	# M8-T30 (maintainer): the chase shot no longer runs on past the burn; the pilot has the ship the tick its thrusters cut.
+	await _start()
+	assert_true(await _until(func() -> bool: return not main.launches.last_handoff.is_empty(), 900), "the player is let go")
+	var burn_ticks: int = roundi(main.launches.profile.burn_s / DT)
+	await _ticks(burn_ticks - 20)
+	assert_true(main.camera_rig.is_playing_shot(), "the launch's shots play while the engines burn")
+	var back: int = -1
+	for i: int in 40:
+		await _ticks(1)
+		if not main.camera_rig.is_playing_shot() and back < 0:
+			back = i
+	assert_between(back, 15, 25, "the shot ends as the thrusters cut")
+	assert_false(main.controls_locked(), "the pilot has the ship")
+	await _ticks(400)
+	assert_false(main.camera_rig.is_playing_shot(), "no launch shot comes back")
+
+
+func test_a_skip_still_lands_in_the_same_state_with_the_quicker_hand_off() -> void:
+	await _start()
+	await _ticks(30)
+	main.launches.cut_shots()  # one call stops the launch's camera; the launch goes on (M8-T32's abort)
+	await _ticks(1)
+	assert_false(main.camera_rig.is_playing_shot(), "the camera is the pilot's")
+	assert_true(main.launches.locks_controls(), "the launch itself goes on, controls held on the rack")
+	await _ticks(60)
+	assert_false(main.camera_rig.is_playing_shot(), "and no further launch shot plays")
+
+
+func test_the_launch_cuts_quick_shots_without_a_repeat_or_a_gap() -> void:
+	# M8-T30 (maintainer): no camera angle lasts 3 s or more; the launch keeps its length by cutting between pool shots, none twice,
+	# and the cockpit never shows between them until the thrusters cut.
+	await _start()
+	var on_screen: Array[Dictionary] = []  # each shot as it went on: {shot, ticks}
+	var gaps: int = 0
+	var released: bool = false
+	for i: int in 1500:
+		await _ticks(1)
+		var shot: CinematicShot = main.camera_rig.playing_shot()
+		if not main.launches.last_handoff.is_empty():
+			released = true
+		if shot == null:
+			if not on_screen.is_empty() and main.controls_locked():
+				gaps += 1
+			if released and not on_screen.is_empty():
+				break
+			continue
+		if on_screen.is_empty() or on_screen[-1]["shot"] != shot:
+			on_screen.append({"shot": shot, "ticks": 0})
+		on_screen[-1]["ticks"] = int(on_screen[-1]["ticks"]) + 1
+	assert_gt(on_screen.size(), 3, "several shots")
+	var ids := PackedStringArray()
+	for k: int in on_screen.size():
+		var entry: Dictionary = on_screen[k]
+		var shot: CinematicShot = entry["shot"]
+		if k < on_screen.size() - 1:  # the last one ends where the thrusters cut
+			assert_gte(float(entry["ticks"]) * DT, CinematicShot.MIN_TAKE_S - DT, "%s on screen at least a second" % shot.id)
+		var limit: float = shot.max_take_s() + (DT if shot.feature else 0.0)
+		assert_lt(float(entry["ticks"]) * DT, limit, "%s held within its limit" % shot.id)
+		assert_false(ids.has(String(shot.id)), "%s plays once in the launch (%s)" % [shot.id, ids])
+		ids.append(String(shot.id))
+	assert_eq(gaps, 0, "no cockpit between the shots while the controls are held")

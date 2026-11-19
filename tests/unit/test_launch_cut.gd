@@ -123,3 +123,28 @@ func test_a_wave_draws_row_shots_for_its_drop_and_leaves_the_exit_out() -> void:
 		assert_true(drops.slice(0, rows.size()).has(rows[k]), "every row shot before any repeats")
 	for k: int in range(1, drops.size()):
 		assert_ne(drops[k], drops[k - 1], "never the same row shot twice running")
+
+
+# M8-T30: every Cobra-bay launch's pool (the player's, the exterior one, the squadron's) has two or more variants a phase, and no
+# launch plays the same set of shots as the one before it, for a lone fighter or a wave.
+func test_no_cut_repeats_the_one_before_in_any_pool() -> void:
+	for path: String in [LaunchProfile.DEFAULT_PATH, LaunchDirector.EXTERIOR_PATH, SquadronLaunch.DEFAULT_PATH]:
+		var made: Dictionary = LaunchProfile.load_file(path)
+		assert_true(bool(made["ok"]), str(made.get("error", "")))
+		var pool: LaunchProfile = made["profile"]
+		for phase: Dictionary in pool.phases:
+			assert_gte((phase["variants"] as Array).size(), 2, "%s: %s has a choice" % [path, phase["phase"]])
+		for size: int in [1, 4]:
+			var cut := LaunchCut.new(pool)
+			for i: int in 60:
+				cut.pick(hash([path, size, i]), size)
+			for k: int in range(1, cut.history.size()):
+				assert_ne(cut.history[k], cut.history[k - 1], "%s: launch %d repeats the set before it" % [path, k])
+
+
+func test_a_forced_variant_plays_once_in_its_phase() -> void:
+	var cut := LaunchCut.new(profile)
+	cut.force = &"exit_beside_arm"
+	var first: Array[Dictionary] = cut.pick(1)
+	assert_true(first.any(func(e: Dictionary) -> bool: return e["variant"] == &"exit_beside_arm"), "the forced shot is in, optional or not")
+	assert_eq(cut.force, &"", "only for one cut")
