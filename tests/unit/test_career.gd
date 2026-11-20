@@ -7,6 +7,13 @@ const PATH: String = "user://test_career.json"
 
 func after_each() -> void:
 	DirAccess.remove_absolute(PATH)
+	DirAccess.remove_absolute(PATH + CareerStore.TMP_SUFFIX)
+
+
+func _write(path: String, text: String) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_string(text)
+	file.close()
 
 
 func test_a_new_career_is_unassigned_and_a_rank_is_only_raised() -> void:
@@ -92,3 +99,21 @@ func test_career_set_without_a_rank_fails_with_its_usage_and_changes_nothing() -
 	assert_eq(rank_after_bare, Career.SQUADRON_LEADER, "not demoted")
 	assert_true(named.ok)
 	assert_eq(rank_after_named, Career.SQUADRON_PILOT, "a named rank is still set, lower or not")
+
+
+## A save whose move failed after the old file had gone leaves the new save in the file beside it: a load finds it there.
+func test_a_load_falls_back_to_the_file_beside_the_save_when_the_save_is_missing_or_unreadable() -> void:
+	var tmp: String = PATH + CareerStore.TMP_SUFFIX
+	_write(tmp, JSON.stringify({"rank": "squadron_leader", "course": "exemplary"}))
+	var back: Career = CareerStore.load_file(PATH)
+	assert_eq(back.rank, Career.SQUADRON_LEADER, "the save is missing: the file beside it is read")
+	assert_eq(back.course, TutorialRules.EXEMPLARY)
+	_write(PATH, "{ not json")
+	assert_eq(CareerStore.load_file(PATH).rank, Career.SQUADRON_LEADER, "the save does not read: the file beside it does")
+	_write(PATH, "[1, 2]")
+	assert_eq(CareerStore.load_file(PATH).rank, Career.SQUADRON_LEADER, "the save is no object")
+	_write(PATH, JSON.stringify({"rank": "squadron_pilot"}))
+	assert_eq(CareerStore.load_file(PATH).rank, Career.SQUADRON_PILOT, "a save that reads comes first")
+	_write(tmp, "garbage")
+	DirAccess.remove_absolute(PATH)
+	assert_eq(CareerStore.load_file(PATH).rank, Career.UNASSIGNED, "neither reads: a fresh career")
