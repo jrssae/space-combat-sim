@@ -1229,3 +1229,81 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   Engines: the flank nacelles and the tail (gravimetric).
 - **Colours (show).** Iridescent pale blue to blue-white, glowing where lit, with darker blue in the hollows; the
   hexagonal grid (Q45) over it.
+
+### Drazi Sunhawk (`drazi_sunhawk`, T29)
+
+- **Reference.** `Drazi_Sunhawk_crusier_350m.stl`, mapping `--right=+y --up=+z --aft=+x`, **197 m** (Q49; the file's
+  350 m is wrong). Box 142 m wide, 45 m tall. Show: `drazi_sunhawk/` (two stills).
+- **Fuselage.** A slim body on the axis: a pointed nose with sensor prongs (0 to 10 %), a cigar hull about 22 m across
+  (10 to 55 %) with a dorsal canopy blister (28 to 45 %), a waist with ribbed radiators (55 to 65 %), a neck, and aft the
+  **fusion bulb** (70 to 100 %): an ellipsoid about 28 m across and 55 m long with a ridge along its top.
+- **Wings and pods.** Two swept wings from the waist (55 to 72 %), each carrying an **inner pod** (x ±32, 28 to 58 %, a
+  tube 9 m across) and an **outer gun pod** (x ±50, 38 to 63 %) with a long barrel forward to 14 %; a small swept tip fin
+  beyond each outer pod (to x ±70). Seen from ahead the wings droop: the pods sit at y -18 below the fuselage.
+- **Weapons (TBP).** 1 particle beam cannon (the nose), 4 medium plasma cannons (the pods), 2 missile launchers. No hangar;
+  one Sky Serpent can ride a dorsal cradle (TBP). No jump engine (gates).
+- **Subsystems.** Bridge: the canopy blister. Reactor: the fusion bulb. Engines: the bulb's aft end and the pods' sterns.
+- **Colours (show).** Gunmetal grey hull, red rings on the pods, and the bulb glowing **red-orange in a cellular
+  pattern** (still 01).
+
+### Drazi Firehawk (`drazi_firehawk`, T59)
+
+- **Reference.** `Drazi_Firehawk_350m.stl`, `--right=+y --up=+z --aft=+x`, **197 m** (Q49). Box 142 m x 45 m: the same
+  hull as the Sunhawk to 1 %. Show: `drazi_firehawk/01.jpg` (a Ships of the Galaxy render: grey with red bands).
+- **Identity.** Mongoose's Drazi "Firehawk Advanced Cruiser" (SotG): built partly on the Sunhawk's chassis, it mounts the
+  Stormfalcon's solar cannon with its **contained fusion bulb**. No fighters (Q49).
+- **Differences from the Sunhawk.** The aft bulb (75 to 100 %) is a **windowed fusion bulb**: two rows of rectangular
+  ports along its flanks and a plated top, without the Sunhawk's ridge; the rest of the hull matches. One generator with
+  T29 (`variant: sunhawk | firehawk`) is the natural build.
+- **Weapons (SotG).** The solar cannon (forward through the nose), 2 twin-linked heavy particle cannons (the pods).
+- **Colours.** As the Sunhawk, with red bands (the SotG render: grey with red stripes and red-tipped barrels).
+
+### Drazi Stormfalcon (`drazi_stormfalcon`, T30)
+
+- **Reference.** `Drazi_Stormfalcon_cruiser_820m.stl` (358 000 triangles), `--right=+y --up=+z --aft=+x`, 820 m. Box
+  706 m wide, 200 m tall. Show: `drazi_stormfalcon/01.jpg` (a game render, bow down).
+- **Fore hull** (0 to 55 %). A large **ellipsoid**, about 200 m across and 90 m tall, pointed at the bow, its aft third
+  finely ribbed; a sensor spine with a fin on its top (15 to 35 %).
+- **Waist and wings** (50 to 75 %). A narrow waist with a ventral gun pod on a pylon (y -90); two broad swept **wings**
+  (x out to ±350), each with a **gun pod** at x ±270 (42 to 62 %) and a second pod inboard at x ±130 (17 to 37 %), their
+  barrels forward.
+- **Aft bulb** (78 to 100 %). The solar cannon's **contained fusion bulb**: an ellipsoid about 110 m across with windowed
+  panels, at the stern.
+- **Weapons and bays (SotG).** 2 solar cannons, heavy particle cannons, interceptors; **launches 1 Sky Serpent** with 12
+  Star Snake light fighters (no reference) and 2 shuttles. Jump engine (own points).
+- **Subsystems.** Bridge: the dorsal spine (25 %). Reactor: the aft bulb. Hangar: the fore hull's ventral face.
+  Engines: the waist and the bulb's flanks.
+- **Colours (render).** Grey hull with **red bands** round the pods and the waist, a green-and-yellow canopy on the bulb.
+
+### Brakiri Avioki cruiser (`brakiri_avioki`, T31)
+
+- **Reference.** `Brakiri_Avioki_cruiser.stl`, mapping `--right=+y --up=+z --aft=+x`, 1 024 m. Box 711 m wide, **1 338 m
+  tall** (the blade). Show: `brakiri_avioki/` (four images, two from the show).
+- **Loop hull** (0 to 70 %). The bow is a **closed loop**: two rounded booms about 80 m thick, one at y +240 and one at
+  y +120 to +200, joined at the bow (0 to 20 %) into a blunt rounded nose about 130 m wide and 200 m tall, and meeting
+  aft at the main body (70 %). The opening between them runs from 25 % to 65 %.
+- **Main body** (65 to 100 %). A thick fuselage where the loop meets the **blade**: one long wing running straight up and
+  down through the body, from y +670 to y -670, about 200 m deep at its root and 120 m at its tips, its trailing edge
+  stepped. A tail cone (85 to 100 %) on the axis at y +120 holds the engine.
+- **Outriggers.** From the main body two curved **struts** sweep forward and out to **pods** at x ±330 (40 to 85 %), each
+  with a gun barrel forward to 37 %; a second pair of thin struts runs from the pods back to the blade. Seen from ahead
+  the struts make a three-legged star with the blade.
+- **Weapons and bays (TBP, SotG).** Graviton beams and graviton pulsars (the pods and the nose); **no fighters**, 2 assault
+  shuttles (Q49). Jump engine (own points).
+- **Subsystems.** Bridge: the nose of the loop. Reactor: the main body. Engines: the tail cone. Shuttle bay: the main
+  body's keel.
+- **Colours (show).** Olive green hull with rows of small white lit windows, **yellow bands** across the blade near its
+  tips and on the tail, a round Brakiri emblem on the blade's top.
+
+### Vree Xill (`vree_xill`, T32)
+
+- **Reference.** `Vree_Xill_cruiser.stl`, `--right=+y --up=+z --aft=+x` (a saucer: the bow is chosen, not seen), 350 m
+  across, 97 m tall. Show: `vree_xill/` (three images).
+- **Saucer.** A flat disc 350 m across: a thin outer rim about 25 m wide with a ring of square ports and running lights,
+  a broad sloped upper face (radius 160 to 55) rising to a **stepped central dome** (radius 55, to y +48) with a small
+  hub on top; the underside is a shallower cone to a ventral hub (y -48).
+- **Upper face.** About 48 radial **glowing panels** between ribs, from the rim to the dome.
+- **Weapons (OG, TBP).** 15 phased-array antimatter cannons in a cluster on the ventral surface, fired in a strafing run;
+  graviton beams in B5W. Jump engine (OG). No fighters (no Vree fighter reference).
+- **Subsystems.** Bridge: the top hub. Reactor: under the dome. Guns: the ventral hub. Engines: the rim (gravitic).
+- **Colours (show).** Silver-grey metal with **glowing blue radial panels**, an orange-lit rim band, white ports.
