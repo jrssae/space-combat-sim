@@ -39,8 +39,11 @@ func _ticks(n: int) -> void:
 func _raider_at(at: Vector3, name: String = "TRAPPED") -> Combatant:
 	main.ensure_free(&"raider_fighter", 1)
 	var made: Dictionary = BrainFactory.from_behaviour({"type": "idle"}, main.world.to_universe(at), 1)
-	return main.ships.acquire(name, main.world.to_universe(at), Basis.IDENTITY, main.world.rest_velocity(),
+	var c: Combatant = main.ships.acquire(name, main.world.to_universe(at), Basis.IDENTITY, main.world.rest_velocity(),
 			made["brain"] as PilotBrain, &"raider_fighter")
+	if c != null:
+		c.driver.in_passage = true  # held where it is: a ship that cannot fly clear (an AI pilot leaves first, M8-T17)
+	return c
 
 
 func _until(done: Callable, limit: int) -> bool:

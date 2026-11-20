@@ -23,6 +23,8 @@ static var CLOSE_S: float = VortexLook.number("timing", "close_s", 1.0)
 static var END_FLASH_S: float = VortexLook.number("timing", "end_flash_s", 1.0)
 ## Open long enough for a ship that is already lined up to pass (3 to 4 s in the clips).
 static var DEFAULT_HOLD_S: float = VortexLook.number("timing", "hold_s", 4.0)
+## An opening holds its lead-in at most this long while AI pilots are still leaving its funnel (M8-T17: `JumpVortex`).
+static var CLEAR_WAIT_S: float = VortexLook.number("timing", "clear_wait_s", 6.0)
 ## A ship's own jump point: a small star that holds this long before it flares (the lead-in of a point).
 static var POINT_LEAD_S: float = VortexLook.number("point", "lead_s", 1.4)
 static var SPARK_RISE_S: float = VortexLook.number("point", "spark_rise_s", 0.2)
@@ -109,6 +111,13 @@ func done_at_s() -> float:
 ## Seconds until it is fully open (0 once open or after).
 func open_in_s(age_s: float) -> float:
 	return maxf(open_at_s - age_s, 0.0)
+
+
+## Holds the lead-in `by_s` longer, everything after it later by as much (it waits for its mouth to clear).
+func delay(by_s: float) -> void:
+	lead_s += by_s
+	open_at_s += by_s
+	close_from_s += by_s
 
 
 ## Keeps it open at least `hold_s` past `age_s`, while it has not begun to close.

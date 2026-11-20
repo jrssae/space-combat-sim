@@ -5,7 +5,8 @@
 		"grow_s": 1.2,
 		"close_s": 1.0,
 		"end_flash_s": 1.0,
-		"hold_s": 4.0
+		"hold_s": 4.0,
+		"clear_wait_s": 6.0
 	},
 	"gate": {
 		"lead_s": 2.0,

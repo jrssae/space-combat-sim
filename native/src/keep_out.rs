@@ -4,8 +4,9 @@
 // (`VortexKeepOuts`), and every think bends its wish round them.
 use godot::builtin::Vector3;
 
-/// A ship already inside a volume leaves it at least this fast.
-pub const ESCAPE_MPS: f64 = 80.0;
+/// A ship already inside a volume leaves it at least this fast (fast enough to clear a gate's mouth while its point waits to
+/// form, M8-T17: `JumpVortex`'s clear wait).
+pub const ESCAPE_MPS: f64 = 150.0;
 /// A ship heading in starts to give way this far beyond the distance it needs to stop.
 pub const BUFFER_M: f64 = 200.0;
 /// How far ahead a wish is followed to see whether it passes through a volume.
@@ -82,7 +83,15 @@ pub fn steer(outs: &[KeepOut], origin: [f64; 3], ship: &Ship, wish: Vector3) -> 
         let c = closest_on(a, b, x);
         let d = sub3(x, c);
         let dist = len3(d);
-        let n = if dist > 1e-6 { mul3(d, 1.0 / dist) } else { tie(sub3(b, a), w, ship.tie_hash) };
+        let mut n = if dist > 1e-6 { mul3(d, 1.0 / dist) } else { tie(sub3(b, a), w, ship.tie_hash) };
+        // Inside and near the mouth the way out is through the mouth, not across the funnel.
+        if dist < r {
+            let ab = sub3(b, a);
+            let len = len3(ab);
+            if len > 1e-6 && dot3(sub3(x, a), ab) / len < 0.5 * r {
+                n = mul3(ab, -1.0 / len);
+            }
+        }
         let radial = dot3(w, n);
         let tangent = sub3(w, mul3(n, radial));
         let bent = if dist < r {

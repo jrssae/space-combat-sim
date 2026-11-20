@@ -59,6 +59,8 @@ const REPLENISH_PROFILE: String = "ally_starfury"
 const ORDERS_BY_KEY: Array[AiContext.Order] = [AiContext.Order.ATTACK_MY_TARGET, AiContext.Order.FORM_ON_ME,
 		AiContext.Order.ENGAGE_AT_WILL, AiContext.Order.COVER_ME, AiContext.Order.FORM_HOLD_FIRE, AiContext.Order.HOLD_POSITION]
 
+## A wingman farther than this from the player when it respawns is put back in its slot (`regroup`).
+const REGROUP_M: float = 3000.0
 var world: WorldFrame = null
 ## Where replacements come from (`ShipPool.ALLY_TYPE` ships); null: `replenish` launches nothing.
 var pool: ShipPool = null
@@ -570,6 +572,27 @@ func _physics_process(delta: float) -> void:
 
 
 ## Drops the members that are down and briefs the others (see the class notes). Runs every tick; public for the tests.
+## The player is back after its death (M8-T17, maintainer 2026-11-20: the wing never came back): its wing drops whatever it was
+## doing for the player (a jump's break-off) and, any wingman farther than `beyond_m` from the respawned player, which could
+## not catch up, is put back in its slot round it. Docking or docked wingmen are left to their docking.
+func regroup(wing: Wing, beyond_m: float = REGROUP_M) -> void:
+	if wing == null or wing.leader == null or not wing.leader.is_player or not is_instance_valid(wing.leader.ship):
+		return
+	wing.leader_away = false
+	var lead: Ship = wing.leader.ship
+	var basis: Basis = lead.global_basis
+	for member: Combatant in wing.members():
+		if not wing.dock_status(member).is_empty() or not is_instance_valid(member.ship) or not member.ship.is_inside_tree():
+			continue
+		if member.ship.global_position.distance_to(lead.global_position) <= beyond_m:
+			continue
+		var at: Vector3 = Formation.slot_point(lead.global_position, -basis.z, basis.y, wing.slot_offset(wing.slot_of(member)))
+		member.ship.reset_to(Transform3D(basis, at))
+		member.ship.linear_velocity = lead.linear_velocity
+		member.ship.reset_physics_interpolation()
+	refresh(wing)
+
+
 func refresh(wing: Wing) -> void:
 	var shot_down: bool = false
 	for member: Combatant in wing.members():

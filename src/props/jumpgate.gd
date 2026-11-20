@@ -76,6 +76,8 @@ var fit: VortexFit = null
 ## The lamps' glows (one per fin-station lamp: steady, flashing in turn during the activation) and the back ends', one multimesh.
 var activation_glows: MultiMeshInstance3D = null
 var collision_body: StaticBody3D = null
+## Ticks a departure waited for an arrival (a readout, M8-T17).
+var held_back: int = 0
 ## Keeps the gate drawn its true size out past the far plane, then as a far dot (M6-T15); its `look` holds the body, the
 ## vortex and the lamps. Null when the asset has no far section.
 var far_prop: FarProp = null
@@ -223,11 +225,13 @@ func request_arrival(place: Callable) -> void:
 
 ## Watches `ship` flying in: the departure vortex opens as it nears and `on_through(ship)` runs once it crosses the vortex.
 ## `swallow_s` > 0: from the mouth to the ring in that many seconds, whatever its speed (the player's jump, M8-T29).
-## `at_mouth_s` >= 0 (SimClock time): the gate paces its run-in to cross the mouth then (a wingman trailing the player, M8-T17).
-func send_departure(ship: Node3D, on_through: Callable, swallow_s: float = 0.0, at_mouth_s: float = -1.0) -> void:
+## `at_mouth_s` >= 0 (SimClock time): the gate paces its run-in to cross the mouth then (a wingman trailing the player, M8-T17),
+## on its own `lane` (x, y in the gate's frame, parallel to the axis), so ships sent together never meet on the axis.
+func send_departure(ship: Node3D, on_through: Callable, swallow_s: float = 0.0, at_mouth_s: float = -1.0,
+		lane: Vector2 = Vector2.ZERO) -> void:
 	cancel_departure(ship)
 	_departures.append({"body": ship, "on_through": on_through, "z": to_local(ship.global_position).z, "swallow_s": swallow_s,
-			"at_mouth_s": at_mouth_s})
+			"at_mouth_s": at_mouth_s, "lane": lane})
 
 
 ## Stops watching `ship` (it was destroyed, or its mission changed its mind); one already in the funnel is let go there, whole.
@@ -322,6 +326,9 @@ func _step_departures() -> void:
 			continue
 		if vortex.is_active() and vortex.direction == JumpVortex.Direction.DEPARTURE:
 			vortex.spare(ship)  # on its way through: neither killed nor kept out by it (M8-T17)
+		if arrival_first():
+			_hold_back(entry)
+			continue
 		var local: Vector3 = to_local(ship.global_position)
 		var was_z: float = entry["z"]
 		entry["z"] = local.z
@@ -356,6 +363,8 @@ func _fly_in(entry: Dictionary, ship: Node3D, local: Vector3) -> void:
 		entry["capability"] = ShipCapability.from_spec(body.spec, body.get_layout())
 		entry["driver"] = driver
 		driver.in_passage = true
+		if collision_body != null:
+			body.add_collision_exception_with(collision_body)  # flown by the gate: never against its own arms
 	var capability: ShipCapability = entry["capability"]
 	var transits: VortexTransits = VortexTransits.for_node(self)
 	var velocity: Vector3 = body.linear_velocity - (transits.rest_velocity() if transits != null else Vector3.ZERO)
@@ -365,15 +374,16 @@ func _fly_in(entry: Dictionary, ship: Node3D, local: Vector3) -> void:
 	if at_mouth >= 0.0:  # paced to cross the mouth on time
 		speed = clampf(local.length() / maxf(at_mouth - SimClock.now(), 0.25), PACED_MIN_MPS, PACED_MAX_MPS)
 	var cmd: FlightCommand
+	var lane: Vector2 = entry.get("lane", Vector2.ZERO)
 	var lined: bool = bool(entry.get("lined_up", false)) \
-			or GateAutopilot.lined_up(local, global_basis.inverse() * velocity, Vector3(0.0, 0.0, local.z + 1.0), departure_forward)
+			or GateAutopilot.lined_up(local, global_basis.inverse() * velocity, Vector3(lane.x, lane.y, local.z + 1.0), departure_forward)
 	if lined:
 		entry["lined_up"] = true
-		cmd = GateAutopilot.follow_axis(body.global_position, velocity, body.global_basis, global_position, axis, Vector3.ZERO, speed,
-				capability)
+		cmd = GateAutopilot.follow_axis(body.global_position, velocity, body.global_basis,
+				global_transform * Vector3(lane.x, lane.y, 0.0), axis, Vector3.ZERO, speed, capability)
 	else:
-		# Onto the axis a little ahead of the ship, so it joins the axis heading in rather than crossing it.
-		var join: Vector3 = Vector3(0.0, 0.0, minf(local.z + AI_JOIN_AHEAD_M, -AI_JOIN_LAST_M))
+		# Onto its lane a little ahead of the ship, so it joins the lane heading in rather than crossing it.
+		var join: Vector3 = Vector3(lane.x, lane.y, minf(local.z + AI_JOIN_AHEAD_M, -AI_JOIN_LAST_M))
 		var target: Vector3 = global_transform * GateAutopilot.line_up_target(local, join)
 		cmd = GateAutopilot.line_up(body.global_position, velocity, body.global_basis, target, capability, speed)
 	body.set_flight_command(cmd)
@@ -384,12 +394,35 @@ func _release_flown(entry: Dictionary) -> void:
 	var driver: AiPilotDriver = entry.get("driver")
 	if driver != null and is_instance_valid(driver):
 		driver.in_passage = false
+	var ship := entry.get("body") as PhysicsBody3D
+	if ship != null and is_instance_valid(ship) and collision_body != null:
+		ship.remove_collision_exception_with(collision_body)
+
+
+## Whether an arrival has the gate now (asked for, or its vortex running): it goes first, every departure waits (M8-T17,
+## maintainer 2026-11-20: a civilian flew in as the player came out).
+func arrival_first() -> bool:
+	return not _pending_arrivals.is_empty() or vortex.is_active() and vortex.direction == JumpVortex.Direction.ARRIVAL
+
+
+# A departing ship waits while an arrival has the gate: the gate stops flying it, so its own pilot keeps it clear of the mouth
+# and the way out (the keep-out); it is flown in again once the arrival is through.
+func _hold_back(entry: Dictionary) -> void:
+	if entry.has("driver"):
+		_release_flown(entry)
+		for key: String in ["capability", "driver", "lined_up"]:
+			entry.erase(key)
+	var ship := entry["body"] as Node3D
+	entry["z"] = to_local(ship.global_position).z
+	held_back += 1
 
 
 # A departing ship crossed the mouth: it flies on down the funnel to the ring (M6-T22) and is handed back from there.
 func _through_mouth(ship: Node3D, on_through: Callable, swallow_s: float = 0.0) -> void:
 	var through: Callable = func(body: Node3D) -> void:
 		departed += 1
+		if body is PhysicsBody3D and is_instance_valid(body) and collision_body != null:
+			(body as PhysicsBody3D).remove_collision_exception_with(collision_body)
 		on_through.call(body)
 		if _departures.is_empty() and vortex.passing == 0 and vortex.direction == JumpVortex.Direction.DEPARTURE:
 			vortex.close()  # its last ship is through

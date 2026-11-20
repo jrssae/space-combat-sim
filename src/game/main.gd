@@ -606,6 +606,8 @@ func respawn() -> void:
 	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
 	gates.cancel_jump("respawn")
 	docking.cancel_player("respawn")
+	if wings != null:
+		wings.regroup(wings.player_wing())  # the wing re-forms round the respawned player (M8-T17)
 	_restart_lessons()
 	combatant.cannon.reset_gate()
 	combatant.cannon.reset_flashes()

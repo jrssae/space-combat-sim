@@ -5525,7 +5525,23 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   behind the last as it enters, the close takes only on a ship still closing), until the last is through; the vortex folds behind it and its closing sweep comes
   before the arrival opens; then the black and the arrival as before (about 4.5 s of hold for two wingmen in formation).
   The wingmen a hold take watches carry the cinematic key light (its `wing` section, from the camera's side) and their mains
-  glow (`HOLD_ENGINE_GLOW`). A
+  glow (`HOLD_ENGINE_GLOW`).
+  Maintainer's play-test, 2026-11-20 (jumps back to back): followers are flown in on their own lanes across the mouth (70 m
+  apart, handed out in the order they lie across the axis, each at its own height) and do not collide with each other while
+  the gate flies them (two met on the axis, and a lost follower called the hold off); a follower at or inside the mouth when a
+  hold is called off goes through with the player instead of being left in the arrival's way.
+- **Every AI pilot clears an opening jump point (M8-T17, maintainer 2026-11-20).** The keep-out is in force from `open()`; an
+  opening does not form while an AI pilot it does not spare is still in its funnel (`VortexHazard.strays`): its lead-in waits
+  (`VortexTiming.delay`) up to `clear_wait_s` (6 s, data/jump/vortex_look.json), gates and ship-opened points alike; a ship
+  inside leaves at 150 m/s, out of the mouth when it is near it (`keep_out.rs`). Pilotless ships, ships in a passage and the
+  player are not waited for.
+- **The gate's arbitration and a committed jump (M8-T17, maintainer 2026-11-20).** Arrival wins: while an arrival is asked for
+  or running (`Jumpgate.arrival_first`) the gate flies no departing ship in, lets go of any it was flying (its own pilot and the
+  keep-out keep it clear of the mouth and the way out) and flies it in again once the arrival is through. A ship the gate
+  flies in, and the player from its jump's start to its end, does not collide with the gate's own arms (a jump asked at speed
+  from the side flew the player into the far arm). A follower that cannot stop short of the mouth when its hold is called off
+  goes through with the player. On respawn the player's wing drops any jump state and a wingman more than 3 km off is put back
+  in its slot (`WingDirector.regroup`). A
   follower dying or the order changing calls the hold off at once and the vortex folds. Gate only: the player opens no point of
   its own.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the

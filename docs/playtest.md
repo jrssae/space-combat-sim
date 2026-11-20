@@ -1566,4 +1566,12 @@ too quiet or right, against the engines (the bed the rest sits on).
       after you, cutting between a few angles where you can see them go in; the orange vortex folds behind the last of them,
       then the usual moment of black and you all come back out of the blue one side by side. Under `wing order engage` they
       break off, stay clear of the vortex and rejoin you after. A wingman more than 3 km from the mouth is not waited for.
+- [ ] **(H) Back-to-back jumps and a clear mouth:** `launch wing alpha`, `wing order form`, fly to the gate and jump three or four
+      times in a row: every jump takes the wing through and back out with you, nobody dies. Park a wingman in the mouth
+      (`wing order hold` with the gate behind you) and `gate open arrival`: the arms keep glowing until it has flown out, then
+      the vortex forms.
+- [ ] **(H) A jump at speed and a busy gate:** fly at the gate fast from the side and hold X just inside 10 km: the autopilot
+      takes you round and through, never into an arm. Die in a run-in (`god off`, `damage 200`) and respawn: your wing is back
+      in formation round you at once. Jump while civilians come and go: none flies in as you come out; they wait clear of the
+      mouth and go after.
 

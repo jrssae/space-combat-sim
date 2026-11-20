@@ -13,6 +13,14 @@ extends RefCounted
 const FOLLOW_ORDERS: Array[AiContext.Order] = [AiContext.Order.FORM_ON_ME, AiContext.Order.FORM_HOLD_FIRE]
 ## Followers come out this far apart beside the player, alternating sides.
 const ARRIVAL_SPREAD_M: float = 120.0
+## Followers fly in on lanes this far apart across the mouth (the first this far off the axis), alternating sides, so the ones sent
+## together never meet (the maintainer's play-test, 2026-11-20: two met on the axis).
+const LANE_SPACING_M: float = 70.0
+## A lane keeps its follower's own height, within this of the axis.
+const LANE_HEIGHT_M: float = 200.0
+## A follower this far in front of the mouth's plane, or nearer, when its hold is called off is in the way of the arrival: it goes
+## through with the player instead of being left there.
+const IN_THE_MOUTH_M: float = 150.0
 ## While a follower is on its way the vortex is kept open at least this much longer, each tick.
 const KEEP_OPEN_S: float = 1.0
 ## Where a follower waits while away: behind the gate, beside the player's own wait, this far apart.
@@ -78,16 +86,36 @@ func on_run_in(eta_s: float) -> void:
 	if gate == null or not is_instance_valid(gate) or _sent_all:
 		return
 	var mouth: Vector3 = gate.vortex.true_frame().origin
-	var at: float = SimClock.now() + maxf(eta_s, 0.0) + GateJump.FOLLOW_TRAIL_S
+	var going: Array[Combatant] = []
 	for member: Combatant in followers.duplicate():
 		if _usable(member) and member.ship.global_position.distance_to(mouth) <= GateJump.FOLLOW_RANGE_M:
-			gate.vortex.spare(member.ship)
-			gate.send_departure(member.ship, _through.bind(member), GateJump.SWALLOW_S, at)
-			sent.append(member)
-			at += GateJump.FOLLOW_SPACING_S
+			going.append(member)
 		else:
 			_let_go(member)  # too far to wait for: it keeps clear and rejoins after
+	var lanes: Dictionary = lanes_for(going, gate)
+	var at: float = SimClock.now() + maxf(eta_s, 0.0) + GateJump.FOLLOW_TRAIL_S
+	for member: Combatant in going:
+		gate.vortex.spare(member.ship)
+		gate.send_departure(member.ship, _through.bind(member), GateJump.SWALLOW_S, at, lanes[member])
+		for other: Combatant in sent:
+			member.ship.add_collision_exception_with(other.ship)  # flown in together: they never ram each other
+		sent.append(member)
+		at += GateJump.FOLLOW_SPACING_S
 	_sent_all = true
+
+
+## Each follower's lane across the mouth (x, y in the gate's frame): lanes `LANE_SPACING_M` apart, handed out in the order the
+## followers lie across the axis now, each at its own height (within the mouth), so no two cross on the way in.
+static func lanes_for(going: Array[Combatant], p_gate: Jumpgate) -> Dictionary:
+	var order: Array[Combatant] = going.duplicate()
+	var x_of: Callable = func(c: Combatant) -> float: return p_gate.local_of(c.ship.global_position).x
+	order.sort_custom(func(a: Combatant, b: Combatant) -> bool: return x_of.call(a) < x_of.call(b))
+	var out: Dictionary = {}
+	var half: float = float(order.size() - 1) * 0.5
+	for i: int in order.size():
+		var y: float = clampf(p_gate.local_of(order[i].ship.global_position).y, -LANE_HEIGHT_M, LANE_HEIGHT_M)
+		out[order[i]] = Vector2((float(i) - half) * LANE_SPACING_M, y)
+	return out
 
 
 ## Whether the vortex is held for followers still on their way through.
@@ -167,14 +195,18 @@ func _watch_hold() -> void:
 		return
 	called_off += 1
 	var transits: VortexTransits = VortexTransits.of(main.world)
+	var frame: Transform3D = gate.vortex.true_frame()
 	for member: Combatant in sent.duplicate():
 		if away.has(member):
 			continue
-		if is_instance_valid(member) and is_instance_valid(member.ship):
+		if _usable(member):
+			var committed: bool = _committed(member, frame)
 			var inside: bool = transits != null and transits.is_passing(member.ship)
 			gate.cancel_departure(member.ship)
-			if not inside:
-				_let_go(member)  # still outside: it keeps clear of the closing vortex
+			if inside or committed:
+				_take_away(member)  # in the mouth already, or too fast to stop short of it: it goes through with the player
+				continue
+			_let_go(member)  # still well outside: it keeps clear of the closing vortex
 		sent.erase(member)
 	_close_behind()
 
@@ -186,9 +218,22 @@ func _close_behind() -> void:
 		v.close()
 
 
+# Whether a follower is past turning back: at the mouth, or closing on it faster than it can stop short of it.
+func _committed(member: Combatant, frame: Transform3D) -> bool:
+	var local: Vector3 = frame.affine_inverse() * member.ship.global_position
+	if local.z >= -IN_THE_MOUTH_M:
+		return true
+	var closing: float = (member.ship.linear_velocity - main.world.rest_velocity()).dot(frame.basis.z.normalized())
+	if closing <= 0.0 or member.ship.spec == null:
+		return false
+	var brake: float = maxf(ShipCapability.from_spec(member.ship.spec, member.ship.get_layout()).a_retro, 1.0)
+	return closing * closing / (2.0 * brake) >= -local.z - IN_THE_MOUTH_M
+
+
 # A follower that does not go through after all: no longer spared, so it keeps clear like every AI pilot.
 func _let_go(member: Combatant) -> void:
 	followers.erase(member)
+	_unlink(member)
 	if _usable(member) and is_instance_valid(gate):
 		gate.vortex.unspare(member.ship)
 
@@ -211,6 +256,8 @@ func bring_out() -> void:
 
 ## The jump is over (or called off): the wing is the player's again under its own order.
 func finish() -> void:
+	for member: Combatant in sent:
+		_unlink(member)
 	for member: Combatant in sent:
 		if not away.has(member) and _usable(member) and is_instance_valid(gate):
 			gate.cancel_departure(member.ship)
@@ -237,6 +284,7 @@ func _through(_body: Node3D, member: Combatant) -> void:
 func _take_away(member: Combatant) -> void:
 	if away.has(member) or not _usable(member):
 		return
+	_unlink(member)
 	var ship: Ship = member.ship
 	_kept[member] = {"layer": ship.collision_layer, "mask": ship.collision_mask, "tier": ship.tier_exempt}
 	ship.collision_layer = 0
@@ -271,6 +319,15 @@ func _restore(member: Combatant, xform: Transform3D, velocity: Vector3) -> void:
 	if wing != null:
 		wing.set_away(member, false)
 	_kept.erase(member)
+
+
+# Collides with the other followers again (the exceptions made as they were sent in together).
+func _unlink(member: Combatant) -> void:
+	if not is_instance_valid(member) or not is_instance_valid(member.ship):
+		return
+	for other: Combatant in sent:
+		if other != member and is_instance_valid(other) and is_instance_valid(other.ship):
+			member.ship.remove_collision_exception_with(other.ship)
 
 
 func _usable(member: Combatant) -> bool:
