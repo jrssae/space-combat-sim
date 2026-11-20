@@ -183,7 +183,7 @@ func _plan_cruise(e: EncounterEvent, type: StringName, n: int, pass_m: Vector2, 
 		var ship_type: StringName = type
 		var pods: int = -1
 		if ship_type == &"":
-			var types: Array[StringName] = ShipCatalog.civilian_types()
+			var types: Array[StringName] = ShipCatalog.CIVILIAN_TYPES
 			ship_type = types[mini(floori(_unit(i, Salt.TYPE + k) * float(types.size())), types.size() - 1)]
 			if ship_type == BOKMAI:
 				pods = mini(floori(_unit(i, Salt.PODS + k) * float(MAX_PODS + 1)), MAX_PODS)

@@ -62,9 +62,6 @@ res://tests/integration/test_friendly_fire.gd
 res://tests/integration/test_ram_scale.gd
 # Ships, pools, destruction
 res://tests/unit/test_ship_catalog.gd
-res://tests/unit/test_ship_catalog_data.gd
-res://tests/unit/test_ship_catalog_recorded.gd
-res://tests/unit/test_ship_catalog_doc.gd
 res://tests/integration/test_ship_scene.gd
 res://tests/integration/test_ship_pool.gd
 res://tests/integration/test_multi_ship.gd

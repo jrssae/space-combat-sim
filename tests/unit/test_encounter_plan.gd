@@ -163,7 +163,7 @@ func test_traffic_is_one_to_three_civilians_passing_two_to_ten_km_from_the_playe
 				pods[e.cargo_pods[k]] = true
 			else:
 				assert_eq(e.cargo_pods[k], -1, "only a Bokmai has a pod count")
-	assert_eq(types.size(), ShipCatalog.civilian_types().size(), "every civilian hull comes")
+	assert_eq(types.size(), ShipCatalog.CIVILIAN_TYPES.size(), "every civilian hull comes")
 	assert_eq(pods.size(), 4, "a Bokmai comes with 0, 1, 2 and 3 pods")
 
 

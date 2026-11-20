@@ -91,7 +91,7 @@ func test_a_civilian_matches_the_drums_roll_flies_through_the_opened_doors_and_l
 	assert_not_null(c, "a civilian took the lane")
 	if c == null:
 		return
-	assert_true(DockingPlan.tunnel_types().has(main.ships.type_of(c)), "a hull that fits the mouth")
+	assert_true(DockingPlan.TUNNEL_TYPES.has(main.ships.type_of(c)), "a hull that fits the mouth")
 	_watch_rams(c)
 	var lock: StationAirlock = station.airlock
 	assert_not_null(lock, "the bay has its inner doors")
@@ -193,7 +193,7 @@ func test_every_tunnel_hull_undocks_lying_square_without_touching_the_bay() -> v
 		pending("the babylon5_station asset is not generated")
 		return
 	var lock: StationAirlock = station.airlock
-	for type: StringName in DockingPlan.tunnel_types():
+	for type: StringName in DockingPlan.TUNNEL_TYPES:
 		assert_eq(main.traffic.undock(type), "", String(type))
 		var c: Combatant = main.traffic.last_ship()
 		if c == null:

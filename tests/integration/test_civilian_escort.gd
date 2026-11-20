@@ -160,7 +160,7 @@ func test_play_loads_it_into_the_cinematic_intro_with_the_drawn_civilian() -> vo
 	assert_not_null(civilian)
 	assert_eq(civilian.display_name, _civilian_name())
 	assert_eq(main.ships.pool_size(main.ships.type_of(civilian)), 1, "only the drawn hull is pooled")
-	for type: StringName in ShipCatalog.civilian_types():
+	for type: StringName in ShipCatalog.CIVILIAN_TYPES:
 		if type != main.ships.type_of(civilian):
 			assert_eq(main.ships.pool_size(type), 0, "no %s pooled" % type)
 

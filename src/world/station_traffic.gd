@@ -202,7 +202,7 @@ func dock(type: StringName = &"", near: bool = false, extra: Dictionary = {}) ->
 		return why
 	var hull: StringName = _tunnel_type(type)
 	if hull == &"":
-		return "%s does not fit the docking tunnel (%s do)" % [type, ", ".join(DockingPlan.tunnel_types())]
+		return "%s does not fit the docking tunnel (%s do)" % [type, ", ".join(DockingPlan.TUNNEL_TYPES)]
 	return _arrive(hull, &"dock", plan.dock_in, near, extra)
 
 
@@ -213,7 +213,7 @@ func undock(type: StringName = &"", extra: Dictionary = {}) -> String:
 		return why
 	var hull: StringName = _tunnel_type(type)
 	if hull == &"":
-		return "%s does not fit the docking tunnel (%s do)" % [type, ", ".join(DockingPlan.tunnel_types())]
+		return "%s does not fit the docking tunnel (%s do)" % [type, ", ".join(DockingPlan.TUNNEL_TYPES)]
 	var s: Station = station()
 	var xform: Transform3D = s.global_transform
 	var airlock: Vector3 = plan.airlock
@@ -231,7 +231,7 @@ func undock(type: StringName = &"", extra: Dictionary = {}) -> String:
 	return ""
 
 
-## A Saturn of `type` (any of `DockingPlan.freighter_types()`; "" picks one) flies the cargo bay's cycle, unloading or `loading`.
+## A Saturn of `type` (any of `DockingPlan.FREIGHTER_TYPES`; "" picks one) flies the cargo bay's cycle, unloading or `loading`.
 ## `start`: "" out of the gate (or far out), `near` on the lane's first point, `hold` already holding at the bay, `show` backing in
 ## its last `SHOW_BACK_M` with the cargo pods already on their way and the player put beside the lane to watch. Returns "" or why not.
 func freighter(type: StringName = &"", loading: bool = false, start: StringName = &"", extra: Dictionary = {}) -> String:
@@ -240,9 +240,9 @@ func freighter(type: StringName = &"", loading: bool = false, start: StringName 
 		return why
 	var hull: StringName = type
 	if hull == &"":
-		hull = DockingPlan.freighter_types()[_spawned % DockingPlan.freighter_types().size()]
-	if not DockingPlan.freighter_types().has(hull):
-		return "%s does not come to the cargo bay (%s do)" % [type, ", ".join(DockingPlan.freighter_types())]
+		hull = DockingPlan.FREIGHTER_TYPES[_spawned % DockingPlan.FREIGHTER_TYPES.size()]
+	if not DockingPlan.FREIGHTER_TYPES.has(hull):
+		return "%s does not come to the cargo bay (%s do)" % [type, ", ".join(DockingPlan.FREIGHTER_TYPES)]
 	if start == &"hold" or start == &"show":
 		var xform: Transform3D = station().global_transform
 		var lane: Array[Dictionary] = [plan.freighter[plan.freighter_hold_index], plan.freighter[plan.freighter.size() - 1]]
@@ -402,11 +402,11 @@ func lane_event(e: EncounterEvent, seed_value: int) -> bool:
 	var placed: int = 0
 	for k: int in e.count():
 		var type: StringName = e.types[k]
-		if DockingPlan.freighter_types().has(type) and not freighter_taken:
+		if DockingPlan.FREIGHTER_TYPES.has(type) and not freighter_taken:
 			freighter_taken = true
-			type = _free_hull(DockingPlan.freighter_types(), DockingPlan.freighter_types().find(type))
+			type = _free_hull(DockingPlan.FREIGHTER_TYPES, DockingPlan.FREIGHTER_TYPES.find(type))
 		else:
-			type = _free_hull(DockingPlan.tunnel_types(), DockingPlan.tunnel_types().find(type) if DockingPlan.tunnel_types().has(type) else e.index + k)
+			type = _free_hull(DockingPlan.TUNNEL_TYPES, DockingPlan.TUNNEL_TYPES.find(type) if DockingPlan.TUNNEL_TYPES.has(type) else e.index + k)
 		if _join_inbound(type, along + step * float(k), {"loading": _unit("load", e.index * 4 + k) < 0.5, "encounter": true}) != null:
 			placed += 1
 	return placed > 0
@@ -484,8 +484,8 @@ func _ready_plan() -> String:
 
 func _tunnel_type(type: StringName) -> StringName:
 	if type == &"":
-		return DockingPlan.tunnel_types()[_spawned % DockingPlan.tunnel_types().size()]
-	return type if DockingPlan.tunnel_types().has(type) else &""
+		return DockingPlan.TUNNEL_TYPES[_spawned % DockingPlan.TUNNEL_TYPES.size()]
+	return type if DockingPlan.TUNNEL_TYPES.has(type) else &""
 
 
 func _gate() -> Jumpgate:
@@ -597,7 +597,7 @@ func _seed_run() -> void:
 		if k % 2 == 0:
 			_join_inbound(_arrival_hull(k), along, {"flow": true, "loading": _unit("load", k) < 0.5})
 		else:
-			_join_outbound(_free_hull(ShipCatalog.civilian_types(), hash([main.scenario_seed, "traffic out", k])), along, {"flow": true})
+			_join_outbound(_free_hull(ShipCatalog.CIVILIAN_TYPES, hash([main.scenario_seed, "traffic out", k])), along, {"flow": true})
 	_last_flow_s = elapsed_s
 
 
@@ -627,7 +627,7 @@ func _join_along(draw: int) -> float:
 
 # A ship of `type` already on the run at `along`, flying in to its lane: a Saturn to the cargo bay, any other hull to the docking bay.
 func _join_inbound(type: StringName, along: float, extra: Dictionary) -> Combatant:
-	var freighter_hull: bool = DockingPlan.freighter_types().has(type)
+	var freighter_hull: bool = DockingPlan.FREIGHTER_TYPES.has(type)
 	var lane: Array[Dictionary] = plan.freighter if freighter_hull else plan.dock_in
 	var transit: Route = _transit_route(lane, false)
 	var at: Vector3 = _run_point(lane, along, 1.0)
@@ -652,8 +652,8 @@ func _join_outbound(type: StringName, along: float, extra: Dictionary) -> Combat
 # The run's next arrival: a Saturn for the cargo bay by its share while none is there or on its way, else a hull for the tunnel.
 func _arrival_hull(index: int) -> StringName:
 	if alive_of(&"freighter") == 0 and _pending_flow == 0 and _unit("freighter", index) < FREIGHTER_SHARE:
-		return _free_hull(DockingPlan.freighter_types(), hash([main.scenario_seed, "traffic freighter", index]))
-	return _free_hull(DockingPlan.tunnel_types(), hash([main.scenario_seed, "traffic hull", index]))
+		return _free_hull(DockingPlan.FREIGHTER_TYPES, hash([main.scenario_seed, "traffic freighter", index]))
+	return _free_hull(DockingPlan.TUNNEL_TYPES, hash([main.scenario_seed, "traffic hull", index]))
 
 
 # The first of `types` from `start` on with a ship free in its pool (so a start never builds one mid-flight); `start`'s own when none is.
@@ -803,7 +803,7 @@ func _take(type: StringName, route: Route, at: Vector3, basis: Basis, velocity: 
 		return null
 	var brain: PilotBrain = made["brain"]
 	BehaviourFollowPath.attach(brain as AiPilot, route)
-	var callsign: String = main.ships.next_name(EncounterDirector.civilian_callsign(type), 1)
+	var callsign: String = main.ships.next_name(EncounterDirector.CIVILIAN_CALLSIGNS.get(type, "CIVILIAN"), 1)
 	var c: Combatant = main.ships.acquire(callsign, main.world.to_universe(at), basis, velocity, brain, type)
 	if c == null:
 		return null
@@ -835,11 +835,11 @@ func _start_auto() -> void:
 	var why: String = ""
 	match kind:
 		&"dock":
-			why = dock(_free_hull(DockingPlan.tunnel_types(), hash([main.scenario_seed, "traffic hull", index])), false, flow)
+			why = dock(_free_hull(DockingPlan.TUNNEL_TYPES, hash([main.scenario_seed, "traffic hull", index])), false, flow)
 		&"undock":
-			why = undock(_free_hull(DockingPlan.tunnel_types(), hash([main.scenario_seed, "traffic hull", index])), flow)
+			why = undock(_free_hull(DockingPlan.TUNNEL_TYPES, hash([main.scenario_seed, "traffic hull", index])), flow)
 		&"freighter":
-			var hull: StringName = _free_hull(DockingPlan.freighter_types(), hash([main.scenario_seed, "traffic freighter", index]))
+			var hull: StringName = _free_hull(DockingPlan.FREIGHTER_TYPES, hash([main.scenario_seed, "traffic freighter", index]))
 			why = freighter(hull, _unit("load", index) < 0.5, &"", flow)
 	last_event = "%s (auto)%s" % [kind, "" if why.is_empty() else ": " + why]
 
@@ -1220,7 +1220,7 @@ func _register_console() -> void:
 		&"last_event": {"get": func() -> String: return last_event, "doc": "The last thing the traffic started"},
 	}), self)
 	registry.register_command(ConsoleCommand.new(&"traffic",
-			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's cargo pods carry its cargo blocks or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the cargo pods on their way and you beside the lane to watch; type is one of %s, default each in turn), raid [n] (raiders at the station; a scrambled wing still out takes it, else the next wing launches), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.freighter_types()),
+			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's cargo pods carry its cargo blocks or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the cargo pods on their way and you beside the lane to watch; type is one of %s, default each in turn), raid [n] (raiders at the station; a scrambled wing still out takes it, else the next wing launches), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.FREIGHTER_TYPES),
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"), _rest_arg()] as Array[ConsoleArg]),
 			_cmd_traffic, self)
 

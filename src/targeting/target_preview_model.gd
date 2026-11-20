@@ -14,8 +14,19 @@ const FIELDS: Dictionary = {
 	Kind.OBJECTIVE: [&"text", &"range"],
 	Kind.UNKNOWN: [&"range", &"closing"],
 }
-## What the pilot reads for the things that are not ships (their asset id); ships' names are the catalogue's (`class_names`).
-const PROP_CLASS_NAMES: Dictionary = {
+## What the pilot reads for each hull (its asset id); an unlisted one reads as its id.
+const CLASS_NAMES: Dictionary = {
+	"starfury_aurora": "Aurora Starfury",
+	"raider_fighter": "Delta-V raider",
+	"saturn_3_freighter": "Saturn 3 freighter",
+	"saturn_4_transport": "Saturn 4 transport",
+	"saturn_4_tanker": "Saturn 4 tanker",
+	"saturn_8_transport": "Saturn 8 transport",
+	"saturn_8_tanker": "Saturn 8 tanker",
+	"skylark_transport": "Skylark transport",
+	"narn_transport": "Narn transport",
+	"centauri_brezebel": "Brezebel transport",
+	"brakiri_bokmai": "Bokmai hauler",
 	"nav_buoy": "Nav buoy",
 	"jumpgate": "Jumpgate",
 }
@@ -53,16 +64,8 @@ static func is_attacking(behaviour: String, state: String = "") -> bool:
 	return ATTACK_BEHAVIOURS.has(behaviour) or (behaviour == "aggro" and state.begins_with("attack"))
 
 
-## What the pilot reads for each hull (its asset id): the ship catalogue's `name`s and the props'. An unlisted one reads as its id.
-static func class_names() -> Dictionary:
-	var out: Dictionary = ShipCatalog.data().by_asset("name").duplicate()
-	out.merge(PROP_CLASS_NAMES)
-	return out
-
-
 static func class_text(asset_id: String) -> String:
-	var ship_name: String = ShipCatalog.data().by_asset("name").get(asset_id, "")
-	return ship_name if not ship_name.is_empty() else String(PROP_CLASS_NAMES.get(asset_id, asset_id.capitalize()))
+	return String(CLASS_NAMES.get(asset_id, asset_id.capitalize()))
 
 
 ## Nothing to draw: a blank panel, or the "none" entry with what picking it does.

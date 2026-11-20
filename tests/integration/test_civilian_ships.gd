@@ -26,7 +26,7 @@ func after_each() -> void:
 
 
 func _skipped() -> bool:
-	for type: StringName in ShipCatalog.civilian_types():
+	for type: StringName in ShipCatalog.CIVILIAN_TYPES:
 		if not Hardpoints.load_file(ShipCatalog.spec_for(type).hardpoints_path()).valid:
 			pending("%s is not generated (scripts/gen_assets.sh)" % type)
 			return true
@@ -44,7 +44,7 @@ func test_every_hull_flies_newtonian_with_zero_damping_and_turns_by_torque_alone
 	add_child_autofree(world)
 	var thrusting: Array[Ship] = []
 	var turning: Array[Ship] = []
-	var types: Array[StringName] = ShipCatalog.civilian_types()
+	var types: Array[StringName] = ShipCatalog.CIVILIAN_TYPES
 	for i: int in types.size():
 		var spec: ShipSpec = ShipCatalog.spec_for(types[i])
 		for row: int in 2:
@@ -125,7 +125,7 @@ func test_the_showcase_parks_every_hull_with_its_people_and_role() -> void:
 		var lights := c.ship.get_node_or_null(^"RunningLights") as RunningLights
 		assert_not_null(lights, "%s shows running lights" % type)
 		assert_lt(c.ship.global_position.length(), 2500.0, "%s is parked in view" % type)
-	for type: StringName in ShipCatalog.civilian_types():
+	for type: StringName in ShipCatalog.CIVILIAN_TYPES:
 		assert_true(types.has(type), "%s is in the showcase" % type)
 	assert_eq(int(types[BOKMAI]), 2)
 
@@ -188,7 +188,7 @@ func test_the_target_preview_draws_a_bokmai_with_its_pods_and_counts_them() -> v
 	assert_true(preview.is_showing())
 	assert_eq(preview.model.kind, TargetPreviewModel.Kind.SHIP)
 	assert_true(preview.wire.has_hull(), "a civilian hull is drawn")
-	assert_true(TargetPreviewModel.class_names().values().has(preview.model.subtitle.get_slice(" · ", 0)), preview.model.subtitle)
+	assert_true(TargetPreviewModel.CLASS_NAMES.values().has(preview.model.subtitle.get_slice(" · ", 0)), preview.model.subtitle)
 	director.close()
 	assert_false(preview.is_showing())
 

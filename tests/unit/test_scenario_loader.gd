@@ -597,7 +597,7 @@ func test_the_civilian_escort_file_validates() -> void:
 	assert_almost_eq((props[0]["position"] as UniversePos).distance_to(props[1]["position"]), 45000.0, 1.0, "45 km apart (M8-T26; 30 before)")
 	assert_eq_deep(result["pools"], {&"raider_fighter": 24, &"starfury_ally": 2, &"random_civilian": 1})
 	assert_eq((result["belts"] as Array).size(), 1, "the belt across the route")
-	assert_eq((result["civilian_names"] as Dictionary).size(), ShipCatalog.civilian_types().size(), "names for all nine hulls")
+	assert_eq((result["civilian_names"] as Dictionary).size(), ShipCatalog.CIVILIAN_TYPES.size(), "names for all nine hulls")
 	var mission: Dictionary = result["mission"]
 	assert_eq(mission["script"], "res://data/missions/civilian_escort.gd")
 	var ids: Array = []
@@ -647,7 +647,7 @@ func test_the_seed_draws_every_civilian_hull_and_only_that_hull_is_pooled() -> v
 		seen[spawn["type"]] = true
 		if spawn["type"] == &"brakiri_bokmai":
 			assert_between(int(spawn["cargo_pods"]), 1, 3, "a Bokmai flies 1 to 3 pods")
-	assert_eq(seen.size(), ShipCatalog.civilian_types().size(), "all nine hulls come up")
+	assert_eq(seen.size(), ShipCatalog.CIVILIAN_TYPES.size(), "all nine hulls come up")
 
 
 func test_a_retry_with_the_same_seed_flies_the_same_ship() -> void:

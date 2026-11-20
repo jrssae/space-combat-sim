@@ -262,7 +262,7 @@ static func resolve_random_civilian(scenario: Dictionary, seed_value: int) -> vo
 	var pools: Dictionary = scenario.get("pools", {})
 	if not pools.has(RANDOM_CIVILIAN):
 		return
-	var types: Array[StringName] = ShipCatalog.civilian_types()
+	var types: Array[StringName] = ShipCatalog.CIVILIAN_TYPES
 	var hull: StringName = types[posmod(hash([seed_value, "random_civilian"]), types.size())]
 	var names: PackedStringArray = (scenario.get("civilian_names", {}) as Dictionary).get(hull, PackedStringArray())
 	var ship_name: String = names[posmod(hash([seed_value, "civilian_name"]), names.size())] if not names.is_empty() \
@@ -315,7 +315,7 @@ static func _civilian_names(raw: Variant, source: String) -> Variant:
 	for key: Variant in raw as Dictionary:
 		var hull := StringName(str(key))
 		if not ShipCatalog.is_civilian(hull):
-			return "%s: civilian_names.%s is not a civilian hull (%s)" % [source, key, ShipCatalog.civilian_types()]
+			return "%s: civilian_names.%s is not a civilian hull (%s)" % [source, key, ShipCatalog.CIVILIAN_TYPES]
 		var list: Variant = (raw as Dictionary)[key]
 		var names := PackedStringArray()
 		if list is Array:
