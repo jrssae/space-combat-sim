@@ -321,7 +321,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | not started |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
-| T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | not started |
+| T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | in progress |
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | not started |
 | T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | not started |
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | not started |

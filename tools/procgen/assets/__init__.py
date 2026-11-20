@@ -9,7 +9,8 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ..core.context import AssetOutputs, BuildContext
-from . import asteroids, b5_interior, babylon5_station, brakiri_bokmai, capital_hulls, cargo_pod_craft, centauri_brezebel
+from . import asteroids, b5_interior, babylon5_station, brakiri_bokmai, capital_hulls, capital_test_cruiser, cargo_pod_craft
+from . import centauri_brezebel
 from . import grid_heavy_cannon
 from . import grid_interceptor_battery, jumpgate, planet, saturn_family, skylark_transport
 from . import maintenance_bot, narn_transport, nav_buoy, raider_fighter, raider_strike_carrier, sfx_combat, sfx_ui, sfx_world, sky_default
@@ -21,6 +22,7 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "babylon5_station": babylon5_station.build,
     "brakiri_bokmai": brakiri_bokmai.build,
     "capital_hulls": capital_hulls.build,
+    "capital_test_cruiser": capital_test_cruiser.build,
     "cargo_pod_craft": cargo_pod_craft.build,
     "centauri_brezebel": centauri_brezebel.build,
     "grid_heavy_cannon": grid_heavy_cannon.build,

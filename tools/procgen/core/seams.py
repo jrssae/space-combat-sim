@@ -362,6 +362,53 @@ class Plates(Feature):
 
 
 @dataclass(frozen=True)
+class Hexes(Feature):
+    """A hexagonal grid (M10 Q45: the Minbari's and the Interstellar Alliance's skins): seams on the edges of regular hexagons
+    ``cell_m`` across their flats, laid per point on the two axes its normal faces least (as ``Plates``' ``"sides"``), every cell
+    with its own tone and sheen. ``stretch`` scales the two axes (a tile that must wrap squeezes its cells a little)."""
+
+    cell_m: float = 4.0
+    tone: float = 0.05
+    sheen: float = 0.05
+    long_axis: int = 2
+    seed: int = 0
+    stretch: tuple[float, float] = (1.0, 1.0)
+
+    def cells(self, u: np.ndarray, v: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Each point's hexagon (a key) and its distance to the hexagon's nearest edge, m; ``u`` and ``v`` in metres."""
+        a, b = u / (self.cell_m * self.stretch[0]), v / (self.cell_m * self.stretch[1])
+        row = math.sqrt(3.0)  # two rows of centres, the second set half a cell across and half a period up
+        best_d = np.full(a.shape, _INF)
+        best_key = np.zeros(a.shape, dtype=np.int64)
+        edge = np.zeros(a.shape)
+        for lattice, (su, sv) in enumerate(((0.0, 0.0), (0.5, 0.5 * row))):
+            iu, iv = np.round(a - su), np.round((b - sv) / row)
+            du, dv = a - su - iu, b - sv - iv * row
+            d = du * du + dv * dv
+            nearer = d < best_d
+            best_d = np.where(nearer, d, best_d)
+            best_key = np.where(nearer, ((iu.astype(np.int64) * 2 + lattice) * 73856093) ^ (iv.astype(np.int64) * 19349663), best_key)
+            reach = np.maximum(np.abs(du), np.maximum(np.abs(0.5 * du + 0.5 * row * dv), np.abs(0.5 * du - 0.5 * row * dv)))
+            edge = np.where(nearer, 0.5 - reach, edge)
+        return best_key, np.maximum(edge, 0.0) * self.cell_m * min(self.stretch)
+
+    def _paint_all(self, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out: Relief, ok: np.ndarray) -> None:
+        drop = np.argmax(np.abs(n), axis=1)
+        pair = np.array([[1, 2], [0, 2], [0, 1]])[drop]
+        swap = pair[:, 1] == self.long_axis
+        index = np.arange(len(p))
+        u = p[index, np.where(swap, pair[:, 1], pair[:, 0])]
+        v = p[index, np.where(swap, pair[:, 0], pair[:, 1])]
+        key, edge = self.cells(u, v)
+        key = key * 4 + drop
+        s = _smooth(1.0 - edge / (0.5 * line_m * self.width)) * ok
+        out.height -= depth_m * self.depth * s
+        out.line[:] = np.maximum(out.line, self.dark * s)
+        out.tint *= 1.0 + self.tone * (2.0 * _keyed_hash(key, self.seed + 401) - 1.0) * ok
+        out.rough += self.sheen * (2.0 * _keyed_hash(key, self.seed + 607) - 1.0) * ok
+
+
+@dataclass(frozen=True)
 class SeamLayout:
     """A part's features, in groups that each keep the frame they were drawn in (``matrix`` columns are that frame's axes in the
     part's current frame, ``origin`` its origin), so the layout follows the part through moves, turns and mirrors."""
@@ -430,5 +477,5 @@ def retuned(feature: Feature, **kw: object) -> Feature:
     return dataclasses.replace(feature, **kw)
 
 
-__all__ = ["Cut", "EMPTY", "Feature", "Hatch", "FULL", "Hoop", "MAJOR", "PLATING", "Path", "Plates", "Relief", "SeamLayout", "Spoke", "every", "retuned", "rings",
+__all__ = ["Cut", "EMPTY", "Feature", "Hatch", "Hexes", "FULL", "Hoop", "MAJOR", "PLATING", "Path", "Plates", "Relief", "SeamLayout", "Spoke", "every", "retuned", "rings",
            "spokes"]

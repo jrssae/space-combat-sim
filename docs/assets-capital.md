@@ -6,9 +6,9 @@ Positions are in the authored frame of the design references: x to starboard, y 
 axes. As with every asset, the generator then centres its mesh and hardpoints on the centroid of the visible surface and
 records the shift as `manifest.centroid_offset`.
 
-M12-T05 builds the shared capital framework (D12.1: sections, texel tiers, weapon mounts). The strike carrier is built
-ahead of it (the early delivery, Q25) on the civilians' pipeline, `core/civilian.py`, and moves onto the framework when it
-lands.
+M10-T05 (the old M12-T05) built the shared capital framework (D12.1: sections, texel tiers, weapon mounts), described
+under "Capital framework" below; every capital hull from M10-T21 on is built on it. The strike carrier was built ahead of
+it (the early delivery, Q25) on the civilians' pipeline, `core/civilian.py`, and stays there until a task moves it.
 
 ## Output contract
 
@@ -52,6 +52,80 @@ carrier (M12-T19 built a second one on its branch; M8-T07 folded it into M7-T03'
 - **Tests** (`tools/procgen/tests/test_collision.py`): hull corners and the point budget, distances, the merge, both coverage
   measures, moves and mirrors, a ring covered with its hole open, one hull round a ring failing the reach check, the
   section and its validation, reading it back, determinism.
+
+## Capital framework (M10-T05)
+
+What every capital generator is built from. A generator composes **modules**, names the **damage section** each belongs to
+and hands a `CapitalSpec` to `core/capital.build`, which writes the whole contract. `capital_test_cruiser` is the worked
+example.
+
+```
+tools/procgen/parts/capital.py           Module (a part, its collision shapes, its hardpoints, in one frame), Hardpoint, twins, mounts
+tools/procgen/parts/capital_hull.py      hull_section (lofted through stations), prow, armour_plates
+tools/procgen/parts/capital_weapons.py   turret_mount, beam_emitter, interceptor_dome, missile_launcher, mine_layer
+tools/procgen/parts/capital_bays.py      launch_bay, launch_tube
+tools/procgen/parts/capital_engines.py   engine_block
+tools/procgen/parts/capital_fittings.py  rotating_section, antenna, lamp
+tools/procgen/styles/capital.py          CapitalStyle (a faction's paint and skin); the skins PanelMosaic, HexGrid, Seamless
+tools/procgen/core/capital.py            Section, PieceSpec, CapitalSpec, problems (the checks), build (the writer)
+tools/procgen/core/budgets.py            the class budgets (Q38) and a texture set's memory
+tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part, every section and hardpoint kind
+```
+
+- **Modules.** Every library part returns a `Module`: placing, turning (`transformed`, `mounted` for a part built on a
+  mount) or mirroring it moves its mesh, its collision and its hardpoints together. A starboard module (`side` RIGHT, its
+  name ending `_r`) gets a port twin, as do sections named `..._r`. Any other mesh joins through `capital.module(name,
+  mesh, shapes)`: this is where M10-T06's organic bodies come in.
+- **Sections** (`manifest.sections[]`): `name`, `kind` (`reactor`, `magazine`, `fuel`, `bridge`, `hangar`, `engine`,
+  `habitat`, `structure`), `hull_share` (they add up to 1), `piece`, `chunk` and `collision` (the names of its break-up chunk
+  in `hardpoints.chunks[]` and of its entry in `collision.pieces`, where its convex shapes and hit volumes are; `shapes` and
+  `hit_volumes` count them), `hardpoints` (the names it holds), `modules`, `aabb_min` and `aabb_max` (body frame), and
+  for the explosive kinds (`reactor`, `magazine`, `fuel`) `blast_energy_j`. A section is whole modules, so its chunk is cut
+  along its modules' boundaries on its piece's atlas and keeps its own collision.
+- **Pieces** (`manifest.pieces`, the station's form): `hull`, whose mesh is also the manifest's `mesh` (`<id>.glb`), and one
+  piece per rotating section (`<id>_<piece>.glb`) with `pivot` (body frame, on its axis), `axis` and `spin_rad_s`. A piece
+  has an atlas of its own with the low and high texture sets. A rotating piece's mesh and its sections' collision are in its
+  own frame, on the pivot (as the station's drum: the game drives it as an `AnimatableBody3D`); its chunk draws with its own
+  piece's maps, not the hull's.
+- **Texel tiers** (D72): the piece's atlas carries the paint, the frame lines and the plating (tens of centimetres a texel
+  on a 300 m hull); every opaque surface's `world_detail` names one shared 16 m tile (`<id>_detail_albedo.png`,
+  `_normal.png`) that the game lays triplanar in the mesh's own space (`MeshAssets.apply_world_detail`), so a 1 to 3 km
+  hull reads from 50 m. A hull too big for one atlas takes a bigger one within its class's budget.
+- **Skins** (`styles/capital.py`): `PanelMosaic` by default; `HexGrid` for the Minbari and the Interstellar Alliance (Q45:
+  `core/seams.Hexes` on the atlas and a hexagonal tile); `Seamless` for the Shadows and Vorlons (Q46: no seams, no tile).
+  `CapitalStyle.surface` adds keys to every opaque surface entry: M10-T06's sheen parameters go there. `manifest.skin`
+  names the skin.
+- **Hardpoints** (`hardpoints.json`, body frame, rotating pieces at rest): the ships' contract (`pods` filled from the
+  engines, `nav_lights` from the lamps, `turrets` left empty: D61's civilian turrets are not these), plus, each entry with
+  its `name`, `section` and `position`:
+  - `weapons[]`: `kind` (`turret`, `beam`, `interceptor`, `missile`, `mine`), `forward` (the boresight at rest; the way
+    a missile or a mine leaves), `up` (the mount's normal) and the kind's numbers (`traverse_deg`, `elevation_deg`,
+    `barrel_m`, `barrels`; `arc_deg`, `aperture_m`; `radius_m`; `cells`, `cell_m`; `mouth_m`);
+  - `bays[]`: `kind` (`bay` or `tube`), `position` (where a craft starts), `forward` (its nose and the way out), `up`,
+    `exit` (the mouth's centre) and `mouth_m`, `depth_m` or `radius_m`, `length_m`;
+  - `engines[]`: `thrust` (the push on the ship), `exhaust`, `share` (of the ship's thrust; they add up to 1), `radius_m`;
+  - `rotors[]`: `piece`, `pivot`, `axis`, `spin_rad_s`, `sections`;
+  - `lights[]`: `direction`, `role` (`port`, `starboard`, `top`, `beacon`, `flood`), `colour` (linear RGB), `range_m`;
+  - `chunks[]` gain `piece`; `jump_point` as the carrier's.
+- **Collision** (above): one entry of `collision.pieces` per section, named for it, with `piece` (the body that carries
+  it); 64 shapes a section and 32 points a hull by default; `coverage` over the whole skin. A bay's hall and a rotating
+  collar's bore stay open (four walls and a back; ring sectors).
+- **Also written:** `far` (M6's D70: the bounding sphere and silhouette areas), `budget` (`class`, `triangles`,
+  `texture_mb` of this build), `dimensions_m`.
+- **The checks** (`capital.problems`, run by `build`): unknown kinds, shares that do not add up, an explosive section
+  without a blast energy, a module in no section, a section with no module, names that repeat, thrust shares that do not
+  add up, a piece beside the hull that does not spin.
+- **Tests:** `test_capital_parts.py`, `test_capital_style.py`, `test_capital_framework.py`, `test_budgets.py`,
+  `test_capital_test_cruiser.py` (Python); `tests/unit/test_capital_framework_asset.gd` (the test hull loads in Godot).
+
+**The test hull**, `capital_test_cruiser`: the stand-ins' cruiser (300 by 60 by 45.6 m with its bay and antenna), 3 646
+triangles, a 2 048 px hull atlas (12 cm a texel) and a 1 024 px one for the rotating section, 19.3 MB a texture set; ten
+sections (every kind), 13 weapon mounts (every kind), a bay and two tubes, four engines, a rotating habitat section, four
+lamps. The explosive sections' blast energies are placeholders until M10-T03. Pictures (gitignored):
+`references/screenshots/M10-T05 capital framework/test hull/`.
+
+**Class budgets (Q38):** proposed in `core/budgets.py`, pending the maintainer's approval; the table and the GPU test behind
+it (`scripts/class_budget_probe.sh`) are written here once approved.
 
 ## `raider_strike_carrier` (M12-T19)
 

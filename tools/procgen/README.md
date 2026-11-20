@@ -215,6 +215,14 @@ commands and scores are in docs/assets-civilian.md.
 The bench's capital stand-ins: one textured box per class, window rows on the flanks, each a textured mesh with its bounds
 (`core/pieces.py`; manifest `classes`).
 
+## `capital_test_cruiser` and the capital framework
+
+The capital framework's test hull (M10-T05): a 300 m cruiser with one of every part of the capital library
+(`parts/capital*.py`) in a neutral grey (`styles/capital.py`), written by `core/capital.py`: a hull piece and a rotating
+piece with an atlas each, the shared detail tile, damage sections with their chunks and collision, and the capital hardpoints.
+A capital generator is a list of modules, a list of sections and a `CapitalSpec`; docs/assets-capital.md ("Capital
+framework") has the contract. About 35 s at full size.
+
 ## `babylon5_station`
 
 The Babylon 5 station (M7-T04, D72; replaced M4's `b5_station` stand-in), built from the measurements in
