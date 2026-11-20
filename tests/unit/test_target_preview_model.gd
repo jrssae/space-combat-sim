@@ -162,4 +162,4 @@ func test_every_kind_has_its_fields_and_a_hull_without_a_name_reads_as_its_id() 
 	assert_eq(TargetPreviewModel.class_text("capital_cruiser"), "Capital Cruiser")
 	for type: StringName in ShipCatalog.types():
 		var asset_id: String = ShipCatalog.spec_for(type).asset_id
-		assert_true(TargetPreviewModel.CLASS_NAMES.has(asset_id), "%s has a class name" % asset_id)
+		assert_true(TargetPreviewModel.class_names().has(asset_id), "%s has a class name" % asset_id)

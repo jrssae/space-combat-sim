@@ -11,23 +11,17 @@ extends Node
 ## apart (`raider_fighter_chunks`, `starfury_aurora_chunks`), a capital stand-in of each class (`capital_cruiser`, `capital_destroyer`,
 ## `capital_carrier`) and the Babylon 5 station (`babylon5_station`, M7-T04).
 ##
-## M12-T19: the sheet parks a capital hull (`HULL_ASSETS`) as its bare textured mesh, its nearest corner `distance_m` away, with a
+## M12-T19: the sheet parks a capital hull (`hull_assets`) as its bare textured mesh, its nearest corner `distance_m` away, with a
 ## Delta-V on one cradle for scale. `<asset>:<option>` shows a surface option built beside it
 ## (`<asset>_options/<option>/<asset>/`, for the A/B/C sheets).
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
 ## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
 const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side", &"front"]
-const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_fighter": ShipPool.DEFAULT_TYPE,
-		"saturn_3_freighter": &"saturn_3_freighter", "saturn_4_transport": &"saturn_4_transport",
-		"saturn_4_tanker": &"saturn_4_tanker", "saturn_8_transport": &"saturn_8_transport", "saturn_8_tanker": &"saturn_8_tanker",
-		"skylark_transport": &"skylark_transport", "narn_transport": &"narn_transport",
-		"centauri_brezebel": &"centauri_brezebel", "brakiri_bokmai": &"brakiri_bokmai"}  # the civilians (M5-T16)
 ## The hulls that are not pooled ships, for the sheets (M4-T30d).
 const PROP_ASSETS: Array[String] = ["nav_buoy", "raider_fighter_chunks", "starfury_aurora_chunks", "capital_cruiser", "capital_destroyer",
 		"capital_carrier", "babylon5_station"]
-## The capital hulls shown as their bare mesh (M12-T19), and the cradle that holds the scale fighter.
-const HULL_ASSETS: Array[String] = ["raider_strike_carrier"]
+## The cradle that holds the scale fighter beside a bare capital hull.
 const SCALE_FIGHTER: String = "raider_fighter"
 const SCALE_CRADLE: String = "outer_000"
 const DOCK_GAP_M: float = 0.05
@@ -75,6 +69,16 @@ func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
 
 
+## Asset id -> the pooled type parked for its sheet: the catalogue's `look_sheet: pool` entries (M10-T61).
+static func pool_types() -> Dictionary:
+	return ShipCatalog.data().by_asset("look_sheet", "pool")
+
+
+## The capital hulls shown as their bare mesh (M12-T19): the catalogue's `look_sheet: hull` entries.
+static func hull_assets() -> Array:
+	return ShipCatalog.data().by_asset("look_sheet", "hull").keys()
+
+
 ## Whether a ship or a prop is parked now.
 func is_active() -> bool:
 	return _parked != null or _prop != null
@@ -94,9 +98,10 @@ func parked() -> Combatant:
 func show(asset_id: String, distance_m: float, light: StringName, view: StringName = &"three_quarter") -> String:
 	if not _resolve():
 		return "sheet needs the world, the ship pool, the player's ship and the key star"
-	var is_hull: bool = HULL_ASSETS.has(asset_id.get_slice(":", 0))
-	if not POOL_TYPES.has(asset_id) and not PROP_ASSETS.has(asset_id) and not is_hull:
-		return "no pooled ship or prop draws %s (one of %s, %s)" % [asset_id, ", ".join(POOL_TYPES.keys()), ", ".join(PROP_ASSETS)]
+	var is_hull: bool = hull_assets().has(asset_id.get_slice(":", 0))
+	var pooled: Dictionary = pool_types()
+	if not pooled.has(asset_id) and not PROP_ASSETS.has(asset_id) and not is_hull:
+		return "no pooled ship or prop draws %s (one of %s, %s)" % [asset_id, ", ".join(pooled.keys()), ", ".join(PROP_ASSETS)]
 	var camera: Camera3D = get_viewport().get_camera_3d()
 	if camera == null:
 		return "no current camera"
@@ -117,7 +122,7 @@ func show(asset_id: String, distance_m: float, light: StringName, view: StringNa
 
 # Parks one idle pooled ship of `asset_id` for the sheet.
 func _show_ship(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, view: StringName) -> String:
-	var type: StringName = POOL_TYPES[asset_id]
+	var type: StringName = pool_types()[asset_id]
 	if pool.prepare(type, 1) < 1:
 		return "the %s pool is empty" % type
 	var at: Vector3 = camera.global_position - camera.global_basis.z * distance_m
@@ -185,7 +190,7 @@ func _release() -> void:
 func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, view: StringName) -> String:
 	var at: Vector3 = camera.global_position - camera.global_basis.z * distance_m
 	var basis: Basis = _sheet_basis(camera, at, view)
-	if HULL_ASSETS.has(asset_id.get_slice(":", 0)):
+	if hull_assets().has(asset_id.get_slice(":", 0)):
 		var hull: Node3D = _hull_prop(asset_id)
 		if hull == null:
 			return "%s is not generated (run scripts/gen_assets.sh, then import)" % asset_id

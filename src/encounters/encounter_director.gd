@@ -59,11 +59,8 @@ const STATION_RAID_REACH_M: float = 25000.0
 ## A station raid comes out this much farther from the station's centre than a raid from its target, clear of its hull.
 const STATION_STANDOFF_M: float = 5000.0
 const PATROL_CALLSIGNS: Array[String] = ["BRAVO", "CHARLIE", "DELTA", "ECHO", "FOXTROT"]
-const CIVILIAN_CALLSIGNS: Dictionary[StringName, String] = {
-	&"saturn_3_freighter": "SATURN", &"saturn_4_transport": "SATURN", &"saturn_4_tanker": "SATURN",
-	&"saturn_8_transport": "SATURN", &"saturn_8_tanker": "SATURN", &"skylark_transport": "SKYLARK",
-	&"narn_transport": "NARN", &"centauri_brezebel": "BREZEBEL", &"brakiri_bokmai": "BOKMAI",
-}
+## A civilian whose catalogue entry gives no `callsign` calls in under this.
+const CIVILIAN_CALLSIGN: String = "CIVILIAN"
 const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider"}
 const STATION_RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack", "objective": Station.DISPLAY_NAME}
 const ALLY_AI: Dictionary = {"type": "ai", "profile": "ally_starfury", "orders": "engage"}
@@ -436,7 +433,7 @@ func _free_of(type: StringName, taken: Dictionary) -> int:
 
 
 func _free_civilian(wanted: StringName, taken: Dictionary) -> StringName:
-	var types: Array[StringName] = ShipCatalog.CIVILIAN_TYPES
+	var types: Array[StringName] = ShipCatalog.civilian_types()
 	var start: int = maxi(types.find(wanted), 0)
 	for step: int in types.size():
 		var type: StringName = types[(start + step) % types.size()]
@@ -593,7 +590,13 @@ func _name_for(e: EncounterEvent, type: StringName) -> String:
 			return main.ships.next_name()
 		&"patrol":
 			return main.ships.next_name(PATROL_CALLSIGNS[e.index % PATROL_CALLSIGNS.size()], 1)
-	return main.ships.next_name(CIVILIAN_CALLSIGNS.get(type, "CIVILIAN"), 1)
+	return main.ships.next_name(civilian_callsign(type), 1)
+
+
+## The name a civilian of `type` calls in under: its catalogue `callsign` (M10-T61).
+static func civilian_callsign(type: StringName) -> String:
+	var callsign: String = ShipCatalog.entry_text(type, "callsign")
+	return callsign if not callsign.is_empty() else CIVILIAN_CALLSIGN
 
 
 func _behaviour_for(e: EncounterEvent, target_name: String) -> Dictionary:
