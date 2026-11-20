@@ -1042,3 +1042,103 @@ a 296 Hz inharmonic clank) and `explosion` (1.8 s, centroid 131 Hz) get no refer
     measured in the reference.
 - **Hits and explosions.** No reference will be measured: the maintainer chose to invent them (2026-10-25), in keeping
   with the gun and engine sounds above (bright, metallic, short), while `explosion` keeps a low body for weight.
+
+## M10 hulls (M10-T01)
+
+One section per M10 hull, fighter and small craft, written from the maintainer's STLs (rendered with `tools/refview`
+into `reports/refs/<id>/`) and the verified show images in `references/show/m10/<folder>/` (Q35). Lengths, sources and
+the gate check are in `docs/assets-capital.md`, "M10 lengths (T01)" (approved, Q49). Frame as everywhere: x to
+starboard, y up, z aft from the bow, metres; stations are percent of the length from the bow. Weapons and launches are
+what the sources list (the Babylon Project wiki, TBP; Mongoose's Ships of the Galaxy, SotG; the Official Guide, OG);
+T03 sets the game's loadouts. Positions of the reactor, bridge, hangars and engines are read off the model and the show,
+for T08's sections and subsystems. Nothing here is a trace: the generators build their own geometry from these words.
+
+Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py references/<file> --name <id> --length <L>
+<mapping>`.
+
+### EA Omega-class destroyer (`ea_omega`, T21)
+
+- **Reference.** `EA Omega Destroyer.stl`, mapping `--right=+y --up=+z --aft=+x`, 1 714.3 m. Box 474 m wide (the drum),
+  545 m tall (the drum, turned in the file; see below). Show: `ea_omega/` (four stills).
+- **Bow section** (0 to 21 %). A long sensor spike from the bow (0 to 6 %), then the **command section**: a slab-sided block
+  (10 to 16 %) about 70 m wide, 240 m tall, its fore face bevelled, with a short dorsal mast and a long ventral one; a
+  narrower neck behind it (16 to 21 %, about 60 m square) with small turret blisters on its flanks.
+- **Forward spine** (21 to 32 %): a square-section spine about 90 m across with two rings of turret pods.
+- **Rotating section** (32 to 52 %). The defining part: a **drum** about 330 m long round the spine, between two collars
+  (32 % and 52 %, about 60 m thick and a little wider than the spine). The drum is four box-section arms in a cross,
+  each about 240 m wide, their outer faces 237 m from the axis, plated in long slats with a row of square windows at the
+  rim; the arms are joined by an inner hub. **The file models it turned about 40 degrees** about the length (the front view
+  shows the cross on a slant); the build sets it square (arms at 0, 90, 180, 270) and turns it as an `AnimatableBody3D`
+  in the game (T21 note).
+- **Aft spine** (52 to 71 %): like the forward spine, with two more rings of turret pods.
+- **Engine section** (71 to 100 %). A tapered housing (71 to 82 %) widening to about 170 m, its flanks in angled plates,
+  then four engine pods in a square (82 to 97 %, about 45 m each, the bells to 97 %), a dorsal fin pair, and long
+  stabiliser spikes to the stern (100 %).
+- **Weapons and bays (TBP).** 4 heavy plasma pulse cannons, 6 laser batteries (2 fore, 4 aft), 12 pulse cannons, missiles,
+  mines, interceptors; the turret pods on the spines and the command neck carry them. **Two full squadrons of
+  Starfuries** (24): the launch bays are in the drum's arms (the show launches from the drum's rim).
+- **Subsystems.** Bridge: the command section's fore face. Reactor: the engine section's forward housing (71 to 82 %).
+  Hangars: the drum. Engines: the four pods. Jump engine: aft spine (own points).
+- **Colours (show).** Light and mid grey plating in big panels with darker recessed bands, black window rows, small
+  EA markings and red-orange running lights; engines glow blue-white. Same palette as the station's EA grey.
+
+### EA Hyperion-class heavy cruiser (`ea_hyperion`, T22)
+
+- **Reference.** `EA Hyperion Class Heavy Cruiser.stl`, mapping `--right=+x --up=+z --aft=-y`, 1 025.39 m. Box 249 m wide,
+  267 m tall. Show: `ea_hyperion/` (four stills; the name painted on the hull).
+- **Forward hull** (0 to 45 %). A long wedge, widest (about 140 m) at 30 to 40 %, tapering to a blunt bow 60 m wide; its
+  top is flat, its keel slopes up to the bow. At the bow, a cluster of **four gun barrels** about 60 m long (the heavy
+  plasma cannons) projects forward. Dome turrets (about 25 m) sit on the roof at 27 % and 37 %, on the flanks at 27 %
+  and 37 %, and under the keel.
+- **Command tower** (33 to 45 %). A tall fin rises from the forward hull's roof to y +120 with a dome turret on top; a
+  matching ventral fin drops to y -120 with two turret domes. These are the "big guns mounted forward" and the bridge.
+- **Truss** (45 to 66 %). The hull narrows into an **open lattice spine** (two triangulated girders about 60 m wide, 50 m
+  deep) carrying a dorsal service pipe; a box module (66 to 72 %, about 60 m square) with a dome turret sits on it.
+- **Aft spine** (72 to 85 %): a narrower solid spine to the engine block.
+- **Engine block** (85 to 94 %). A wide flat block (about 240 m across, 50 m tall) with fuel tanks at its four corners
+  and a dome turret on top; **three engine bells** (90 to 100 %), each about 45 m across, in a row.
+- **Weapons and bays (TBP, WPL).** 2 heavy and 2 medium plasma pulse cannons, 2 phased particle cannons, 4 pulse discharge
+  cannons (the domes), 2 torpedo tubes. **Launches 6 Starfuries and 2 shuttles** (Q49): a launch bay in the forward
+  hull's flank at 40 to 45 % (the show's still 03 shows a lit bay door low on the flank).
+- **Subsystems.** Bridge: the command tower. Reactor: the box module on the truss. Hangar: forward hull flank. Engines:
+  the block.
+- **Colours (show).** Light grey hull with **broad royal-blue bands** round the hull and the tower, white panels,
+  "HYPERION" in dark letters on the flank, the EA roundel; engines glow blue.
+
+### EA Nova-class dreadnought (`ea_nova`, T23)
+
+- **Reference.** `EA Nova class destroyer.STL` (the file's name is wrong: it is the Nova), mapping `--right=-x --up=+z
+  --aft=+y`, 1 502.1 m. Box 210 m wide, 446 m tall (with its masts). Show: `ea_nova/` (three stills).
+- **Bow** (0 to 25 %). Long sensor spikes forward (0 to 12 %), then the **command block** (14 to 24 %): a tall block about
+  140 m wide and 270 m tall, its upper half straight-sided, its lower half a wedge tapering to a keel at y -130, two
+  thin masts above to y +220 and one below to -220.
+- **Gun spine** (25 to 75 %). A long box spine about 120 m wide and 90 m tall in three bays split by two raised collars
+  (at 37 % and 55 %, each a block about 60 m long). Along both flanks and the roof the spine carries the **twin gun
+  turrets** in rows (TBP: 18 twin cannons), and four outrigger lugs per bay.
+- **Engine section** (75 to 100 %). A tapered housing (75 to 82 %) widening to about 190 m with angled flank plates, then
+  **four engine pods** in a square (82 to 97 %), the same layout as the Omega's.
+- **Weapons and bays.** TBP: 18 twin cannons; no fighter bays are confirmed (the table's "Starfury" stays as the EA's
+  default, for T03). SotG lists 2 light shuttles.
+- **Subsystems.** Bridge: the command block. Reactor: the engine housing. Engines: the four pods.
+- **Colours (show).** Darker than the Omega: grey-brown and ochre plating, many lit windows, "B" and hull numbers in
+  white, engines glowing red-orange in still 02.
+
+### EA Warlock-class destroyer (`ea_warlock`, T24)
+
+- **Reference.** `EA-Warlock_destroyer.stl` (483 000 triangles, detailed), mapping `--right=+x --up=+z --aft=-y`,
+  1 992.4 m. Box 575 m wide (the side pods), 349 m tall. Show: `ea_warlock/` (three stills, dark).
+- **Bow** (0 to 15 %). Two long **particle beam cannons** (TBP) project forward, one high at y +35 (0 to 13 %) and one low
+  at y -75 (4 to 21 %), from a sensor boom between them.
+- **Main hull** (15 to 70 %). A long armoured hull about 200 m wide and 150 m tall, faceted, its roof sloping down to the
+  bow; turret mounts in rows on the roof and keel. **Two gravitic side pods** at 47 to 55 %, on short pylons, each about
+  70 m wide and 100 m long with four nozzles fore and aft. Small swept fins at 20 % and 65 % on both flanks.
+- **Launch bay.** TBP: on the bow, between the sensor boom and the beam cannons (a lit opening under the bow at 15 %).
+- **Neck** (70 to 82 %): a narrow lattice-and-box spine about 80 m wide.
+- **Engine section** (82 to 100 %). A block about 150 m wide and 200 m tall with angled plates, **four engines** (two
+  above, two below), a ventral fin, stern spikes.
+- **Weapons (TBP).** Two particle beam cannons, 12 large missile silos, plasma cannons, railguns; Starfuries and
+  Thunderbolts (the Thunderbolt after M11).
+- **Subsystems.** Bridge: the forward roof (a raised block at 25 %). Reactor: amidships under the side pods. Engines:
+  the stern block and the two gravitic pods.
+- **Colours (show).** Very dark navy-grey plating, almost black, with orange-amber running lights and engine glow;
+  "WARLOCK" lettering in still 03.
