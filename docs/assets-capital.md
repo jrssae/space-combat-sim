@@ -291,3 +291,57 @@ pass a gate; the Sharlin passes only rolled.
 the T36 destroyer's hull (the transport shape: 03, 04 with its petals open, Pasted image (2) and (3)), except
 `Pasted image.png`, a close view of the T60 hull's body; `references/show/m10/vorlon_dreadnought/` shows the T60 heavy
 cruiser (the long forward claws).
+
+### Axis mappings and measurements (T01 stage 2)
+
+The `refview` and `compare` mapping per hull (`--right --up --aft`), read off the renders in `reports/refs/<id>/`; the
+bow is the end the shape and the show agree on (`docs/design-references.md`, "M10 hulls", says why for each). `--length`
+is the approved length unless noted.
+
+| Id | File | Mapping | Note |
+|---|---|---|---|
+| `ea_omega` | `EA Omega Destroyer.stl` | `+y +z +x` | the drum is turned about 40 degrees in the file |
+| `ea_hyperion` | `EA Hyperion Class Heavy Cruiser.stl` | `+x +z -y` | |
+| `ea_nova` | `EA Nova class destroyer.STL` | `-x +z +y` | |
+| `ea_warlock` | `EA-Warlock_destroyer.stl` | `+x +z -y` | |
+| `narn_gquan` | `Narn Gquon battlecruiser.stl` | `-x +z +y` | |
+| `centauri_vorchan` | `Centauri Vorchan Cruiser.stl` | `+y +z +x` | |
+| `centauri_primus` | `Centauri_Primus_1586m.stl` | `-x +z +y` | bow at the twin barrels |
+| `centauri_primus` (mass driver) | `Centauri_Primus_w_mass_driver.stl` | `+y +z +x` | the driver: ventral, 16 to 46 %, 253 m across its mounts, to y -115 |
+| `minbari_sharlin` | `Minbari_Sharlin_cruiser.stl` | `+y +z +x` | |
+| `drazi_sunhawk`, `drazi_firehawk` | `Drazi_Sunhawk_crusier_350m.stl`, `Drazi_Firehawk_350m.stl` | `+y +z +x` | one hull; the Firehawk's aft bulb is windowed |
+| `drazi_stormfalcon` | `Drazi_Stormfalcon_cruiser_820m.stl` | `+y +z +x` | |
+| `brakiri_avioki` | `Brakiri_Avioki_cruiser.stl` | `+y +z +x` | |
+| `vree_xill` | `Vree_Xill_cruiser.stl` | `+y +z +x` | a saucer: the bow is chosen |
+| `isa_whitestar` | `ISA Whitestar.stl` | `+y +z +x` | bow at the single point |
+| `isa_victory` | `ISA Destroyer.stl` | `+y +z +x` | |
+| `shadow_battlecrab` | `Shadow_Battlecrab.stl` | `+x +z -y` | `--length 640.6` (the body's run) gives the 1 500 m span |
+| `vorlon_destroyer` | `Vorlon_Destroyer (missing pedals) - 131m.stl` | `+x +z -y` | petals below |
+| `vorlon_heavy_cruiser` | `Vorlon Dreadnought - 1528m.stl` | `-x +z +y` | bow at the claws |
+| `drakh_carrier` | `Drakh carrier.STL` | `+x +z -y` | bow at the prongs |
+| `narn_frazi` | `Narn_Fighter.stl` | `-x +z +y` | bow at the gun barrels |
+| `centauri_sentri` | `Centari_Sentri_Fighter.stl` | `+y +z +x` | |
+| `minbari_nial` | `Minbari Liara fighter.stl` | `+x +z -y` | |
+| `drazi_sky_serpent` | `Drazi_Sky_serpant_fighter_19m.stl` | `+x +z -y` | |
+| `brakiri_falkosi` | `Brakiri_Falkosi_fighter.STL` | `-x +z +y` | |
+| `drakh_fighter` | `Drakh_Fighter.stl` | `-x +z +y` | |
+| `shadow_fighter` | `Shadow_advanced_fighter.stl` | `+y +z +x` | |
+| `shadow_scout` | `Shadow_Scout_fighter_201m.stl` | `+y +z +x` | |
+| `vorlon_fighter` | `Vorlon_Light_Fighter (pedals open).stl` | `+x +z -y` | |
+| `ea_thunderbolt` | `EA_Thunderbolt_fighter.stl` | turn +42 degrees about file z, then `-x +z +y` | `refview` has no turn: T50 adds one |
+| `ea_panama`, `ea_explorer`, `ea_construction_tender`, `ea_shuttle`, `ea_atmo_shuttle` | (their files) | `-x +z +y` | the Explorer's bow is not certain (T52) |
+| `ea_asimov`, `ea_mining_transport` | `EA Asimov liner.stl`, `EA_Mining_Transport.stl`, `..._doors_open.stl` | `-x +z +y` | one scale (3.47 m a unit): the liner 600 m, the mining transport 632 m closed and 716 m open (`--length 632.4` and `716.3`) |
+| `centauri_shuttle`, `minbari_flyer` | (their files) | `+y +z +x` | |
+
+**Vorlon destroyer's petals (Q10).** Both petal STLs are single petals at the body's scale (0.18 m a unit), laid out as
+print pieces (not in place). Closed: 56 m long, a curled shell of 17.8 m chord and 6.9 m depth (radius about 9.2 m against
+the head's 9.8 m), so it wraps the head from the bow to about 43 %, its hinge stub aft. Open: 32 m wide and 46 m long,
+standing about 50 degrees out from the axis, tip forward; four make a flower about 90 m across. The petal changes shape
+between the states (curled to flat), so the generator morphs it as well as turning it. Four petals per the show; three
+would close edge to edge.
+
+**Mining transport doors (Q43).** The two STLs are one mesh moved: the sphere parts across its middle and the halves
+slide apart 24.2 units (84 m at the liner's scale), the hold crossed by posts. One rigid moving part, two states.
+
+**Launches the hull tables may still miss.** TBP lists 4 Nials for the White Star and Starfuries, Thunderbolts and Kestrel
+shuttles for the Victory; the hull table has none for both. For T03 under Q49's "follow the sources".
