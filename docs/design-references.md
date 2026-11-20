@@ -1307,3 +1307,125 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   graviton beams in B5W. Jump engine (OG). No fighters (no Vree fighter reference).
 - **Subsystems.** Bridge: the top hub. Reactor: under the dome. Guns: the ventral hub. Engines: the rim (gravitic).
 - **Colours (show).** Silver-grey metal with **glowing blue radial panels**, an orange-lit rim band, white ports.
+
+### ISA White Star (`isa_whitestar`, T33)
+
+- **Reference.** `ISA Whitestar.stl`, mapping `--right=+y --up=+z --aft=+x`, 475.6 m. Box 222 m wide, 78 m tall. Show:
+  `isa_whitestar/` (eight images). Skin: hexagonal grid (Q45), semi-organic (Q47).
+- **The bow is the single point**, the stern the fork (T. Earls' chart: the 52 m "snub-nose" variant has a short blunt
+  bow at the same end).
+- **Fore hull** (0 to 40 %). A long blade: a pointed bow widening to about 60 m at 20 %, pinching to 30 m at 30 %, with
+  two gun recesses on its upper face (20 to 28 %).
+- **Mid hull** (35 to 70 %). The fuselage swells into a rounded body about 70 m across with a dorsal canopy (40 to 50 %);
+  from it two **curved wings** sweep out and back to the **pods** at x ±100 (38 to 70 %), each pod a slim nacelle with
+  twin gun blocks forward and a long barrel aft. Seen from ahead the wings are an arc from the pods up to the body.
+- **Stern** (60 to 100 %). The hull splits into the **fork**: two long tapered prongs (x ±25, to 100 %), and between them
+  a flat **diamond tail fin** in the vertical plane (65 to 100 %, about 70 m tall).
+- **Weapons and bays (TBP).** A quantum discharge beam cannon (the bow), 2 neutron cannons, 2 twin fusion cannons (the
+  pods' gun blocks); TBP lists **4 Nial fighters** (the table says none; for T03). Opens its own jump points (canon).
+- **Subsystems.** Bridge: the canopy (45 %). Reactor: the mid hull's core. Engines: the fork and the pods' sterns
+  (gravimetric, pale glows).
+- **Colours (show).** **Violet-purple iridescent** plating in organic patches with white highlights, dark blue-black
+  between them, a **yellow-green light strip** along the hull's flank; white engine glows; a green beam.
+
+### ISA Victory-class destroyer (`isa_victory`, T34)
+
+- **Reference.** `ISA Destroyer.stl`, mapping `--right=+y --up=+z --aft=+x`, **2 012 m** (Q49). Box 1 324 m wide,
+  1 107 m tall. Show: `isa_victory/` (eight images, one a three-view). Skin: hexagonal grid (Q45).
+- **Forward hull** (0 to 25 %). A long cigar pod about 80 m across on the axis (y -200), its bow rounded, a row of
+  windows along it.
+- **Neck** (25 to 52 %). A long narrow spine about 25 m across, with a ventral blade under its aft half (31 to 60 %).
+- **Main hull** (52 to 100 %). A long body about 120 m across tapering at both ends, with the main gun housings on its
+  flanks (60 to 75 %), a ventral weapons block (66 to 100 %, about 150 m tall) and engine clusters at the stern.
+- **Wings** (66 to 80 %). **Three swept wings** in a Y seen from ahead: one up to y +560 and two down-and-out at 30
+  degrees below horizontal to x ±620, y -560. Each wing tip carries a **pod** (about 200 m long, 70 m across) with fins.
+- **Weapons and bays (TBP).** Fusion beam cannons (the main hull's flank housings, fired as a giant green beam in the
+  show), an enhanced weapons array, defence grid, interceptors; TBP lists **Starfuries, Thunderbolts and Kestrel
+  shuttles** (the table says none; for T03). Opens its own jump points.
+- **Subsystems.** Bridge: the forward hull. Reactor: the main hull's core (75 %). Hangar: the ventral block. Engines:
+  the stern and the wing pods.
+- **Colours (show).** **Dark charcoal to black** hull with light grey edges and panel lines, blue-white running lights
+  on the wing pods, a green beam.
+
+### Shadow battlecrab (`shadow_battlecrab`, T35)
+
+- **Reference.** `Shadow_Battlecrab.stl` (only 14 900 triangles), mapping `--right=+x --up=+z --aft=-y`, **1 500 m span**
+  (Q49): the run of the body is 641 m (`refview --length 640.6`), the height 310 m. Show: `shadow_battlecrab/` (eight
+  images). Organic and seamless (Q46).
+- **Body.** A compact, knotted central body about 220 m across (z 380 to 600), a lumpy fused mass of tubes with a
+  smooth black skin.
+- **Crossbar.** Its two longest limbs run out sideways from the body's aft end in a gentle arc to x ±700 (z 450 to 620),
+  about 25 m thick, straight in the show's side view (`Pasted image.png`) and level with the body's top.
+- **Legs.** About ten long, thin, curved **spines** splay forward from the body (to z 0 at x ±480) and arch downward,
+  their tips 130 to 180 m below the body: from ahead they hang like a crab's legs round the space under the body.
+- **Weapons and craft.** The slicer beam (TBP: a high-energy beam) fires from the body's **underside front, between the
+  legs** (`Pasted image (2).png`); a jump-point destabiliser; Shadow fighters (6 in B5W, 36 in SotG). No jump points:
+  it shimmers into hyperspace (Q44, `Transitioning to hyperspace.png`).
+- **Subsystems.** One organic being as its core (TBP): the "reactor" and "bridge" are the body; engines: none visible.
+- **Colours (show).** **Black** with a faint shifting purple-blue sheen and a fine scaly pattern; the purple-pink beam.
+
+### Vorlon destroyer (`vorlon_destroyer`, T36)
+
+- **Reference.** The body `Vorlon_Destroyer (missing pedals) - 131m.stl`, mapping `--right=+x --up=+z --aft=-y`,
+  **131 m** (Q49; 0.18 m per file unit). Box 19.5 m across the body. The petals:
+  `Vorlon_Destroyer-Closed_petal_position.stl` and `Vorlon_Destroyer-Open_petal_position.stl`, one petal each, at the
+  body's scale (0.18 m per unit). Show: **the folder `vorlon_heavy_cruiser/`** (named before Q49): 03, 04 (petals
+  open) and Pasted image (2) and (3); TBP gives the Vorlon transport, this shape, 131 m. Organic and seamless, a faint
+  glow (Q46).
+- **Head** (0 to 36 %). A smooth bulb, radius 9.8 m, rounded at the bow with a small ring of spikes on its nose.
+- **Body** (36 to 70 %). Three long **lobes** round the axis (about 6 m across each, at x ±7 and on top), with small fins
+  at 45 %; a narrower core between them.
+- **Tail** (70 to 100 %). The lobes taper into **tendrils**: three long curling tentacles to the stern and a pair of
+  short side ones from a collar at 70 %.
+- **Petals (measured).** Each is a curved shell 56 m long. **Closed**, it curls to a chord of 17.8 m and a depth of 6.9 m:
+  a shell of radius about 9.2 m, which matches the head's 9.8 m, so the closed petals wrap the head from the bow back
+  to about 43 % with their roots (a short hinge stub at the narrow end) aft. **Open**, the petal flattens to 32 m wide
+  and 46 m long and stands about 50 degrees out from the axis, its tip forward: four open petals make a flower about
+  90 m across round the bow (still 04 shows four). Four closed petals at a 130-degree chord overlap at their edges (three
+  would close exactly; still 04 shows four). The petals fit the body: the hinge ring sits where the head meets the
+  lobes, and neither state reaches past the gate-check box.
+- **Weapons and craft.** The Vorlon energy beam (T04) from between the petals; no source lists fighters. Opens its own
+  jump points.
+- **Subsystems.** Organic: the "bridge" in the head, the "reactor" in the body's core (50 %), propulsion in the tendrils.
+- **Colours (show).** **Yellow-green mottled with black**, like a leopard's skin; blue glows in the joints; the petals
+  **deep blue mottled with black**.
+
+### Vorlon heavy cruiser (`vorlon_heavy_cruiser`, T60)
+
+- **Reference.** `Vorlon Dreadnought - 1528m.stl` (the file's name is wrong, Q49), mapping `--right=-x --up=+z
+  --aft=+y`, **1 528 m**. Box 461 m wide, 302 m tall: it passes the gate's mouth (ellipse 0.08). Show: **the folder
+  `vorlon_dreadnought/`** (three images) and `vorlon_heavy_cruiser/Pasted image.png` (its body, close). Built on T36's
+  parts (Q46 skin and glow).
+- **Claws** (0 to 55 %). The bow is **four long curved claws** (TBP: the tentacles at the face of Vorlon capital ships
+  channel the main beam): two wide ones curving out to x ±230 and in again to tips at x ±120 (z 0), and two narrower ones
+  above and below (to y ±130), each claw about 30 m thick, tapering to its tip, toothed along its inner edge.
+- **Inner tendrils** (15 to 50 %). Between the claws, a cluster of short tendrils round the beam's focus on the axis.
+- **Body** (50 to 100 %). A long rounded body about 200 m across, with a **collar band** at 60 to 68 % (a smooth ring
+  with red markings in the show's top view), then a swelling **head** (70 to 100 %) about 260 m across, lobed, rounded at
+  the stern, with four rounded **side pods** (from ahead: a round body with four oval patches).
+- **Weapons and craft.** The Vorlon beam from the claws (T04); Vorlon fighters (B5W: 6, and 2 shuttles). Opens its own
+  jump points.
+- **Subsystems.** The beam focus between the claws; the "reactor" in the head; propulsion organic.
+- **Colours (show).** Two finishes in the images: **copper-brown** (01) and **yellow-green mottled** (the top view and 02);
+  T60's option sheet shows both. The collar band grey with red marks.
+
+### Drakh carrier (`drakh_carrier`, T37)
+
+- **Reference.** `Drakh carrier.STL` (a low-poly model, 2 448 triangles), mapping `--right=+x --up=+z --aft=-y`, **3 316 m**
+  (Q49). Box 1 021 m wide, 505 m tall. Show: `drakh_carrier/` (four images; the cruiser shares the shape, TBP).
+  Semi-organic with seams and panels (Q47).
+- **Prongs** (0 to 35 %). The bow is **two long prongs**, one each side (x ±450 at the tips), curving in to join the
+  hull at 35 %; their tips turn inward like pincers.
+- **Fore hull** (10 to 30 %). On the axis between the prongs, a narrow forward hull with a pair of small pods on stalks
+  (x ±200, 13 to 17 %).
+- **Main hull** (30 to 85 %). A long flat hull about 400 m wide and 150 m tall, faceted, with **five long slots** in its
+  roof (50 to 60 %: the hangar openings), a raised dorsal ridge (60 to 75 %) with small domed turrets and sensor masts.
+- **Stern** (85 to 100 %). Two swept **tail fins** curving out and back to x ±400, and a **ventral fin** dropping to
+  y -250 (75 to 85 %).
+- **Weapons and craft (TBP, MD).** Yellow pulse bolts and a blue beam (the cruiser in "War Zone"); fighters and shuttles
+  from **ventral external docking stations** (TBP: the White Stars strafed them) and the hangars: MD lists 10 heavy or
+  40 light raiders and 40 shuttles. **No jump engine** (canon): it uses gates.
+- **Subsystems.** Bridge: the dorsal ridge (65 %). Reactor: the main hull's core (55 %). Hangars: the roof slots and the
+  ventral docking stations. Engines: the stern.
+- **Colours (show).** **Brass and bronze** with a dark brown hexagonal scale pattern, darker in shadow, a few teal-green
+  glowing panels (the dorsal fin in the renders).
