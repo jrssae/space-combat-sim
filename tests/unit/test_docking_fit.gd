@@ -1,5 +1,5 @@
 extends GutTest
-## Every hull the docking lane takes (`DockingPlan.TUNNEL_TYPES`) fits the main docking bay's mouth (M7-T25: the STL's band across
+## Every hull the docking lane takes (`DockingPlan.tunnel_types()`) fits the main docking bay's mouth (M7-T25: the STL's band across
 ## a taller core, scaled to 80 m) and its black void, lying square in it as the lane flies it (on the axis, its top to the drum's):
 ## its collision shapes seen from ahead stay `MARGIN_M` inside the mouth's clear outline, and it lies wholly behind the inner
 ## doors at the lane's end, short of the void's back wall.
@@ -52,7 +52,7 @@ func test_every_tunnel_hull_fits_the_mouth_lying_square() -> void:
 		pending("the babylon5_station asset is not generated")
 		return
 	var outline: PackedVector2Array = bay["main_docking_bay_opening"]
-	for type: StringName in DockingPlan.TUNNEL_TYPES:
+	for type: StringName in DockingPlan.tunnel_types():
 		var shapes: Array[Dictionary] = Hardpoints.load_collision_only("res://assets/generated/%s/hardpoints.json" % type)
 		if shapes.is_empty():
 			pending("%s is not generated" % type)
@@ -75,7 +75,7 @@ func test_every_tunnel_hull_lies_wholly_in_the_void_at_the_lanes_end() -> void:
 	var doors: float = (bay["main_docking_bay_doors"] as Vector3).z
 	var wall: float = (bay["main_docking_bay_airlock"] as Vector3).z
 	var end: float = wall - DockingPlan.AIRLOCK_SHORT_M
-	for type: StringName in DockingPlan.TUNNEL_TYPES:
+	for type: StringName in DockingPlan.tunnel_types():
 		var body := RigidBody3D.new()
 		for entry: Dictionary in Hardpoints.load_collision_only("res://assets/generated/%s/hardpoints.json" % type):
 			var node := CollisionShape3D.new()

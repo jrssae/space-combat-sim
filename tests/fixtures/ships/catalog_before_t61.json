@@ -1,0 +1,221 @@
+{
+  "_doc": "ShipCatalog and the per-type lists as they answered before M10-T61 (captured from commit c6e161c1); test_ship_catalog_recorded.gd compares the catalogue with it.",
+  "types": [
+    "starfury_aurora",
+    "starfury_ally",
+    "raider_fighter",
+    "saturn_3_freighter",
+    "saturn_4_transport",
+    "saturn_4_tanker",
+    "saturn_8_transport",
+    "saturn_8_tanker",
+    "skylark_transport",
+    "narn_transport",
+    "centauri_brezebel",
+    "brakiri_bokmai"
+  ],
+  "per_type": {
+    "starfury_aurora": {
+      "has_type": true,
+      "faction": "earth_alliance",
+      "civilian": false,
+      "spec": "res://assets/ships/starfury_aurora.tres",
+      "asset": "starfury_aurora",
+      "callsign": "CIVILIAN"
+    },
+    "starfury_ally": {
+      "has_type": true,
+      "faction": "earth_alliance",
+      "civilian": false,
+      "spec": "res://assets/ships/starfury_ally.tres",
+      "asset": "starfury_aurora",
+      "callsign": "CIVILIAN"
+    },
+    "raider_fighter": {
+      "has_type": true,
+      "faction": "raiders",
+      "civilian": false,
+      "spec": "res://assets/ships/raider_delta_v.tres",
+      "asset": "raider_fighter",
+      "callsign": "CIVILIAN"
+    },
+    "saturn_3_freighter": {
+      "has_type": true,
+      "faction": "earth_alliance",
+      "civilian": true,
+      "spec": "res://assets/ships/saturn_3_freighter.tres",
+      "asset": "saturn_3_freighter",
+      "callsign": "SATURN"
+    },
+    "saturn_4_transport": {
+      "has_type": true,
+      "faction": "earth_alliance",
+      "civilian": true,
+      "spec": "res://assets/ships/saturn_4_transport.tres",
+      "asset": "saturn_4_transport",
+      "callsign": "SATURN"
+    },
+    "saturn_4_tanker": {
+      "has_type": true,
+      "faction": "earth_alliance",
+      "civilian": true,
+      "spec": "res://assets/ships/saturn_4_tanker.tres",
+      "asset": "saturn_4_tanker",
+      "callsign": "SATURN"
+    },
+    "saturn_8_transport": {
+      "has_type": true,
+      "faction": "earth_alliance",
+      "civilian": true,
+      "spec": "res://assets/ships/saturn_8_transport.tres",
+      "asset": "saturn_8_transport",
+      "callsign": "SATURN"
+    },
+    "saturn_8_tanker": {
+      "has_type": true,
+      "faction": "earth_alliance",
+      "civilian": true,
+      "spec": "res://assets/ships/saturn_8_tanker.tres",
+      "asset": "saturn_8_tanker",
+      "callsign": "SATURN"
+    },
+    "skylark_transport": {
+      "has_type": true,
+      "faction": "earth_alliance",
+      "civilian": true,
+      "spec": "res://assets/ships/skylark_transport.tres",
+      "asset": "skylark_transport",
+      "callsign": "SKYLARK"
+    },
+    "narn_transport": {
+      "has_type": true,
+      "faction": "narn",
+      "civilian": true,
+      "spec": "res://assets/ships/narn_transport.tres",
+      "asset": "narn_transport",
+      "callsign": "NARN"
+    },
+    "centauri_brezebel": {
+      "has_type": true,
+      "faction": "centauri",
+      "civilian": true,
+      "spec": "res://assets/ships/centauri_brezebel.tres",
+      "asset": "centauri_brezebel",
+      "callsign": "BREZEBEL"
+    },
+    "brakiri_bokmai": {
+      "has_type": true,
+      "faction": "brakiri",
+      "civilian": true,
+      "spec": "res://assets/ships/brakiri_bokmai.tres",
+      "asset": "brakiri_bokmai",
+      "callsign": "BOKMAI"
+    },
+    "raider_strike_carrier": {
+      "has_type": false,
+      "faction": "neutral",
+      "civilian": false,
+      "spec": "",
+      "asset": "",
+      "callsign": "CIVILIAN"
+    },
+    "battleship": {
+      "has_type": false,
+      "faction": "neutral",
+      "civilian": false,
+      "spec": "",
+      "asset": "",
+      "callsign": "CIVILIAN"
+    }
+  },
+  "civilian_types": [
+    "saturn_3_freighter",
+    "saturn_4_transport",
+    "saturn_4_tanker",
+    "saturn_8_transport",
+    "saturn_8_tanker",
+    "skylark_transport",
+    "narn_transport",
+    "centauri_brezebel",
+    "brakiri_bokmai"
+  ],
+  "tunnel_types": [
+    "skylark_transport",
+    "narn_transport",
+    "centauri_brezebel"
+  ],
+  "freighter_types": [
+    "saturn_3_freighter",
+    "saturn_4_transport",
+    "saturn_4_tanker",
+    "saturn_8_transport",
+    "saturn_8_tanker"
+  ],
+  "look_pool_types": [
+    [
+      "starfury_aurora",
+      "starfury_ally"
+    ],
+    [
+      "raider_fighter",
+      "raider_fighter"
+    ],
+    [
+      "saturn_3_freighter",
+      "saturn_3_freighter"
+    ],
+    [
+      "saturn_4_transport",
+      "saturn_4_transport"
+    ],
+    [
+      "saturn_4_tanker",
+      "saturn_4_tanker"
+    ],
+    [
+      "saturn_8_transport",
+      "saturn_8_transport"
+    ],
+    [
+      "saturn_8_tanker",
+      "saturn_8_tanker"
+    ],
+    [
+      "skylark_transport",
+      "skylark_transport"
+    ],
+    [
+      "narn_transport",
+      "narn_transport"
+    ],
+    [
+      "centauri_brezebel",
+      "centauri_brezebel"
+    ],
+    [
+      "brakiri_bokmai",
+      "brakiri_bokmai"
+    ]
+  ],
+  "look_hull_assets": [
+    "raider_strike_carrier"
+  ],
+  "class_texts": {
+    "starfury_aurora": "Aurora Starfury",
+    "raider_fighter": "Delta-V raider",
+    "saturn_3_freighter": "Saturn 3 freighter",
+    "saturn_4_transport": "Saturn 4 transport",
+    "saturn_4_tanker": "Saturn 4 tanker",
+    "saturn_8_transport": "Saturn 8 transport",
+    "saturn_8_tanker": "Saturn 8 tanker",
+    "skylark_transport": "Skylark transport",
+    "narn_transport": "Narn transport",
+    "centauri_brezebel": "Brezebel transport",
+    "brakiri_bokmai": "Bokmai hauler",
+    "nav_buoy": "Nav buoy",
+    "jumpgate": "Jumpgate",
+    "raider_strike_carrier": "Raider Strike Carrier",
+    "cargo_pod": "Cargo Pod",
+    "some_new_thing": "Some New Thing"
+  }
+}

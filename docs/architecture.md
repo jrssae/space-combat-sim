@@ -4452,7 +4452,7 @@ M4-T20's capital stand-ins rather than into `weapon_kernels.rs` and `weapon_rows
 ```
 data/factions.json               + narn, centauri, brakiri (hostile to raiders, neutral to everyone else; Q24)
 assets/ships/<civilian>.tres     a ShipSpec per hull: mass and inertia from its hardpoints, heavy and slow, no cannon
-src/game/ship_catalog.gd         the nine types, each its people's faction; CIVILIAN_TYPES, is_civilian (the role)
+src/game/ship_catalog.gd         the nine types, each its people's faction; civilian_types, is_civilian (the role), read from data/ships/catalogue.json (M10-T61)
 src/ship/cargo_pods.gd           CargoPods: the Bokmai's 0-3 pods (mass, inertia, Jolt shapes, hit volumes, far dot, debris)
 native/src/rows.rs               the role column (ROLE_COMBAT, ROLE_CIVILIAN), fed from SimCore.set_civilian, kept in the tier
 native/src/civilian.rs           the civilian flight: kin, shelter, group, alarm; engine-free, tests in civilian/tests.rs
@@ -6214,7 +6214,7 @@ data/station/traffic.json        the run's ships and spacing, its kinds' weights
   it, in the tunnel or in the void, docking or undocking. A ship sent on after a lane gets a new route
   that starts at its first waypoint (`BehaviourFollowPath.attach` resets on a different route, `AiPilot` restarts the native
   slot): before M7-T56 a departing ship took its lane's end for its departure route's and was let go 5 km out.
-- **Cargo carried to the cargo bay (T30, maintainer 2026-11-14; the carriers are cargo pods since T34, below).** Any of the five Saturns (`DockingPlan.FREIGHTER_TYPES`;
+- **Cargo carried to the cargo bay (T30, maintainer 2026-11-14; the carriers are cargo pods since T34, below).** Any of the five Saturns (`DockingPlan.freighter_types()`;
   the traffic draws hull and unloading or loading from the session seed) holds at the cargo bay while the station's bots carry its
   cargo between it and the bay's back wall; nothing flies by itself.
   - **Cargo** is the break-up chunks named `pod*` and `tank*` (`FreighterCargo.is_cargo`): a Saturn 3's three pods, a Saturn 4's

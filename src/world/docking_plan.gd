@@ -11,13 +11,7 @@ extends RefCounted
 ##   and leaves nose first the way it came. The station's maintenance bots carry its cargo meanwhile (M7-T30); the traffic sends
 ##   it on when they are done.
 
-## Hulls that fit the docking bay's mouth (M7-T25: a band 73 x 17 m across a core 45 x 30 m) with room to spare, lying square in it;
-## every other civilian holds outside (the Saturns never enter).
-const TUNNEL_TYPES: Array[StringName] = [&"skylark_transport", &"narn_transport", &"centauri_brezebel"]
 const FREIGHTER_TYPE: StringName = &"saturn_3_freighter"
-## Every Saturn that comes to the cargo bay (M7-T30: each by its own pods or tanks).
-const FREIGHTER_TYPES: Array[StringName] = [&"saturn_3_freighter", &"saturn_4_transport", &"saturn_4_tanker",
-		&"saturn_8_transport", &"saturn_8_tanker"]
 ## How far short of the hold point a freighter turns its stern to the bay, metres.
 const TURN_SHORT_M: float = 700.0
 ## How far short of the void's back wall (the manifest's `main_docking_bay_airlock`) a docking lane ends, and an undocking one
@@ -53,6 +47,17 @@ var freighter: Array[Dictionary] = []
 var freighter_hold_index: int = -1
 ## The unit vector a held freighter's nose points along (away from the bay).
 var away: Vector3 = Vector3.FORWARD
+
+
+## Hulls that fit the docking bay's mouth (M7-T25: a band 73 x 17 m across a core 45 x 30 m) with room to spare, lying square in it;
+## every other civilian holds outside (the Saturns never enter). The catalogue's `docking: tunnel` entries, in its order.
+static func tunnel_types() -> Array[StringName]:
+	return ShipCatalog.types_where("docking", "tunnel")
+
+
+## Every Saturn that comes to the cargo bay (M7-T30: each by its own pods or tanks): the catalogue's `docking: cargo_bay` entries.
+static func freighter_types() -> Array[StringName]:
+	return ShipCatalog.types_where("docking", "cargo_bay")
 
 
 ## The plan from the station's hardpoints. The main docking bay's points are given in the drum's frame (they lie on its

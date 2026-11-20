@@ -1,12 +1,79 @@
 extends GutTest
-## ShipCatalog (architecture §15.2, M3-T08): type -> `ShipSpec`, and the faction each type flies for by default.
+## ShipCatalog (architecture §15.2, M3-T08, M10-T61): type -> `ShipSpec`, and the faction each type flies for by default, from
+## the ship catalogue (`data/ships/catalogue.json`).
+
+## A copy of the catalogue with the test hull added, for the registration test.
+const WITH_TEST_HULL: String = "user://test_ship_catalog_with_test_hull.json"
+const TEST_HULL: Dictionary = {"id": "test_hull", "spec": "res://tests/fixtures/ships/test_hull.tres", "asset": "test_hull",
+		"faction": "narn", "role": "civilian", "ai_profile": "civilian", "name": "Test hull", "look_sheet": "pool",
+		"docking": "tunnel", "callsign": "TESTER"}
+
+
+func after_each() -> void:
+	ShipCatalog.reset()
+
+
+func test_the_catalogue_file_parses() -> void:
+	assert_eq(ShipCatalog.data().error, "")
+	assert_gt(ShipCatalog.types().size(), 10)
 
 
 func test_every_type_loads_a_spec_and_has_a_faction() -> void:
 	for type: StringName in ShipCatalog.types():
 		var spec: ShipSpec = ShipCatalog.spec_for(type)
 		assert_not_null(spec, "%s loads" % type)
-		assert_true(ShipCatalog.FACTIONS.has(type), "%s has a default faction" % type)
+		assert_true(Factions.is_known(ShipCatalog.faction_for(type)), "%s has a known default faction" % type)
+
+
+func test_every_entry_matches_its_spec_and_names_known_profiles_and_factions() -> void:
+	var data: ShipCatalogData = ShipCatalog.data()
+	for id: StringName in data.ids():
+		var spec: ShipSpec = load(data.spec_path(id)) as ShipSpec
+		assert_not_null(spec, "%s: its spec loads" % id)
+		if spec == null:
+			continue
+		assert_eq(data.text(id, "asset"), spec.asset_id, "%s: the entry's asset is its spec's" % id)
+		assert_true(Factions.is_known(data.faction(id)), "%s: a known faction" % id)
+		var profile: String = data.text(id, "ai_profile")
+		assert_true(profile.is_empty() or AiProfile.PATHS.has(StringName(profile)), "%s: a known AI profile" % id)
+
+
+func test_a_hull_registers_with_one_entry_and_one_tres() -> void:
+	var parsed: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(ShipCatalog.FILE))
+	(parsed["ships"] as Array).append(TEST_HULL)
+	var file := FileAccess.open(WITH_TEST_HULL, FileAccess.WRITE)
+	file.store_string(JSON.stringify(parsed))
+	file.close()
+	assert_eq(ShipCatalog.use_file(WITH_TEST_HULL), "")
+	var type: StringName = &"test_hull"
+	assert_true(ShipCatalog.has_type(type))
+	assert_true(ShipCatalog.types().has(type))
+	var spec: ShipSpec = ShipCatalog.spec_for(type)
+	assert_not_null(spec)
+	assert_eq(spec.asset_id, "test_hull" if spec != null else "")
+	assert_eq(ShipCatalog.faction_for(type), &"narn")
+	assert_true(ShipCatalog.is_civilian(type))
+	assert_eq(ShipCatalog.civilian_types().back(), type, "the civilian pool, last in catalogue order")
+	assert_eq(ShipCatalog.entry_text(type, "ai_profile"), "civilian")
+	assert_eq(DockingPlan.tunnel_types().back(), type, "fits the docking tunnel")
+	assert_false(DockingPlan.freighter_types().has(type))
+	assert_eq(LookScene.pool_types().get("test_hull"), type, "its look sheet parks one")
+	assert_eq(TargetPreviewModel.class_text("test_hull"), "Test hull")
+	assert_eq(EncounterDirector.civilian_callsign(type), "TESTER")
+	ShipCatalog.reset()
+	assert_false(ShipCatalog.has_type(type), "reset goes back to the game's catalogue")
+	DirAccess.remove_absolute(WITH_TEST_HULL)
+
+
+func test_a_refused_file_leaves_the_catalogue_as_it_was() -> void:
+	assert_string_contains(ShipCatalog.use_file("res://no/such/catalogue.json"), "no such file")
+	assert_true(ShipCatalog.has_type(&"raider_fighter"))
+
+
+func test_hulls_built_another_way_are_listed_but_not_pooled() -> void:
+	assert_false(ShipCatalog.has_type(&"raider_strike_carrier"), "the strike carrier rides CapitalStandin")
+	assert_eq(ShipCatalog.entry_text(&"raider_strike_carrier", "capital_class"), String(CapitalStandin.STRIKE_CARRIER))
+	assert_eq(ShipCatalog.entry_text(&"raider_strike_carrier", "spec"), CapitalStandin.CLASSES[CapitalStandin.STRIKE_CARRIER]["spec"])
 
 
 func test_default_factions() -> void:

@@ -233,7 +233,7 @@ func test_an_encounter_convoy_joins_the_run_past_the_radar_heading_for_the_stati
 		if type == &"saturn_3_freighter":
 			saturn = c
 		else:
-			assert_true(DockingPlan.TUNNEL_TYPES.has(type), "%s fits the docking tunnel" % type)
+			assert_true(DockingPlan.tunnel_types().has(type), "%s fits the docking tunnel" % type)
 	assert_not_null(saturn, "the Saturn 3 goes to the cargo bay")
 	if saturn == null:
 		return

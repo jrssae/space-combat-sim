@@ -1,74 +1,78 @@
 class_name ShipCatalog
 extends RefCounted
-## Scenario ship type -> `ShipSpec` (architecture §15.2) and the faction each type flies for by default. Scenarios and console
-## commands name ships by type (`raider_fighter`); this is the one place that knows which resource flies it and whose side it
-## is on. `starfury_ally` is the wingman: the Starfury's numbers and hull with no cockpit (§16 D35). The nine civilian hulls
-## (M5-T16, D59) fly for their own people's faction with the `civilian` role (Q24): the role, not the faction, says what they
-## are. Pure.
+## Scenario ship type -> `ShipSpec` (architecture §15.2), the faction each type flies for by default and the other per-type facts,
+## read from the ship catalogue (`data/ships/catalogue.json`, M10-T61; its keys are in `ShipCatalogData`). Scenarios and console
+## commands name ships by type (`raider_fighter`); adding a hull is one catalogue entry and one `.tres`. `starfury_ally` is the
+## wingman: the Starfury's numbers and hull with no cockpit (§16 D35). The civilian hulls (M5-T16, D59) fly for their own people's
+## faction with the `civilian` role (Q24): the role, not the faction, says what they are.
+##
+## `has_type`, `types`, `faction_for`, `spec_for` and `is_civilian` answer for the pooled types only (what `ShipPool` builds);
+## `entry_text` and `types_where` see every entry.
 
 ## The type the player flies (`Main` builds it, and every Starfury breaks up into its asset's chunks).
 const PLAYER_TYPE: StringName = &"starfury_aurora"
+const FILE: String = "res://data/ships/catalogue.json"
 
-const PATHS: Dictionary[StringName, String] = {
-	PLAYER_TYPE: "res://assets/ships/starfury_aurora.tres",
-	&"starfury_ally": "res://assets/ships/starfury_ally.tres",
-	&"raider_fighter": "res://assets/ships/raider_delta_v.tres",
-	&"saturn_3_freighter": "res://assets/ships/saturn_3_freighter.tres",
-	&"saturn_4_transport": "res://assets/ships/saturn_4_transport.tres",
-	&"saturn_4_tanker": "res://assets/ships/saturn_4_tanker.tres",
-	&"saturn_8_transport": "res://assets/ships/saturn_8_transport.tres",
-	&"saturn_8_tanker": "res://assets/ships/saturn_8_tanker.tres",
-	&"skylark_transport": "res://assets/ships/skylark_transport.tres",
-	&"narn_transport": "res://assets/ships/narn_transport.tres",
-	&"centauri_brezebel": "res://assets/ships/centauri_brezebel.tres",
-	&"brakiri_bokmai": "res://assets/ships/brakiri_bokmai.tres",
-}
+static var _data: ShipCatalogData = null
 
-## The faction a ship of each type is built for (`ShipPool.prepare`); the player's own type is listed for completeness.
-const FACTIONS: Dictionary[StringName, StringName] = {
-	PLAYER_TYPE: Factions.EARTH_ALLIANCE,
-	&"starfury_ally": Factions.EARTH_ALLIANCE,
-	&"raider_fighter": Factions.RAIDERS,
-	&"saturn_3_freighter": Factions.EARTH_ALLIANCE,
-	&"saturn_4_transport": Factions.EARTH_ALLIANCE,
-	&"saturn_4_tanker": Factions.EARTH_ALLIANCE,
-	&"saturn_8_transport": Factions.EARTH_ALLIANCE,
-	&"saturn_8_tanker": Factions.EARTH_ALLIANCE,
-	&"skylark_transport": Factions.EARTH_ALLIANCE,
-	&"narn_transport": &"narn",
-	&"centauri_brezebel": &"centauri",
-	&"brakiri_bokmai": &"brakiri",
-}
 
-## The civilian hulls (M5-T16, Q24): built with the `civilian` role, flown by the `civilian` AI profile by default.
-const CIVILIAN_TYPES: Array[StringName] = [&"saturn_3_freighter", &"saturn_4_transport", &"saturn_4_tanker",
-		&"saturn_8_transport", &"saturn_8_tanker", &"skylark_transport", &"narn_transport", &"centauri_brezebel",
-		&"brakiri_bokmai"]
+## The catalogue in use, read on first use.
+static func data() -> ShipCatalogData:
+	if _data == null:
+		_data = ShipCatalogData.load_file(FILE)
+		if not _data.error.is_empty():
+			push_error("ShipCatalog: %s" % _data.error)
+	return _data
+
+
+## Swaps in another catalogue file (tests registering a hull); "" on success, else why it was refused. `reset` goes back.
+static func use_file(path: String) -> String:
+	var other: ShipCatalogData = ShipCatalogData.load_file(path)
+	if other.error.is_empty():
+		_data = other
+	return other.error
+
+
+static func reset() -> void:
+	_data = null
 
 
 static func has_type(type: StringName) -> bool:
-	return PATHS.has(type)
+	return data().is_pooled(type)
 
 
 ## Whether ships of `type` carry the `civilian` role (Q24).
 static func is_civilian(type: StringName) -> bool:
-	return CIVILIAN_TYPES.has(type)
+	return has_type(type) and data().role(type) == &"civilian"
 
 
 static func types() -> Array[StringName]:
-	var out: Array[StringName] = []
-	out.assign(PATHS.keys())
-	return out
+	return data().pooled_ids()
+
+
+## The civilian hulls (M5-T16, Q24), in catalogue order: built with the `civilian` role, flown by the `civilian` AI profile by default.
+static func civilian_types() -> Array[StringName]:
+	return data().ids_where("role", "civilian")
+
+
+## The types whose catalogue `key` is `value`, pooled or not, in catalogue order.
+static func types_where(key: String, value: String) -> Array[StringName]:
+	return data().ids_where(key, value)
+
+
+## A text field of `type`'s catalogue entry ("" when absent), pooled or not.
+static func entry_text(type: StringName, key: String) -> String:
+	return data().text(type, key)
 
 
 ## The faction ships of `type` fly for by default; `neutral` for a type the catalog does not list.
 static func faction_for(type: StringName) -> StringName:
-	return FACTIONS.get(type, Factions.NEUTRAL)
+	return data().faction(type) if has_type(type) else Factions.NEUTRAL
 
 
 ## The spec resource for `type`, or null (with a warning) for an unknown type.
 static func spec_for(type: StringName) -> ShipSpec:
-	if not PATHS.has(type):
+	if not has_type(type):
 		push_warning("ShipCatalog: unknown ship type '%s'" % type)
 		return null
-	return load(PATHS[type]) as ShipSpec
+	return load(data().spec_path(type)) as ShipSpec

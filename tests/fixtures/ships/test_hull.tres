@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "test_hull"
+mass = 250000.0
+hull_max = 900.0
+has_cockpit_interior = false
+damage_layout = &""
