@@ -312,7 +312,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | Task | Track | Title | Depends on | Agent | Status |
 |---|---|---|---|---|---|
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | in progress |
-| T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | in progress |
+| T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | not started |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | not started |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -399,6 +399,16 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   `reports/stl_builder_study/lib.py` (gitignored scratch: read it, do not import it).
 - **Tests:** Python tests on an open-shell fixture: a closed shape with faces removed gives the closed shape's mask.
 - **Done when:** the tests pass and the sections already recorded (the station, the strike carrier) keep their scores.
+- **Done (2026-11-20):** `section_mask` counts the winding along each pixel's row; where the row does not close (its crossings
+  do not cancel: a gap in an open shell) it uses the pixel's column instead, and where neither closes it needs three of four
+  rays (right, left, up, down) to call it solid. A watertight mesh closes everywhere, so it fills exactly as before. The sign of
+  the winding is not used (the references' shells are not wound consistently; a sign test broke the station's planes). The
+  API is unchanged. Tests: `test_refview_sections.py` (4: the closed drum, wall faces missing, faces missing on two sides, an
+  open shell scored against its closed self; the last three fail on the old code). On the Omega (`EA Omega Destroyer.stl`,
+  62 439 triangles) the stripes of 'inside' are gone and 19 planes take 0.17 s at 1 m a pixel (0.28 s at 0.5 m); picture in
+  `references/screenshots/M10-T62 section measure/`. Recorded scores held: all 65 station planes (`test_station_fidelity.py`;
+  scores equal to 4 places) except two exempt ones, which rise (cargo_bay_side 0.405 to 0.519, tower_x0 0.389 to 0.682; their notes in `station_fidelity.py` still quote the old numbers). The strike carrier has
+  no recorded section compare; its masks equal the old ones on 15 z planes.
 
 ### M10-T02 Factions as data
 

@@ -5,7 +5,8 @@ still pass (the Cobra arm as a flat slab, a roofless cargo bay). Here each part 
 compared pixel by pixel inside a window round the part: the intersection over union of the two, ``IoU >= 0.90`` to pass.
 
 A section is filled by the nonzero winding rule from the cut's segments, each oriented by its triangle's outward normal, so a model
-built of overlapping closed parts fills as their union and a hole (a tunnel, a bay) stays empty.
+built of overlapping closed parts fills as their union and a hole (a tunnel, a bay) stays empty. A reference STL that is not watertight
+leaks stripes of "inside" along the rows that run through its missing faces, so a row that does not close defers to the column (M10-T62).
 
 A ``relief`` plane (z cuts only) reads the face as seen from the bow instead: a pixel is solid where the first surface met looking
 aft lies at or before the plane. It serves a reference whose shells overlap with mixed winding (the STL's bow, M7-T25), where the
@@ -122,20 +123,16 @@ def relief_mask(tris: np.ndarray, plane: SectionPlane, pixel_m: float) -> np.nda
     return depth <= plane.value
 
 
-def section_mask(tris: np.ndarray, plane: SectionPlane, pixel_m: float) -> np.ndarray:
-    """The filled section in the plane's window, rows from the window's top (v1) down, by the nonzero winding rule (or the relief
-    a ``relief`` plane asks for)."""
-    if plane.relief:
-        return relief_mask(tris, plane, pixel_m)
-    u0, u1, v0, v1 = plane.window
-    # A hair off the plane, so a plane laid on a row of the mesh's corners still cuts every face through it.
-    segs = cut_segments(turned(tris, plane.turn_deg), plane.axis, plane.value + PLANE_NUDGE_M)
-    cols = int(round((u1 - u0) / pixel_m))
-    rows = int(round((v1 - v0) / pixel_m))
+def _scan(segs: np.ndarray, u0: float, v1: float, cols: int, rows: int, pixel_m: float) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Per pixel: is the winding of the crossings to its right nonzero, and the same for its left; per row: does the row run through
+    a closed outline (its crossings cancel). On a closed row the two agree and are the winding; a row through a gap in an open shell
+    does not close, and the two can differ."""
     us = u0 + (np.arange(cols) + 0.5) * pixel_m
-    mask = np.zeros((rows, cols), dtype=bool)
+    right = np.zeros((rows, cols), dtype=bool)
+    left = np.zeros((rows, cols), dtype=bool)
+    closed = np.ones(rows, dtype=bool)
     if len(segs) == 0:
-        return mask
+        return right, left, closed
     a, b = segs[:, 0], segs[:, 1]
     lo, hi = np.minimum(a[:, 1], b[:, 1]), np.maximum(a[:, 1], b[:, 1])
     sign = np.where(b[:, 1] > a[:, 1], 1, -1)
@@ -148,11 +145,37 @@ def section_mask(tris: np.ndarray, plane: SectionPlane, pixel_m: float) -> np.nd
         uc = fa[:, 0] + (vc - fa[:, 1]) / (fb[:, 1] - fa[:, 1]) * (fb[:, 0] - fa[:, 0])
         order = np.argsort(uc)
         uc, s = uc[order], sign[on][order]
-        # The winding at each column: the signed crossings to its right.
-        right = np.concatenate([np.cumsum(s[::-1])[::-1], [0]])
-        winding = right[np.searchsorted(uc, us, side="right")]
-        mask[r] = winding != 0
-    return mask
+        # The signed crossings to each column's right; the ones to its left are the rest.
+        to_right = np.concatenate([np.cumsum(s[::-1])[::-1], [0]])[np.searchsorted(uc, us, side="right")]
+        right[r] = to_right != 0
+        left[r] = (s.sum() - to_right) != 0
+        closed[r] = s.sum() == 0
+    return right, left, closed
+
+
+def section_mask(tris: np.ndarray, plane: SectionPlane, pixel_m: float) -> np.ndarray:
+    """The filled section in the plane's window, rows from the window's top (v1) down (or the relief a ``relief`` plane asks for).
+
+    A pixel is solid by the nonzero winding of the cut counted along its row, or along its column where the row does not close (a
+    gap in an open shell: the count there is a stripe of 'inside' through the missing face). Where neither closes, two of the four
+    directions (right, left, up, down) must call it solid. On a watertight mesh every line closes, so this is the plain nonzero
+    rule and a model built of overlapping closed parts fills as their union with a hole left empty."""
+    if plane.relief:
+        return relief_mask(tris, plane, pixel_m)
+    u0, u1, v0, v1 = plane.window
+    # A hair off the plane, so a plane laid on a row of the mesh's corners still cuts every face through it.
+    segs = cut_segments(turned(tris, plane.turn_deg), plane.axis, plane.value + PLANE_NUDGE_M)
+    cols = int(round((u1 - u0) / pixel_m))
+    rows = int(round((v1 - v0) / pixel_m))
+    if len(segs) == 0:
+        return np.zeros((rows, cols), dtype=bool)
+    right, left, row_closed = _scan(segs, u0, v1, cols, rows, pixel_m)
+    # Above and below: the same scan with u and v swapped, whose rows run along u from u1 down and columns along v from v0 up.
+    swapped_up, swapped_down, column_closed = _scan(segs[:, :, ::-1], v0, u1, rows, cols, pixel_m)
+    up, down = swapped_up[::-1, ::-1].T, swapped_down[::-1, ::-1].T
+    by_row, by_column = row_closed[:, None], column_closed[::-1][None, :]
+    votes = right.astype(np.int8) + left + up + down
+    return np.where(by_row, right, np.where(by_column, up, votes >= 3))
 
 
 def fill_holes(mask: np.ndarray) -> np.ndarray:
