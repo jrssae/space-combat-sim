@@ -367,7 +367,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T54 | F | not needed: reference removed by the maintainer, 2026-11-20 | - | - | not needed |
 | T55 | F | EA construction tender | T19, T62 | Fable | not started |
 | T56 | F | EA mining transport (Q43): the mining variant of T53's generator | T53 | Fable | not started |
-| T57 | F | EA shuttle and EA atmospheric shuttle | T01, T62 | Fable | not started |
+| T57 | F | EA shuttle and EA atmospheric shuttle | T01, T62 | Fable | in progress |
 | T58 | F | Centauri shuttle and Minbari Flyer | T57, T06 | Fable | not started |
 | T59 | F | Drazi Firehawk | T19, T62 | Fable | not started |
 | T60 | F | Vorlon heavy cruiser, 1 528 m (Q49) | T06, T19, T36 | Fable | not started |
