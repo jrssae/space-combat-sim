@@ -318,6 +318,28 @@ func test_an_event_that_would_pass_the_cap_waits_until_there_is_room() -> void:
 	assert_eq(_director().alive_count(), 2)
 
 
+func test_a_held_event_whose_kind_is_switched_off_never_starts() -> void:
+	# Council round 2 (N3): a raid held back by the cap is dropped when enemy encounters are switched off while it waits.
+	var enemy: bool = bool(Settings.get_value(&"encounters_enemy"))
+	Settings.set_value(&"encounter_max_ships", 4)
+	main = await _make_main(true)
+	var first: EncounterEvent = _raid(false, 3)
+	first.trim(3)
+	assert_true(_director().start(first))
+	var held: EncounterEvent = _raid(false, 2)
+	held.trim(2)
+	_director().waiting = held
+	await wait_physics_frames(3)
+	assert_eq(_director().waiting, held, "held by the cap")
+	Settings.set_value(&"encounters_enemy", false)
+	_director().release_all()
+	await wait_physics_frames(3)
+	Settings.set_value(&"encounters_enemy", enemy)
+	assert_ne(_director().waiting, held, "dropped, not started")
+	for c: Combatant in _director().alive():
+		assert_ne(c.faction, Factions.RAIDERS, "no raider came after the switch went off")
+
+
 func test_an_event_bigger_than_the_cap_is_trimmed_to_it_when_nothing_else_is_in_play() -> void:
 	Settings.set_value(&"encounter_max_ships", 4)
 	main = await _make_main(true)

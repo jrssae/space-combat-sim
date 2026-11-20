@@ -861,7 +861,7 @@ func set_shelter(on: bool) -> int:
 			continue
 		var kind: StringName = entry["kind"]
 		var state: StringName = entry["state"]
-		if on and (kind == &"freighter" or state == &"leave"):
+		if on and state != &"shelter" and (kind == &"freighter" or state == &"leave"):
 			_stand_off(entry)
 			n += 1
 		elif not on and state == &"shelter":
@@ -878,6 +878,18 @@ func sheltered_count() -> int:
 	return n
 
 
+# The lowest stand-off point no sheltering ship holds, so a ship lost from the group leaves its point for the next.
+func _free_slot() -> int:
+	var taken: Array[int] = []
+	for entry: Dictionary in _own:
+		if entry["state"] == &"shelter" and _still_ours(entry):
+			taken.append(int(entry.get("shelter_slot", -1)))
+	var slot: int = 0
+	while taken.has(slot):
+		slot += 1
+	return slot
+
+
 # A sheltering ship waits behind the station, on the side away from the gate (where raids come from), each at its own point.
 func _stand_off(entry: Dictionary) -> void:
 	var s: Station = station()
@@ -891,7 +903,8 @@ func _stand_off(entry: Dictionary) -> void:
 	if gate != null and not gate.global_position.is_equal_approx(s.global_position):
 		away = (s.global_position - gate.global_position).normalized()
 	var side: Vector3 = away.cross(Vector3.UP if absf(away.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT).normalized()
-	var slot: int = sheltered_count()
+	var slot: int = _free_slot()
+	entry["shelter_slot"] = slot
 	var at: Vector3 = s.global_position + away * STANDOFF_M + side * STANDOFF_SPACING_M * float((slot + 1) / 2) \
 			* (1.0 if slot % 2 == 0 else -1.0)
 	var route := Route.new()

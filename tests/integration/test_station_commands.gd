@@ -149,6 +149,43 @@ func test_shelter_holds_new_traffic_stands_civilians_off_and_releases_them() -> 
 	assert_eq(main.station_commands.last_line, "CIVILIAN TRAFFIC, YOU ARE CLEARED TO RESUME")
 
 
+func test_a_lost_shelterer_frees_its_point_and_sheltering_again_moves_nobody() -> void:
+	# Council round 2 (N2): each sheltering ship holds its own stand-off point; a new one takes the lowest free point, and asking
+	# for shelter while it is on leaves those already standing off where they are.
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var types: Array[String] = ["saturn_3_freighter", "saturn_4_transport", "saturn_4_tanker"]
+	for type: String in types:
+		assert_true(_run("traffic freighter %s near" % type).ok, type)
+	await _ticks(2)
+	assert_eq(main.traffic.set_shelter(true), 3)
+	var slots: Dictionary = _slots()
+	assert_eq(slots.values(), [0, 1, 2], "points 0, 1 and 2: %s" % [slots])
+	assert_eq(main.traffic.set_shelter(true), 0, "on again: nobody already standing off moves")
+	assert_eq(_slots(), slots, "every ship keeps its point")
+	var lost: Combatant = null
+	for c: Combatant in slots:
+		if int(slots[c]) == 1:
+			lost = c
+	lost.damageable.kill()
+	await _ticks(3)
+	assert_true(_run("traffic freighter saturn_8_transport near").ok)
+	await _ticks(2)
+	assert_eq(main.traffic.set_shelter(true), 1, "only the newcomer goes to the stand-off")
+	var newcomer: Combatant = main.traffic.last_ship()
+	assert_eq(int(_slots().get(newcomer, -1)), 1, "it takes the lost ship's point, not point 2 again")
+
+
+# Each sheltering traffic ship and the stand-off point it holds, in the traffic's order.
+func _slots() -> Dictionary:
+	var out: Dictionary = {}
+	for entry: Dictionary in main.traffic._own:
+		if entry["state"] == &"shelter" and is_instance_valid(entry["combatant"]):
+			out[entry["combatant"]] = int(entry.get("shelter_slot", -1))
+	return out
+
+
 func test_recall_brings_every_fighter_home_to_stay() -> void:
 	if not await _start():
 		pending("the babylon5_station asset is not generated")

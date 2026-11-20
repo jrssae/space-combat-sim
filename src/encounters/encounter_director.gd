@@ -260,6 +260,8 @@ func _physics_process(delta: float) -> void:
 # At most one event a tick: the one waiting, else the next once its time has come.
 func _start_due() -> void:
 	sync_switches()
+	if waiting != null and not plan.kind_on(waiting.kind):
+		waiting = null  # its kind was switched off while the cap held it: the next draw picks from the kinds still on
 	if not plan.any_on():
 		return
 	if waiting == null and elapsed_s >= next_due_s:
