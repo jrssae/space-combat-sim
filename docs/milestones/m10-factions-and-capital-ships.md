@@ -2,10 +2,10 @@
 
 > "The setting's fleets." (`docs/roadmap.md`)
 
-**Status:** **planned; not the current milestone; starts when M8 is accepted** (Q34), before M8.5 (Opus maintainability)
-and M9 (Windows build); until then `CLAUDE.md`'s "Start here" skips this file. Work runs on branch `m10`, kept in sync
-with `m8` until M10 starts. T19 (the raider strike carrier) is done; every other task is `not started`. Every task checks
-M7 and M8 as built before relying on them.
+**Status:** **in progress; started 2026-11-20 while M8 finishes its close-out (Q48)**, before M8.5 (Opus maintainability)
+and M9 (Windows build). Work runs on branch `m10` in a worktree beside the main checkout (which stays on `m8` until M8 is
+accepted); `m8` is merged into `m10` as it moves. T19 (the raider strike carrier) is done. Every task checks M7 and M8 as
+built before relying on them.
 
 Planned on 2026-11-13 as M12 and renumbered on 2026-11-18 (older commit subjects say M12-Txx); re-scoped on 2026-11-19
 (Q32) and 2026-11-20 (Q34 to Q47). Decisions are labelled D12.x until M10 starts; then they are renumbered and the
@@ -74,6 +74,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q45 | Minbari and ISA skins | A hexagonal grid, not the panel mosaic other hulls use: T28, T33, T34, T39's Nial, T58's Flyer |
 | Q46 | Vorlon and Shadow exteriors | Organic, with no seams or panel lines; Vorlon ships glow faintly with bioluminescence |
 | Q47 | Minbari, ISA and Drakh exteriors | Semi-organic: organic shapes with visible seams and panels (the hexagonal grid on Minbari and ISA hulls, Q45), not seamless |
+| Q48 | Starting beside M8 (2026-11-20) | M10 starts now, in a worktree on branch `m10`, while M8 finishes in the main checkout; `m8` is merged into `m10` (no more fast-forwards of `m8` onto `m10`). T01 stops after the lengths table and the gate-mouth check for the maintainer's approval, then writes the per-hull descriptions while the first generators start. At most two agents at a time; Fable tasks first once unblocked |
 
 ## The hulls
 
@@ -300,7 +301,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   (capitals in the game) for the capitals and big civilians, with T06 for the organic ones; T61 and T03 for the fighters.
 - **Design calls are the maintainer's.** The controller holds T03 and T04 with the maintainer; a later question about
   weapons, balance or the ancients goes back to the maintainer.
-- **One working copy** on branch `m10` in the main checkout, no task branches.
+- **One working copy** on branch `m10` (a worktree beside the main checkout until M8 is accepted, Q48), no task branches.
 - **Locks, hunk-only commits, native parity and no GDScript fallback:** as `CLAUDE.md` says.
 - **Tests.** Each task runs the Python and GUT files it touched and its new tests; the full suite runs once, in T48. Test
   first for the pure classes.
@@ -310,8 +311,8 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 
 | Task | Track | Title | Depends on | Agent | Status |
 |---|---|---|---|---|---|
-| T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | not started |
-| T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | not started |
+| T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | in progress |
+| T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | in progress |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | not started |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | not started |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -387,6 +388,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   the gate's mouth (Q22): which hulls need their own jump points.
 - **Files:** `docs/design-references.md` (a section per hull), `docs/assets-capital.md` (lengths with sources, axis
   mappings, measurements).
+- **Order (Q48):** the lengths table and the gate-mouth check go to the maintainer first; the per-hull descriptions follow.
 - **Done when:** AC1; the maintainer has approved the lengths table.
 
 ### M10-T62 Section measure for open STLs (Q36)
