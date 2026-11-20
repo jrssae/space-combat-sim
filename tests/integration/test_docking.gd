@@ -666,3 +666,137 @@ func test_an_ai_flight_docks_by_itself_and_keeps_the_docked_ships_place() -> voi
 	assert_eq(flight.slot_of(mate), 2, "nobody closed up over it")
 	assert_eq(flight.leader, lead)
 	assert_eq(main.docking.visit_of(wingman.display_name).repair_s, 30.0, "an AI wingman's fixed 30 s")
+
+
+# --- fighters first at the bay (maintainer, 2026-11-19) ----------------------------------------------------------------
+
+
+# How far along the docking lane `ship` is from the mouth (negative outside), and how far off its line, m.
+func _on_lane(ship: Ship) -> Vector2:
+	var plan: DockingPlan = main.docking.plan
+	var axis: Vector3 = (plan.mouth - (plan.dock_in[0]["at"] as Vector3)).normalized()
+	var local: Vector3 = _local(ship)
+	return Vector2((local - plan.mouth).dot(axis), DockAutopilot.off_axis_m(local, plan.mouth, axis))
+
+
+# Counts the rams `c` takes into `into[0]`.
+func _count_rams(c: Combatant, into: Array[int]) -> void:
+	c.damageable.hit_taken.connect(func(info: HitInfo) -> void:
+		into[0] += 1 if info != null and info.cause == HitInfo.CAUSE_RAM else 0)
+
+
+func test_a_second_dock_with_civilians_at_the_bay_goes_through_and_they_dock_after() -> void:
+	# The play-test's failure (2026-11-19): after one dock and launch, the player docks again while a transport is on the lane.
+	# Before the fix the fighter waited on the lane's line for the transport, which could not get past it and was lost.
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var ship: Ship = main.ship
+	_fast()
+	assert_true(_run("dock player").ok)
+	assert_true(await _until(func() -> bool: return main.docking.player_visit() == null, 200.0), "the first dock and launch")
+	assert_eq(main.docking.relaunched_count, 1)
+	assert_false(main.docking.claims_bay(), "nobody is cleared to dock now")
+	# Two civilians for the bay: one near the mouth, one farther out on the lane (free flight's queue behind them is flown in
+	# `test_docking_traffic`). A wingman goes to dock too.
+	assert_true(_run("traffic dock near").ok)
+	var near: Combatant = main.traffic.last_ship()
+	assert_true(_run("traffic dock").ok)
+	var far: Combatant = main.traffic.last_ship()
+	assert_ne(near, far)
+	var civilian_rams: Array[int] = [0]
+	_count_rams(near, civilian_rams)
+	_count_rams(far, civilian_rams)
+	assert_true(await _until(func() -> bool: return main.traffic.state_of(far) == &"lane", 60.0), "the second is on the lane")
+	var two: Combatant = _ship("ALPHA 2")
+	_damage(two, 0.15)
+	rams = 0
+	var player_docked: Array[int] = [0]
+	main.docking.player_docked.connect(func() -> void: player_docked[0] += 1)
+	var started_s: float = SimClock.now()
+	assert_true(_run("dock player").ok, "the second dock starts")
+	await _ticks(2)
+	assert_true(main.docking.claims_bay(), "1.2 km out and cleared to dock: the bay is the fighter's")
+	var nearest: Array[float] = [INF]
+	var waited_off_lane: Array[bool] = [true]
+	var ok: bool = await _until(func() -> bool:
+		for c: Combatant in main.traffic.ships():
+			nearest[0] = minf(nearest[0], c.ship.global_position.distance_to(ship.global_position))
+		var visit: DockVisit = main.docking.player_visit()
+		if visit != null and visit.state == DockVisit.State.APPROACH and main.traffic.bay_busy():
+			var at: Vector2 = _on_lane(ship)
+			# Waiting for a ship it cannot ask aside, it never stands on the lane's line.
+			if _speed(ship) < 15.0 and at.x > -700.0 and at.y < 2.0 * main.docking.corridor_m:
+				waited_off_lane[0] = false
+		return player_docked[0] == 1, 150.0)
+	assert_true(ok, "the second dock goes through (%s; %s)" % [main.docking.describe(), main.traffic.last_event])
+	assert_lt(SimClock.now() - started_s, 150.0, "without a long wait")
+	assert_false(main.docking.last_visit != null and main.docking.last_visit.is_player and main.docking.last_visit.skipped,
+			"flown, not jumped by the timeout")
+	assert_true(waited_off_lane[0], "a fighter that waits does so beside the lane, never on it")
+	assert_gt(nearest[0], 60.0, "no civilian came near the fighter (%.0f m)" % nearest[0])
+	assert_eq(rams, 0, "the fighter touched nothing")
+	assert_gte(main.traffic.yielded_count, 1, "the transport on the lane stood aside for the fighters")
+	# Nobody stalls for good: the wingman is taken in, and both civilians dock once the fighters are in.
+	ok = await _until(func() -> bool: return main.traffic.docked_count >= 2 and main.docking.docked_count >= 3, 1100.0)
+	assert_true(ok, "both civilians and the wingman dock in the end (traffic %d docked, %s; fighters %d docked, %s)" % [
+			main.traffic.docked_count, main.traffic.last_event, main.docking.docked_count, main.docking.describe()])
+	assert_eq(civilian_rams[0], 0, "and no civilian hit the station on the way")
+	assert_eq(main.traffic.alive_of(&"dock"), 0, "none left hanging about the bay")
+
+
+func test_a_civilian_on_the_lane_stands_aside_for_a_fighter_and_docks_afterwards() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var ship: Ship = main.ship
+	_fast()
+	assert_true(_run("traffic dock").ok)
+	var civilian: Combatant = main.traffic.last_ship()
+	var civilian_rams: Array[int] = [0]
+	_count_rams(civilian, civilian_rams)
+	assert_true(await _until(func() -> bool: return main.traffic.state_of(civilian) == &"lane", 60.0), "the civilian has the lane")
+	assert_lt(_on_lane(civilian.ship).x, -main.docking.commit_out_m, "still far out on it")
+	assert_false(main.traffic.bay_busy(), "that far out it can be asked aside: the bay is not taken for a fighter")
+	# A fighter is cleared to dock: the civilian leaves the lane for its side and waits there.
+	assert_true(_run("dock player").ok)
+	assert_true(await _until(func() -> bool: return main.traffic.state_of(civilian) == &"yield", 5.0), "it yields at once")
+	assert_eq(main.traffic.yielded_count, 1)
+	var seen: Dictionary = {"off_m": 0.0, "waited": false}
+	var ok: bool = await _until(func() -> bool:
+		if main.traffic.state_of(civilian) == &"yield":
+			seen["off_m"] = maxf(float(seen["off_m"]), _on_lane(civilian.ship).y)
+		var visit: DockVisit = main.docking.player_visit()
+		if visit != null and visit.state == DockVisit.State.APPROACH and visit.state_s > 1.0 and _speed(ship) < 5.0:
+			seen["waited"] = true  # at rest short of the lane: held up
+		return main.docking.docked_count == 1, 150.0)
+	assert_true(ok, "the fighter docks (%s)" % main.docking.describe())
+	assert_false(bool(seen["waited"]), "without waiting for the civilian")
+	assert_gt(float(seen["off_m"]), 50.0, "the civilian left the lane's line (%.0f m off it when the fighter was in)" % float(seen["off_m"]))
+	assert_eq(main.traffic.docked_count, 0, "it has not docked ahead of the fighter")
+	# The fighter is in: the civilian goes round to an entry point, takes the lane again in its turn and docks.
+	ok = await _until(func() -> bool: return main.traffic.docked_count == 1, 700.0)
+	assert_true(ok, "the civilian docks afterwards (%s, %s)" % [main.traffic.state_of(civilian), main.traffic.last_event])
+	assert_eq(civilian_rams[0], 0, "without touching anything")
+	assert_eq(rams, 0)
+
+
+func test_a_civilian_waiting_its_turn_does_not_take_the_lane_from_a_fighter() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	_fast()
+	# The fighter is cleared first; a civilian that arrives meanwhile holds at its entry point.
+	assert_true(_run("dock player").ok)
+	await _ticks(2)
+	assert_true(_run("traffic dock").ok)
+	var civilian: Combatant = main.traffic.last_ship()
+	var took_lane_early: Array[bool] = [false]
+	var ok: bool = await _until(func() -> bool:
+		if main.docking.claims_bay() and main.traffic.state_of(civilian) == &"lane" and not took_lane_early[0]:
+			took_lane_early[0] = _on_lane(civilian.ship).x >= -main.docking.commit_out_m
+		return main.docking.docked_count == 1, 150.0)
+	assert_true(ok, "the fighter docks (%s)" % main.docking.describe())
+	assert_false(took_lane_early[0], "the civilian never reached the lane's last stretch while the fighter was on its way in")
+	ok = await _until(func() -> bool: return main.traffic.docked_count == 1, 700.0)
+	assert_true(ok, "and docks once the fighter is in (%s)" % main.traffic.last_event)

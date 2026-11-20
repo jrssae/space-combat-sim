@@ -6645,8 +6645,18 @@ data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen,
   never moves an away member or puts a ship in its place (the ones behind it move up past it), so it comes back to the slot it left. The rosters (`WingDirector.hud_roster`, `roster`) read `docking` while it flies in
   (`Wing.set_docking`) and `docked` while it is inside or on the rack (`Wing.dock_status`; the HUD's DOCKING and DOCKED), then
   its pilot's behaviour again. After its launch its own pilot is put back and the wing briefs it at the next refresh.
-- **One at a time.** A fighter takes the lane only when `StationTraffic.bay_busy()` is false and no other visit is on the lane or
-  through the doors; the traffic's own check counts fighters (`holds_bay`).
+- **One at a time, fighters first (maintainer, 2026-11-19).** A fighter cleared to dock claims the bay
+  (`DockingDirector.claims_bay`: on the lane or through the doors, or on its approach within `priority.claim_within_m`, 3 km,
+  of the mouth). While one does, no civilian takes the lane from its entry point (`StationTraffic._bay_busy`), and a docking
+  civilian on the lane farther out than `commit_out_m` (700 m) leaves it for a point `yield_off_m` (300 m) to its own side
+  and waits (`yield`, each at its own distance), then goes round to an entry point off the lane's start and comes in again
+  in its turn, as any arrival does (resuming the lane from the middle flew it badly); nobody stalls for good. A wingman at
+  its waiting point lets the player take the lane first. A fighter waits only for a ship it cannot ask aside (`StationTraffic.bay_busy()`: a
+  civilian on the lane's last stretch, in the tunnel or the void, or one coming out, and another fighter on the lane), and it
+  waits `wait_off_m` (150 m) below the lane, never on it; the wingmen's waiting points off the bow lie below the lane's line
+  too. Before this the waiting fighter stood on the lane's line at the join point: a transport already on the lane could
+  not pass it, wandered off the lane and was lost beside the mouth, while the fighter waited for that same transport
+  (the play-test's failed second dock).
 - **Control's offer (D79 beat 13).** A player whose hull falls below `offer.hull_below` gets `dock_offered` once per damage
   (re-armed above the threshold) and, unless a mission turns `offer_line` off to speak its own, the data's line on the HUD's
   acknowledgement line (`notice_text`, which also carries the wing's docking answers).

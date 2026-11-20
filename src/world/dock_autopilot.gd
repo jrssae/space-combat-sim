@@ -7,6 +7,8 @@ extends RefCounted
 
 ## The nose turns onto the velocity error while it is larger than this (a flip and burn); else onto the course.
 const FACE_DV_MPS: float = 30.0
+## A ship stopping on a point closes no faster than its distance times this, 1/s.
+const SETTLE_PER_S: float = 0.5
 ## How hard the lane pulls back onto its axis, 1/s, and the most it asks sideways, m/s.
 const K_LATERAL: float = 0.5
 const MAX_LATERAL_MPS: float = 25.0
@@ -18,9 +20,11 @@ const ROLL_ALIGN_MAX_RAD_S: float = 0.4
 
 
 ## The speed to close on a point `distance` away: what the ship can still shed with a flip and its mains, no more than `cruise_mps`
-## and no less than `arrive_mps` (the speed it may pass the point with; 0 stops on it).
+## and no less than `arrive_mps` (the speed it may pass the point with; 0 stops on it). A ship that stops on the point eases
+## onto it over its last metres, so it stands still there instead of circling it (the play-test's "jockeying", 2026-11-19).
 static func approach_speed(distance: float, cruise_mps: float, arrive_mps: float, capability: ShipCapability) -> float:
-	return minf(cruise_mps, maxf(arrive_mps, StoppingDistance.speed_for_mps(distance, capability.a_main)))
+	var speed: float = minf(cruise_mps, maxf(arrive_mps, StoppingDistance.speed_for_mps(distance, capability.a_main)))
+	return minf(speed, distance * SETTLE_PER_S) if arrive_mps <= 0.0 else speed
 
 
 ## The command toward `target` at `approach_speed`. `velocity` is against the station.

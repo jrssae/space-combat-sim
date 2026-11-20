@@ -1308,6 +1308,12 @@ the Fury stops, rolls to the bay's turn and goes in rolling with it. `state dock
 - [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK): `ALPHA 2: COPY, DOCKING FOR
       REPAIRS`, it flies off to the bay (its roster row reads DOCKING), is gone a while (DOCKED), comes out of a Cobra bay and forms up
       again (its usual readout). Hurt one below 25 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
+- [ ] **(H) Fighters first at the bay:** with civilians about (`traffic dock`, `traffic auto on`), dock, launch and dock again. A
+      transport on its way down the lane moves a few hundred metres aside and waits; you fly in past it. You wait only for a
+      ship already on the lane's last 700 m, in the tunnel, or coming out, and then beside the lane (150 m below it), not on
+      it, standing still (the ship used to circle its waiting point as if jockeying). The transport goes round to the start of the lane and
+      docks after you (`state traffic.yielded` counts the ones that stood aside). Try it in free flight after two raids, as
+      in the play-test of 2026-11-19 where the second dock never finished.
 - [ ] **(H) The comms ring:** eight slices now, the four orders still up, right, down and left; say if the blank diagonals and
       DOCK between ENGAGE and COVER ME read well.
 - [ ] **(H) AI wingmen wait 30 s:** a docked wingman's roster row reads DOCKED for about 30 s before it comes out of a Cobra bay.

@@ -14,11 +14,32 @@ func _capability() -> ShipCapability:
 func test_the_approach_speed_falls_with_the_distance_left() -> void:
 	var cap: ShipCapability = _capability()
 	assert_eq(DockAutopilot.approach_speed(5000.0, 140.0, 0.0, cap), 140.0, "far out: the cruise")
-	var near: float = DockAutopilot.approach_speed(50.0, 140.0, 0.0, cap)
-	assert_almost_eq(near, StoppingDistance.speed_for_mps(50.0, cap.a_main), 1e-6)
+	var near: float = DockAutopilot.approach_speed(200.0, 140.0, 0.0, cap)
+	assert_almost_eq(near, StoppingDistance.speed_for_mps(200.0, cap.a_main), 1e-6)
 	assert_lt(near, 140.0)
 	assert_eq(DockAutopilot.approach_speed(0.0, 140.0, 0.0, cap), 0.0, "at rest on the point")
 	assert_eq(DockAutopilot.approach_speed(1.0, 140.0, 45.0, cap), 45.0, "a turning point is passed at speed")
+
+
+func test_a_ship_that_stops_on_a_point_eases_onto_it() -> void:
+	# The play-test (2026-11-19): a fighter holding short of the lane circled its point at 9 m/s, as if jockeying for position.
+	var cap: ShipCapability = _capability()
+	assert_almost_eq(DockAutopilot.approach_speed(5.0, 140.0, 0.0, cap), 2.5, 1e-6, "5 m out it closes at walking pace")
+	assert_almost_eq(DockAutopilot.approach_speed(1.0, 140.0, 0.0, cap), 0.5, 1e-6)
+	assert_eq(DockAutopilot.approach_speed(5.0, 140.0, 45.0, cap), 45.0, "a turning point is still passed at speed")
+	# A point mass flown by the wish comes to rest on the point and stays there.
+	var at := Vector3(0.0, 0.0, 300.0)
+	var velocity := Vector3.ZERO
+	var fastest_late: float = 0.0
+	for k: int in 60 * 60:
+		var to: Vector3 = -at
+		var wish: Vector3 = to.normalized() * DockAutopilot.approach_speed(to.length(), 140.0, 0.0, cap) if to.length() > 1e-3 else Vector3.ZERO
+		velocity = velocity.move_toward(wish, cap.a_rcs.x / 60.0)
+		at += velocity / 60.0
+		if k > 40 * 60:
+			fastest_late = maxf(fastest_late, velocity.length())
+	assert_lt(at.length(), 1.0, "on the point")
+	assert_lt(fastest_late, 0.5, "and still, not circling it (%.2f m/s)" % fastest_late)
 
 
 func test_a_ship_coming_in_fast_is_braked_before_anything_else() -> void:

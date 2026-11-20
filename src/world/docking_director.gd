@@ -68,6 +68,13 @@ var last_notice: String = ""
 var last_visit: DockVisit = null
 
 var join_out_m: float = 400.0
+## Fighters first at the bay (maintainer, 2026-11-19; `data/station/docking.json`'s `priority`): a fighter claims the bay on
+## the lane, or on its approach within `claim_within_m` of the mouth; a civilian on the lane farther out than `commit_out_m`
+## then moves `yield_off_m` aside; a fighter that must wait does so `wait_off_m` below the lane, never on it.
+var claim_within_m: float = 3000.0
+var commit_out_m: float = 700.0
+var yield_off_m: float = 300.0
+var wait_off_m: float = 150.0
 var corridor_m: float = 35.0
 var approach_mps: float = 140.0
 var via_mps: float = 45.0
@@ -162,6 +169,23 @@ func visits() -> Array[DockVisit]:
 ## The docking holds the player's controls (`Main.controls_locked`).
 func locks_controls() -> bool:
 	return not _player_entry().is_empty()
+
+
+## A fighter is cleared to dock (maintainer, 2026-11-19): on the lane or through the doors, or on its way in within
+## `claim_within_m` of the mouth. The station's civilians keep off the lane meanwhile and go again afterwards.
+func claims_bay() -> bool:
+	var s: Station = station()
+	if s == null or plan == null:
+		return false
+	for entry: Dictionary in _entries:
+		var visit: DockVisit = entry["visit"]
+		if visit.state == DockVisit.State.LANE or visit.state == DockVisit.State.INSIDE:
+			return true
+		var c: Combatant = entry["combatant"]
+		if visit.state == DockVisit.State.APPROACH and is_instance_valid(c.ship) \
+				and c.ship.global_position.distance_to(s.global_transform * plan.mouth) <= claim_within_m:
+			return true
+	return false
 
 
 ## A fighter is on the lane or through the doors: the station's traffic starts nothing in the bay meanwhile.
@@ -407,6 +431,8 @@ func step_player(_delta: float) -> FlightCommand:
 		var target: Vector3 = keep_out.next_target(local)
 		# The last leg ends at rest on the lane; a turning point is passed at speed.
 		var arrive: float = 0.0 if target.is_equal_approx(keep_out.goal) else via_mps
+		if arrive == 0.0 and _bay_taken(entry):
+			target += _below() * wait_off_m  # a ship it cannot ask aside has the lane: it waits beside the lane, never on it
 		return DockAutopilot.approach(ship.global_position, velocity, ship.global_basis, xform * target, approach_mps, arrive,
 				_capability)
 	var axis: Vector3 = _axis()
@@ -813,7 +839,7 @@ func _step_wingman(entry: Dictionary, s: Station, delta: float) -> void:
 				BehaviourFollowPath.attach(entry["docker"] as AiPilot, wait)
 				entry["stage"] = &"entry"
 		&"entry":
-			if done and not _bay_taken(entry):
+			if done and not _bay_taken(entry) and not _player_goes_first():
 				BehaviourFollowPath.attach(entry["docker"] as AiPilot, DockingPlan.route_of(plan.dock_in, s.global_transform,
 						main.world, DockingPlan.DOCK_CRUISE_MPS, "DOCKING"))
 				entry["stage"] = &"lane"
@@ -925,7 +951,16 @@ func _in_corridor(ship: Ship, s: Station, local: Vector3) -> bool:
 	return velocity.length() <= join_max_mps and across.length() <= 0.3 * join_max_mps
 
 
-# Whether someone else has the tunnel: a civilian of the station's traffic, or another fighter.
+# The player is on its way in: a wingman still at its waiting point lets it take the lane first.
+func _player_goes_first() -> bool:
+	var entry: Dictionary = _player_entry()
+	if entry.is_empty():
+		return false
+	var visit: DockVisit = entry["visit"]
+	return visit.state == DockVisit.State.APPROACH or visit.state == DockVisit.State.LANE or visit.state == DockVisit.State.INSIDE
+
+
+# Whether someone else has the tunnel: a civilian too far in to be asked aside or one coming out, or another fighter.
 func _bay_taken(entry: Dictionary) -> bool:
 	if main.traffic != null and main.traffic.bay_busy():
 		return true
@@ -973,7 +1008,14 @@ func _waiting_wingmen() -> int:
 
 # A wingman's waiting point off the bow on the lane's line, in the station's frame: one farther out per fighter waiting.
 func _entry_point(queue: int) -> Vector3:
-	return (plan.dock_in[0]["at"] as Vector3) - _axis() * (entry_out_m + queue_spacing_m * float(queue))
+	# Below the lane's line: a ship coming out of the bay flies that line on past the lane's first point.
+	return (plan.dock_in[0]["at"] as Vector3) - _axis() * (entry_out_m + queue_spacing_m * float(queue)) + _below() * wait_off_m
+
+
+# Away from the spine, square to the lane, in the station's frame: where a fighter waits beside the lane.
+func _below() -> Vector3:
+	var axis: Vector3 = _axis()
+	return (Vector3.DOWN - axis * Vector3.DOWN.dot(axis)).normalized()
 
 
 # The way to the waiting point, flown with the brains' avoidance on (the station is in the way from most places).
@@ -1155,6 +1197,11 @@ func _load_data() -> void:
 	relaunch_door = maxi(int(relaunch.get("door", relaunch_door)), 1)
 	retry_s = maxf(float(relaunch.get("retry_s", retry_s)), 0.1)
 	give_up_s = maxf(float(relaunch.get("give_up_s", give_up_s)), 1.0)
+	var priority: Dictionary = d.get("priority", {})
+	claim_within_m = maxf(float(priority.get("claim_within_m", claim_within_m)), 0.0)
+	commit_out_m = maxf(float(priority.get("commit_out_m", commit_out_m)), join_out_m)
+	yield_off_m = maxf(float(priority.get("yield_off_m", yield_off_m)), 50.0)
+	wait_off_m = maxf(float(priority.get("wait_off_m", wait_off_m)), 2.0 * corridor_m)
 	_boxes = DockKeepOut.boxes_from(d.get("keep_out"))
 	if not shots.pool.error.is_empty():
 		push_warning("DockingDirector: %s" % shots.pool.error)

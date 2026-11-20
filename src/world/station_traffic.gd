@@ -51,6 +51,8 @@ const ENTRY_OUT_M: float = 3000.0
 const ENTRY_HOLD_S: float = 1.0
 ## Arrivals for the docking bay queue at their own points along its axis, this far apart, and take the lane one at a time.
 const QUEUE_SPACING_M: float = 700.0
+## Ships that stand aside for a fighter together keep this far apart beside the lane, metres.
+const YIELD_SPACING_M: float = 250.0
 ## Arrivals turn off, and departures turn in, this far out from the gate on their own side.
 const GATE_CLEAR_M: float = 3000.0
 ## An encounter's convoy joins the run this far from the station, pushed toward the gate until it is past the player's radar.
@@ -100,6 +102,8 @@ var scramble_wings: PackedStringArray = PackedStringArray()
 var elapsed_s: float = 0.0
 var events: int = 0
 var docked_count: int = 0
+## Times a docking civilian stood aside for a fighter (maintainer, 2026-11-19: fighters first at the bay).
+var yielded_count: int = 0
 var undocked_count: int = 0
 var freighters_done: int = 0
 ## Freighters' cargo blocks the cargo pods carried into the cargo bay, and onto freighters.
@@ -367,6 +371,14 @@ func state_of(c: Combatant) -> StringName:
 	for entry: Dictionary in _own:
 		if entry["combatant"] == c:
 			return entry["state"]
+	return &""
+
+
+## What `c` is here for (`dock`, `undock`, `freighter`, `raid`), or &"" when it is not the traffic's.
+func kind_of(c: Combatant) -> StringName:
+	for entry: Dictionary in _own:
+		if entry["combatant"] == c:
+			return entry["kind"]
 	return &""
 
 
@@ -654,19 +666,108 @@ func _free_hull(types: Array[StringName], start: int) -> StringName:
 	return types[first]
 
 
-## Whether one of the traffic's ships has the docking bay (its lane, tunnel or void): a fighter docking for repair waits (M8-T06).
+## Whether one of the traffic's ships has the docking bay and cannot be asked aside: a civilian on the lane's last stretch, in
+## the tunnel or the void, or one coming out. A fighter docking for repair waits for these only (M8-T06); every other
+## civilian yields to it (maintainer, 2026-11-19).
 func bay_busy() -> bool:
 	for entry: Dictionary in _own:
-		if (entry["kind"] == &"dock" and entry["state"] == &"lane") \
+		if (entry["kind"] == &"dock" and entry["state"] == &"lane" and _committed(entry)) \
 				or (entry["kind"] == &"undock" and (entry["state"] == &"airlock" or entry["state"] == &"lane")):
 			return true
 	return false
 
 
-# Whether a ship is on the docking bay's lane, in its tunnel or its void (docking or undocking): the bay takes one at a time.
-# A fighter docking for repair counts (M8-T06).
+# Whether a civilian may not take the lane now: a ship is on it, in the tunnel or the void (docking or undocking), or a fighter
+# is cleared to dock. The bay takes one at a time, and fighters first.
 func _bay_busy() -> bool:
-	return bay_busy() or (main != null and main.docking != null and main.docking.holds_bay())
+	for entry: Dictionary in _own:
+		if (entry["kind"] == &"dock" and entry["state"] == &"lane") \
+				or (entry["kind"] == &"undock" and (entry["state"] == &"airlock" or entry["state"] == &"lane")):
+			return true
+	return _fighters_claim()
+
+
+# A fighter is cleared to dock (`DockingDirector.claims_bay`).
+func _fighters_claim() -> bool:
+	return main != null and main.docking != null and main.docking.claims_bay()
+
+
+# How far along the docking lane a ship is, m from the mouth (negative outside), and the lane's direction, station frame.
+func _lane_axis() -> Vector3:
+	return (plan.mouth - (plan.dock_in[0]["at"] as Vector3)).normalized()
+
+
+func _along(entry: Dictionary) -> float:
+	var local: Vector3 = station().global_transform.affine_inverse() * (entry["combatant"] as Combatant).ship.global_position
+	return (local - plan.mouth).dot(_lane_axis())
+
+
+# A docking civilian too far in to stand aside: on the lane's last stretch (`commit_out_m`), or through the doors.
+func _committed(entry: Dictionary) -> bool:
+	if bool(entry.get("through", false)) or main == null or main.docking == null:
+		return true
+	return _along(entry) >= -main.docking.commit_out_m
+
+
+# Fighters first (maintainer, 2026-11-19): a docking civilian not yet on the lane's last stretch leaves the lane for a point
+# beside it, on its own side, and waits there.
+func _yield(entry: Dictionary) -> void:
+	var s: Station = station()
+	var c: Combatant = entry["combatant"]
+	var axis: Vector3 = _lane_axis()
+	var local: Vector3 = s.global_transform.affine_inverse() * c.ship.global_position
+	var along: float = (local - plan.mouth).dot(axis)
+	var side: Vector3 = axis.cross(Vector3.UP).normalized()
+	if (local - plan.mouth).dot(side) < 0.0:
+		side = -side
+	# Each at its own distance from the lane, so two that stand aside together never want the same place.
+	var slot: int = _free_yield_slot(entry)
+	entry["yield_slot"] = slot
+	var at: Vector3 = plan.mouth + axis * along + side * (main.docking.yield_off_m + YIELD_SPACING_M * float(slot))
+	_let_doors_go(entry)
+	BehaviourFollowPath.attach(entry["brain"] as AiPilot, _leg_route("YIELDING", c.ship.global_position, s.global_transform * at,
+			1.0e9, DockingPlan.DOCK_CRUISE_MPS))
+	entry["state"] = &"yield"
+	yielded_count += 1
+	last_event = "%s yields the docking bay to a fighter" % c.display_name
+
+
+# The fighters are in: a ship that stood aside goes round to an entry point off the lane's start and comes in again as any
+# arrival does, in its turn (resuming the lane from the middle flew it badly: a Skylark clipped the mouth).
+func _requeue(entry: Dictionary) -> void:
+	var s: Station = station()
+	var c: Combatant = entry["combatant"]
+	var inward: Vector3 = ((plan.dock_in[1]["at"] as Vector3) - (plan.dock_in[0]["at"] as Vector3)).normalized()
+	var at: Vector3 = (plan.dock_in[0]["at"] as Vector3) - inward * (ENTRY_OUT_M + QUEUE_SPACING_M * float(_queue_slot()))
+	BehaviourFollowPath.attach(entry["brain"] as AiPilot, _leg_route("TO THE STATION", c.ship.global_position,
+			s.global_transform * at, ENTRY_HOLD_S, TRANSIT_CRUISE_MPS))
+	entry["state"] = &"transit"
+	entry["inner"] = false
+	entry.erase("through")
+
+
+# The lowest place beside the lane no other yielding ship holds.
+func _free_yield_slot(entry: Dictionary) -> int:
+	var taken: Array[int] = []
+	for other: Dictionary in _own:
+		if not is_same(other, entry) and other["state"] == &"yield" and _still_ours(other):
+			taken.append(int(other.get("yield_slot", -1)))
+	var slot: int = 0
+	while taken.has(slot):
+		slot += 1
+	return slot
+
+
+# A lane-style route (World points) from `from` to `to` with a hold there: a leg of its own, so the ship flies it straight.
+func _leg_route(route_name: String, from: Vector3, to: Vector3, hold_s: float, cruise_mps: float) -> Route:
+	var route := Route.new()
+	route.name = route_name
+	route.pace = Route.PACE_NONE
+	route.lane = true
+	route.cruise_mps = cruise_mps
+	route.add_lane(main.world.to_universe(from))
+	route.add_lane(main.world.to_universe(to), hold_s)
+	return route
 
 
 # The next free waiting place for an arrival bound for the docking bay: one past every docking ship still on its way in.
@@ -791,8 +892,14 @@ func _step(i: int) -> void:
 				BehaviourFollowPath.attach(entry["brain"] as AiPilot, DockingPlan.route_of(plan.dock_out, station().global_transform,
 						main.world, DockingPlan.DOCK_CRUISE_MPS, "UNDOCKING"))
 				entry["state"] = &"lane"
+		&"yield":  # beside the lane until the fighters are in, then round to an entry point and in again
+			if not _fighters_claim():
+				_requeue(entry)
 		&"lane":
 			if kind == &"dock":
+				if _fighters_claim() and not _committed(entry):
+					_yield(entry)
+					return
 				_dock_step(i, entry, path, done)
 				return
 			if kind == &"undock":
@@ -1101,6 +1208,8 @@ func _register_console() -> void:
 		&"freighters": {"get": func() -> int: return alive_of(&"freighter"), "doc": "Of them, freighters at the cargo bay"},
 		&"raiders": {"get": func() -> int: return alive_of(&"raid"), "doc": "Of them, raiders sent at the station"},
 		&"docked": {"get": func() -> int: return docked_count, "doc": "Ships that docked: flew into the void behind the inner doors, which shut behind them"},
+		&"yielded": {"get": func() -> int: return yielded_count, "type": TYPE_INT,
+				"doc": "Times a docking civilian stood aside for a fighter cleared to dock (fighters first at the bay)"},
 		&"undocked": {"get": func() -> int: return undocked_count, "doc": "Ships that came out of the bay and left"},
 		&"freighters_done": {"get": func() -> int: return freighters_done, "doc": "Freighter cycles finished"},
 		&"pods_in": {"get": func() -> int: return pods_in, "doc": "Freighters' cargo blocks the cargo pods carried into the cargo bay"},

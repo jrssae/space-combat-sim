@@ -606,6 +606,28 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 - **Follow-up (maintainer, 2026-11-18, same queue): leash evasion.** Under FORM ON ME (and in AI flights), a wingman evading past
   the flight's cohesion distance (2.5 km, `data/wings/flights.json`) breaks toward its leader or flight instead of away, dragging
   the chaser into the wing's guns (M8-T19 saw one dragged 10.4 km off). Native, with parity and 1/6-thread identity kept.
+- **Fix (2026-11-19, the maintainer's play-test: "2nd dock failed ... a narn transport also trying to dock and failing"):**
+  reproduced headless in `station_dock` (dock, launch, `traffic dock near` and `traffic dock`, dock again) and in free flight
+  with encounters on and `traffic raid` twice, docking after each. **Cause:** the fighter waited for the lane on the lane's
+  own line, 400 m off the mouth, while a civilian had the lane; the transport already flying it could not get past, left the
+  lane (up to 211 m off it for 2.5 minutes) and was lost beside the mouth or slipped in late, and in free flight the next
+  civilian of the queue took the lane the moment it was free, so the fighter never got it: 243 s, then its timeout jumped it
+  in (166 s on the first dock when a civilian happened to be on the lane; an abort and a retry met the same queue). Nothing
+  was left over from the first visit, the raid or a rebase: doors, shelter, the drum's turn and the lane were as before. The
+  "jockeying" was the hold itself: the ship circled its waiting point at 9 m/s. **Fix and the
+  maintainer's rule, fighters first:** a fighter cleared to dock claims the bay (`DockingDirector.claims_bay`); civilians then
+  hold at their entry point, one on the lane farther out than 700 m stands 300 m aside (`StationTraffic` state `yield`),
+  then goes round to an entry point and docks in its turn, a wingman at its waiting point lets the player in first, and a fighter waits only for a ship on the lane's last stretch, in the tunnel or coming out,
+  150 m below the lane, never on it (`data/station/docking.json`'s `priority`); a ship stopping on a point eases onto it
+  (`DockAutopilot.approach_speed`), so a hold stands still. The same runs now: in `station_dock` the second dock in 80 s with
+  both civilians docked; in free flight after each raid 32 s and 41 s. **Tests** (staged
+  scratch copy, HEAD `114ce134` plus this fix): the compile check clean (1004 scripts); 18 GUT files, 120 tests, 0 failures
+  after one fix to the new test itself: `test_docking` (15: a second dock with a civilian near the mouth, one on the lane and
+  a wingman docking, all docked in the end; a civilian on the lane stands aside and docks after; one waiting its turn never
+  takes the lane from a fighter), the new `test_docking_traffic` (slow; free flight with the station's run: two docks of
+  29 s each with a civilian on the lane and a queue behind it, the civilians dock after, no rams), `test_dock_autopilot` (8,
+  the eased hold), `test_station_traffic`, `test_station_run`, `test_station_commands`, `test_station_sheltered`,
+  `test_encounters`, `test_freighter_cargo`, `test_console_command_list`.
 - **Done, the three follow-ups (2026-11-19):** **AI flights:** `DockingDirector._watch_wing` goes through every wing, so
   Babylon 5's flights of three dock by themselves below 25 % with their home in range; a flight's lead first hands the flight
   to its first wingman (`WingDirector.hand_lead`) and docks as one of its wingmen, so the flight flies on and the docked ship's
