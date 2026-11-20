@@ -24,13 +24,16 @@ var aborts: int = 0
 var last: StringName = &""
 
 var _prompt: SkipPrompt = null
+static var _hold_s: float = -1.0  # the data's hold time once read
 
 
-## How long X is held to abort, s (data).
+## How long X is held to abort, s (data, read once: `Main` asks every tick an abort is on offer).
 static func hold_s() -> float:
-	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PATH)) if FileAccess.file_exists(PATH) else null
-	var value: Variant = (parsed as Dictionary).get("hold_s") if parsed is Dictionary else null
-	return float(value) if (value is float or value is int) and float(value) > 0.0 else DEFAULT_HOLD_S
+	if _hold_s < 0.0:
+		var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(PATH)) if FileAccess.file_exists(PATH) else null
+		var value: Variant = (parsed as Dictionary).get("hold_s") if parsed is Dictionary else null
+		_hold_s = float(value) if (value is float or value is int) and float(value) > 0.0 else DEFAULT_HOLD_S
+	return _hold_s
 
 
 ## The prompt for the buttons `buttons` (`BindingNames.of_action(InputAdapter.AUTOTRACK)`).
