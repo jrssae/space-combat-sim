@@ -824,6 +824,10 @@ func player_destroyed() -> void:
 func release() -> void:
 	_seq.release()
 	_live.clear()
+	# A script's own listeners and `when` actions hold this API (a lambda that captures `m`): let go, or it is never freed.
+	_reactions.clear()
+	for connection: Dictionary in demo_requested.get_connections():
+		demo_requested.disconnect(connection["callable"] as Callable)
 	world.stage = null
 	stage = null
 

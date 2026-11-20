@@ -132,3 +132,15 @@ func test_notes_set_before_the_start_are_kept_as_a_checkpoint_restart_needs() ->
 	assert_true(bool(api.result["success"]), "the drill did not overwrite the flown result")
 	assert_eq(api.result["rank"], Career.SQUADRON_PILOT)
 	assert_false(GameFlow.has_checkpoint(api.result), "a mission won offers no checkpoint")
+
+
+func test_releasing_drops_a_scripts_listeners_and_pending_actions() -> void:
+	assert_eq(api.begin(script_), "")
+	api.demo_requested.connect(func(_check: StringName, _demo: StringName) -> void: api.note(&"shown", true))
+	api.when(TriggerSpec.fact(&"repairs", 1.0), func() -> void: api.note(&"repaired", true))
+	_ticks(2)
+	assert_eq(api.demo_requested.get_connections().size(), 1)
+	assert_false(api._reactions.is_empty())
+	api.release()
+	assert_eq(api.demo_requested.get_connections().size(), 0, "a script's lambda that holds the API is let go")
+	assert_true(api._reactions.is_empty(), "and so are its pending actions")

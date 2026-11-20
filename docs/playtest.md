@@ -1448,7 +1448,7 @@ raider strike carrier (M8-T08; the Battle Wagon is gone, M8-T27). Shortcuts are 
 ### The release build (M8-T15)
 
 `scripts/build_release.sh` builds `build/release/space-combat-sim.x86_64` (about 15 minutes, nearly all of it the assets);
-`scripts/release_smoke.sh` runs it headless for 600 ticks (`SMOKE_SCENARIO=tutorial` for the tutorial's opening).
+`scripts/release_smoke.sh` runs it headless for 600 ticks (the tutorial's opening; `SMOKE_SCENARIO` plays another scenario).
 
 - [ ] **(H) The release build:** run `build/release/space-combat-sim.x86_64` from a file manager or a shell outside the
       repository: the start screen over the hangar, the tutorial's opening plays, the settings save, and Quit closes it cleanly.

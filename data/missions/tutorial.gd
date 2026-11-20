@@ -93,7 +93,7 @@ func step_launch(m: MissionApi) -> void:
 	m.own_dock_offer()
 	m.say(&"control_launch_clear")  # not awaited: the lines play over the launch
 	m.say(&"instructor_welcome")
-	m.demo_requested.connect(func(_check: StringName, demo: StringName) -> void: _show(m, demo))
+	m.demo_requested.connect(_on_demo.bind(m))  # a bound method: a lambda holding `m` outlived a step cut short
 	m.join_flight(INSTRUCTOR)
 	await m.launch_squadron(WING, 0, 1)
 	m.leave_flight(INSTRUCTOR)
@@ -316,6 +316,10 @@ func _scramble(m: MissionApi, count: int, line: StringName, tries_left: int = SC
 		m.say(line)
 	elif tries_left > 0:
 		m.when(TriggerSpec.timer(SCRAMBLE_RETRY_S), func() -> void: _scramble(m, count, line, tries_left - 1))
+
+
+func _on_demo(_check: StringName, demo: StringName, m: MissionApi) -> void:
+	_show(m, demo)
 
 
 # The instructor flies the move a check asked for.

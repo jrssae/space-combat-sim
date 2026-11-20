@@ -6821,6 +6821,6 @@ src/mission/control_hint_text.gd      ControlHintText: the live pad and keyboard
   library and the assets, imports and exports `Linux release` from the committed `export_presets.cfg` (reports, tests, docs,
   tools, scripts, GUT, references and `native/` left out) into `build/release/` (gitignored): one binary with the pack embedded
   plus `libscs_native.so`. Nearly all of its 15 minutes is the asset build.
-- `scripts/release_smoke.sh` runs the binary headless with `--console-strict`, plays `free_flight` (`SMOKE_SCENARIO=tutorial` for the tutorial's opening) for 600 ticks and quits: exit 0,
+- `scripts/release_smoke.sh` runs the binary headless with `--console-strict`, plays the tutorial's opening (`SMOKE_SCENARIO` for another scenario) for 600 ticks and quits: exit 0,
   no `ERROR:` lines. It is not part of `run_tests.sh` (it needs the build). The bench writes to `user://reports` in an export
   (T14, `BenchPaths`).

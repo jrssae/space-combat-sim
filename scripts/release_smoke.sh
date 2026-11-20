@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Export smoke test (M8-T15, AC10): runs the exported binary headless, plays a scenario through the loading screen, waits some
 # ticks and quits. Fails on a non-zero exit or any "ERROR:" line. Usage: release_smoke.sh [binary]
-# The tutorial's opening replaces free_flight here once the tutorial is merged (SMOKE_SCENARIO overrides).
+# It plays the tutorial's opening (the two-ship launch from the Cobra bays: 600 ticks end in or just after it), the first
+# thing a new player sees; SMOKE_SCENARIO overrides (free_flight was the default until the tutorial was merged).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BIN="${1:-${ROOT}/build/release/space-combat-sim.x86_64}"
-SCENARIO="${SMOKE_SCENARIO:-free_flight}"
+SCENARIO="${SMOKE_SCENARIO:-tutorial}"
 [[ -x "${BIN}" ]] || { echo "release_smoke.sh: no binary at ${BIN}; run scripts/build_release.sh" >&2; exit 1; }
 mkdir -p "${ROOT}/reports/tmp"
 log="$(mktemp "${ROOT}/reports/tmp/release_smoke.XXXXXX.log")"

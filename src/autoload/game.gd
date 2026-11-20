@@ -228,7 +228,7 @@ func _register_console() -> void:
 	registry.register_command(ConsoleCommand.new(&"career",
 			"The pilot's rank, saved beside the settings: career (shows it), career set <rank>, career reset",
 			[ConsoleArg.enum_optional(&"action", [&"status", &"set", &"reset"] as Array[StringName], &"status"),
-			ConsoleArg.enum_optional(&"rank", Career.RANKS, Career.UNASSIGNED)]), _cmd_career, self)
+			ConsoleArg.enum_optional(&"rank", Career.RANKS)]), _cmd_career, self)
 	registry.register_provider(&"career", ConsoleVars.new({
 		&"rank": {"get": func() -> String: return String(career.rank), "doc": "unassigned, squadron_pilot or squadron_leader"},
 		&"course": {"get": func() -> String: return String(career.course) if career.course != &"" else "none",
@@ -269,6 +269,8 @@ func _debrief_value(key: StringName) -> String:
 func _cmd_career(args: Dictionary) -> ConsoleResult:
 	match StringName(args[&"action"]):
 		&"set":
+			if args[&"rank"] == null:
+				return ConsoleResult.failure("career set <%s>" % "|".join(PackedStringArray(Career.RANKS)))
 			career.set_rank(StringName(args[&"rank"]))
 			save_career()
 		&"reset":

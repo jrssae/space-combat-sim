@@ -47,10 +47,12 @@ func to_dict() -> Dictionary:
 	return {"rank": String(rank), "course": String(course)}
 
 
-## A career from saved data; anything unreadable gives a fresh one.
+## A career from saved data; anything unreadable gives a fresh one, and a course rating that is none reads as never flown
+## (an unknown word would rank below every real rating and block each later improvement).
 static func from_dict(data: Variant) -> Career:
 	var out := Career.new()
 	if data is Dictionary:
 		out.set_rank(StringName(str((data as Dictionary).get("rank", UNASSIGNED))))
-		out.course = StringName(str((data as Dictionary).get("course", "")))
+		var saved := StringName(str((data as Dictionary).get("course", "")))
+		out.course = saved if TutorialRules.RATINGS.has(saved) else &""
 	return out
