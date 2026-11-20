@@ -110,6 +110,9 @@ static var _shared_data: Dictionary = {}
 static var _shared_manifest: Dictionary = {}
 
 @onready var body: MeshInstance3D = $Body
+## The stencil value a gate's hull writes; the vortex's funnel reads it (jump_vortex.gdshader, jump_vortex_over_gate.gdshader).
+const HULL_STENCIL: int = 64
+static var _marked: Dictionary = {}  # hull material -> its stencil-marked copy, shared by every gate
 @onready var targetable: Targetable = $Targetable
 
 
@@ -130,6 +133,7 @@ func _init() -> void:
 func _ready() -> void:
 	_load_shared()
 	body.mesh = _shared_mesh
+	_mark_hull(body)
 	far_prop = FarProp.attach(self, [body] as Array[Node3D], _shared_manifest.get("far", {}),
 			FarProp.albedo_of(_shared_manifest), BROADCAST_RANGE_M, display_name)
 	var visuals: Node3D = far_prop.look if far_prop != null else self
@@ -146,6 +150,25 @@ func _ready() -> void:
 	if far_prop != null:
 		far_prop.keep_drawn = [vortex] as Array[Node3D]  # a far open vortex stays itself; its own detail by distance is T20's
 	_sync_targetable()
+
+
+# The hull marks its pixels in the stencil (`HULL_STENCIL`), so the vortex's walls draw solid in front of it and no arm shows
+# through them (M8-T17). On copies of the hull's materials: they may be shared with other models.
+func _mark_hull(mesh_instance: MeshInstance3D) -> void:
+	if mesh_instance.mesh == null:
+		return
+	for i: int in mesh_instance.mesh.get_surface_count():
+		var source := mesh_instance.mesh.surface_get_material(i) as BaseMaterial3D
+		if source == null:
+			continue
+		if not _marked.has(source):
+			var marked := source.duplicate() as BaseMaterial3D
+			marked.stencil_mode = BaseMaterial3D.STENCIL_MODE_CUSTOM
+			marked.stencil_flags = BaseMaterial3D.STENCIL_FLAG_WRITE
+			marked.stencil_compare = BaseMaterial3D.STENCIL_COMPARE_ALWAYS
+			marked.stencil_reference = HULL_STENCIL
+			_marked[source] = marked
+		mesh_instance.set_surface_override_material(i, _marked[source])
 
 
 func _physics_process(_delta: float) -> void:

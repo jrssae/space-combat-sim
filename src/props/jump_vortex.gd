@@ -23,6 +23,8 @@ const DIRECTION_NAMES: Array[StringName] = [&"arrival", &"departure"]
 
 const SCENE_PATH: String = "res://src/props/jump_vortex.tscn"
 const FUNNEL_SHADER: Shader = preload("res://src/props/jump_vortex.gdshader")
+## Its second pass, over a gate's hull alone (M8-T17): solid walls there, so the arms never show through the vortex.
+const OVER_GATE_SHADER: Shader = preload("res://src/props/jump_vortex_over_gate.gdshader")
 const GLOW_SHADER: Shader = preload("res://src/props/jump_glow.gdshader")
 ## Colours (linear) when the opener gives none, from `data/jump/vortex_look.json` (the gate generator's values).
 static var DEFAULT_COLOURS: Dictionary = {
@@ -241,8 +243,16 @@ static func funnel_material(colours: Dictionary, p_direction: Direction) -> Shad
 	var cached: ShaderMaterial = _material_cache.get(key)
 	if cached != null:
 		return cached
+	var material := _funnel_pass(FUNNEL_SHADER, pair, way, p_direction)
+	material.next_pass = _funnel_pass(OVER_GATE_SHADER, pair, way, p_direction)
+	_material_cache[key] = material
+	return material
+
+
+# One pass of the funnel's material, its look set from the colours and the look data.
+static func _funnel_pass(shader: Shader, pair: Array, way: StringName, p_direction: Direction) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
-	material.shader = FUNNEL_SHADER
+	material.shader = shader
 	material.set_shader_parameter(&"colour", pair[0])
 	material.set_shader_parameter(&"highlight", pair[1])
 	material.set_shader_parameter(&"flow", VortexSwirl.radial(p_direction))
@@ -252,7 +262,6 @@ static func funnel_material(colours: Dictionary, p_direction: Direction) -> Shad
 	for name: String in look:
 		if look[name] is float:
 			material.set_shader_parameter(StringName(name), float(look[name]))
-	_material_cache[key] = material
 	return material
 
 
