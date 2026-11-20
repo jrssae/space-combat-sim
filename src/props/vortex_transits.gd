@@ -111,6 +111,7 @@ func begin_arrival(body: RigidBody3D, vortex: JumpVortex, exit_position: Vector3
 	if body == null or vortex == null or not body.is_inside_tree():
 		return false
 	cancel(body)
+	vortex.spare(body)  # its own vortex never kills it, however it comes out (M8-T17)
 	var frame: Transform3D = vortex.true_frame()
 	var local: Vector3 = frame.affine_inverse() * exit_position
 	if not always and not _seen(body, exit_position):
@@ -137,6 +138,7 @@ func begin_departure(body: RigidBody3D, vortex: JumpVortex, on_through: Callable
 	if body == null or vortex == null or not body.is_inside_tree():
 		return false
 	cancel(body)
+	vortex.spare(body)
 	var p: VortexPassage = _start(body, vortex, VortexPassage.Kind.DEPARTURE)
 	p.on_through = on_through
 	p.limit_s = DEPARTURE_LIMIT_S

@@ -127,6 +127,7 @@ var sound: AudioStreamPlayer3D = null
 var _active: bool = false
 var _formed: bool = false  # this opening has formed (its ships swept)
 var _close_swept: bool = false  # and closed (swept again)
+var _spared: Dictionary = {}  # instance id -> true: the ships this opening brings through or takes away
 var _materials: Array[ShaderMaterial] = []  # by direction, shared with every vortex of these colours
 var _colours: Dictionary = DEFAULT_COLOURS.duplicate()
 var _rig: LightRig = null
@@ -305,6 +306,7 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	_active = true
 	_formed = false
 	_close_swept = false
+	_spared.clear()
 	_sounded = false
 	openings += 1
 	funnel.material_override = _materials[direction]
@@ -356,6 +358,23 @@ func stop() -> void:
 func extend(hold_s: float) -> void:
 	if _active:
 		timing.extend(age_s, hold_s)
+
+
+## Spares `body` from this opening's sweeps: it is coming out of it or going in on purpose (cleared by the next opening).
+func spare(body: Node) -> void:
+	if body != null:
+		_spared[body.get_instance_id()] = true
+
+
+## Whether this opening's sweeps leave `body` whole: its opener, a ship it brings through or takes away, or one riding its opener.
+func spares(body: Node) -> bool:
+	if body == null:
+		return false
+	if body == opener or _spared.has(body.get_instance_id()):
+		return true
+	var carrier := opener as CapitalStandin
+	return carrier != null and is_instance_valid(carrier) and carrier.dock != null and body is Ship \
+			and carrier.dock.is_docked(body as Ship)
 
 
 ## Whether it is about to form: the opener's lead-in runs, the flash not yet come (`VortexHazard.warning`).

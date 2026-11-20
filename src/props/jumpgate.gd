@@ -307,6 +307,7 @@ func _step_departures() -> void:
 			if not open_vortex(JumpVortex.Direction.DEPARTURE):
 				continue  # an arrival is running: it opens once that one has closed
 			vortex.extend(DEPARTURE_KEEP_S)
+			vortex.spare(ship)  # it opened for this ship: flying in is not straying into it (M8-T17)
 	if _departures.is_empty() and vortex.direction == JumpVortex.Direction.DEPARTURE and vortex.passing == 0:
 		vortex.close()
 

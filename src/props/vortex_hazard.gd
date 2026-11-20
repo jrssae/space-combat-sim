@@ -2,7 +2,8 @@ class_name VortexHazard
 extends RefCounted
 ## Jump points kill (M8-T17, maintainer 2026-11-19): when a vortex forms, any ship in the space it forms in is destroyed, and when
 ## it closes, any ship still in it is. Everyone, the player included, at a gate or at a point a ship opened; spared are the ship that
-## opened the point and the ships it is carrying through (an arrival on its way out, a departure on its way in). The space is the
+## opened the point and the ships it is carrying through (every arrival of that opening, the whole way out and after, seen or not;
+## a departure on its way in; a fighter docked on its opener; M8-T17 fix, 2026-11-20). The space is the
 ## funnel, from the mouth's plane to its base, as wide as the funnel at each depth. Pure but for `sweep` and `warning`, which read
 ## the physics and the scene. Ships far from the player wait in the low-attention tier with no body in the world; the rule reaches
 ## the ships flying in full round the player, where a jump point is seen.
@@ -36,7 +37,7 @@ static func sweep(vortex: JumpVortex) -> int:
 	var killed: int = 0
 	var transits: VortexTransits = VortexTransits.for_node(vortex)
 	for body: RigidBody3D in caught(vortex):
-		if body == vortex.opener or (transits != null and transits.is_passing(body)):
+		if vortex.spares(body) or (transits != null and transits.is_passing(body)):
 			continue
 		var damageable: Damageable = Damageable.of(body)
 		if damageable != null and damageable.kill(HitInfo.CAUSE_VORTEX):
@@ -79,7 +80,7 @@ static func warning(ship: Node3D, tree: SceneTree) -> String:
 	var radius: float = damageable.bounding_radius if damageable != null else 0.0
 	for node: Node in tree.get_nodes_in_group(JumpVortex.GROUP):
 		var vortex := node as JumpVortex
-		if vortex == null or not vortex.is_forming() or vortex.opener == ship:
+		if vortex == null or not vortex.is_forming() or vortex.spares(ship):
 			continue
 		if inside(vortex.fit, vortex.true_frame().affine_inverse() * ship.global_position, radius):
 			return WARNING
