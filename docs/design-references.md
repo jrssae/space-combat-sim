@@ -1429,3 +1429,103 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   ventral docking stations. Engines: the stern.
 - **Colours (show).** **Brass and bronze** with a dark brown hexagonal scale pattern, darker in shadow, a few teal-green
   glowing panels (the dorsal fin in the renders).
+
+### Narn Frazi heavy fighter (`narn_frazi`, T38)
+
+- **Reference.** `Narn_Fighter.stl`, mapping `--right=-x --up=+z --aft=+y`, 17.53 m. Box 8.8 m wide, 3.7 m tall. Show:
+  `narn_frazi/` (two stills).
+- **Shape.** A flat **arrowhead**: a broad delta body, widest (8.8 m) at its trailing corners (75 %), with a slab-sided
+  centre fuselage holding the cockpit; two long **gun barrels** forward from the fuselage's flanks (the bow end), and two
+  swept **vertical fins** on the wing roots canted outward (from ahead a shallow V). Twin engines in the fuselage's stern.
+- **Weapons.** Twin forward guns (T03). Carried by the G'Quan.
+- **Colours (show).** Pale grey to white plating with **orange-red chevrons**, dark red trim; a green-grey variant (02).
+
+### Centauri Sentri medium fighter (`centauri_sentri`, T38)
+
+- **Reference.** `Centari_Sentri_Fighter.stl`, mapping `--right=+y --up=+z --aft=+x`, 22.25 m. Box **36 m wide** (the
+  crescent), 9.5 m tall. Show: `centauri_sentri/` (two stills).
+- **Shape.** A slim **pod fuselage** (about 3 m across, 22 m long) set in front of a thin **crescent wing** whose horns
+  sweep forward to the bow line and whose arc trails to the stern; seen from ahead the crescent droops into an arc. Two
+  small gun pods on the crescent near its root; a dorsal canopy fairing.
+- **Weapons and carrier.** Twin guns. **No carrier in M10** (the Primus has no bays, Q49): placed by scenarios.
+- **Colours (show).** Dark purple-maroon with gold-bronze ribs along the crescent.
+
+### Minbari Nial heavy fighter (`minbari_nial`, T39)
+
+- **Reference.** `Minbari Liara fighter.stl` (the file's "Liara" is no known craft; this is the Nial, Q49), mapping
+  `--right=+x --up=+z --aft=-y`, 22.23 m. Box 7.7 m x 7.9 m. Show: `minbari_nial/01.jpg`. Skin: hexagonal grid (Q45).
+- **Shape.** A long, slim **dart**: a pointed nose, a fuselage swelling to about 3.5 m at 55 %, a tapering tail. Three
+  **fins** at 120 degrees (one up, two down and out), each ending in a small **gun pod**; two long thin spikes forward of
+  the lower fins.
+- **Weapons.** Fusion cannons in the pods; Minbari stealth (Q13). Carried by the Sharlin (15) and, in TBP, the White Star.
+- **Colours (show).** Iridescent violet to blue-green, glowing at the edges, under the hexagonal grid.
+
+### Drazi Sky Serpent heavy fighter (`drazi_sky_serpent`, T39)
+
+- **Reference.** `Drazi_Sky_serpant_fighter_19m.stl`, mapping `--right=+x --up=+z --aft=-y`, 19.12 m. Box 13.1 m wide,
+  4.7 m tall. Show: `drazi_sky_serpent/` (two close stills).
+- **Shape.** A long cigar **fuselage** (about 4 m across) with a pointed nose and a ribbed dorsal spine; two short
+  drooping wings at 30 to 60 % carrying **gun pods** (x ±5.5, y -1) as long as half the fuselage; a ventral pod under the
+  wing root.
+- **Weapons and carrier.** Pod guns. Launched by the Stormfalcon (1); can ride the Sunhawk's dorsal cradle.
+- **Colours (show).** Gunmetal grey with red-orange rings, as the Drazi capitals.
+
+### Brakiri Falkosi light interceptor (`brakiri_falkosi`, T40)
+
+- **Reference.** `Brakiri_Falkosi_fighter.STL`, mapping `--right=-x --up=+z --aft=+y`, 15 m (SotG estimate). Box 12.1 m
+  wide, 8.7 m tall. Show: `brakiri_falkosi/01.jpg` (an RPG render).
+- **Shape.** A rounded **cockpit pod** at the bow, a long twin-boom fuselage (two tubes side by side, 15 to 70 %), and at
+  the stern three **wings** in a Y (two up-and-out, one down), the upper pair broad and swept; the fusion engines in the
+  wing roots (SotG: "Flamer", for the engine wakes).
+- **Weapons and carrier.** A light gravitic bolt. **No carrier in M10** (the Avioki has none, Q49): placed by scenarios.
+- **Colours (render).** Olive green with grey panels, as the Avioki.
+
+### Drakh fighter (`drakh_fighter`, T40)
+
+- **Reference.** `Drakh_Fighter.stl`, mapping `--right=-x --up=+z --aft=+y`, 17.8 m (MD's light raider). Box 9.1 m x 8.6 m.
+  Show: `drakh_fighter/` (two stills). Semi-organic with seams (Q47).
+- **Shape.** A pointed **nose pod** (0 to 25 %), a slim body, and from 45 % aft **five long curved blades** at 72 degrees
+  round the axis, swept back and out like a star seen from ahead, their tips past the stern.
+- **Weapons and carrier.** Forward guns; launched by the Drakh carrier.
+- **Colours (show).** **Tiger-striped yellow-gold and black**, teal-green glowing panels and edges.
+
+### Shadow fighter (`shadow_fighter`, T41)
+
+- **Reference.** `Shadow_advanced_fighter.stl`, mapping `--right=+y --up=+z --aft=+x`, 15.3 m. Box 10.9 m wide, 6.3 m
+  tall. Show: `shadow_fighter/` (two stills). Organic and seamless (Q46).
+- **Shape.** A rounded, blunt **head** at the bow; a body that splays aft into long curved **spines** (two long ones
+  outward and back to the stern corners, shorter ones above and below), like a black dart with claws trailing.
+- **Weapons and carrier.** A small slicer-type beam (T04); launched by the battlecrab. Shimmers (Q44).
+- **Colours (show).** Black with a fine scaled texture and a faint purple sheen.
+
+### Shadow scout (`shadow_scout`, T41)
+
+- **Reference.** `Shadow_Scout_fighter_201m.stl`, mapping `--right=+y --up=+z --aft=+x`, 201 m. Box 168 m wide, 120 m
+  tall. Show: `shadow_scout/` (three stills). A small capital ship: the capital framework with the battlecrab's organic
+  parts (Q49). Organic and seamless (Q46).
+- **Shape.** A long armoured **body** (about 80 m across) with a pointed snout forward; along its back a double row of
+  **curved legs** (about eight a side) that arch up and forward over the body like a centipede's, and longer spines
+  trailing below and aft.
+- **Weapons.** A beam (T04); TBP: a scout, jamming. Shimmers (Q44).
+- **Colours (show).** Black, scaled, faint purple sheen.
+
+### Vorlon light fighter (`vorlon_fighter`, T42)
+
+- **Reference.** `Vorlon_Light_Fighter (pedals open).stl`, mapping `--right=+x --up=+z --aft=-y`, 21.92 m. Box 15.9 m x
+  15.9 m with its **four petals open**. Show: `vorlon_fighter/` (two stills). Organic, faint glow (Q46).
+- **Shape.** A small version of the Vorlon destroyer: a bulbous **head** with four **petals** (opened at 45 degrees, each
+  a leaf about 8 m long), a ribbed body of lobes, and trailing **tendrils** to the stern.
+- **Weapons and carrier.** A small Vorlon beam; TBP: Vorlon fighters seem to jump on their own (T04). Launched by the
+  Vorlon heavy cruiser.
+- **Colours (show).** Yellow-green mottled with black, as the Vorlon ships.
+
+### EA Thunderbolt (`ea_thunderbolt`, T50)
+
+- **Reference.** `EA_Thunderbolt_fighter.stl` is turned 42 degrees about file z; turn it back first, then mapping
+  `--right=-x --up=+z --aft=+y`, 16.24 m. Box 12.0 m wide, 6.3 m tall. (Made with a turned copy in `reports/tmp/rot/`;
+  `refview` cannot turn, so T50 adds the turn or a `--turn` option.) Show: `ea_thunderbolt/` (three stills).
+- **Shape.** A long two-seat **fuselage** (0 to 55 %) with the cockpit canopy and nose guns; a centre body (45 to 80 %)
+  with a dorsal fin; **four engine pods** on X-wings (x ±5.2, y ±2.5) from 55 % to 100 %, each with a nozzle cluster at
+  the stern and a swept fin; seen from ahead the pods make an X, as the Starfury's.
+- **Weapons.** Nose guns and pod-mounted cannons (TBP); M11 flies it.
+- **Colours (show).** White and pale grey with black panel lines, EA markings, orange engine glow.
