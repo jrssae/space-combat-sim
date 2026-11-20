@@ -1383,7 +1383,7 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   and 46 m long and stands about 50 degrees out from the axis, its tip forward: four open petals make a flower about
   90 m across round the bow (still 04 shows four). Four closed petals at a 130-degree chord overlap at their edges (three
   would close exactly; still 04 shows four). The petals fit the body: the hinge ring sits where the head meets the
-  lobes, and neither state reaches past the gate-check box.
+  lobes, about 43 %, and both states fit a gate easily.
 - **Weapons and craft.** The Vorlon energy beam (T04) from between the petals; no source lists fighters. Opens its own
   jump points.
 - **Subsystems.** Organic: the "bridge" in the head, the "reactor" in the body's core (50 %), propulsion in the tendrils.
@@ -1529,3 +1529,90 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   the stern and a swept fin; seen from ahead the pods make an X, as the Starfury's.
 - **Weapons.** Nose guns and pod-mounted cannons (TBP); M11 flies it.
 - **Colours (show).** White and pale grey with black panel lines, EA markings, orange engine glow.
+
+### EA Panama-class transport (`ea_panama`, T51)
+
+- **Reference.** `EA Panama class.STL` (6 100 triangles), mapping `--right=-x --up=+z --aft=+y`, **180 m** (Q49, an
+  estimate that fits B5's main bay core). Box 45 m wide, 29 m tall. Show: `ea_panama/` (seven images; TBP's "White Star"
+  type commercial transport). Civilian pipeline (Q49).
+- **Shape.** A long **cargo box** (10 to 88 %, about 40 m wide and 25 m tall) with flat sides and a stepped roof; a narrow
+  **bow spine** with a sensor spike forward of it (0 to 10 %); four cylindrical **tanks** along the box's lower corners
+  (two long ones from 20 to 60 %, two short ones aft); at the stern a crew sphere on the axis and **two engines** (88 to
+  100 %).
+- **Subsystems.** Bridge: the bow spine's root. Engines: the stern pair. Cargo: the box (hatches in its roof).
+- **Colours (show).** Grey and dark grey plating, a lighter roof, small red and white lights; no markings legible.
+
+### EA Explorer class (`ea_explorer`, T52)
+
+- **Reference.** `EA Explorer class.stl`, mapping `--right=-x --up=+z --aft=+y`, 6 103 m. Box 846 m wide, 2 526 m tall with
+  its **antenna mast** (975 m without). Show: `ea_explorer/` (two images). **The bow is chosen at the sphere end and is
+  not certain**: T52 confirms it against the show (still 01 has the spheres at one end and a ring at the other).
+- **Shape.** A long **spine** about 200 m across: at one end a cluster of **spherical tanks** and a big sphere (0 to 10 %),
+  then a long open **lattice truss** (10 to 32 %), a **rotating section** (32 to 45 %: a drum of ribbed rings, about
+  330 m across), modules along a second truss (45 to 75 %), a pair of tall **radiator vanes** standing up and down (75 to
+  80 %) and the long vertical **antenna mast** through the spine at 75 %, and the engine block (90 to 100 %).
+- **Weapons and bays (TBP).** Four turreted pulse cannons, four twin particle beam arrays, two squadrons of Starfuries;
+  huge jump engines (it builds jumpgates). Opens its own points.
+- **Colours (show).** White and pale grey with **yellow-and-black hazard stripes** on big panels, orange accents.
+
+### EA Asimov liner and mining transport (`ea_asimov`, T53; `ea_mining_transport`, T56)
+
+- **Reference.** `EA Asimov liner.stl`, mapping `--right=-x --up=+z --aft=+y`, **600 m**: the sphere is 347 m across
+  (3.47 m per file unit). `EA_Mining_Transport.stl` and `EA_Mining_Transport_doors_open.stl` are the **same hull** (one
+  generator, two variants, Q49), same mapping. Show: `ea_asimov/` (two stills); the still in `ea_mining_transport/`
+  shows a different ship.
+- **Liner.** A big **sphere** (radius 174 m, 18 to 72 %) with a rotating band round its equator; forward of it, on a short
+  neck, a small **command hub** (0 to 13 %) with a docking ring; aft, an engine frame with **four engines** (80 to 100 %)
+  and a dorsal pair of exhaust stacks.
+- **Mining variant and its doors (Q43, measured).** The mining STL is 9.4 file units (32 m at the liner's scale) longer
+  than the liner. **Closed**: 632 m at the liner's scale. **Open**: the sphere parts across its middle and its two halves
+  separate by **24.2 units (84 m)**, the hold between them crossed by posts; 716 m long. Both STLs are one mesh moved
+  (735 760 triangles each), so the doors are two rigid halves on a slide: one moving part, two states for the 90 %
+  compare. At the approved 600 m for the mining transport the sphere would shrink 5 %; keeping the liner's sphere (632 m
+  closed) is simpler for one generator (for T53/T56 to settle).
+- **Subsystems.** Bridge: the command hub. Reactor: the engine frame's forward end. Engines: the four. Passenger decks
+  or the hold: the sphere.
+- **Colours (show).** White sphere with **green bands** and rows of windows, grey hub and engines.
+
+### EA construction tender (`ea_construction_tender`, T55)
+
+- **Reference.** `EA_construction_tender.stl` (182 000 triangles), mapping `--right=-x --up=+z --aft=+y`, **50 m** (Q49,
+  an estimate). Box 70 m wide (the truss), 24 m tall. Show: `ea_construction_tender/WORKPOD2.webp` (work pods at a
+  construction frame). Civilian pipeline (Q49).
+- **Shape.** A boxy **work body** (20 to 75 %, about 15 m across) with a cockpit block forward; four **claw arms** forward
+  (0 to 25 %), two above and two below, each with a two-fingered grab; a **truss crossbar** across the body at 62 to 75 %
+  out to x ±35 with a **thruster pod** at each end; a drum engine aft (75 to 100 %) and two landing legs under the body.
+- **Colours.** EA work-craft yellow-ochre and grey (the work pods in the still), black hazard stripes on the claws.
+
+### EA shuttle (`ea_shuttle`, T57)
+
+- **Reference.** `EA Shuttle.stl`, mapping `--right=-x --up=+z --aft=+y`, 18.64 m. Box 9.2 m wide, 5.3 m tall. Show:
+  `ea_shuttle/` (three stills). Civilian pipeline; M24 makes it a player ship.
+- **Shape.** A blunt box hull: a sloped, faceted **nose** (0 to 25 %) with the cockpit windows, a long cabin body (25 to
+  85 %) with a row of six side windows each side and angled chines, four small engine bells and RCS blocks aft.
+- **Colours (show).** Light grey and white panels, a **red-orange stripe** and a blue cockpit band, EA markings.
+
+### EA atmospheric shuttle (`ea_atmo_shuttle`, T57)
+
+- **Reference.** `EA_Atmospheric_Shuttle.stl`, mapping `--right=-x --up=+z --aft=+y`, 25.59 m. Box **45.6 m wide**, 8.6 m
+  tall. Show: `ea_atmo_shuttle/` (two stills).
+- **Shape.** A lifting body: a rounded **nose** and a broad flat fuselage (0 to 75 %), long **swept wings** from 40 % out
+  to the tips (x ±23) at 90 %, three engines and two canted tail fins at the stern.
+- **Colours (show).** Grey and olive with orange-red markings; orange engine glow.
+
+### Centauri shuttle (`centauri_shuttle`, T58)
+
+- **Reference.** `Centauri_Shuttle.stl`, mapping `--right=+y --up=+z --aft=+x`, 36 m. Box 52 m wide, 13.5 m tall. Show:
+  `centauri_shuttle/` (three images).
+- **Shape.** A long pointed **nose** and slim fuselage, a broad **delta wing** from 35 % to the stern swept to tips at x
+  ±26, its trailing edge notched; a tall swept **tail fin**; the wing tips droop (from ahead an arc). Engine louvres along
+  the wing roots.
+- **Colours (show).** Purple-maroon with gold detailing and red lights, as the Centauri warships.
+
+### Minbari Flyer (`minbari_flyer`, T58)
+
+- **Reference.** `Minbari_Flyer_diplomat_transport.stl`, mapping `--right=+y --up=+z --aft=+x`, 29.19 m. Box 13.5 m wide,
+  6.0 m tall. Show: `minbari_flyer/` (two stills, docked). Skin: hexagonal grid (Q45).
+- **Shape.** A smooth, tapered **fuselage** (0 to 75 %) with a forked nose and blade-like strakes along its flanks; at 70
+  to 85 % a **crossbar wing** with an engine **pod** at each tip (x ±6.5), and a pointed tail cone aft (to 100 %).
+- **Colours (show).** Iridescent blue-violet with pale highlights.
