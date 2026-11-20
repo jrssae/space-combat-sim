@@ -23,7 +23,10 @@ const SHOT_LEAD_S: float = 0.2
 const APPROACH_M: float = 6000.0
 ## Lit layer of the flash and the fade: over the HUD and the letterbox (39), under the console.
 const FADE_LAYER: int = 60
-const ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"jump", &"cancel", &"target", &"approach", &"view", &"shots"]
+const ACTIONS: Array[StringName] = [&"status", &"open", &"close", &"jump", &"cancel", &"target", &"approach", &"view", &"shots",
+		&"trap"]
+## `gate trap` puts a ship this deep in the gate's funnel, to test that jump points kill (M8-T17).
+const TRAP_DEPTH_M: float = 500.0
 const DIRECTIONS: Array[StringName] = [&"arrival", &"departure"]
 ## `gate view <name>`: held camera poses on the gate for captures, in the gate's frame (-Z its front, +Y its top): the camera's
 ## offset, the aim's offset, the field of view and the roll (degrees, the picture turned clockwise). `reference` matches `references/jumpgate/jumpgate.png` (the maintainer's
@@ -415,6 +418,22 @@ func _set_key_light(on: bool) -> void:
 	_key_light.attach(main.ship, to_sun)
 
 
+# `gate trap [raider|player]` (M8-T17): a ship at rest inside the gate's funnel, where the next opening forms, to test that jump
+# points kill: open the vortex (`gate open arrival`) and the ship is destroyed as it forms.
+func _trap(g: Jumpgate, who: String) -> ConsoleResult:
+	var at: Vector3 = g.vortex.true_frame() * Vector3(0.0, 0.0, TRAP_DEPTH_M)
+	if who == "player":
+		main.ship.reset_to(Transform3D(main.ship.global_basis, at))
+		return ConsoleResult.line("player %d m deep in %s's funnel: open its vortex to test the kill" % [int(TRAP_DEPTH_M), g.display_name])
+	main.ensure_free(&"raider_fighter", 1)
+	var made: Dictionary = BrainFactory.from_behaviour({"type": "idle"}, main.world.to_universe(at), 1)
+	var raider: Combatant = main.ships.acquire("TRAPPED", main.world.to_universe(at), Basis.IDENTITY, main.world.rest_velocity(),
+			made["brain"] as PilotBrain, &"raider_fighter")
+	if raider == null:
+		return ConsoleResult.failure("no raider to spare")
+	return ConsoleResult.line("raider %d m deep in %s's funnel: open its vortex to test the kill" % [int(TRAP_DEPTH_M), g.display_name])
+
+
 func _play(shot: CinematicShot) -> void:
 	if shot != null:
 		main.camera_rig.play_shot(shot, _actor_pose, _origin_to_local)
@@ -496,7 +515,7 @@ func _register_console() -> void:
 	_transit_console = TransitConsole.new(self)
 	_transit_console.register(registry)
 	registry.register_command(ConsoleCommand.new(&"gate",
-			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from within 2 km, farther closing fast: state gate.reach_m), cancel (end the jump), target (select it), approach [km] (put the player 6 km in front of it, facing it, or that many km), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures), shots <approach>,<mouth>|auto|arrive:<id>|arrive:auto (open every run-in and mouth stage, or the way back out, with those takes; auto picks again)",
+			"The jumpgate: status, open <arrival|departure> [hold seconds] (the vortex, after the arms' activation), close, jump (start the player's jump through it, from within 2 km, farther closing fast: state gate.reach_m), cancel (end the jump), target (select it), approach [km] (put the player 6 km in front of it, facing it, or that many km), view <front|three_quarter|close|tip|run_in|side|behind|reference|off> (hold the camera on it for captures), trap [raider|player] (a ship at rest deep in the funnel: the next opening destroys it, jump points kill), shots <approach>,<mouth>|auto|arrive:<id>|arrive:auto (open every run-in and mouth stage, or the way back out, with those takes; auto picks again)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
 			ConsoleArg.string_optional(&"option", null),
 			ConsoleArg.float_optional(&"hold_s", CONSOLE_HOLD_S, 0.0, 600.0)] as Array[ConsoleArg]), _cmd_gate, self)
@@ -572,6 +591,9 @@ func _register_console() -> void:
 				"doc": "When the last run-in expected the ship at the mouth, after its start; the camera takes are cut from it (-1: none yet)"},
 		&"vortex": {"get": func() -> String: return gate().vortex.phase_name() if gate() != null else "none",
 				"doc": "The vortex: closed, activate (the arms' lamps), flash, grow, open, closing or end_flash (its closing flash)"},
+		&"vortex_kills": {"get": func() -> String: return "%d formed, %d closed" % [gate().vortex.form_kills, gate().vortex.close_kills] \
+				if gate() != null else "none",
+				"doc": "Ships the gate's vortex destroyed as it formed and as it closed (M8-T17: jump points kill)"},
 		&"vortex_direction": {"get": func() -> String: return String(gate().vortex.direction_name()) if gate() != null else "none",
 				"doc": "arrival (blue), departure (orange) or none"},
 		&"vortex_age_s": {"get": func() -> float: return gate().vortex.age_s if gate() != null and gate().vortex.is_active() else 0.0,
@@ -791,6 +813,8 @@ func _cmd_gate(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.line("%s vortex opening" % option)
 		&"view":
 			return _view(g, StringName(str(args.get(&"option", ""))))
+		&"trap":
+			return _trap(g, str(args.get(&"option", "raider")) if args.get(&"option") != null else "raider")
 		&"shots":
 			var option: String = str(args.get(&"option", "")) if args.get(&"option") != null else ""
 			if option.begins_with("arrive:"):

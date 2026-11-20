@@ -729,6 +729,9 @@ func _build_hud_input() -> HudInput:
 	if not docking.notice_text().is_empty():
 		input.ack_line = docking.notice_text()  # a docking's line (Control's offer, a wingman's call) takes the same place
 	input.prompt_line = interactions.prompt_line()
+	var hazard: String = VortexHazard.warning(ship, get_tree())
+	if not hazard.is_empty():
+		input.ack_line = hazard  # sitting where a jump point is about to form: the loudest line (M8-T17)
 	input.approach_cue = interactions.cue()
 	input.interact_progress = adapter.last.ui.interact_progress
 	if route_active():

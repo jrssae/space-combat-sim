@@ -11,6 +11,9 @@ const CAUSE_CONSOLE: StringName = &"console"
 const CAUSE_PLANET: StringName = &"planet"
 ## The ship was in a jump point's funnel when the point collapsed (M6-T23, `JumpPointPool`): no shooter, no kill credit.
 const CAUSE_VORTEX_COLLAPSE: StringName = &"vortex_collapse"
+## The ship sat where a jump point's vortex formed, or was still in it when it closed (M8-T17, maintainer 2026-11-19: jump points
+## kill): no shooter, no kill credit.
+const CAUSE_VORTEX: StringName = &"vortex"
 ## The ship sat docked on a carrier that was destroyed (M12-T19, Q28, `CarrierDock`): no shooter, no kill credit.
 const CAUSE_CARRIER_LOST: StringName = &"carrier_lost"
 

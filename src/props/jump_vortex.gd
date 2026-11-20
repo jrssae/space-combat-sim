@@ -90,6 +90,9 @@ var hold_range_m: float = 0.0
 var opener_through_at_s: float = -1.0
 ## Why the last opening collapsed (`JumpCapability`'s reasons; empty when it closed by its timing).
 var collapse_reason: StringName = &""
+## Ships the rule that jump points kill destroyed as this vortex formed, and as it closed (M8-T17).
+var form_kills: int = 0
+var close_kills: int = 0
 ## The node whose frame is the vortex's true one when it is drawn under a far stand-in (a gate's vortex follows its gate's
 ## `FarProp` look, which shrinks toward the eye far away); null for a stand-alone point.
 var frame_owner: Node3D = null
@@ -122,6 +125,8 @@ var emitter: LightEmitter = null
 var sound: AudioStreamPlayer3D = null
 
 var _active: bool = false
+var _formed: bool = false  # this opening has formed (its ships swept)
+var _close_swept: bool = false  # and closed (swept again)
 var _materials: Array[ShaderMaterial] = []  # by direction, shared with every vortex of these colours
 var _colours: Dictionary = DEFAULT_COLOURS.duplicate()
 var _rig: LightRig = null
@@ -204,7 +209,12 @@ func setup(vortex_data: Dictionary = {}, with_sound: bool = true) -> void:
 	_hide_all()
 
 
+## Every jump vortex joins this group, so the HUD can warn a pilot sitting in one about to form (`VortexHazard.warning`).
+const GROUP: StringName = &"jump_vortices"
+
+
 func _ready() -> void:
+	add_to_group(GROUP)
 	_sync_processing()
 
 
@@ -293,6 +303,8 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	timing.reset(hold_s, VortexTiming.POINT_LEAD_S if own_point and lead_s <= 0.0 else lead_s, own_point)
 	age_s = 0.0
 	_active = true
+	_formed = false
+	_close_swept = false
 	_sounded = false
 	openings += 1
 	funnel.material_override = _materials[direction]
@@ -346,6 +358,11 @@ func extend(hold_s: float) -> void:
 		timing.extend(age_s, hold_s)
 
 
+## Whether it is about to form: the opener's lead-in runs, the flash not yet come (`VortexHazard.warning`).
+func is_forming() -> bool:
+	return _active and timing.phase(age_s) == VortexTiming.Phase.ACTIVATE
+
+
 func is_active() -> bool:
 	return _active
 
@@ -395,6 +412,14 @@ func advance(delta: float) -> void:
 	if not _active:
 		return
 	age_s += delta
+	var now: VortexTiming.Phase = timing.phase(age_s)
+	# Jump points kill (M8-T17): the ships where it forms as it flashes, and those still in it as its funnel folds away.
+	if not _formed and now != VortexTiming.Phase.ACTIVATE:
+		_formed = true
+		form_kills += VortexHazard.sweep(self)
+	if _formed and not _close_swept and now >= VortexTiming.Phase.END_FLASH:
+		_close_swept = true
+		close_kills += VortexHazard.sweep(self)
 	if not _sounded and age_s >= timing.lead_s:
 		_sounded = true
 		if not muted and sound != null and sound.stream != null and direction == Direction.ARRIVAL and is_inside_tree():

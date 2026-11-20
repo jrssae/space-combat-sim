@@ -1534,3 +1534,13 @@ too quiet or right, against the engines (the bed the rest sits on).
 - [x] **(H) Busy fight, no clipping:** `traffic raid 6` near the station with your wing out, fight for a minute, then
       `state audio`: `master_peak_db` never above -0.5. Listen for crackle or the whole mix ducking when several explosions hit at
       once.
+
+# Play-testing jump points that kill and brisk civilian jumps (M8-T17, maintainer 2026-11-19)
+
+- [ ] **(H) Jump points kill:** `gate approach 3`, `gate trap raider`, `gate open arrival`: the raider sitting in the funnel is
+      destroyed as the blue vortex forms. Fly into the gate's funnel yourself and `gate open arrival`: the HUD warns
+      `JUMP POINT OPENING — CLEAR THE MOUTH` during the arms' lead-in, and you die if you stay. Raiders that came out of the gate
+      and are still in its funnel when you jump out die as the orange vortex forms.
+- [ ] **(H) Civilians jump briskly:** watch a civilian leave through the gate: in front of it the gate lines it up on the axis and
+      runs it in at the run-in's speed (as fast as its own engines allow), and it is swallowed quickly past the mouth.
+

@@ -5497,6 +5497,14 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   live bindings) and bar sit on their own layer over the cinematic (`SkipPrompt`). The abort cancels the jump or the visit where
   the ship is, at its velocity; the shots stop through the director's own `stop_shots()`. While the controls are held a tap of X
   toggles nothing (`InputAdapter.taps_blocked`). Console `autopilot [status|abort]`, provider `autopilot`.
+- **Jump points kill (M8-T17, maintainer 2026-11-19).** When a vortex forms (its flash, after the opener's lead-in), every ship in
+  the space it forms in is destroyed; when its funnel folds away, every ship still in it is. The space is the funnel from the
+  mouth's plane to its base, as wide as the funnel at each depth, a hull counting from its edge (`VortexHazard.inside`). It holds
+  at the gate and at every point a ship opens (`JumpVortex.advance` sweeps once as it forms and once as it closes), for the player
+  too; spared are the point's opener and the ships it carries (`VortexTransits.is_passing`). Kills go through `Damageable.kill`
+  with `HitInfo.CAUSE_VORTEX`, credited to no one. The HUD's acknowledgement line warns a pilot sitting where a vortex is about to
+  form (`VortexHazard.warning`). Ships waiting in the low-attention tier have no body in the world and are not reached. Console
+  `gate trap [raider|player]`; `gate.vortex_kills`.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
   acceptance pose of the still), `vortex [status|open|close|view]`; providers `gate`, `vortex`.
 - GPU (RX 6950 XT, headless gamescope): the vortex costs about 0.23 ms and one draw call, even filling the screen from inside; the
