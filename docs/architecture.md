@@ -5517,6 +5517,17 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   wingmen are spared by the departure vortex, sent in by the gate once the player is in the funnel, taken away in the black (a
   straggler within 4 km too) and burst out of the arrival beside the player. Under any other order the wing breaks off
   (`Wing.leader_away`, as while docking), keeps clear like every AI pilot and rejoins when the jump ends. Other flights only keep clear.
+  Maintainer, 2026-11-20: the departure vortex is held open for them. Followers within `follow_range_m` (3 km, data/jump/
+  player_jump.json) of the mouth as the run-in starts are handed to the gate, paced to cross the mouth `follow_trail_s` (3 s)
+  after the player and `follow_spacing_s` (1.5 s) apart; the others are let go (`JumpVortex.unspare`). At the ring flash's peak
+  `GateJump` cuts to `HOLD` (no black; never past `follow_hold_max_s`, 20 s): `hold` takes from data/jump/gate_shots.json watch
+  the follower nearest the mouth (actor `wingman`), chosen by the moment (`exterior` outside the gate first, `follow_in` 40 m
+  behind the last as it enters, the close takes only on a ship still closing), until the last is through; the vortex folds behind it and its closing sweep comes
+  before the arrival opens; then the black and the arrival as before (about 4.5 s of hold for two wingmen in formation).
+  The wingmen a hold take watches carry the cinematic key light (its `wing` section, from the camera's side) and their mains
+  glow (`HOLD_ENGINE_GLOW`). A
+  follower dying or the order changing calls the hold off at once and the vortex folds. Gate only: the player opens no point of
+  its own.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
   acceptance pose of the still), `vortex [status|open|close|view]`; providers `gate`, `vortex`.
 - GPU (RX 6950 XT, headless gamescope): the vortex costs about 0.23 ms and one draw call, even filling the screen from inside; the

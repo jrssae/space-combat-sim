@@ -10,7 +10,13 @@ const APPROACH: StringName = &"approach"
 const MOUTH: StringName = &"mouth"
 const ARRIVAL_OPEN: StringName = &"arrival_open"
 const ARRIVAL_OUT: StringName = &"arrival_out"
-const SLOTS: Array[StringName] = [APPROACH, MOUTH, ARRIVAL_OPEN, ARRIVAL_OUT]
+## M8-T17: outside on the gate while the departure vortex is held open for the player's following wingmen.
+const HOLD: StringName = &"hold"
+const SLOTS: Array[StringName] = [APPROACH, MOUTH, ARRIVAL_OPEN, ARRIVAL_OUT, HOLD]
+## The hold's takes watch this actor: the following wingman nearest the mouth.
+const WINGMAN_ACTOR: String = "wingman"
+## ... and the last of them still on its way, for a take that frames them all.
+const LAST_WINGMAN_ACTOR: String = "last_wingman"
 const DEFAULT_CUT_LEAD_S: float = 3.5
 ## A take is cut no later than this (the maintainer: an angle under 3 s, with room for the ring's 0.3 s flash at the end) ...
 const TAKE_MAX_S: float = 2.6
@@ -75,9 +81,11 @@ func is_feature(slot: StringName, id: String) -> bool:
 	return bool(_entry(slot, id).get("feature", false))
 
 
-## The longest the take is held.
+## The longest the take is held: its own `max_s` when it has one (an insert, M8-T17), never past its kind's limit.
 func max_s(slot: StringName, id: String) -> float:
-	return FEATURE_MAX_S if is_feature(slot, id) else TAKE_MAX_S
+	var limit: float = FEATURE_MAX_S if is_feature(slot, id) else TAKE_MAX_S
+	var own: Variant = _entry(slot, id).get("max_s")
+	return clampf(float(own), MIN_HOLD_S, limit) if own is float or own is int else limit
 
 
 ## When the run-in's approach takes give way to the mouth's, s after its start, for an arrival `arrival_s` out.

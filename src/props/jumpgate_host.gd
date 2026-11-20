@@ -18,6 +18,14 @@ const FALLBACK_DISTANCE_M: float = 50000.0
 const PARK_BEHIND_M: float = 3000.0
 ## The way out's takes start this long before the ship comes out of the ring (the reviewer: catch the core's white burst).
 const SHOT_LEAD_S: float = 0.2
+## A wingman this close in time to the mouth is entering: the hold follows it in.
+const HOLD_ENTERING_S: float = 2.2
+## The mains of the wingmen a hold take watches glow at least this much (0..1) while they coast in.
+const HOLD_ENGINE_GLOW: float = 0.7
+## Within this of the mouth the next wingman and the ones behind it are framed together.
+const HOLD_PAIR_M: float = 400.0
+## A take watching a wingman stops following it this deep in the funnel and holds there, so its ring flash reads as a disc.
+const HOLD_FOLLOW_DEPTH_M: float = 300.0
 ## `gate approach` puts the player this far in front of the gate, facing it (inside the prompt's 10 km), unless it names a
 ## distance (`gate approach 1.8`, km: inside the 2 km a jump may be asked from, M7-T28).
 const APPROACH_M: float = 6000.0
@@ -70,6 +78,9 @@ var _capability: ShipCapability = null
 var _capability_ship: Ship = null
 var _lights_before: Variant = null  # the running lights before the ship came back out lit, or null
 var _key_light: CinematicKeyLight = CinematicKeyLight.new()
+## The hold's wingmen carry the key light too while a take watches them (the reviewer: they read as silhouettes otherwise).
+var _wing_lights: Array[CinematicKeyLight] = [CinematicKeyLight.new(_wing_light_settings()),
+		CinematicKeyLight.new(_wing_light_settings())]
 var _fade: ColorRect = null
 var _flash_colour: Color = JumpVortex.DEFAULT_FLASH
 ## The stand-alone points `vortex open` shows.
@@ -80,6 +91,12 @@ var _player_pose: Variant = null  # the player's pose while last in sight, for t
 var _view_gate: Jumpgate = null
 ## The player's wingmen at the jump: through with the player, or clear of the vortex (M8-T17).
 var wing_jump: GateWingJump = GateWingJump.new()
+var _hold_cut: bool = false  # the hold's first take was cut at the ring flash itself
+var _watched: Combatant = null  # the wingman the hold's take watches
+var _watched_pose: Variant = null
+var _glowing: Array[Node3D] = []  # the wingmen whose mains glow for the hold's take
+var _watched_last: Combatant = null  # and the last of them, for a take framing them all
+var _watched_last_pose: Variant = null
 var _view_point: JumpVortex = null
 ## When the run-in expects the ship at the mouth, s after its start (M8-T18; the camera takes are cut from it); -1 before the first.
 var run_in_eta_s: float = -1.0
@@ -291,6 +308,7 @@ func step_player(delta: float) -> FlightCommand:
 	var ship: Ship = main.ship
 	var local: Vector3 = jump_gate.local_of(ship.global_position)
 	var closing_mps: float = (ship.linear_velocity - main.world.rest_velocity()).dot(jump_gate.global_basis * jump_gate.departure_forward)
+	jump.hold_wanted = _hold_wanted()
 	var events: PackedStringArray = jump.step(delta, local, jump_gate.departure_point, main.player_alive, _went_through, _placed,
 			closing_mps)
 	_went_through = false
@@ -301,6 +319,7 @@ func step_player(delta: float) -> FlightCommand:
 	_set_key_light(jump.is_active() and main.camera_rig.is_playing_shot())
 	if jump.is_active():
 		shots.tick(delta, _play)
+		_aim_wing_lights()
 		if (jump.state == GateJump.State.ARRIVING or jump.state == GateJump.State.CLEARING) and ship.visible:
 			var transits: VortexTransits = VortexTransits.of(main.world)
 			if transits == null or transits.emerges_in_s(ship) <= SHOT_LEAD_S or not transits.is_passing(ship):
@@ -335,13 +354,23 @@ func _handle(events: PackedStringArray) -> void:
 			GateJump.EV_RUN_IN:
 				jump_gate.send_departure(main.ship, _on_player_through, GateJump.SWALLOW_S)
 				run_in_eta_s = _predicted_arrival_s()
+				wing_jump.on_run_in(run_in_eta_s)  # followers paced to trail the player through the mouth
 				shots.begin(_shot_context(run_in_eta_s), _play)
 			GateJump.EV_THROUGH:
-				shots.on_through(_play)  # a close shot cuts away to the gate before the ring's flash
+				if not _hold_cut:
+					shots.on_through(_play)  # a close shot cuts away to the gate before the ring's flash
 				_park_away()
+			GateJump.EV_HOLD:
+				if not _hold_cut:
+					shots.begin_hold(_hold_context(), _play)  # outside on the gate while the wingmen go in: no black
+				_hold_cut = false
+			GateJump.EV_HOLD_END:
+				_light_wingmen([])
+				shots.on_through(_play)  # the take on screen holds into the hard cut to black
 			GateJump.EV_ASK_ARRIVAL:
 				wing_jump.take_rest()  # the black hides the last of them going through
 				if jump_gate.vortex.is_active() and jump_gate.vortex.direction == JumpVortex.Direction.DEPARTURE:
+					jump_gate.vortex.sweep_close_now()  # stopped in the black, it still kills what it closes on
 					jump_gate.vortex.stop()  # gone in the black: the arrival opens on the pylons' glow at the cut, no dead time
 				jump_gate.request_arrival(_place_player)
 				shots.begin_arrival(_arrival_context(), _play)
@@ -351,8 +380,22 @@ func _handle(events: PackedStringArray) -> void:
 				_finish()
 
 
+# The jump waits outside on the gate (M8-T17) while following wingmen are on their way through, never cutting a take before
+# its second; the vortex starts to fold behind the last of them, and its closing sweep comes before the arrival opens.
+func _hold_wanted() -> bool:
+	if wing_jump.holding():
+		return true
+	if jump.state != GateJump.State.HOLD:
+		return false
+	shots.freeze()  # nothing more to wait for: the take on screen has its second, then the black
+	return shots.take_young()
+
+
 func _on_player_through(_ship: Node3D) -> void:
 	_went_through = true
+	if wing_jump.holding():
+		_hold_cut = true
+		shots.begin_hold(_hold_context(), _play)  # in the ring flash's own tick: never a frame of its white
 
 
 # Out of sight while away: hidden and parked at rest behind the gate, where nothing flies.
@@ -384,6 +427,7 @@ func _place_player() -> void:
 
 func _finish() -> void:
 	wing_jump.finish()
+	_light_wingmen([])
 	var ship: Ship = main.ship
 	var plumes: ThrusterVisuals = ship.get_node_or_null(^"ThrusterVisuals") as ThrusterVisuals
 	if plumes != null:
@@ -426,6 +470,54 @@ func _set_key_light(on: bool) -> void:
 	_key_light.attach(main.ship, to_sun)
 
 
+# The key light's settings for the hold's wingmen: its `wing` section raises it, so a coasting wingman reads against the bright
+# funnel behind it (data/camera/key_light.json).
+static func _wing_light_settings() -> Dictionary:
+	var settings: Dictionary = CinematicKeyLight.load_settings().duplicate(true)
+	var wing: Variant = settings.get("wing")
+	if wing is Dictionary:
+		for part: String in ["key", "rim"]:
+			if (wing as Dictionary).get(part) is Dictionary and settings.get(part) is Dictionary:
+				(settings[part] as Dictionary).merge((wing as Dictionary)[part], true)
+	return settings
+
+
+# The hold's wingmen are key-lit from the camera's side, a little above, so the side we see reads against the funnel.
+func _aim_wing_lights() -> void:
+	var camera: Camera3D = main.camera_rig.cinematic_camera
+	for light: CinematicKeyLight in _wing_lights:
+		var ship: Node3D = light.subject()
+		if ship != null and camera != null:
+			light.update((camera.global_position - ship.global_position).normalized() + Vector3.UP * 0.3)
+
+
+# The wingmen a hold take watches are lit (none: off): the key light, and their mains glowing while they coast in, so they
+# read against the bright funnel.
+func _light_wingmen(members: Array) -> void:
+	var to_sun: Vector3 = main.space_environment.key_star.global_basis.z if main.space_environment != null else Vector3.ZERO
+	var lit: Array[Node3D] = []
+	for i: int in _wing_lights.size():
+		var member: Combatant = members[i] as Combatant if i < members.size() else null
+		if member == null or not is_instance_valid(member) or not is_instance_valid(member.ship) or lit.has(member.ship):
+			_wing_lights[i].detach()
+			continue
+		lit.append(member.ship)
+		_wing_lights[i].attach(member.ship, to_sun)
+	for ship: Node3D in _glowing:
+		if is_instance_valid(ship) and not lit.has(ship):
+			_set_glow(ship, 0.0)
+	for ship: Node3D in lit:
+		_set_glow(ship, HOLD_ENGINE_GLOW)
+	_glowing = lit
+	_aim_wing_lights()
+
+
+static func _set_glow(ship: Node3D, floor_level: float) -> void:
+	var plumes: ThrusterVisuals = ship.get_node_or_null(^"ThrusterVisuals") as ThrusterVisuals
+	if plumes != null:
+		plumes.main_glow_floor = floor_level
+
+
 # `gate trap [raider|player]` (M8-T17): a ship at rest inside the gate's funnel, where the next opening forms, to test that jump
 # points kill: open the vortex (`gate open arrival`) and the ship is destroyed as it forms.
 func _trap(g: Jumpgate, who: String) -> ConsoleResult:
@@ -443,6 +535,12 @@ func _trap(g: Jumpgate, who: String) -> ConsoleResult:
 
 
 func _play(shot: CinematicShot) -> void:
+	if shot != null and String(shot.id).begins_with("gate_%s_" % GateShotPool.HOLD):
+		_watched = wing_jump.lead()  # each hold take watches the wingman nearest the mouth at its cut
+		_watched_pose = null
+		_watched_last = wing_jump.last()
+		_watched_last_pose = null
+		_light_wingmen([_watched, _watched_last])
 	if shot != null:
 		main.camera_rig.play_shot(shot, _actor_pose, _origin_to_local)
 
@@ -489,11 +587,67 @@ func _predicted_arrival_s() -> float:
 	return GateAutopilot.predicted_arrival_s(to_plane, open_in, speed, ship_capability())
 
 
+# What the hold's takes read (M8-T17): the gate, the follower the camera watches and what a camera must keep clear of.
+func _hold_context() -> Dictionary:
+	var lead: Combatant = wing_jump.lead()
+	return {
+		"gate": jump_gate, "ship": lead.ship if lead != null else main.ship, "gate_actor": _gate_key(),
+		"lead_pose": lead.ship.global_transform if lead != null else jump_gate.vortex.true_frame(),
+		"hold_order": _hold_order,
+		"lead_pose_now": func() -> Transform3D:
+			var now: Combatant = wing_jump.lead()
+			return now.ship.global_transform if now != null else jump_gate.vortex.true_frame(),
+		"space": main.world.get_world_3d().direct_space_state,
+		"planet": main.flight_reference.body_near(jump_gate.global_position) if main.flight_reference != null else null,
+		"seed_extra": roundi(SimClock.now() * 10.0),
+	}
+
+
+# The hold's takes in the order they suit now (M8-T17, the shot reviews): every hold opens on a short insert outside the gate,
+# then frames the wingmen by how far the next one has to go, and follows it in as it enters.
+func _hold_order() -> PackedStringArray:
+	var lead: Combatant = wing_jump.lead()
+	if shots.played_in(GateShotPool.HOLD) == 0 or lead == null:
+		return PackedStringArray(["exterior", "beside_pair"])
+	var mouth: Vector3 = jump_gate.vortex.true_frame().origin
+	var axis: Vector3 = (jump_gate.global_basis * jump_gate.departure_forward).normalized()
+	var distance: float = lead.ship.global_position.distance_to(mouth)
+	var closing: float = (lead.ship.linear_velocity - main.world.rest_velocity()).dot(axis)
+	var eta: float = distance / closing if closing > 1.0 else INF
+	var previous: String = shots.last_id()
+	if (jump_gate.vortex.true_frame().affine_inverse() * lead.ship.global_position).z >= 0.0:
+		return PackedStringArray(["long_lens", "beside_pair"])  # the last is already in the funnel: from outside as it goes
+	if eta <= HOLD_ENTERING_S and previous != "exterior":
+		return PackedStringArray(["follow_in", "beside_pair"])
+	if distance <= HOLD_PAIR_M:
+		return PackedStringArray(["beside_pair", "follow_in"])
+	if distance <= 1000.0:
+		return PackedStringArray(["long_lens", "beside_pair"])
+	if distance <= 2000.0 and closing > 1.0:
+		return PackedStringArray(["beside_wing", "wing_trail", "long_lens"])
+	return PackedStringArray(["wing_trail", "long_lens"])
+
+
 func _gate_key() -> String:
 	return "gate:" + jump_gate.display_name
 
 
 func _actor_pose(actor: String) -> Variant:
+	if actor == GateShotPool.LAST_WINGMAN_ACTOR:
+		if is_instance_valid(_watched_last) and is_instance_valid(_watched_last.ship) and (_watched_last_pose == null \
+				or _watched_last.ship.visible and (jump_gate.vortex.true_frame().affine_inverse() \
+				* _watched_last.ship.global_position).z < HOLD_FOLLOW_DEPTH_M):
+			_watched_last_pose = _watched_last.ship.get_global_transform_interpolated()
+		if _watched_last_pose == null and jump_gate != null and is_instance_valid(jump_gate):
+			_watched_last_pose = jump_gate.vortex.true_frame()
+		return _watched_last_pose
+	if actor == GateShotPool.WINGMAN_ACTOR:
+		if is_instance_valid(_watched) and is_instance_valid(_watched.ship) and (_watched_pose == null or _watched.ship.visible \
+				and (jump_gate.vortex.true_frame().affine_inverse() * _watched.ship.global_position).z < HOLD_FOLLOW_DEPTH_M):
+			_watched_pose = _watched.ship.get_global_transform_interpolated()
+		if _watched_pose == null and jump_gate != null and is_instance_valid(jump_gate):
+			_watched_pose = jump_gate.vortex.true_frame()
+		return _watched_pose  # gone through the ring, the take holds where it last saw it
 	if actor == "player":
 		if main.ship == null:
 			return null

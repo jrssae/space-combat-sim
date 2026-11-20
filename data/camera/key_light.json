@@ -1,5 +1,6 @@
 {
-  "_comment": "The cinematic key light on a shot's subject ship (M8-T29, maintainer 2026-11-19: the show always key-lit its ships, even in deep space): a soft light from the sun's side at distance_m, and an optional rim from behind. Lights only the subject's surroundings (range_m); on only while a cinematic shot plays. Energy is Godot's light_energy; colour linear RGB.",
+  "_comment": "The cinematic key light on a shot's subject ship (M8-T29, maintainer 2026-11-19: the show always key-lit its ships, even in deep space): a soft light from the sun's side at distance_m, and an optional rim from behind. Lights only the subject's surroundings (range_m); on only while a cinematic shot plays. Energy is Godot's light_energy; colour linear RGB. 'wing' (M8-T17) raises key and rim for the player's wingmen in the gate hold's takes, coasting against the bright funnel; their key comes from the camera's side.",
   "key": {"energy": 1.6, "range_m": 120.0, "distance_m": 45.0, "colour": [1.0, 0.96, 0.9]},
-  "rim": {"enabled": true, "energy": 1.1, "range_m": 110.0, "distance_m": 40.0, "lift_m": 12.0, "colour": [0.75, 0.85, 1.0]}
+  "rim": {"enabled": true, "energy": 1.1, "range_m": 110.0, "distance_m": 40.0, "lift_m": 12.0, "colour": [0.75, 0.85, 1.0]},
+  "wing": {"key": {"energy": 6.0, "distance_m": 30.0}, "rim": {"energy": 4.0, "distance_m": 30.0}}
 }

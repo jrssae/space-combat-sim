@@ -4,5 +4,10 @@
   "ring_flash_s": 0.3,
   "black_s": 0.75,
   "burst_out_s": 1.0,
-  "engine_glow_floor": 0.35
+  "engine_glow_floor": 0.35,
+  "_follow": "Wingmen under FORM ON ME or FORM UP, HOLD FIRE follow the player through (M8-T17, maintainer 2026-11-20): those within follow_range_m of the mouth's centre as the run-in starts count; the gate paces them to cross the mouth follow_trail_s after the player, follow_spacing_s apart; the departure vortex is held open for them with the camera outside on the gate (cut to at the ring flash's peak, no black) until the last is through and it starts to fold; never longer than follow_hold_max_s. Wingmen farther off veer off and rejoin after.",
+  "follow_range_m": 3000.0,
+  "follow_hold_max_s": 20.0,
+  "follow_trail_s": 3.0,
+  "follow_spacing_s": 1.5
 }

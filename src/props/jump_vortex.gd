@@ -378,6 +378,19 @@ func spare(body: Node) -> void:
 		spared_version += 1
 
 
+## No longer spares `body` (a wingman that was to follow through and now keeps clear instead).
+func unspare(body: Node) -> void:
+	if body != null and _spared.erase(body.get_instance_id()):
+		spared_version += 1
+
+
+## The closing sweep now, if this opening formed and has not had it yet (an opening stopped early still kills on its close).
+func sweep_close_now() -> void:
+	if _active and _formed and not _close_swept:
+		_close_swept = true
+		close_kills += VortexHazard.sweep(self)
+
+
 ## The body ids this opening leaves alone (its opener among them), for the AI's keep-out.
 func spared_ids() -> PackedInt64Array:
 	var out := PackedInt64Array(_spared.keys())

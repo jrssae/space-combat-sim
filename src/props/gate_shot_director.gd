@@ -91,6 +91,28 @@ func begin_arrival(ctx: Dictionary, play: Callable) -> String:
 	return opening
 
 
+## The departure vortex is held open for the player's following wingmen (M8-T17): takes outside on the gate, watching the one
+## nearest the mouth, until `on_through` freezes the last into the cut to black. `ctx`: `gate`, `ship` (the watched wingman),
+## `lead_pose` (its transform now), `gate_actor`, `space`, `planet`.
+func begin_hold(ctx: Dictionary, play: Callable) -> String:
+	_ctx = ctx
+	_clear.clear()
+	_holding = false
+	_stage_start(GateShotPool.HOLD, INF)
+	_cut(play)
+	return String(played[played.size() - 1]["id"]) if not played.is_empty() else ""
+
+
+## Whether the take on screen has not yet had its least hold (a second, a feature its 2.5 s).
+func take_young() -> bool:
+	return _stage != &"" and clock_s - _take_at < _least_hold_s()
+
+
+## No more cuts: the take on screen plays on into what comes next (the hold is ending, the ring's flash).
+func freeze() -> void:
+	_holding = true
+
+
 ## The gate has placed the ship in the funnel: takes of it coming out.
 func on_placed(play: Callable) -> void:
 	if _stage != GateShotPool.ARRIVAL_OPEN or clock_s - _take_at < _least_hold_s():
@@ -185,6 +207,21 @@ func is_clear(slot: StringName, id: String, ctx: Dictionary) -> bool:
 
 ## Whether a way-back take keeps clear: the vortex opening (the ship not yet out) or the ship's way out along its exit path,
 ## seen once it is out in front of the mouth (`ctx` as in `begin_arrival`).
+## Whether a hold take's camera keeps clear and sees the watched wingman, held where it is now.
+func hold_clear(slot: StringName, id: String, ctx: Dictionary) -> bool:
+	var sample := PackedFloat32Array()
+	var poses: Array[Transform3D] = []
+	var watch := PackedByteArray()
+	var t: float = 0.0
+	var pose: Transform3D = (ctx["lead_pose_now"] as Callable).call() if ctx.get("lead_pose_now") is Callable else ctx["lead_pose"]
+	while t <= pool.max_s(slot, id) + 1e-3:
+		sample.append(t)
+		poses.append(pose)
+		watch.append(1)
+		t += SAMPLE_S
+	return _take_clear(slot, id, ctx, sample, poses, watch)
+
+
 func arrival_clear(slot: StringName, id: String, ctx: Dictionary) -> bool:
 	var gate: Jumpgate = ctx["gate"]
 	var placed: Transform3D = ctx["arrival_pose"]
@@ -248,6 +285,8 @@ func _cut(play: Callable) -> void:
 	var opening: bool = used.is_empty() and (slot == GateShotPool.APPROACH or slot == GateShotPool.ARRIVAL_OPEN)
 	var avoid: String = (last_opening if slot == GateShotPool.APPROACH else last_arrival_opening) if opening else ""
 	var id: String = _pinned_for(slot, used)
+	if id.is_empty() and slot == GateShotPool.HOLD and _ctx.get("hold_order") is Callable:
+		id = _hold_pick(previous)
 	if id.is_empty():
 		id = pool.next(_rng, slot, used, previous, avoid, _usable, kind)
 	if id.is_empty():
@@ -268,6 +307,28 @@ func _cut(play: Callable) -> void:
 	play.call(made["shot"])
 
 
+# The hold's take: the first of the host's order that is clear and not the one before (M8-T17).
+func _hold_pick(previous: String) -> String:
+	var order: PackedStringArray = (_ctx["hold_order"] as Callable).call()
+	for id: String in order:
+		if id != previous and pool.ids(GateShotPool.HOLD).has(id) and _usable(GateShotPool.HOLD, id):
+			return id
+	return order[0] if not order.is_empty() and order[0] != previous else ""
+
+
+## The take on screen's id ("" before any).
+func last_id() -> String:
+	return String(played[played.size() - 1]["id"]) if not played.is_empty() else ""
+
+
+## How many takes of `slot` this jump has played.
+func played_in(slot: StringName) -> int:
+	var n: int = 0
+	for take: Dictionary in played:
+		n += int(take["slot"] == slot)
+	return n
+
+
 # A pinned opening take for this stage, if one is pinned and the stage has not opened yet.
 func _pinned_for(slot: StringName, used: PackedStringArray) -> String:
 	if not used.is_empty():
@@ -283,6 +344,8 @@ func _pinned_for(slot: StringName, used: PackedStringArray) -> String:
 
 func _usable(slot: StringName, id: String) -> bool:
 	var key: String = "%s/%s" % [slot, id]
+	if slot == GateShotPool.HOLD:
+		return hold_clear(slot, id, _ctx)  # the wingman moves on: judged afresh at each cut
 	if not _clear.has(key):
 		var arriving: bool = slot == GateShotPool.ARRIVAL_OPEN or slot == GateShotPool.ARRIVAL_OUT
 		_clear[key] = arrival_clear(slot, id, _ctx) if arriving else is_clear(slot, id, _ctx)

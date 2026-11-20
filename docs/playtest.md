@@ -1561,4 +1561,9 @@ too quiet or right, against the engines (the bed the rest sits on).
       and are still in its funnel when you jump out die as the orange vortex forms.
 - [ ] **(H) Civilians jump briskly:** watch a civilian leave through the gate: in front of it the gate lines it up on the axis and
       runs it in at the run-in's speed (as fast as its own engines allow), and it is swallowed quickly past the mouth.
+- [ ] **(H) Wingmen follow you through the gate:** with your wing beside you, `wing order form` (or `form_hold`), `gate approach 1.9`,
+      hold X on the gate. After your ring's flash the camera stays outside on the gate (no black) while your wingmen fly in
+      after you, cutting between a few angles where you can see them go in; the orange vortex folds behind the last of them,
+      then the usual moment of black and you all come back out of the blue one side by side. Under `wing order engage` they
+      break off, stay clear of the vortex and rejoin you after. A wingman more than 3 km from the mouth is not waited for.
 

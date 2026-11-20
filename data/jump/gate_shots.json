@@ -1,5 +1,5 @@
 {
- "_comment": "The gate jump's camera takes (M8-T29, maintainer 2026-11-19, after show-likeness reviews; every take under 3 s). The jump is cut into short takes from these pools, picked at random per jump, never the same take twice in a row and never the last jump's opening take, and only takes whose camera stays clear of the gate, the station and the planets and can see the ship: the run-in's 'approach' takes until cut_lead_s before the ship is predicted at the mouth (M8-T18), then 'mouth' takes to the ring (a take tagged 'when': 'entry' goes on the take that holds the moment of entry, one tagged 'before' only before it; on the way back a take tagged 'after' waits 1.5 s, until the blue vortex opens); at the ring's 0.3 s flash a hard cut to the arrival side: 'arrival_open' takes from the pylons' glow, which starts at the cut, as the blue vortex opens, then 'arrival_out' takes from the moment the ship bursts out of the ring (about 1 s through the funnel) until control returns (3 s or 500 m in front of the mouth). Each take's keys run 0 to 2.9 s and it is cut at most 2.6 s in (under 3 s with the ring's 0.3 s flash); a take marked 'feature': true (an interesting angle, maintainer 2026-11-19) runs 0 to 4.9 s and is cut at most 4.6 s in. Actors: 'player' (offsets in its frame: +z behind it, +y above it) and 'gate' (its frame: -z in front of the mouth, the ship flies in along +z, the funnel runs on to about +1200). 'roll' turns the picture, degrees.",
+ "_comment": "The gate jump's camera takes (M8-T29, maintainer 2026-11-19, after show-likeness reviews; every take under 3 s). The jump is cut into short takes from these pools, picked at random per jump, never the same take twice in a row and never the last jump's opening take, and only takes whose camera stays clear of the gate, the station and the planets and can see the ship: the run-in's 'approach' takes until cut_lead_s before the ship is predicted at the mouth (M8-T18), then 'mouth' takes to the ring (a take tagged 'when': 'entry' goes on the take that holds the moment of entry, one tagged 'before' only before it; on the way back a take tagged 'after' waits 1.5 s, until the blue vortex opens); at the ring's 0.3 s flash a hard cut to the arrival side: 'arrival_open' takes from the pylons' glow, which starts at the cut, as the blue vortex opens, then 'arrival_out' takes from the moment the ship bursts out of the ring (about 1 s through the funnel) until control returns (3 s or 500 m in front of the mouth). Each take's keys run 0 to 2.9 s and it is cut at most 2.6 s in (under 3 s with the ring's 0.3 s flash); a take marked 'feature': true (an interesting angle, maintainer 2026-11-19) runs 0 to 4.9 s and is cut at most 4.6 s in. Actors: 'player' (offsets in its frame: +z behind it, +y above it) and 'gate' (its frame: -z in front of the mouth, the ship flies in along +z, the funnel runs on to about +1200). 'roll' turns the picture, degrees. M8-T17 (maintainer 2026-11-20, shot review rounds 2 to 4): 'hold' takes run while the departure vortex is held open for the player's following wingmen, from the ring flash's peak until the last is through, then the hard cut to black as before. Actor 'wingman' is the follower nearest the mouth at the take's cut, 'last_wingman' the last of them still on its way (offsets in their frame, +z behind). The host orders them by the moment: every hold opens on 'exterior', an insert of at most 'max_s' (outside the gate: an arm, the rim, the stars), then by the lead's distance: 'beside_pair' (within 400 m: beside and behind the last, aimed halfway to the core, the last in the right third, both wingmen against the core), 'long_lens' (400 m to 1 km), 'beside_wing' (1 to 2 km), 'wing_trail' (farther, closing), and 'follow_in' (40 m behind the next to go in) as one enters the mouth. A take's 'max_s' cuts it sooner than its kind's limit.",
  "cut_lead_s": 3.5,
  "approach": [
   {
@@ -631,6 +631,272 @@
      },
      "look_at": {
       "actor": "player"
+     },
+     "fov": 18
+    }
+   ]
+  }
+ ],
+ "hold": [
+  {
+   "id": "exterior",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       -700,
+       300,
+       -800
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       132,
+       122,
+       -349
+      ]
+     },
+     "fov": 30
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       -640,
+       270,
+       -740
+      ]
+     },
+     "look_at": {
+      "actor": "gate",
+      "offset": [
+       102,
+       122,
+       -379
+      ]
+     },
+     "fov": 27
+    }
+   ],
+   "max_s": 1.4
+  },
+  {
+   "id": "follow_in",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "wingman",
+      "offset": [
+       -8,
+       3,
+       40
+      ]
+     },
+     "look_at": {
+      "actor": "wingman",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 58
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "wingman",
+      "offset": [
+       -8,
+       3,
+       40
+      ]
+     },
+     "look_at": {
+      "actor": "wingman",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 58
+    }
+   ]
+  },
+  {
+   "id": "beside_wing",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "wingman",
+      "offset": [
+       -18,
+       -5,
+       30
+      ]
+     },
+     "look_at": {
+      "actor": "wingman",
+      "offset": [
+       0,
+       0,
+       -70
+      ]
+     },
+     "fov": 50,
+     "roll": -10
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "wingman",
+      "offset": [
+       -16,
+       -5,
+       26
+      ]
+     },
+     "look_at": {
+      "actor": "wingman",
+      "offset": [
+       0,
+       0,
+       -70
+      ]
+     },
+     "fov": 50,
+     "roll": -10
+    }
+   ]
+  },
+  {
+   "id": "wing_trail",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "wingman",
+      "offset": [
+       12,
+       8,
+       45
+      ]
+     },
+     "look_at": {
+      "actor": "wingman",
+      "offset": [
+       0,
+       0,
+       -150
+      ]
+     },
+     "fov": 50
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "wingman",
+      "offset": [
+       11,
+       7,
+       42
+      ]
+     },
+     "look_at": {
+      "actor": "wingman",
+      "offset": [
+       0,
+       0,
+       -150
+      ]
+     },
+     "fov": 48
+    }
+   ]
+  },
+  {
+   "id": "beside_pair",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "last_wingman",
+      "offset": [
+       -120,
+       15,
+       60
+      ]
+     },
+     "look_at": {
+      "actor": "last_wingman",
+      "offset": [
+       0,
+       0,
+       -80
+      ]
+     },
+     "fov": 45
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "last_wingman",
+      "offset": [
+       -115,
+       14,
+       55
+      ]
+     },
+     "look_at": {
+      "actor": "last_wingman",
+      "offset": [
+       0,
+       0,
+       -80
+      ]
+     },
+     "fov": 43
+    }
+   ],
+   "max_s": 1.6
+  },
+  {
+   "id": "long_lens",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       650,
+       450,
+       -1300
+      ]
+     },
+     "look_at": {
+      "actor": "wingman"
+     },
+     "fov": 18
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "gate",
+      "offset": [
+       650,
+       450,
+       -1300
+      ]
+     },
+     "look_at": {
+      "actor": "wingman"
      },
      "fov": 18
     }

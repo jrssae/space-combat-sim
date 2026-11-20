@@ -93,6 +93,33 @@ func test_the_jump_goes_out_and_comes_back() -> void:
 	assert_eq(jump.start(), PackedStringArray([GateJump.EV_START]), "another jump may follow")
 
 
+# Following wingmen still on their way through (M8-T17): at the ring flash's peak the jump cuts outside on the gate and holds
+# there with no black for as long as the host wants it, never past `HOLD_MAX_S`, then the black and the arrival as usual.
+func test_the_jump_holds_for_following_wingmen_without_black_then_goes_on() -> void:
+	var jump := GateJump.new()
+	jump.start()
+	_run(jump, DT, DEPARTURE)
+	jump.hold_wanted = true
+	assert_eq(_run(jump, DT, Vector3(0.0, 0.0, 5.0), true), PackedStringArray([GateJump.EV_THROUGH, GateJump.EV_HOLD]),
+			"straight outside at the ring's flash, never held on its white")
+	assert_eq(jump.state, GateJump.State.HOLD)
+	assert_eq(_run(jump, 3.0, Vector3.ZERO), PackedStringArray(), "held while wingmen are on their way")
+	assert_eq(jump.black_level, 0.0, "no black while held")
+	assert_true(jump.ship_hidden())
+	jump.hold_wanted = false
+	assert_eq(_run(jump, DT, Vector3.ZERO), PackedStringArray([GateJump.EV_HOLD_END]))
+	assert_eq(jump.state, GateJump.State.AWAY, "then the black, as long as ever")
+	assert_eq(_run(jump, GateJump.AWAY_S + 2.0 * DT, Vector3.ZERO), PackedStringArray([GateJump.EV_ASK_ARRIVAL]))
+	var capped := GateJump.new()
+	capped.start()
+	_run(capped, DT, DEPARTURE)
+	capped.hold_wanted = true
+	_run(capped, DT, Vector3(0.0, 0.0, 5.0), true)
+	var events: PackedStringArray = _run(capped, GateJump.HOLD_MAX_S + 3.0 * DT, Vector3.ZERO)
+	assert_eq(events, PackedStringArray([GateJump.EV_HOLD_END]), "never held past its cap")
+	assert_almost_eq(GateJump.FOLLOW_RANGE_M, 3000.0, 1e-3, "data/jump/player_jump.json")
+
+
 # A ship just out of the gate crosses the departure point flying away: the run-in (and with it the vortex and the shot) waits
 # until it has turned round (M7-T28).
 func test_the_run_in_waits_for_a_ship_flying_away_from_the_gate() -> void:

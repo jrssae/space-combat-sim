@@ -42,6 +42,9 @@ const FALLBACK_REACH_M: float = 2200.0
 ## A departing ship this close to the mouth, in front, opens the vortex: from the departure point (1 500 m) a ship at the
 ## run-in speed reaches the mouth after the 3.5 s the vortex takes to open.
 const DEPARTURE_OPEN_M: float = 1600.0
+## A run-in paced to a time (`send_departure`'s `at_mouth_s`) flies no slower and no faster than this.
+const PACED_MIN_MPS: float = 40.0
+const PACED_MAX_MPS: float = 400.0
 ## While a departing ship is on its way in, the vortex is kept open at least this much longer each tick.
 const DEPARTURE_KEEP_S: float = 1.5
 ## Crossing the plane this far out (a share of the mouth's ellipse) still counts as going through.
@@ -197,9 +200,11 @@ func request_arrival(place: Callable) -> void:
 
 ## Watches `ship` flying in: the departure vortex opens as it nears and `on_through(ship)` runs once it crosses the vortex.
 ## `swallow_s` > 0: from the mouth to the ring in that many seconds, whatever its speed (the player's jump, M8-T29).
-func send_departure(ship: Node3D, on_through: Callable, swallow_s: float = 0.0) -> void:
+## `at_mouth_s` >= 0 (SimClock time): the gate paces its run-in to cross the mouth then (a wingman trailing the player, M8-T17).
+func send_departure(ship: Node3D, on_through: Callable, swallow_s: float = 0.0, at_mouth_s: float = -1.0) -> void:
 	cancel_departure(ship)
-	_departures.append({"body": ship, "on_through": on_through, "z": to_local(ship.global_position).z, "swallow_s": swallow_s})
+	_departures.append({"body": ship, "on_through": on_through, "z": to_local(ship.global_position).z, "swallow_s": swallow_s,
+			"at_mouth_s": at_mouth_s})
 
 
 ## Stops watching `ship` (it was destroyed, or its mission changed its mind); one already in the funnel is let go there, whole.
@@ -333,6 +338,9 @@ func _fly_in(entry: Dictionary, ship: Node3D, local: Vector3) -> void:
 	var velocity: Vector3 = body.linear_velocity - (transits.rest_velocity() if transits != null else Vector3.ZERO)
 	var axis: Vector3 = (global_basis * departure_forward).normalized()
 	var speed: float = minf(AI_RUN_IN_MPS, sqrt(velocity.length_squared() + capability.a_main * local.length()))
+	var at_mouth: float = float(entry.get("at_mouth_s", -1.0))
+	if at_mouth >= 0.0:  # paced to cross the mouth on time
+		speed = clampf(local.length() / maxf(at_mouth - SimClock.now(), 0.25), PACED_MIN_MPS, PACED_MAX_MPS)
 	var cmd: FlightCommand
 	var lined: bool = bool(entry.get("lined_up", false)) \
 			or GateAutopilot.lined_up(local, global_basis.inverse() * velocity, Vector3(0.0, 0.0, local.z + 1.0), departure_forward)
