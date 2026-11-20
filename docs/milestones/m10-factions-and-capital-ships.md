@@ -320,7 +320,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | not started |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | not started |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
-| T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | in progress |
+| T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
 | T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | not started |
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | not started |
 | T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | not started |
@@ -459,6 +459,12 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Rules:** every type id kept as it is (recordings, fixtures and saved careers hold them); parity recordings green.
 - **Done when:** every existing id gives the same spec, faction and role as before (a recorded comparison); a test hull
   registers with one entry and one `.tres`; the sync test passes.
+- **Done (2026-11-20):** `data/ships/catalogue.json` (13 entries: the 12 pooled types and the strike carrier, `pooled: false`)
+  read through `ShipCatalogData`; the civilian list, the docking tunnel and cargo-bay lists, the look sheets' pooled and hull
+  lists, the preview's class names and the civilian callsigns now come from it. `docs/catalogue/ships.md` is written by
+  `scripts/gen_ship_catalog.sh`; `test_ship_catalog_recorded.gd` checks the old answers (captured from c6e161c1).
+  Left out: `ShipPool.DEFAULT_TYPE`/`ALLY_TYPE`, `CarrierDock.FIGHTER_ASSET`, `cargo_pod_scene.gd`'s freighter and the
+  `CapitalStandin` spec path name one hull each, not lists; the default AI profile is recorded but nothing picks by it yet.
 
 ### M10-T05 Capital asset framework
 
