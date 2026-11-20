@@ -8,7 +8,7 @@ with `m8` until M10 starts. T19 (the raider strike carrier) is done; every other
 M7 and M8 as built before relying on them.
 
 Planned on 2026-11-13 as M12 and renumbered on 2026-11-18 (older commit subjects say M12-Txx); re-scoped on 2026-11-19
-(Q32) and 2026-11-20 (Q34 to Q46). Decisions are labelled D12.x until M10 starts; then they are renumbered and the
+(Q32) and 2026-11-20 (Q34 to Q47). Decisions are labelled D12.x until M10 starts; then they are renumbered and the
 design goes into a new section of `docs/architecture.md`.
 
 Read first, by grep: `docs/architecture.md` §14.7, §14.8 (capital ships, the asset framework), §15.4, §15.7 (hull,
@@ -72,7 +72,8 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q43 | Mining transport doors | T56's doors are moving parts, open and closed, from its two STLs (as the Vorlon petals); the 90 % compare runs on both states |
 | Q44 | Shadow transits | The battlecrab, and the Shadows' other ships unless T04 says otherwise, use no jump points or gates: they shimmer in and out of hyperspace (`Transitioning to hyperspace.png` in `references/show/m10/shadow_battlecrab/`) |
 | Q45 | Minbari and ISA skins | A hexagonal grid, not the panel mosaic other hulls use: T28, T33, T34, T39's Nial, T58's Flyer |
-| Q46 | Vorlon and Shadow exteriors | Organic, with no seams or panel lines; Vorlon ships glow faintly with bioluminescence. The Drakh stay as planned |
+| Q46 | Vorlon and Shadow exteriors | Organic, with no seams or panel lines; Vorlon ships glow faintly with bioluminescence |
+| Q47 | Minbari, ISA and Drakh exteriors | Semi-organic: organic shapes with visible seams and panels (the hexagonal grid on Minbari and ISA hulls, Q45), not seamless |
 
 ## The hulls
 
@@ -187,8 +188,8 @@ Out:
   Vorlons, the Shadows' black hulls with their faint purple sheen and moving surface patterns; one shader include, its
   parameters per style. The Vorlons' faint bioluminescent glow is part of their sheen layer; Shadow
   and Vorlon organic parts have no seams or panel lines (Q46).
-- The Shadows, Vorlons and Drakh are organic; the White Star and the Victory-class mix Minbari and Vorlon lines
-  (hard-surface parts with organic fairings).
+- Fully organic and seamless: the Shadows and Vorlons. Semi-organic, organic shapes with visible seams and panels (Q47):
+  the Minbari, the ISA and the Drakh; T06's shapes carry the panel skin there (Minbari and ISA: the hexagonal grid).
 
 ### D12.3 Factions as data
 
@@ -339,7 +340,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T25 | F | Narn G'Quan-class heavy cruiser | T19, T62 | Fable | not started |
 | T26 | F | Centauri Vorchan-class warship | T19, T62 | Fable | not started |
 | T27 | F | Centauri Primus-class battlecruiser (Q41) | T19, T62 | Fable | not started |
-| T28 | F | Minbari Sharlin-class warcruiser | T19, T62 | Fable | not started |
+| T28 | F | Minbari Sharlin-class warcruiser | T19, T06, T62 | Fable | not started |
 | T29 | F | Drazi Sunhawk | T19, T62 | Fable | not started |
 | T30 | F | Drazi Stormfalcon | T19, T62 | Fable | not started |
 | T31 | F | Brakiri Avioki cruiser | T19, T62 | Fable | not started |
@@ -350,7 +351,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T36 | F | Vorlon heavy cruiser | T06, T19, T62 | Fable | not started |
 | T37 | F | Drakh carrier | T06, T19, T62 | Fable | not started |
 | T38 | F | Narn Frazi and Centauri Sentri fighters | T61, T03, T62 | Fable | not started |
-| T39 | F | Minbari Nial and Drazi Sky Serpent fighters | T38 | Fable | not started |
+| T39 | F | Minbari Nial and Drazi Sky Serpent fighters | T38, T06 | Fable | not started |
 | T40 | F | Brakiri Falkosi and Drakh fighters | T38, T06 | Fable | not started |
 | T41 | F | Shadow fighter and Shadow scout | T38, T06 | Fable | not started |
 | T42 | F | Vorlon light fighter | T38, T06 | Fable | not started |
@@ -362,7 +363,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T55 | F | EA construction tender | T19, T62 | Fable | not started |
 | T56 | F | EA mining transport (Q43) | T19, T62 | Fable | not started |
 | T57 | F | EA shuttle and EA atmospheric shuttle | T01, T62 | Fable | not started |
-| T58 | F | Centauri shuttle and Minbari Flyer | T57 | Fable | not started |
+| T58 | F | Centauri shuttle and Minbari Flyer | T57, T06 | Fable | not started |
 | T59 | F | Drazi Firehawk | T19, T62 | Fable | not started |
 | T60 | F | Vorlon dreadnought | T06, T19, T36 | Fable | not started |
 | T43 | G | The Shadow, Vorlon and Minbari mechanics in the game, as T04 settled them | T04, T35, T36, T28 | Opus | not started |
