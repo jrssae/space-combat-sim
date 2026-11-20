@@ -8,7 +8,7 @@ with `m8` until M10 starts. T19 (the raider strike carrier) is done; every other
 M7 and M8 as built before relying on them.
 
 Planned on 2026-11-13 as M12 and renumbered on 2026-11-18 (older commit subjects say M12-Txx); re-scoped on 2026-11-19
-(Q32) and 2026-11-20 (Q34 to Q40). Decisions are labelled D12.x until M10 starts; then they are renumbered and the
+(Q32) and 2026-11-20 (Q34 to Q46). Decisions are labelled D12.x until M10 starts; then they are renumbered and the
 design goes into a new section of `docs/architecture.md`.
 
 Read first, by grep: `docs/architecture.md` §14.7, §14.8 (capital ships, the asset framework), §15.4, §15.7 (hull,
@@ -42,7 +42,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q7 | Raider control ship | Dropped (no reference); it returns only if references are added |
 | Q8 | Earthforce renegades | A `renegades` faction on the same EA hulls and Starfuries with their own marking, hostile to Earth Alliance, set per scenario |
 | Q9 | Capital weapons | Most capital ships carry beams; some, mostly Earth Alliance, also carry interceptors. T03 gives every hull its own on that rule |
-| Q10 | Fidelity to the reference | The 90 % rule (`CLAUDE.md`, "STL fidelity"; `tools/refview/compare.py`) for every hull with an STL: three silhouettes and the dimensions, plus per-part sections for large hulls (Q36). The Vorlon heavy cruiser's petals come from its two petal STLs (2026-11-19) |
+| Q10 | Fidelity to the reference | The 90 % rule (`CLAUDE.md`, "STL fidelity"; `tools/refview/compare.py`) for every hull with an STL: three silhouettes and the dimensions, plus per-part sections for large hulls (Q36). The Vorlon heavy cruiser's petals: its two petal STLs (2026-11-19) |
 | Q11 | Colours and textures | From show images of each ship (Q35), or of its faction's other ships where it has none; one style per faction; low and high texture sets for every hull and fighter (M5-T40's setting) |
 | Q12 | Faction relations | Every faction hostile to the raiders; renegades hostile to Earth Alliance; Shadows and Drakh hostile to everyone but each other; Vorlons hostile to Shadows and Drakh; the rest neutral. Scenarios override it |
 | Q13 | Minbari stealth | Yes, but milder than the Shadows' jamming (for example only a shorter lock range); T04 sets both rules |
@@ -54,19 +54,25 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q19 | Disabled hulks | Kept for the mission as drifting rows (D12.7); a cap on how many stay, the oldest scuttled past it; boarding and salvage are later (M32) |
 | Q20 | Mines | Each faction lays its own minefields, placed by scenario and mission data around capitals and chokepoints; the hulls T03 names lay mines in battle too (for example the Narn). A mine ignores its own faction and its friends, triggers by proximity, blasts with D12.6's falloff and shows on the radar only at short range |
 | Q21 | The benchmark | The stand-ins go: the bench draws real classes from several factions (cruiser, destroyer and carrier sizes) with their real weapons; M4's bars are measured again |
-| Q22 | Who opens jump points | Only the larger classes (destroyers, carriers, dreadnoughts); smaller cruisers use a gate or another ship's point; fighters never. A point is sized for its opener; hulls wider than the gate's mouth (2 400 by 1 510 m) use their own; the ancients' arrivals follow T04. T01 and T03 pick the list |
+| Q22 | Who opens jump points | Only the larger classes (destroyers, carriers, dreadnoughts); smaller cruisers use a gate or another ship's point; fighters never. A point is sized for its opener; hulls wider than the gate's mouth (2 400 by 1 510 m) use their own; the ancients' arrivals follow T04 (the Shadows: Q44). T01 and T03 pick the list |
 | Q23 | Where the fleets are seen | A fleet sandbox scenario, capitals in free-flight encounters (raider carriers launching Delta-Vs, patrols), minefields, all from data; no story missions (M32) |
 | Q24 | Sound | Generated: each beam kind, interceptor fire, a capital's engines close by, the break-up, a reactor's blast, and the ancients' voices (the Shadows' scream, the Vorlon ships' tones) |
-| Q25 to Q30 | The raider strike carrier, built first (T19) | No weapons; opens its own jump points; has hull points (docked fighters die with it; sections come with T08 to T11). Its fighters arrive docked or out of its point beside it, by data per raid, and latch back onto free cradles when the raid is over, when badly damaged or before a jump; it waits with a time limit, then leaves them. It hangs back, turns away from attackers and jumps out when its hull is low or the raid ends. Length: none is published; about 110 m after the painted print (2026-11-15), pinned at **112 m** (the clamp pins' tips are 15.24 % of the length apart, 17 m for a Delta-V); surface option A, show green |
+| Q25 to Q30 | The raider strike carrier, built first (T19) | No weapons; opens its own jump points; has hull points (docked fighters die with it; sections come with T08 to T11). Its fighters arrive docked or out of its point beside it, by data per raid, and latch back onto free cradles when the raid is over, when badly damaged or before a jump; it waits with a time limit, then leaves them. It hangs back, turns away from attackers and jumps out when its hull is low or the raid ends. Length: none is published; pinned at **112 m** (the clamp pins' tips are 15.24 % of the length apart, 17 m for a Delta-V); surface option A, show green |
 | Q32 | Which ship models (2026-11-19) | Every remaining ship model (T50 to T60). Big hulls use the capital framework (T05), small civilians M5's civilian pipeline. M11 keeps the Thunderbolt's `ShipSpec`, cockpit and unlock |
 | Q33 | The ship catalogue as data (2026-11-19) | A new task, T61, before T05 and the hull tasks, so registering a hull is one entry and one `.tres` (M8.5's Q4) |
 | Q34 | When M10 starts (2026-11-20) | Right after M8 is accepted, before M8.5 and M9, which come after M10 |
-| Q35 | Show images (2026-11-20) | The controller has run an image search for show images of each hull; the maintainer verifies them. Verified ones live in `references/show/m10/<hull id>/` (gitignored) with a `SOURCES.md`; T01 uses them. Where none were found, the maintainer supplies references |
+| Q35 | Show images (2026-11-20) | Verified by the maintainer on 2026-11-20, who supplied the missing ones: `references/show/m10/<hull id>/` (gitignored; the Primus is `centauri_primus`) with `SOURCES.md` and `index.html`; T01 uses them |
 | Q36 | Section measure for open STLs (2026-11-20) | A new small task, T62, before any hull work: the section measure cannot be trusted on STLs that are not watertight |
 | Q37 | What M8.5 left for M10 (2026-11-20) | The catalogue pages `ai-profiles.md` and `factions.md`, `adding-a-hull.md`, the native splits and splitting grown GDScript files are done in M8.5, after M10, not in M10 |
 | Q38 | Budgets (2026-11-20) | T05 proposes a triangle and texture (VRAM) budget per class (fighter, small craft, cruiser, capital, dreadnought) from a GPU test with several hulls in view; the maintainer approves it; every hull task stays within it |
 | Q39 | Parallel agents (2026-11-20) | At most two at a time unless the maintainer says otherwise |
 | Q40 | A generic STL-to-model builder (2026-11-20) | Studied and declined: it passes silhouettes only at 2 to 6 times the triangle budget and fails sections on multi-part and organic hulls. Hulls stay hand-written generators |
+| Q41 | Centauri Primus | T27 is the Primus-class battlecruiser (the earlier reference was removed): one generator, the mass driver an optional fitted part (two variants, two STLs). T01 checks its 1 586 m against the gate's mouth and what the second STL adds |
+| Q42 | Khnar super freighter | Dropped (T54): the maintainer removed its reference |
+| Q43 | Mining transport doors | T56's doors are moving parts, open and closed, from its two STLs (as the Vorlon petals); the 90 % compare runs on both states |
+| Q44 | Shadow transits | The battlecrab, and the Shadows' other ships unless T04 says otherwise, use no jump points or gates: they shimmer in and out of hyperspace (`Transitioning to hyperspace.png` in `references/show/m10/shadow_battlecrab/`) |
+| Q45 | Minbari and ISA skins | A hexagonal grid, not the panel mosaic other hulls use: T28, T33, T34, T39's Nial, T58's Flyer |
+| Q46 | Vorlon and Shadow exteriors | Organic, with no seams or panel lines; Vorlon ships glow faintly with bioluminescence. The Drakh stay as planned |
 
 ## The hulls
 
@@ -85,7 +91,7 @@ identification, its length (Q4) and the fighters it launches.
 | T24 | Warlock-class destroyer | EA, renegades | advanced destroyer | `EA-Warlock_destroyer.stl` | Starfury (Thunderbolt after M11) |
 | T25 | G'Quan-class heavy cruiser | Narn | heavy cruiser and carrier | `Narn Gquon battlecruiser.stl` | Frazi |
 | T26 | Vorchan-class warship | Centauri | cruiser | `Centauri Vorchan Cruiser.stl` | none |
-| T27 | Centauri attack cruiser (class identified in T01) | Centauri | cruiser and carrier | `Centauri_octurion_attack_cruiser.stl` (the file name says Octurion; T01 confirms the class) | Sentri |
+| T27 | Primus-class battlecruiser | Centauri | battlecruiser and carrier | `Centauri_Primus_1586m.stl`, `Centauri_Primus_w_mass_driver.stl` (Q41) | Sentri |
 | T28 | Sharlin-class warcruiser | Minbari | warcruiser | `Minbari_Sharlin_cruiser.stl` | Nial |
 | T29 | Sunhawk | Drazi | cruiser | `Drazi_Sunhawk_crusier_350m.stl` | none |
 | T30 | Stormfalcon | Drazi | heavy cruiser and carrier | `Drazi_Stormfalcon_cruiser_820m.stl` | Sky Serpent |
@@ -119,9 +125,8 @@ T01 gives each its length and confirms its pipeline (the table's choice holds un
 | T51 | Panama class | EA | civilian cargo vessel (Q5) | `EA Panama class.STL` | capital framework |
 | T52 | Explorer class | EA | exploration vessel | `EA Explorer class.stl` | capital framework |
 | T53 | Asimov liner | EA | passenger liner (M24's evacuation liner) | `EA Asimov liner.stl` | capital framework |
-| T54 | Khnar super freighter | Narn | super freighter | `Narn_Khnar_super_frieghter.STL` | capital framework |
 | T55 | Construction tender | EA | construction ship | `EA_construction_tender.stl` | capital framework |
-| T56 | Mining transport (M18's mining colony ship) | EA | mining transport | `EA_Mining_Transport.stl` | capital framework |
+| T56 | Mining transport (M18's mining colony ship) | EA | mining transport | `EA_Mining_Transport.stl`, `EA_Mining_Transport_doors_open.stl` (Q43) | capital framework |
 | T57 | EA shuttle; EA atmospheric shuttle | EA | shuttles (M24 makes the first a player ship) | `EA Shuttle.stl`; `EA_Atmospheric_Shuttle.stl` | civilian pipeline |
 | T58 | Centauri shuttle; Minbari Flyer | Centauri; Minbari | shuttle; diplomat transport | `Centauri_Shuttle.stl`; `Minbari_Flyer_diplomat_transport.stl` | civilian pipeline |
 
@@ -171,6 +176,7 @@ Out:
   - **break-up chunks** cut along the sections' boundaries on the hull's atlas (`core/chunks.py`).
 - Texel tiers as M7's station (D72): per-piece atlases for the broad paint and a shared detail layer tiled in world space,
   so a 1 to 3 km hull reads from 50 m.
+- Skins: a panel mosaic; Minbari and ISA hulls a hexagonal grid instead (Q45).
 - Low and high texture sets per hull; far representations as M6's D70; a triangle and VRAM budget per class (Q38).
 
 ### D12.2 Organic hulls and sheen
@@ -179,7 +185,8 @@ Out:
   meshed to the textured mesh writer's input.
 - A view-dependent sheen layer over the four maps, as the liveries are a layer: spherical-harmonic iridescence for the
   Vorlons, the Shadows' black hulls with their faint purple sheen and moving surface patterns; one shader include, its
-  parameters per style.
+  parameters per style. The Vorlons' faint bioluminescent glow is part of their sheen layer; Shadow
+  and Vorlon organic parts have no seams or panel lines (Q46).
 - The Shadows, Vorlons and Drakh are organic; the White Star and the Victory-class mix Minbari and Vorlon lines
   (hard-surface parts with organic fairings).
 
@@ -258,6 +265,7 @@ Out:
   out, Shadow jamming (hard to lock for younger races), the slicer beam, the Shadows' and Vorlons' self-repair, the Vorlon
   lightning beam, how Shadow and Vorlon fighters fight, the ancients' arrivals, the Drakh's Shadow-derived technology,
   Minbari stealth (Q13), and the show's counters to them.
+- Fixed input to T04 (Q44): Shadow ships shimmer in and out of hyperspace; no jump points, no gates.
 - Fixed whatever T04 decides: per-tick work in the native core, threads identical, gameplay through `FlightCommand` and
   `CombatCommand`, no wall clock.
 
@@ -289,7 +297,6 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Tracks** (the table's column): inside a track the order holds; T47 and T48 come last.
 - **Before a hull starts:** T62 (the section measure) for every hull; T61 (the catalogue), T05 (the framework) and T07
   (capitals in the game) for the capitals and big civilians, with T06 for the organic ones; T61 and T03 for the fighters.
-- **Parallel agents:** at most two at a time unless the maintainer says otherwise (Q39).
 - **Design calls are the maintainer's.** The controller holds T03 and T04 with the maintainer; a later question about
   weapons, balance or the ancients goes back to the maintainer.
 - **One working copy** on branch `m10` in the main checkout, no task branches.
@@ -302,7 +309,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 
 | Task | Track | Title | Depends on | Agent | Status |
 |---|---|---|---|---|---|
-| T01 | A | References, identifications and lengths for every hull (Q4), from the STLs and the verified show images (Q35) | - | Opus | not started |
+| T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | not started |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | not started |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | not started |
@@ -322,7 +329,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T16 | E | The `capital` brain and fighters' attacks on capitals | T12, T14 | Opus | not started |
 | T17 | E | Carriers launch fighters from bays and tubes | T07, T16 | Opus | not started |
 | T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | not started |
-| T49 | E | The player at a capital's helm: controls, camera, firing orders from a radial menu (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
+| T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
 | T21 | F | EA Omega-class destroyer | T19, T62 | Fable | not started |
@@ -331,7 +338,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
 | T25 | F | Narn G'Quan-class heavy cruiser | T19, T62 | Fable | not started |
 | T26 | F | Centauri Vorchan-class warship | T19, T62 | Fable | not started |
-| T27 | F | Centauri attack cruiser | T19, T62 | Fable | not started |
+| T27 | F | Centauri Primus-class battlecruiser (Q41) | T19, T62 | Fable | not started |
 | T28 | F | Minbari Sharlin-class warcruiser | T19, T62 | Fable | not started |
 | T29 | F | Drazi Sunhawk | T19, T62 | Fable | not started |
 | T30 | F | Drazi Stormfalcon | T19, T62 | Fable | not started |
@@ -340,23 +347,23 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T33 | F | ISA White Star | T19, T06, T62 | Fable | not started |
 | T34 | F | ISA Victory-class destroyer | T33 | Fable | not started |
 | T35 | F | Shadow battlecrab | T06, T19, T62 | Fable | not started |
-| T36 | F | Vorlon heavy cruiser (petals from its open and closed petal STLs) | T06, T19, T62 | Fable | not started |
+| T36 | F | Vorlon heavy cruiser | T06, T19, T62 | Fable | not started |
 | T37 | F | Drakh carrier | T06, T19, T62 | Fable | not started |
 | T38 | F | Narn Frazi and Centauri Sentri fighters | T61, T03, T62 | Fable | not started |
 | T39 | F | Minbari Nial and Drazi Sky Serpent fighters | T38 | Fable | not started |
 | T40 | F | Brakiri Falkosi and Drakh fighters | T38, T06 | Fable | not started |
 | T41 | F | Shadow fighter and Shadow scout | T38, T06 | Fable | not started |
 | T42 | F | Vorlon light fighter | T38, T06 | Fable | not started |
-| T50 | F | EA Thunderbolt fighter, model only (M11 adds its `ShipSpec`, cockpit and unlock) | T01, T62; the Starfury's generator and style | Fable | not started |
-| T51 | F | EA Panama class, civilian cargo vessel (Q5, Q32) | T19, T62 | Fable | not started |
+| T50 | F | EA Thunderbolt fighter, model only | T01, T62; the Starfury's generator and style | Fable | not started |
+| T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | not started |
 | T52 | F | EA Explorer class | T19, T62 | Fable | not started |
-| T53 | F | EA Asimov liner (Q32; M24's evacuation liner) | T19, T62 | Fable | not started |
-| T54 | F | Narn Khnar super freighter | T19, T62 | Fable | not started |
+| T53 | F | EA Asimov liner | T19, T62 | Fable | not started |
+| T54 | F | not needed: reference removed by the maintainer, 2026-11-20 | - | - | not needed |
 | T55 | F | EA construction tender | T19, T62 | Fable | not started |
-| T56 | F | EA mining transport, M18's mining colony ship | T19, T62 | Fable | not started |
-| T57 | F | EA shuttle and EA atmospheric shuttle (Q32; M24 makes the shuttle a player ship) | T01, T62 | Fable | not started |
+| T56 | F | EA mining transport (Q43) | T19, T62 | Fable | not started |
+| T57 | F | EA shuttle and EA atmospheric shuttle | T01, T62 | Fable | not started |
 | T58 | F | Centauri shuttle and Minbari Flyer | T57 | Fable | not started |
-| T59 | F | Drazi Firehawk (Q32; class and role identified in T01) | T19, T62 | Fable | not started |
+| T59 | F | Drazi Firehawk | T19, T62 | Fable | not started |
 | T60 | F | Vorlon dreadnought | T06, T19, T36 | Fable | not started |
 | T43 | G | The Shadow, Vorlon and Minbari mechanics in the game, as T04 settled them | T04, T35, T36, T28 | Opus | not started |
 | T44 | G | Sounds (Q24), the ancients' voices included | T12, T13, T11 | Sonnet | not started |
@@ -372,10 +379,11 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Goal:** AC1 (Q4).
 - **Steps, per hull and fighter:** confirm what ship it is (the open points are in the hull tables); list its published
   lengths with their sources and disagreements; choose the STL's axis mapping (`tools/refview/refview.py`) and render
-  its views to `reports/refs/<id>/`; describe its shape section by section, its colours from the verified show images in
-  `references/show/m10/<hull id>/` (Q35; ask the maintainer where a hull has none), its weapons and bays, and where its
+  its views to `reports/refs/<id>/`; describe its shape section by section, its colours from its verified show images
+  (Q35), its weapons and bays, and where its
   reactor, bridge, hangars and engines are. Measure the Vorlon heavy cruiser's petals from its two petal STLs and check
-  that they fit the body. Check every length against the gate's mouth (Q22): which hulls need their own jump points.
+  that they fit the body; likewise T56's doors (Q43) and the Primus's mass driver (Q41). Check every length against
+  the gate's mouth (Q22): which hulls need their own jump points.
 - **Files:** `docs/design-references.md` (a section per hull), `docs/assets-capital.md` (lengths with sources, axis
   mappings, measurements).
 - **Done when:** AC1; the maintainer has approved the lengths table.
@@ -438,7 +446,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 ### M10-T06 Organic part library and sheen
 
 - **Goal:** AC5's organic half (D12.2).
-- **Also:** watertightness tests and a sheen look sheet (H).
+- **Also:** watertightness tests and a sheen look sheet (H); no panel seams, the Vorlon glow (Q46).
 - **Done when:** an organic test asset builds within budget and draws with its sheen.
 
 ### M10-T07 Capital ships in the game
@@ -483,16 +491,19 @@ On top of it:
   `AnimatableBody3D` as the station's drum. T21 to T24 carry the renegades' marking (T02). T34 and T60 are the largest:
   check their jump points and far representations.
   T60 is built on T36's parts, with T04's Vorlon mechanics.
+  T27: two variants (Q41). T28, T33, T34: hexagonal skin (Q45). T35: no jump points or gates, it shimmers (Q44).
 - **Faction fighters (T38 to T42):** the fighter pipeline (the generator as `raider_fighter`, not the capital framework),
   with T06's parts where organic; its `ShipSpec`, thruster layout, guns per T03, a pilot profile, break-up chunks. Done
   when a seeded fight against Starfuries also runs headless; its carriers launch it in T17.
+  The Nial: hexagonal skin (Q45).
 - **Thunderbolt (T50):** the model only, as a fighter (generator, hardpoints, break-up chunks), on the Starfury's
   generator and style where they fit (`docs/assets-starfury.md`).
 - **Big civilians (T51 to T56):** as the capital hulls, on T05: sections (cargo, fuel, habitat, engine, bridge),
   hardpoints for engines and lights and, where a mission needs them, docking and berths (set when it is planned: M18 for
   the mining transport, M24 for the Asimov liner). No weapons unless T01's notes say otherwise.
+  T56's doors move (Q43).
 - **Small craft (T57, T58):** M5's civilian pipeline (`docs/assets-civilian.md`), as the cargo pod (M7-T33): generator
-  and style, hardpoints, `ShipSpec`. The missions that need them wire them (M24's shuttle as a player ship).
+  and style, hardpoints, `ShipSpec` (the Flyer's skin: Q45). The missions that need them wire them.
 
 ### M10-T43 to T47 Mechanics, sounds, bench, scenarios and performance
 
