@@ -2,10 +2,13 @@
 
 > "The first mission." (`docs/roadmap.md`)
 
-**Status:** **in progress** (started 2026-11-18 with T07). Branch `m8` was cut from `main` at `1e7064dc` (M7's merge) on 2026-11-18. The planning
-questions below were asked on 2026-11-18; the maintainer answered Q5 to Q8 the same day, and the proposed answers to the others
-stand until the maintainer answers. The tutorial's script is
-not planned here: its beats, lines and pacing are settled with the maintainer in T01, and T03 to T05 are filled in from it.
+**Status:** **built, awaiting the maintainer's play-test** (2026-11-19; started 2026-11-18 with T07). Every task but T17 is `done`
+(T09's Battle Wagon removed again by T27). T17 ran the standard suite once on `dd72d616`: Python 1 261 tests OK (2 skipped), Rust 257
+passed, import and compile check clean (1 003 scripts), the console smokes passed, and GUT green in six shards (491 scripts, 4 734
+tests: 4 696 passed, 38 pending, 0 failed; about 115 minutes, so the unsharded cap was raised, `a5284588`). The (H) list is
+`docs/playtest.md` "M8 acceptance checklist"; acceptance (AC13) is the maintainer's. Branch `m8` was cut from `main` at
+`1e7064dc` (M7's merge) on 2026-11-18. The planning questions below were asked on 2026-11-18 and answered by the maintainer
+during the milestone; the tutorial's script was settled with the maintainer in T01.
 
 The roadmap was renumbered on 2026-11-18 (`docs/roadmap.md`, "After the tutorial"): the capital-ship milestone planned as M12
 (its branch is now `m10`) is **M10**. T07 merged it into `m8` and renamed its plan `docs/milestones/m10-factions-and-capital-ships.md`,
@@ -288,13 +291,13 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | AC3 | Control checks: each check passes on its actions and state in headless tests driven by injected commands, for pad and keyboard bindings; a rebind changes the hint; a missed check repeats and demonstrates, never fails | A | **Met except the flown demo** (T04, 2026-11-18; the instructor flying it is checked in T05's AC4): the demo is asked for on `MissionApi.demo_requested`; the instructor flying it is T05's |
 | AC4 | Tutorial mission: starts from the menu and runs to the debrief in a headless test driven by console commands; the tour visits its points; the raid comes through the jumpgate vortex and the station's allies and grid fight it; losing the player ends in the debrief | A | **Met** (T05, 2026-11-19) |
 | AC5 | Docking: the player docks through the main docking bay, is repaired (hull, guns, missiles) and relaunched from a Cobra bay (headless test on the state before and after); a wingman docks on order and by threshold and rejoins its wing | A | **Met** (T06, 2026-11-18; no missiles exist yet, so hull, gun charge and reaction mass are what is restored) |
-| AC6 | Strike carrier: M10-T19 merged into `m8` with its tests green next to M7's; one collision builder serves the station and the carrier | A | |
-| AC7 | Civilian escort: the first two waves arrive docked on the strike carrier and launch; the carrier hangs back, recalls and jumps out; the escort's tests (success, both failures, flee and resume) pass with it | A | |
+| AC6 | Strike carrier: M10-T19 merged into `m8` with its tests green next to M7's; one collision builder serves the station and the carrier | A | **Met** (T07, 2026-11-18; the carrier's look and flight approved in the play-test of 2026-11-19) |
+| AC7 | Civilian escort: the first two waves arrive docked on the strike carrier and launch; the carrier hangs back, recalls and jumps out; the escort's tests (success, both failures, flee and resume) pass with it | A | **Met** (T08, 2026-11-18; since T27 all three waves ride strike carriers; flying it is (H), `docs/playtest.md` M8 checklist) |
 | AC8 | Battle Wagon: meets the output contract with Python tests (budgets, frames, hardpoints, tubes, determinism), its look sheet seen by the maintainer (no STL: M10's Q10), in the game with its weapons and four launch tubes, in a sandbox scenario and free-flight raids; the civilian escort's last wave launches from its tubes and the escort's tests pass with it | A | **Met** (T09, 2026-11-19; two tubes with four lanes, as the sheet has it: the maintainer, 2026-11-18. How it looks and plays is (H), `docs/playtest.md`). **Withdrawn:** the ship was removed by T27 (2026-11-19) |
-| AC9 | Carried items: M7-2 to M7-6 and L15 each done with a test where one can be written | A | |
+| AC9 | Carried items: M7-2 to M7-6 and L15 each done with a test where one can be written | A | **Met**: M7-2 T10, M7-3 T11, M7-4 T02, M7-5 T12, M7-6 T13, L15 T14 (the looks and the listening are (H); the audio and the flicker approved 2026-11-19) |
 | AC10 | Release build: a script builds the Linux x86_64 export from the pinned templates; the exported game opens, runs the tutorial's opening and quits cleanly in a smoke test | A | done |
 | AC11 | Cost: on the maintainer's GPU, the squadron launch, the tour and the raid: `renderer = forward_plus`, FPS, draw calls and VRAM recorded; the tick inside the 60 Hz budget during the raid | A | Numbers recorded (T16, HEAD `76618200`): `forward_plus` throughout; windowed at the monitor's 60 Hz (1920x1080 and 3840x2160) 56 to 60 fps everywhere, GPU 0.7 to 1.8 ms (1080p) and 1.1 to 2.8 ms (2160p), 17 to 201 draw calls, renderer 1 189 MB (1080p) and 1 378 to 1 482 MB (2160p), the game about 1.0 to 1.9 GB of the card's 16 GB; uncapped (X11 fullscreen 6144x3456) the launch 106 to 179 fps after its first 4 s in the bay (about 60, GPU 6.6 ms), the tour 107 to 242, the raid 131 to 176, GPU 3.1 to 6.7 ms, 2 249 MB; the raid (14 raiders, 22 to 32 ships, up to 71 bolts) ticked p50 2.1 to 2.4 ms, p99 5.0 to 6.0 ms, max 10.9 ms |
-| AC12 | Docs and the suite: `docs/architecture.md` §21 as built, a `docs/playtest.md` M8 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | |
+| AC12 | Docs and the suite: `docs/architecture.md` §21 as built, a `docs/playtest.md` M8 section, the roadmap row, `info.md`; `scripts/run_tests.sh` green once, at the end | A | **Met** (T17, 2026-11-19: docs as built; the standard suite green, GUT run in six shards after the unsharded run hit its 60-minute cap, see the status line) |
 | AC13 | (H) The maintainer plays it: the tutorial start to finish, the squadron launch, the approach cues and a fast gate jump, docking and relaunch, the escort with the strike carrier, the audio, the release build | H | |
 | AC14 | Approach cues and the gate's reach (D84): `ApproachCue`'s states are unit-tested over approach speeds, offsets and brake strengths; the cue shows on the gate and both bays in both views; the gate offers the jump farther out at speed, and headless jumps requested at 200 m/s to several km/s all run the line-up, the run-in and the cinematic and arrive through the mouth (tests on the end state and the shot's timing) | A |  **Met** (T18, 2026-11-19; whether the cue reads in time and a fast jump looks right is (H), `docs/playtest.md`) |
 | AC15 | Flights and orders (D85): the player commands only a flight of two wingmen where the mission says so; AI flights of three cover each other and stay within their cohesion distance through a seeded headless fight; ships in formation fire at targets in reach; the two hold-fire orders hold formation or position without firing and are lifted by any other order (tests for each, pad menu and keyboard), native kept 1 and 6 threads identical | A | **Met** (T19, 2026-11-18) |
@@ -1451,3 +1454,8 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 
 - **Goal:** AC12 and AC13. Docs as built, the M8 checklist in `docs/playtest.md`, the roadmap row, `info.md`; the full suite once;
   the maintainer's play-test.
+- **Progress (2026-11-19):** AC12 met: §21 given an introduction pointing to every M8 part and its decision, two new subsections
+  (§21.5 control checks, §21.6 the release build), stale lines fixed (T06's fixed docking shots, the ring of eight); the playtest
+  page's M8 items collected into one "M8 acceptance checklist" with new items for the launch shots, the radial fit, Gamma
+  Leporis, the interceptor muzzle and the release build; the roadmap row; `gate shots` in `info.md`'s usage. Suite counts in the
+  status line. Open: AC13, the maintainer's play-test.

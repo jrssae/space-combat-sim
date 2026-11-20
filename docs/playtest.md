@@ -764,12 +764,7 @@ is no timeout. Closed, keys 1 to 4 still give the orders directly. Console: `com
 **Babylon 5's commands (M8-T34).** `play station_dock`, select BABYLON 5 (the wheel, or the target menu's ALLIES ring) and open the comms
 menu: its first ring is BABYLON 5 with LAUNCH WING (a second ring: Alpha, Beta, Delta, Zeta, All), RECALL, DEFENSE GRID, FIRE
 SUPPORT, SHELTER and SITREP; keys 1-6 pick. Control answers each on the comms panel.
-- [ ] **(H) Launch and recall:** key 1 then 2 launches Beta from its arm; RECALL sends every fighter home, your wingmen too, and
-      they stay inside.
-- [ ] **(H) Grid and covering fire:** with raiders about (`traffic raid 4`), DEFENSE GRID off silences every gun and
-      interceptor; on again, FIRE SUPPORT has the guns that reach take the raiders within 2 km of you first.
-- [ ] **(H) Shelter:** with traffic running (`traffic auto on`), SHELTER holds it: docking ships go in, freighters and leaving
-      ships wait 3 km behind the station; again, they leave. SITREP reads the sections, wings, raiders and grid.
+See the M8 acceptance checklist ("Radial menus and Babylon 5's commands") for what to judge.
 Console: `stationcmd <launch|recall|grid|support|shelter|sitrep>`, `state station_cmd`.
 
 ## Free-flight encounters (M5-T17)
@@ -1194,59 +1189,50 @@ Everything automated is recorded in the acceptance table of `docs/milestones/m7-
       back: the wing comes round over and under you and re-forms without ramming you or each other.
 - [x] **The station:** `god on`, fly into Babylon 5's drum with the wing following: no wingman rams the station or another wingman.
 
-# Play-testing the sawtooth Cobra-bay doors (M8-T02)
+# Play-testing M8 (Tutorial vertical slice)
 
-`play station_launch` (or `launch alpha 3` in any scenario with the station), then `launch wing all` for every arm. The look sheets
-the choice was made from: `references/screenshots/M8-T02 sawtooth doors/`.
+How to reach each new thing comes first; everything for you to judge is in the list after it, "M8 acceptance checklist". The
+design is `docs/architecture.md` §21 (its introduction points to every part). Screenshots and review strips the agents took are
+under `references/screenshots/` in folders named for each task (`M8-T02 sawtooth doors/`, `M8-T24 radial fit/`,
+`M8-T29 gate shots/review/`, `M8-T30 launch shots/review/`, `M8-T31 docking shots/review/`, ...).
 
-- [ ] **(H) The doors:** shut, each launch door shows a seam of three big flat-tipped teeth down its middle; for a launch its two
-      leaves slide apart sideways under the deck (nothing swings outward) and the fighter drops through; open, no leaf shows in the
-      well; they slide shut again with the teeth meshing. Along an arm the doors still open in a quick ripple.
-- [ ] **(H) The hangar behind the menu:** the doors in the hall's floor have the same toothed seam, with rails across each leaf.
+## Start
 
-# Play-testing wingmen closing up after losses (M8-T13)
+```
+.tools/godot/godot --path .                                   # New game, then "Tutorial: qualification flight" (first in the list)
+.tools/godot/godot --path . -- --scenario=station_dock        # 1.2 km off the main docking bay with two wingmen
+.tools/godot/godot --path . -- --scenario=station_launch      # a Cobra-bay launch, then free flight at the station
+.tools/godot/godot --path . -- --scenario=civilian_escort     # the escort, now in Gamma Leporis
+```
 
-`play station_launch`, `launch wing alpha`, FORM ON ME, then shoot wingmen down by selecting one and `kill target` (or let raiders
-do it: `spawn raider ai 1500`).
+Free flight's encounters are three switches now (M8-T28): civilian traffic, allied patrols and enemy encounters, on the Free
+flight page or `set settings.encounters_civilian|_allied|_enemy false`.
 
-- [ ] **(H) Closing up:** when a wingman goes down, the ones behind it on its arm each move up one place, and the V has no hole;
-      nobody rams anybody on the way. With one arm two ships longer than the other, the long arm's last ship crosses behind you
-      to the short one. Say if the centre ship (ALPHA 12) moving out to an arm that has room looks right, or if it should stay.
-- [ ] **(H) The roster:** the wingmen keep their callsigns when they move up; the roster follows the formation's places, so
-      their rows move up too and the DOWN row, under the downed wingman's callsign, is the place at the back; `wing replenish`
-      brings a replacement under that callsign, at the back of the formation.
+## Console for M8 (all in `info.md`)
 
-# Play-testing docking for repair (M8-T06)
+```
+play tutorial              the tutorial; mission goto <step> (launch, form_up, flight_checks, camera_lights, x_button, course,
+                           combat, wing_orders, tour, jumpgate, raid, defense, debrief); retry checkpoint from a lost debrief
+checks status|list|pass    the control checks; checks start roll shows a hint in any mission
+career                     the saved rank and best course rating; career set <rank>
+launch squadron [wing]     the squadron launch; launch force <variant> / launch cut for the launch shots
+dock                       dock status; dock wing; dock cancel; state dock (homes, shots)
+gate approach 10           10 km off the gate; gate shots <approach>,<mouth> | arrive:<id> | auto; state gate.shots
+wing order form_hold|hold  the two hold-fire orders (keys 7 and 8)
+stationcmd <launch|recall|grid|support|shelter|sitrep>   Babylon 5's commands; state station_cmd
+commsmenu open / pick <n>  the comms ring; targetmenu pick <n>
+carrier status|hurt|charge|recall|kill   the strike carrier; transit docked follow
+joypads                    the pads the game sees, their mapping and the last connect events
+overlay on                 the debug overlay with the VRAM line; state render
+```
 
-`play station_dock` puts you 1.2 km off the main docking bay with two wingmen (or fly there in free flight). Only fighters whose
-home is Babylon 5 dock here (the scenario's `home`, or a launch from its Cobra bays; `state dock` lists each ship's home), and only
-within 60 km of the bay. Hurt yourself first
-with `damage 50` (hull points; `state ship` shows the hull) so the repair has something to do.
+## M8 acceptance checklist (AC13, the (H) criteria)
 
-- [ ] **(H) Docking:** target `BABYLON 5 DOCKING BAY` (target menu, NAVIGATION), hold X (Shift, Mouse 4) for 2 s inside 2 km. The
-      controls lock, the ship turns for the bay and flies in down the middle of the mouth; the inner doors open ahead of it and shut
-      behind it. Say if the approach looks sensible from beside the drum and from above the spine (it should go round, never
-      through), and if the speeds feel right (140 m/s out, 40 m/s to the mouth, 20 m/s inside).
-- [ ] **(H) From speed:** start the hold at several hundred m/s across the bow: the ship brakes first, then comes back and docks.
-- [ ] **(H) The cinematic:** the two docking shots (behind the ship, beside the mouth) run straight into the launch's own shots:
-      you do not wait for the repair. A or Start skips a stage each press: through the bay onto the launch, then to the hand-off.
-      Say if the cut from the doors shutting to the Cobra bay reads well.
-- [ ] **(H) Relaunch:** you come out of Cobra bay Alpha 1 with a whole hull and the controls back.
-- [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK): `ALPHA 2: COPY, DOCKING FOR
-      REPAIRS`, it flies off to the bay (its roster row reads DOCKING), is gone a while (DOCKED), comes out of a Cobra bay and forms up
-      again (its usual readout). Hurt one below 25 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
-- [ ] **(H) The comms ring:** eight slices now, the four orders still up, right, down and left; say if the blank diagonals and
-      DOCK between ENGAGE and COVER ME read well.
-- [ ] **(H) AI wingmen wait 30 s:** a docked wingman's roster row reads DOCKED for about 30 s before it comes out of a Cobra bay.
-      Babylon 5's own flights (`launch wing beta`) dock the same way when one of them falls below 25 %; a flight's lead hands
-      the flight to its wingman first.
-- [ ] **(H) The leash:** under FORM ON ME, a wingman chased more than 2.5 km from you jinks back toward you instead of running
-      on away, bringing its chaser with it.
-- [ ] **(H) No dock, no order:** in a scenario far from the station, or with wingmen that have no home (`combat_sandbox`), the comms
-      ring has a blank slice where DOCK was and key 6 does nothing; a wingman below 25 % keeps fighting.
-- [ ] **(H) Control's offer:** below half hull the HUD's line offers the bay once (`BABYLON CONTROL: YOU ARE CLEARED TO DOCK ...`).
+Everything automated is recorded in the acceptance table of `docs/milestones/m8-tutorial-vertical-slice.md`. GPU numbers are the
+agents' (RX 6950 XT, AC11). Already approved on 2026-11-19 (ticked at the end of this list): the fonts and the HUD, the audio rework,
+the cargo-bay flicker fix and the raider strike carrier.
 
-## The tutorial mission (M8-T05)
+### The tutorial (M8-T05, T33)
 
 New game, then **Tutorial: qualification flight** (first in the list). Console: `play tutorial`, `mission goto <step>` (steps:
 launch, form_up, flight_checks, camera_lights, x_button, course, combat, wing_orders, tour, jumpgate, raid, defense, debrief),
@@ -1283,10 +1269,107 @@ launch, form_up, flight_checks, camera_lights, x_button, course, combat, wing_or
 - [ ] **(H) Lost after the alarm:** the debrief offers **Restart from the raid's start** and **Restart whole mission**;
       the first puts you and your flight back at the gate with the alarm sounding and the course result kept.
 
-## Flights of three and the hold-fire orders (M8-T19)
+### Launches: the doors, the squadron launch and the launch shots (M8-T02, T03, T30)
 
-The tutorial (M8-T05) will give you a flight of three; until it lands, any scenario shows the rest. `play station_showcase`, or
+`play station_launch` (or `launch alpha 3` in any scenario with the station), then `launch wing all` for every arm. The look sheets
+the choice was made from: `references/screenshots/M8-T02 sawtooth doors/`.
+
+- [ ] **(H) The doors:** shut, each launch door shows a seam of three big flat-tipped teeth down its middle; for a launch its two
+      leaves slide apart sideways under the deck (nothing swings outward) and the fighter drops through; open, no leaf shows in the
+      well; they slide shut again with the teeth meshing. Along an arm the doors still open in a quick ripple.
+- [ ] **(H) The hangar behind the menu:** the doors in the hall's floor have the same toothed seam, with rails across each leaf.
+- [ ] **(H) The squadron launch (M8-T03):** `launch squadron` at the station: the doors ripple open, the squadron drops out,
+      flips, lights its engines and forms up 650 m off the drum, filmed from outside; then you launch alone and get the controls.
+      A or Start skips to the same end state.
+- [ ] **(H) Launch shots (M8-T30):** launch five times (`launch alpha 3`, or the tutorial's opening): the shots change every time,
+      no launch repeats the last one's set, no angle lasts more than about 3 s (5 s for a feature shot), and the controls come
+      back as soon as the launch thrusters cut. Say if any shot clips, loses the ship or is too dark (`launch cut` names them).
+
+### Docking, repair and relaunch (M8-T06, T31)
+
+`play station_dock` puts you 1.2 km off the main docking bay with two wingmen (or fly there in free flight). Only fighters whose
+home is Babylon 5 dock here (the scenario's `home`, or a launch from its Cobra bays; `state dock` lists each ship's home), and only
+within 60 km of the bay. Hurt yourself first
+with `damage 50` (hull points; `state ship` shows the hull) so the repair has something to do.
+
+`play station_dock`, target `BABYLON 5 DOCKING BAY`, hold X. The docking is now cut into short shots, and 300 m short of the mouth
+the Fury stops, rolls to the bay's turn and goes in rolling with it. `state dock.shots` lists the shots; the review strips are in
+`references/screenshots/M8-T31 docking shots/review/`.
+
+- [ ] **(H) Docking:** target `BABYLON 5 DOCKING BAY` (target menu, NAVIGATION), hold X (Shift, Mouse 4) for 2 s inside 2 km. The
+      controls lock, the ship turns for the bay and flies in down the middle of the mouth; the inner doors open ahead of it and shut
+      behind it. Say if the approach looks sensible from beside the drum and from above the spine (it should go round, never
+      through), and if the speeds feel right (140 m/s out, 40 m/s to the mouth, 20 m/s inside).
+- [ ] **(H) From speed:** start the hold at several hundred m/s across the bow: the ship brakes first, then comes back and docks.
+- [ ] **(H) The cinematic:** the two docking shots (behind the ship, beside the mouth) run straight into the launch's own shots:
+      you do not wait for the repair. A or Start skips a stage each press: through the bay onto the launch, then to the hand-off.
+      Say if the cut from the doors shutting to the Cobra bay reads well.
+- [ ] **(H) Relaunch:** you come out of Cobra bay Alpha 1 with a whole hull and the controls back.
+- [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK): `ALPHA 2: COPY, DOCKING FOR
+      REPAIRS`, it flies off to the bay (its roster row reads DOCKING), is gone a while (DOCKED), comes out of a Cobra bay and forms up
+      again (its usual readout). Hurt one below 25 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
+- [ ] **(H) The comms ring:** eight slices now, the four orders still up, right, down and left; say if the blank diagonals and
+      DOCK between ENGAGE and COVER ME read well.
+- [ ] **(H) AI wingmen wait 30 s:** a docked wingman's roster row reads DOCKED for about 30 s before it comes out of a Cobra bay.
+      Babylon 5's own flights (`launch wing beta`) dock the same way when one of them falls below 25 %; a flight's lead hands
+      the flight to its wingman first.
+- [ ] **(H) The leash:** under FORM ON ME, a wingman chased more than 2.5 km from you jinks back toward you instead of running
+      on away, bringing its chaser with it.
+- [ ] **(H) No dock, no order:** in a scenario far from the station, or with wingmen that have no home (`combat_sandbox`), the comms
+      ring has a blank slice where DOCK was and key 6 does nothing; a wingman below 25 % keeps fighting.
+- [ ] **(H) Control's offer:** below half hull the HUD's line offers the bay once (`BABYLON CONTROL: YOU ARE CLEARED TO DOCK ...`).
+- [ ] **(H) The roll match reads:** you see the Fury roll into step with the drum before the mouth, in a shot with the bay's face
+      behind it. Say if it is too slow, too quick, or hard to see.
+- [ ] **(H) Variety:** dock three times. Say if the shots feel varied enough, and if any is too dark, too far or clipping.
+
+### Approach cues and the gate jump (M8-T18, T29)
+
+A navigation target that offers an action (the jumpgate, the docking and cargo bays) now carries an approach cue: under its
+diamond (and on the cockpit's right screen) the closing speed and one of `ON COURSE`, `BRAKE` (amber), `OVERSHOOT` (red) or
+`ADJUST COURSE` (amber), with a bar whose fill is your stopping distance and whose tick is the room left to the target's reach;
+braking is due when the fill meets the tick. The HUD's line under the status says the same (`— +450 m/s  BRAKE: HOLD` and the brake's
+live keys). `state interact` shows the numbers (`cue`, `cue_stop_m`, `cue_room_m`, `cue_closest_m`). The gate offers the jump
+farther out the faster you close (`state gate.reach_m`: 2 km at rest, about 9 km at 500 m/s, at most 10 km).
+
+The jump is now cut into short shots from pools, so no two jumps look alike. It is quicker, too: the ship is swallowed about a
+second after it crosses the mouth, a white flash, a moment of black, then straight back to the gate as its pylons glow, and the ship
+bursts out of the blue vortex in about a second. `state gate.shots` lists the last jump's shots. `gate shots <approach>,<mouth>`
+or `gate shots arrive:<id>` repeats one opening (`auto` picks again). The review strips are in
+`references/screenshots/M8-T29 gate shots/review/`.
+
+- [ ] **(H) The cue reads in time to brake:** `goto jumpgate`, target it, fly at it at 300 to 500 m/s and brake when the cue says
+      BRAKE: you should stop inside the reach without guessing. Do the same at both bays (`goto` a bay, back off 8 km, come in).
+      Say if BRAKE comes too early or too late, and if the bar and its tick read at a glance in both views (chase and cockpit).
+- [ ] **(H) Overshoot and adjust:** come in too fast (1 km/s and more): the cue reads OVERSHOOT. Fly past the target's side: it reads
+      ADJUST COURSE. A bay approached from round the station's side reads ADJUST COURSE until you are in front of its lane.
+- [ ] **(H) A fast jump looks right:** ask for the jump at 200 m/s, 1 km/s and 3 km/s (`gate approach 10`, then full mains on
+      the gate). Slow: the ship carries its speed straight down the axis into the run-in. Fast: it flies past the gate, turns, comes
+      back round the arms and lines up. Every time the departure shot closes in behind the ship just before the mouth; say if any
+      run-in looks odd or the shot misses the moment.
+- [ ] **(H) Variety:** jump five times (`gate approach 1.9`, target the gate, hold X). Say if the sequences feel different
+      enough, and if any shot looks wrong (clipping, the ship out of frame, too dark).
+- [ ] **(H) Pace:** say if the swallow, the black (0.75 s) and the burst out read clearly and are not too quick or too slow
+      (`data/jump/player_jump.json`).
+- [ ] **(H) Readable ship:** coming back out, the ship should read against the vortex: the core glows behind it, its lights are
+      on and a soft key light follows it during the shots. Say if it is too bright or still lost.
+
+### Hold X to abort an autopilot (M8-T32)
+
+During the gate jump's line-up and run-in, and docking's approach and lane, hold X (Shift, Mouse 4) for 1 s: the bar fills under
+`HOLD X / SHIFT / MOUSE 4: ABORT`, the cinematic cuts, and you fly on from where you were. Once the ship is in the gate's funnel, or
+through the docking bay's inner doors, the prompt goes away and X does nothing.
+
+- [ ] **(H) Abort:** abort a jump while it lines up and a docking on its approach. Say if 1 s feels right
+      (`data/controls/autopilot_abort.json`) and if the cut back to flying is clean.
+- [ ] **(H) Point of no return:** the prompt should vanish as the ship enters the vortex and as it passes the inner doors.
+
+### Flights of three, the hold-fire orders and closing up (M8-T19, T13)
+
+The tutorial gives you a flight of two wingmen; any scenario shows the rest. `play station_showcase`, or
 free flight near the station, then `launch wing zeta` and `state wing`.
+
+`play station_launch`, `launch wing alpha`, FORM ON ME, then shoot wingmen down by selecting one and `kill target` (or let raiders
+do it: `spawn raider ai 1500`).
 
 - [ ] **(H) A wing in flights:** `launch wing zeta` sends twelve Starfuries that fly as four vics of three (ZETA 1, 4, 7 and 10
       lead), the three later leads spread behind ZETA 1 while there is nothing to fight. Say if the spacing between the flights
@@ -1301,8 +1384,57 @@ free flight near the station, then `launch wing zeta` and `state wing`.
       them back.
 - [ ] **(H) The comms ring:** FORM UP sits between ATTACK and FORM ON ME, HOLD POSITION between FORM ON ME and ENGAGE. Say if
       the two labels with `hold fire` under them are clear enough to tell apart at a glance.
+- [ ] **(H) Closing up:** when a wingman goes down, the ones behind it on its arm each move up one place, and the V has no hole;
+      nobody rams anybody on the way. With one arm two ships longer than the other, the long arm's last ship crosses behind you
+      to the short one. Say if the centre ship (ALPHA 12) moving out to an arm that has room looks right, or if it should stay.
+- [ ] **(H) The roster:** the wingmen keep their callsigns when they move up; the roster follows the formation's places, so
+      their rows move up too and the DOWN row, under the downed wingman's callsign, is the place at the back; `wing replenish`
+      brings a replacement under that callsign, at the back of the formation.
 
-# Play-testing the gamepad notices and the pad diagram (M8-T22)
+### Radial menus and Babylon 5's commands (M8-T24, T34)
+
+Every radial ring has one equal slice per entry (M8-T24): three are 120 degrees, five are 72; entries that are not available
+(DOCK with no home dock in range) leave the ring. The stick points and A picks; keys 1 to N pick by place; the D-pad does nothing
+while a ring is open; B (Ctrl or Escape on the keyboard) closes it.
+
+**Babylon 5's commands (M8-T34).** `play station_dock`, select BABYLON 5 (the wheel, or the target menu's ALLIES ring) and open the comms
+menu: its first ring is BABYLON 5 with LAUNCH WING (a second ring: Alpha, Beta, Delta, Zeta, All), RECALL, DEFENSE GRID, FIRE
+SUPPORT, SHELTER and SITREP; keys 1-6 pick. Control answers each on the comms panel.
+Console: `stationcmd <launch|recall|grid|support|shelter|sitrep>`, `state station_cmd`.
+
+- [ ] **(H) The rings fit:** open the comms menu with and without DOCK (`play station_dock`, then `play combat_sandbox`) and the
+      target menu's rings with one, three and five entries: no empty slices, the first entry at the top, the labels readable.
+- [ ] **(H) Launch and recall:** key 1 then 2 launches Beta from its arm; RECALL sends every fighter home, your wingmen too, and
+      they stay inside.
+- [ ] **(H) Grid and covering fire:** with raiders about (`traffic raid 4`), DEFENSE GRID off silences every gun and
+      interceptor; on again, FIRE SUPPORT has the guns that reach take the raiders within 2 km of you first.
+- [ ] **(H) Shelter:** with traffic running (`traffic auto on`), SHELTER holds it: docking ships go in, freighters and leaving
+      ships wait 3 km behind the station; again, they leave. SITREP reads the sections, wings, raiders and grid.
+
+### The civilian escort in Gamma Leporis (M8-T08, T23, T26)
+
+New game, then **Civilian escort** (or `play civilian_escort`). The escort moved to its own star system, Gamma Leporis (M8-T23):
+a yellow-white F6 star, the ice world Gamma Leporis II, no Babylon 5 and no nebula, so the wingmen have no home dock and fight on.
+The route is 45 km with a bigger belt, the second wave waits 60 s, and Control briefs at the start (M8-T26). Every wave rides a
+raider strike carrier (M8-T08; the Battle Wagon is gone, M8-T27). Shortcuts are in "Civilian escort" in M5's chapter.
+
+- [ ] **(H) The new system:** the sky has no nebula, the sun is whiter than Epsilon's and the ice world sits behind the
+      civilian in the opening shot. Say if it reads as a different place.
+- [ ] **(H) The re-flight (M8-T26):** fly it through: Control's opening brief, the longer crossing and the belt, the 60 s before
+      wave two. Say if the pacing and length (about 12 to 15 minutes) feel right.
+- [ ] **The escort with the carriers (H, M8-T08, AC7):** fly the civilian escort: each wave's carrier arrives, launches and
+      hangs back; Control offers the optional objective; destroy one carrier (`Destroy a raider carrier` goes done, Control
+      says so at the end) and let another get away. The waves are 6, 8 and 10 raiders: each fights until 3 are left, and
+      those fly home, which can take a minute and a half when the fight has moved 15 km from their carrier. Say if it can
+      be won with ALPHA 2 and ALPHA 3 and how long it should take (the AI-flown check is in the M8 plan, T08).
+
+### The grid's interceptors (M8-T10)
+
+- [ ] **(H) Pulses from the barrel tips (M8-T10):** `play station_showcase`, `grid free all`, `traffic raid 6`, and watch an
+      interceptor battery up close (`station goto` a grid stop): each pulse leaves a drawn barrel's tip. A battery firing at shots
+      from nearly overhead turns far between its left and right barrels (it did before too); say if that looks wrong.
+
+### Gamepad notices and the pad diagram (M8-T22)
 
 "Gamepad not detected" near the top of this page has the cause and what to try.
 
@@ -1313,7 +1445,22 @@ free flight near the station, then `launch wing zeta` and `state wing`.
 - [ ] **(H) The diagram:** in the pause menu and on Settings > Controls, each button lights white while held, each stick while
       off centre and each trigger while pulled; the action in focus on the Controls page stays amber.
 
-# Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
+### The release build (M8-T15)
+
+`scripts/build_release.sh` builds `build/release/space-combat-sim.x86_64` (about 15 minutes, nearly all of it the assets);
+`scripts/release_smoke.sh` runs it headless for 600 ticks (`SMOKE_SCENARIO=tutorial` for the tutorial's opening).
+
+- [ ] **(H) The release build:** run `build/release/space-combat-sim.x86_64` from a file manager or a shell outside the
+      repository: the start screen over the hangar, the tutorial's opening plays, the settings save, and Quit closes it cleanly.
+
+### Approved 2026-11-19
+
+- [x] **(H) The fonts and the HUD (M8-T21):** Babylon5 for titles, Babylon5Credits for the rest and the HUD, readable in both views.
+- [x] **(H) The audio rework (M8-T12):** the listening checklist below.
+- [x] **(H) The cargo bay's walls (M8-T11):** no flicker beside the cargo bay.
+- [x] **(H) The raider strike carrier (M10-T19, merged by M8-T07):** the checklist below, except the escort, which is above.
+
+## Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
 
 Flown in M8's play-test; M10-T19 stays open until the maintainer has flown it.
 
@@ -1341,11 +1488,7 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
 - [x] **Its fighters go home (H, M8-T08):** shoot a raid down to three: the rest fly back and dock, and the carrier flees
       once they are aboard. Shoot one raider to under a fifth of its hull: it goes home alone. Say if 3 left, 20 % hull, 50 %
       carrier damage, the 90 s limit, the 240 s recharge and the 60 m/s run feel right (`data/capitals/capitals.json`).
-- [ ] **The escort with the carriers (H, M8-T08, AC7):** fly the civilian escort: each wave's carrier arrives, launches and
-      hangs back; Control offers the optional objective; destroy one carrier (`Destroy a raider carrier` goes done, Control
-      says so at the end) and let another get away. The waves are 6, 8 and 10 raiders: each fights until 3 are left, and
-      those fly home, which can take a minute and a half when the fight has moved 15 km from their carrier. Say if it can
-      be won with ALPHA 2 and ALPHA 3 and how long it should take (the AI-flown check is in the M8 plan, T08).
+- The escort with the carriers moved to the M8 acceptance checklist ("The civilian escort in Gamma Leporis").
 - [x] **It hangs back:** fly at a carrier that is standing off: inside 2.5 km it turns its stern to you and backs away at up to
       30 m/s. Say if the stand-off, the speed and the turn rate (4 degrees a second) feel right.
 - [x] **Its death (H):** `carrier kill` with fighters docked: the capital explosion, and each docked fighter blows up on its
@@ -1353,26 +1496,7 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
 - [x] **A raid in free flight (H):** `encounters force raid`: the carrier arrives 6 to 12 km out, launches, stands off while its
       fighters attack, and leaves when they are all gone or after five minutes.
 
-# Play-testing approach cues and fast gate jumps (M8-T18)
-
-A navigation target that offers an action (the jumpgate, the docking and cargo bays) now carries an approach cue: under its
-diamond (and on the cockpit's right screen) the closing speed and one of `ON COURSE`, `BRAKE` (amber), `OVERSHOOT` (red) or
-`ADJUST COURSE` (amber), with a bar whose fill is your stopping distance and whose tick is the room left to the target's reach;
-braking is due when the fill meets the tick. The HUD's line under the status says the same (`— +450 m/s  BRAKE: HOLD` and the brake's
-live keys). `state interact` shows the numbers (`cue`, `cue_stop_m`, `cue_room_m`, `cue_closest_m`). The gate offers the jump
-farther out the faster you close (`state gate.reach_m`: 2 km at rest, about 9 km at 500 m/s, at most 10 km).
-
-- [ ] **(H) The cue reads in time to brake:** `goto jumpgate`, target it, fly at it at 300 to 500 m/s and brake when the cue says
-      BRAKE: you should stop inside the reach without guessing. Do the same at both bays (`goto` a bay, back off 8 km, come in).
-      Say if BRAKE comes too early or too late, and if the bar and its tick read at a glance in both views (chase and cockpit).
-- [ ] **(H) Overshoot and adjust:** come in too fast (1 km/s and more): the cue reads OVERSHOOT. Fly past the target's side: it reads
-      ADJUST COURSE. A bay approached from round the station's side reads ADJUST COURSE until you are in front of its lane.
-- [ ] **(H) A fast jump looks right:** ask for the jump at 200 m/s, 1 km/s and 3 km/s (`gate approach 10`, then full mains on
-      the gate). Slow: the ship carries its speed straight down the axis into the run-in. Fast: it flies past the gate, turns, comes
-      back round the arms and lines up. Every time the departure shot closes in behind the ship just before the mouth; say if any
-      run-in looks odd or the shot misses the moment.
-
-# Listening checklist: the sound mix and the engines' steady level (M8-T12)
+## Listening checklist: the sound mix and the engines' steady level (M8-T12)
 
 Every sound is now written at one loudness (-20 LUFS, `tools/procgen/core/loudness.py`) and the mix lives in one table,
 `src/audio/sound_mix.gd`: change a row there to make an effect louder or quieter. Master ends in a limiter (-0.5 dBFS);
@@ -1404,39 +1528,3 @@ too quiet or right, against the engines (the bed the rest sits on).
 - [x] **(H) Busy fight, no clipping:** `traffic raid 6` near the station with your wing out, fight for a minute, then
       `state audio`: `master_peak_db` never above -0.5. Listen for crackle or the whole mix ducking when several explosions hit at
       once.
-
-# Play-testing the gate jump's camera (M8-T29)
-
-The jump is now cut into short shots from pools, so no two jumps look alike. It is quicker, too: the ship is swallowed about a
-second after it crosses the mouth, a white flash, a moment of black, then straight back to the gate as its pylons glow, and the ship
-bursts out of the blue vortex in about a second. `state gate.shots` lists the last jump's shots. `gate shots <approach>,<mouth>`
-or `gate shots arrive:<id>` repeats one opening (`auto` picks again). The review strips are in
-`references/screenshots/M8-T29 gate shots/review/`.
-
-- [ ] **(H) Variety:** jump five times (`gate approach 1.9`, target the gate, hold X). Say if the sequences feel different
-      enough, and if any shot looks wrong (clipping, the ship out of frame, too dark).
-- [ ] **(H) Pace:** say if the swallow, the black (0.75 s) and the burst out read clearly and are not too quick or too slow
-      (`data/jump/player_jump.json`).
-- [ ] **(H) Readable ship:** coming back out, the ship should read against the vortex: the core glows behind it, its lights are
-      on and a soft key light follows it during the shots. Say if it is too bright or still lost.
-
-# Play-testing the docking camera and the roll match (M8-T31)
-
-`play station_dock`, target `BABYLON 5 DOCKING BAY`, hold X. The docking is now cut into short shots, and 300 m short of the mouth
-the Fury stops, rolls to the bay's turn and goes in rolling with it. `state dock.shots` lists the shots; the review strips are in
-`references/screenshots/M8-T31 docking shots/review/`.
-
-- [ ] **(H) The roll match reads:** you see the Fury roll into step with the drum before the mouth, in a shot with the bay's face
-      behind it. Say if it is too slow, too quick, or hard to see.
-- [ ] **(H) Variety:** dock three times. Say if the shots feel varied enough, and if any is too dark, too far or clipping.
-
-# Play-testing the autopilot abort (M8-T32)
-
-During the gate jump's line-up and run-in, and docking's approach and lane, hold X (Shift, Mouse 4) for 1 s: the bar fills under
-`HOLD X / SHIFT / MOUSE 4: ABORT`, the cinematic cuts, and you fly on from where you were. Once the ship is in the gate's funnel, or
-through the docking bay's inner doors, the prompt goes away and X does nothing.
-
-- [ ] **(H) Abort:** abort a jump while it lines up and a docking on its approach. Say if 1 s feels right
-      (`data/controls/autopilot_abort.json`) and if the cut back to flying is clean.
-- [ ] **(H) Point of no return:** the prompt should vanish as the ship enters the vortex and as it passes the inner doors.
-

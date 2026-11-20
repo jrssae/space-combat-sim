@@ -6525,13 +6525,49 @@ data/station/bot_points.json     the crew's tunables, roads, patrol areas and wo
 ### 20.14 Known gaps (carried to later milestones)
 
 - The roadmap's "Carried from M7": an interceptor pulse leaves about 1.3 m beside its drawn barrel within about 30 m (M7-2), the
-  walls beside the cargo bay flicker (M7-3), sawtooth Cobra-bay doors (M7-4), the audio rework (M7-5); all M8.
+  walls beside the cargo bay flicker (M7-3), sawtooth Cobra-bay doors (M7-4), the audio rework (M7-5); all done in M8 (T10, T11,
+  T02, T12; §21).
 - A wing following a leader that glances along the drum's flank at 250 m/s or more sits at the edge of a Starfury's stop: one in five
   starts still lost a wingman at 200 m/s (M7-T76).
 - The cargo bay's `cargo` interaction is a placeholder that answers "not available" (the docking bay's `dock` runs since M8-T06, §21.1).
 - A lone fleeing Saturn rarely beats two raiders and never three; it survives by reaching shelter (accepted, M7-T55).
 
 ## 21. The tutorial vertical slice (M8)
+
+M8 as built (tasks T01 to T34 in `docs/milestones/m8-tutorial-vertical-slice.md`, decisions D79 to D90 there). The game's first
+mission, the tutorial (D79), and what it needed, plus the items carried from M7 and a few features the maintainer added on the way.
+This chapter holds the parts that are new systems; the rest went into the section of the system it changed, listed here.
+
+- **The tutorial (D79, T01, T05, T33):** §21.3. Two ships fly until the raid (the instructor and the player, T33); at the alarm the
+  whole wing launches in play and the player commands a flight of two wingmen. The raid is six raiders through the gate, then the
+  strike carrier with eight more (settled before T05). The course remark, the qualification and `Career` are §21.3's.
+- **Control checks (D80, T04):** §21.5.
+- **Launches (D81, T02, T03, T30):** the sawtooth doors and the squadron launch are §20.2 (`SquadronLaunch`, `launch squadron`);
+  T30 cut every launch into short takes from shot pools (§20.2, "Camera variety and the quicker hand-off").
+- **Docking, repair and relaunch (D82, T06, T31):** §21.1, with home docks and the roll match before the mouth.
+- **The raider capitals (D83, T07, T08, T09, T27):** the strike carrier (M10-T19, merged by T07) is §19.18, with the jump drive's
+  recharge and the retreat rules (T08). The civilian escort's three waves all ride strike carriers. **The Raider Battle Wagon
+  (T09) was removed by T27** (not from the show, and its source image's creator would not want it used this way): no hull, no
+  missile racks, no `transit wagon`; D83's lines about it are history.
+- **Approach cues and the gate at speed (D84, T18):** §20.5 (`ApproachCue`) and §19.10 ("At speed"); the gate jump's takes (T29)
+  and the hold-X abort for every autopilot (T32, `AutopilotAbort`) are §19.10 too.
+- **Flights of three and the hold-fire orders (D85, T19):** §21.2. Wingmen closing gaps after losses (T13) is §20.12.
+- **GPU memory on the overlay (D86, T20):** `VramReading` (§3 layout, the `render` provider in §6.4).
+- **Fonts (D87, T21):** `GameFonts` and `src/ui/game_theme.tres` (§18.2's layout); the console keeps a monospace font.
+- **Gamepad detection (D88, T22):** the cause was the pad's receiver, not the game (D88); the `Joypads` autoload, its toasts and
+  `joypads` are in §6.1 ("Which pads the game sees").
+- **The escort's own system (D89, T23, T26):** Gamma Leporis, no station and no nebula (§7.5, "A system's sky"); the escort's longer
+  route and Control's brief (T26) are mission data.
+- **Radial menus fit their entries (D90, T24):** §18.19 ("One slice per entry") and §18.22; Babylon 5's comms page (T34,
+  `StationCommands`) is §20.3 ("Control's orders").
+- **Smaller items:** the interceptor muzzle (T10, §20.3), the cargo bay's flicker (T11, the section skirts in the generator,
+  §20.7), the audio rework (T12, one loudness reference and the engines' steady level, §18.32), the bench in an export (T14,
+  `BenchPaths`, §17.1), free flight's three encounter switches (T28, §18.12), the Linux release build (T15, `scripts/build_release.sh`
+  and `release_smoke.sh`, §21.6). T25 found no frame-rate regression (a measuring mistake: `wait` counts ticks).
+- **Shot lengths (maintainer, 2026-11-19):** every cinematic camera angle lasts 1 s to under 3 s, up to 5 s for a take flagged
+  `feature`; the launch, gate and docking pools never repeat a take back to back (`ShotPool`, `ShotSequencer`;
+  `test_cinematic_shot_lengths` reads every shot in the data).
+- §21.4 has the measurements (T16).
 
 ### 21.1 Docking for repair and relaunch (D82, T06)
 
@@ -6582,8 +6618,8 @@ data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen,
 - **Relaunch.** The ship is given back its layers and handed to `LaunchDirector`: `launch_player(wing, door, false)` for the
   player (the launch's own camera, skip, hand-off and burn), `launch_ships` for a wingman; the arm in `relaunch`, else the next
   arm that is not launching, tried every `retry_s`; after `give_up_s` the ship is put off the bow at rest instead.
-- **Camera and skip.** Three `CinematicShot`s from the data (`dock_approach` behind the ship, `dock_entry` beside the mouth,
-  `dock_wait` drawing back from the bay), actors `player` and `bay`. `Main`'s shot skip (A or Start) calls `skip`: to the bay,
+- **Camera and skip.** T06's three fixed shots (`dock_approach`, `dock_entry`, `dock_wait`) were replaced by T31's takes (the
+  last bullet of this section). `Main`'s shot skip (A or Start) calls `skip`: to the bay,
   then to the end of the repair, then the launch's own skip. A visit that has not reached the bay in `timeout_s` jumps there too.
 - **Cancel.** `dock cancel` (and a respawn, whatever the state) ends a visit; from the console only while the ship is outside
   the inner doors.
@@ -6597,10 +6633,9 @@ data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen,
   scene, the dock's bay within `dock_range_m` (60 km from the fighter: the station's space out to its jumpgate), and a dock
   this director flies ships into (today the station's bay; a carrier's recall stays M8-T08's `CarrierDock`). Otherwise the
   fighter stays and fights. The bay's DOCK is offered to the player only when the bay is its home.
-- **Wingmen.** `order_wing` (`UiCommand.wing_dock`, key 6; the comms menu's DOCK, down-left on the ring of eight whose compass
-  points keep the four orders) sends every damaged wingman of the player's wing that may dock; the order exists only while
-  `order_available()` (a wingman has its home dock in range): otherwise the comms menu leaves DOCK's slice blank
-  (`CommsMenu.wing_orders(false)`, set at each opening) and the key does nothing. One below `wingman.hull_below` (0.25: maintainer,
+- **Wingmen.** `order_wing` (`UiCommand.wing_dock`, key 6; the comms menu's DOCK, the fifth entry, one equal slice since D90) sends every damaged wingman of the player's wing that may dock; the order exists only while
+  `order_available()` (a wingman has its home dock in range): otherwise the comms menu leaves DOCK out of the ring
+  (`CommsMenu.wing_orders(false)`, set at each opening; D90) and the key does nothing. One below `wingman.hull_below` (0.25: maintainer,
   2026-11-18; free flight included) goes by itself. The wingman's own `AiPilot` is set aside and a docking pilot flies it natively (§17.13): faster than
   `peel_above_mps` it first swings `peel_out_m` out of its formation, on along its course at the speed it has (braking where it
   flew put it in the way of the ships behind it: M8-T13's seeded fight lost a wingman to that), then a plain route with avoidance on
@@ -6744,7 +6779,7 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   (`Game.earn`, with the course rating from the notes) and saves it. Only a mission the flow started saves, so a test's Main
   never writes the pilot's file. Console: `career`, provider `career`.
 - **The list.** A mission block's `order` (default 100) sorts the New game list (`MissionCatalog`); the tutorial's is 0.
-- **Tests.** `test_tutorial` (menu to debrief by console commands, the launch's two flights, the drones left alone, the
+- **Tests.** `test_tutorial` (menu to debrief by console commands, the two-ship launch, the drones left alone, the
   skip, the four course remarks, the tour's stops in order, the raid out of the gate and off the carrier with the scramble,
   both ways of losing the pilot and the restart from the raid, the squadron leader; a fought raid as a balance test),
   `test_career`, `test_tutorial_rules`, `test_mission_seams`, and additions to `test_game_flow`, `test_debrief_model`,
@@ -6758,3 +6793,34 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   except about 60 fps for the launch's first 4 s inside the bay (tick and GPU both well under the frame there).
 - The raid at its busiest (14 raiders, 22 to 32 ships, up to 71 bolts, the grid and station traffic): tick p50 2.1 to 2.4 ms,
   p99 5.0 to 6.0 ms, max 10.9 ms; inside the 60 Hz budget, close to M7's p50 2.9, p99 6.8 ms (§20.13).
+
+### 21.5 Control checks (D80, T04)
+
+```
+src/mission/control_check.gd          ControlCheck (pure): one check's actions, pass condition, hint line and demo
+src/mission/control_check_runner.gd   ControlCheckRunner (pure): hint, repeat after `repeat_s`, demo after a second miss, never fails
+src/mission/control_check_book.gd     ControlCheckBook: the checks in data/checks/controls.json (27, D79's beats 4 to 9)
+src/mission/control_check_sample.gd   ControlCheckSample: the measured state a check reads, and the tick's command events
+src/mission/control_check_probe.gd    ControlCheckProbe: measures the real ship for MissionRunner while a check is open
+src/mission/control_hint_text.gd      ControlHintText: the live pad and keyboard bindings in the prompt line's naming
+```
+
+- **Pass conditions** read measured state, never `Input`: `velocity` (speed gained along a ship axis while the check's actions
+  were held), `rotation` (degrees about pitch, yaw or roll), `brake` (held and slowed) and `state` (assist, camera, look,
+  lights, tracking, target, fire mode, interactions, wing orders, target menus). Events come from the tick's `PilotCommand`.
+- **Never fails (Q3).** The hint shows as the check opens and again after 20 s; after a second miss the mission is asked for the
+  demo (`MissionApi.demo_requested`), which the tutorial has the instructor fly (`m.demo`). A check with no bound action is left
+  out with a journal note.
+- **Mission side.** `await m.check(id)`, `await m.run_checks([ids])`; a skipped step passes its checks. The HUD's `ControlHint`
+  shows the label, the live buttons (a rebind changes them) and a progress bar. Console `checks [status|list|pass|start|stop]`.
+- `target_ahead` has no default binding and `target_prev` only the mouse wheel, so the tutorial does not teach them (D79 beat 8).
+
+### 21.6 The Linux release build (T15, AC10)
+
+- `scripts/build_release.sh` fetches the pinned export templates by SHA-512 (`setup_export_templates.sh`), builds the native
+  library and the assets, imports and exports `Linux release` from the committed `export_presets.cfg` (reports, tests, docs,
+  tools, scripts, GUT, references and `native/` left out) into `build/release/` (gitignored): one binary with the pack embedded
+  plus `libscs_native.so`. Nearly all of its 15 minutes is the asset build.
+- `scripts/release_smoke.sh` runs the binary headless with `--console-strict`, plays `free_flight` (`SMOKE_SCENARIO=tutorial` for the tutorial's opening) for 600 ticks and quits: exit 0,
+  no `ERROR:` lines. It is not part of `run_tests.sh` (it needs the build). The bench writes to `user://reports` in an export
+  (T14, `BenchPaths`).
