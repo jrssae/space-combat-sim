@@ -48,6 +48,16 @@ const DEPARTURE_KEEP_S: float = 1.5
 const THROUGH_RADIUS: float = 1.1
 ## Ships come out of an arrival at this speed along -Z: clear of the plane in well under the 4 s it stays open.
 const ARRIVAL_SPEED_MPS: float = 200.0
+## A departing AI ship within this of the gate, in front of it, is flown in by the gate: lined up on the axis and run in at the
+## run-in's speed as far as its hull can reach (maintainer, 2026-11-19: civilians jumped too slowly).
+const LINE_UP_ZONE_M: float = 3500.0
+const AI_RUN_IN_MPS: float = 250.0
+## The line-up aims at the axis this far ahead of the ship, m.
+const AI_JOIN_AHEAD_M: float = 1200.0
+## ... and no nearer the mouth than this, so it is on the axis before it.
+const AI_JOIN_LAST_M: float = 300.0
+## Past the mouth a departing AI ship is swallowed in this long, the hyperspace surge (the hull's limits stop at the threshold).
+const AI_SWALLOW_S: float = 2.5
 ## Every gate in the tree, for a ship that looks for one to leave by (M8-T08: a carrier whose drive is still recharging).
 const GROUP: StringName = &"jumpgates"
 
@@ -199,6 +209,7 @@ func cancel_departure(ship: Node3D) -> void:
 		transits.cancel_departure(ship)
 	for i: int in range(_departures.size() - 1, -1, -1):
 		if _departures[i]["body"] == ship:
+			_release_flown(_departures[i])
 			_departures.remove_at(i)
 
 
@@ -278,6 +289,7 @@ func _step_departures() -> void:
 		var entry: Dictionary = _departures[i]
 		var ship := entry["body"] as Node3D
 		if not is_instance_valid(ship) or not ship.is_inside_tree() or not ship.is_visible_in_tree():
+			_release_flown(entry)
 			_departures.remove_at(i)
 			continue
 		var local: Vector3 = to_local(ship.global_position)
@@ -286,14 +298,59 @@ func _step_departures() -> void:
 		var inside: bool = fit.contains(Vector2(local.x, local.y), THROUGH_RADIUS)
 		if was_z < 0.0 and local.z >= 0.0 and inside and vortex.is_passable_for(JumpVortex.Direction.DEPARTURE):
 			_departures.remove_at(i)
-			_through_mouth(ship, entry["on_through"] as Callable, float(entry.get("swallow_s", 0.0)))
+			var swallow: float = float(entry.get("swallow_s", 0.0))
+			_through_mouth(ship, entry["on_through"] as Callable, swallow if swallow > 0.0 else AI_SWALLOW_S)
 			continue
+		if local.z < 0.0 and local.length() <= LINE_UP_ZONE_M:
+			_fly_in(entry, ship, local)
 		if local.z < 0.0 and local.length() <= DEPARTURE_OPEN_M:
 			if not open_vortex(JumpVortex.Direction.DEPARTURE):
 				continue  # an arrival is running: it opens once that one has closed
 			vortex.extend(DEPARTURE_KEEP_S)
 	if _departures.is_empty() and vortex.direction == JumpVortex.Direction.DEPARTURE and vortex.passing == 0:
 		vortex.close()
+
+
+# A departing AI ship in front of the gate: the gate flies it (its pilot set aside), lining it up on the axis and running it in at
+# the run-in's speed as far as its mains can take it, so a civilian jumps briskly and on the axis instead of slowing for the gate.
+# The player's own jump has its own autopilot (`GateAutopilot` through `JumpgateHost`).
+func _fly_in(entry: Dictionary, ship: Node3D, local: Vector3) -> void:
+	var body := ship as Ship
+	var driver: AiPilotDriver = null
+	for child: Node in ship.get_children():
+		if child is AiPilotDriver and (child as AiPilotDriver).brain != null:
+			driver = child as AiPilotDriver
+	if body == null or body.spec == null or driver == null:
+		return
+	if not entry.has("capability"):
+		entry["capability"] = ShipCapability.from_spec(body.spec, body.get_layout())
+		entry["driver"] = driver
+		driver.in_passage = true
+	var capability: ShipCapability = entry["capability"]
+	var transits: VortexTransits = VortexTransits.for_node(self)
+	var velocity: Vector3 = body.linear_velocity - (transits.rest_velocity() if transits != null else Vector3.ZERO)
+	var axis: Vector3 = (global_basis * departure_forward).normalized()
+	var speed: float = minf(AI_RUN_IN_MPS, sqrt(velocity.length_squared() + capability.a_main * local.length()))
+	var cmd: FlightCommand
+	var lined: bool = bool(entry.get("lined_up", false)) \
+			or GateAutopilot.lined_up(local, global_basis.inverse() * velocity, Vector3(0.0, 0.0, local.z + 1.0), departure_forward)
+	if lined:
+		entry["lined_up"] = true
+		cmd = GateAutopilot.follow_axis(body.global_position, velocity, body.global_basis, global_position, axis, Vector3.ZERO, speed,
+				capability)
+	else:
+		# Onto the axis a little ahead of the ship, so it joins the axis heading in rather than crossing it.
+		var join: Vector3 = Vector3(0.0, 0.0, minf(local.z + AI_JOIN_AHEAD_M, -AI_JOIN_LAST_M))
+		var target: Vector3 = global_transform * GateAutopilot.line_up_target(local, join)
+		cmd = GateAutopilot.line_up(body.global_position, velocity, body.global_basis, target, capability, speed)
+	body.set_flight_command(cmd)
+
+
+# A departing ship the gate was flying is given back to its pilot (its departure called off).
+func _release_flown(entry: Dictionary) -> void:
+	var driver: AiPilotDriver = entry.get("driver")
+	if driver != null and is_instance_valid(driver):
+		driver.in_passage = false
 
 
 # A departing ship crossed the mouth: it flies on down the funnel to the ring (M6-T22) and is handed back from there.

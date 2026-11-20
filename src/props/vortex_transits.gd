@@ -478,6 +478,11 @@ func _seen(body: RigidBody3D, at: Vector3) -> bool:
 	return VortexTransit.worth_flying(radius, camera.global_position.distance_to(at), px)
 
 
+## The frame's rest velocity, World (what "at rest" means for a gate and its funnels).
+func rest_velocity() -> Vector3:
+	return _rest()
+
+
 func _rest() -> Vector3:
 	return _world.rest_velocity() if _world != null and is_instance_valid(_world) else Vector3.ZERO
 
