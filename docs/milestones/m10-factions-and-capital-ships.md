@@ -10,8 +10,9 @@ tutorial"); M8-T07 (bring the strike carrier into `m8`) merged `origin/m10` into
 are now M10-Txx; commit subjects keep the old ids). The maintainer answered the scope questions Q1 to Q9 and the design
 questions Q10 to Q24 on 2026-11-13 (table below); Q14 and Q16 are settled in T03, Q6's and Q13's rules in T04. **M10 is not
 the current milestone** (M8 is, on `m8`): an agent looking for the next task in `CLAUDE.md`'s "Start here" skips this file
-until the milestones before it are accepted. Its later work runs on branch `m10`, rebased onto or re-cut from `main` before
-T01 starts (the maintainer decides), and every task checks M7 to M9 as built before relying on them. Decisions are labelled
+until the milestones before it are accepted. Its later work runs on branch `m10`, which the maintainer had fast-forwarded to
+`m8` on 2026-11-20 (it holds all of M8 and M8.5's plan; re-sync it from `m8` or `main` before T01 starts), and every
+task checks M7 to M9 as built before relying on them. Decisions are labelled
 D12.1, D12.2, ... (the plan's first number) until M10 starts; then they are renumbered and the design goes into a new
 section of `docs/architecture.md`.
 
