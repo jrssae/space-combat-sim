@@ -222,6 +222,98 @@ func test_a_run_for_a_gate_goes_round_its_side_onto_the_axis_and_through() -> vo
 	assert_true(through, "and goes through the mouth")
 
 
+# --- the play-test rules of 2026-11-20 (M8-T08) ------------------------------------------------------------------------
+
+
+func test_cornered_is_under_attack_with_the_drive_empty() -> void:
+	assert_true(CarrierTactics.cornered(true, false), "hit, and it cannot jump: every docked fighter goes out")
+	assert_false(CarrierTactics.cornered(true, true), "hit, but it can jump away")
+	assert_false(CarrierTactics.cornered(false, false), "nobody is shooting at it")
+
+
+func test_its_weave_never_stops_and_is_its_own() -> void:
+	var first: Vector3 = CarrierTactics.weave(7, 0.0, 12.0, 90.0)
+	var turned: float = 0.0
+	var last: Vector3 = first
+	for i: int in 900:
+		var w: Vector3 = CarrierTactics.weave(7, float(i), 12.0, 90.0)
+		assert_almost_eq(w.length(), 12.0, 1e-3, "always under way, at its weave's speed")
+		turned = maxf(turned, rad_to_deg(first.angle_to(w)))
+		assert_lt(rad_to_deg(last.angle_to(w)), 8.0, "slow: no more than a few degrees a second")
+		last = w
+	assert_gt(turned, 150.0, "it comes right round")
+	assert_eq(CarrierTactics.weave(7, 33.0, 12.0, 90.0), CarrierTactics.weave(7, 33.0, 12.0, 90.0), "the same every time for one seed")
+	assert_gt(CarrierTactics.weave(7, 33.0, 12.0, 90.0).distance_to(CarrierTactics.weave(8, 33.0, 12.0, 90.0)), 0.5,
+			"another carrier weaves its own way")
+
+
+func test_it_is_pushed_out_of_what_it_keeps_clear_of() -> void:
+	var centres := PackedVector3Array([Vector3.ZERO])
+	var radii := PackedFloat32Array([12000.0])
+	assert_eq(CarrierTactics.keep_out(Vector3(13000.0, 0.0, 0.0), centres, radii), Vector3.ZERO, "outside: nothing to do")
+	var edge: Vector3 = CarrierTactics.keep_out(Vector3(11900.0, 0.0, 0.0), centres, radii)
+	assert_gt(edge.x, 0.45, "just inside: out again at half speed or more, faster than its weave could take it in")
+	var deep: Vector3 = CarrierTactics.keep_out(Vector3(0.0, 6000.0, 0.0), centres, radii)
+	assert_almost_eq((deep - Vector3.UP).length(), 0.0, 1e-4, "deep inside: straight out at full speed")
+	var two: Vector3 = CarrierTactics.keep_out(Vector3(500.0, 0.0, 0.0), PackedVector3Array([Vector3.ZERO, Vector3(1000.0, 0.0, 0.0)]),
+			PackedFloat32Array([4000.0, 4000.0]))
+	assert_lte(two.length(), 1.0, "between two it is still one push")
+
+
+func test_a_run_goes_round_the_guns_when_a_safer_way_exists() -> void:
+	# The grid sits on the straight line from the carrier to the gate's approach.
+	var from := Vector3(0.0, 0.0, 30000.0)
+	var goal := Vector3(0.0, 0.0, -30000.0)
+	var centres := PackedVector3Array([Vector3(1000.0, 0.0, 0.0)])
+	var radii := PackedFloat32Array([12000.0])
+	assert_gt(CarrierTactics.time_inside(from, goal, centres, radii, 60.0), 300.0, "the straight way is minutes under the guns")
+	var via: Vector3 = CarrierTactics.route_via(from, goal, centres, radii, 60.0, 4.0)
+	assert_ne(via, goal, "so it does not fly it")
+	assert_gt(via.distance_to(centres[0]), radii[0], "its way round passes outside the guns' reach")
+	assert_almost_eq(CarrierTactics.time_inside(from, via, centres, radii, 60.0), 0.0, 1e-3, "the first leg is clear")
+	assert_lt(CarrierTactics.time_inside(via, goal, centres, radii, 60.0), 30.0, "and the second all but clear")
+	# Flown, deciding again as it goes, it reaches the goal without entering the guns' reach.
+	var at: Vector3 = from
+	var nearest: float = INF
+	for i: int in 4000:
+		if at.distance_to(goal) < 100.0:
+			break
+		at += (CarrierTactics.route_via(at, goal, centres, radii, 60.0, 4.0) - at).normalized() * 30.0
+		nearest = minf(nearest, at.distance_to(centres[0]))
+	assert_lt(at.distance_to(goal), 100.0, "it gets there")
+	assert_gt(nearest, radii[0] - 600.0, "having no more than skimmed the margin round the guns' reach (%.0f m)" % nearest)
+	# Nothing in the way: straight there.
+	assert_eq(CarrierTactics.route_via(from, goal, PackedVector3Array([Vector3(40000.0, 0.0, 0.0)]), radii, 60.0, 4.0), goal)
+	assert_eq(CarrierTactics.route_via(from, goal, PackedVector3Array(), PackedFloat32Array(), 60.0, 4.0), goal)
+
+
+func test_with_every_way_dangerous_a_run_still_goes() -> void:
+	# The gate itself lies inside the guns' reach, and so does the carrier: there is no safe way, and it goes all the same.
+	var from := Vector3(0.0, 0.0, 5000.0)
+	var goal := Vector3(0.0, 0.0, -5000.0)
+	var centres := PackedVector3Array([Vector3.ZERO])
+	var radii := PackedFloat32Array([12000.0])
+	var via: Vector3 = CarrierTactics.route_via(from, goal, centres, radii, 60.0, 4.0)
+	assert_true(via.is_finite())
+	var at: Vector3 = from
+	for i: int in 2000:
+		if at.distance_to(goal) < 100.0:
+			break
+		at += (CarrierTactics.route_via(at, goal, centres, radii, 60.0, 4.0) - at).normalized() * 30.0
+	assert_lt(at.distance_to(goal), 100.0, "it reaches the gate")
+
+
+func test_the_play_test_distances_are_data() -> void:
+	var raiders: Dictionary = CarrierTactics.options({}, CapitalData.doctrine(Factions.RAIDERS))
+	for key: String in ["grid_margin_m", "wing_keepout_m", "wing_span_m", "watch_m", "weave_mps", "weave_period_s", "attack_memory_s",
+			"danger_weight"]:
+		assert_true(CapitalData.doctrine(Factions.RAIDERS).has(key), "%s is in capitals.json" % key)
+		assert_gt(float(raiders[key]), 0.0, key)
+	assert_gte(int(raiders["wing_size"]), 2, "a group is more than one fighter")
+	assert_lt(float(raiders["weave_mps"]), CarrierJumps.CARRIER_SPEED_MPS * CarrierTactics.KEEP_OUT_MIN + 0.01,
+			"its weave cannot carry it into what it is pushed out of")
+
+
 # --- the native docking rows ------------------------------------------------------------------------------------------
 
 

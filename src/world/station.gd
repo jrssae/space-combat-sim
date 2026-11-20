@@ -37,6 +37,8 @@ const ASSET_ID: String = "babylon5_station"
 const DISPLAY_NAME: String = "BABYLON 5"
 ## The id fighters name as their home dock (`Combatant.home`, M8-T06): the scenario's `home: "babylon5"`.
 const HOME_ID: StringName = &"babylon5"
+## Every station in the tree, for a ship that keeps clear of a hostile one's guns (M8-T08: a raider carrier).
+const GROUP: StringName = &"stations"
 ## The station's beacon is heard 1 000 km out, as a nav buoy's and the gate's (M3-T17, D69).
 const BROADCAST_RANGE_M: float = 1.0e6
 ## Before the core's sync (-11), so the rows and Jolt see the drum at this tick's angle; after the frame's sample (-100).
@@ -110,6 +112,7 @@ var _goto_after_launch: String = ""  # the tour point a `station goto` during a 
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	add_to_group(WorldFrame.ANCHORED_GROUP)
+	add_to_group(GROUP)
 	process_physics_priority = SPIN_PRIORITY
 
 

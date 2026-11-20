@@ -29,6 +29,9 @@ const SHELL_MARGIN_M: float = 40.0
 ## A returning fighter turns its nose onto its velocity error while that is larger than this, else onto its docked heading.
 const FACE_DV_MPS: float = 30.0
 
+## A returning fighter follows the carrier's turning only within this of it, m; by twice this it flies the straight way.
+const TURN_FRAME_M: float = 400.0
+
 const PHASE_LAUNCH: int = 0
 const PHASE_RETURN: int = 1
 const EVENT_RELEASED: int = 1
@@ -134,6 +137,20 @@ func launch_all() -> int:
 	return added
 
 
+## Launches every docked fighter in the same tick, none waiting its turn (M8-T08: a carrier under attack that cannot jump
+## away). Returns how many left their cradles.
+func scramble() -> int:
+	var sent: int = 0
+	_queue.clear()
+	for i: int in cradles.count():
+		if cradles.states[i] != CarrierCradles.State.DOCKED:
+			continue
+		_launch(i)
+		sent += 1 if cradles.states[i] == CarrierCradles.State.BUSY else 0
+	set_physics_process(not _held.is_empty())
+	return sent
+
+
 ## Calls `ship` back to a free cradle (the one nearest to it): its pilot is held and the dock flies it in. False when it
 ## cannot (no free cradle, or the ship is already here).
 func recall(ship: Ship) -> bool:
@@ -230,7 +247,11 @@ func _step_rows(delta: float) -> void:
 		var ship: Ship = entry["ship"]
 		var basis := Basis(out[3][i], out[4][i], out[5][i])
 		if bool(entry["flying"]):
-			_steer(ship, entry["capability"], vel[i], -basis.z)
+			# The kernel flies it in the carrier's turning frame, which is right beside the hull only: kilometres out a
+			# slow turn of the carrier asked for hundreds of m/s sideways, and the fighter flew off for good.
+			var offset: Vector3 = ship.global_position - body.global_position
+			var far: float = clampf((offset.length() - TURN_FRAME_M) / TURN_FRAME_M, 0.0, 1.0)
+			_steer(ship, entry["capability"], vel[i] - body.angular_velocity.cross(offset) * far, -basis.z)
 			if events[i] == EVENT_AT_APPROACH:
 				entry["flying"] = false
 				ship.add_collision_exception_with(body)

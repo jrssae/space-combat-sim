@@ -5721,6 +5721,19 @@ The first real capital hull, built ahead of M10's framework (M10-T05, T07) and m
   and gets away if the pursuit breaks off. Tests: `test_carrier_logic.gd` (the rules, the doctrine and the drives as data),
   `test_jump_capability.gd` and `test_jump_holds.gd` (the drive, the pool's refusal), `test_strike_carrier.gd` (home at 3
   left and under 20 %, flight at 50 % and with every survivor docked, the jump, the gate, the run, a cradle-less carrier).
+- **The play-test rules of 2026-11-20** (M8-T08; all per carrier at 2 Hz in GDScript: `CarrierTactics` pure, `CarrierJumps`
+  the glue; the doctrine's keys in `data/capitals/capitals.json`). It never sits still: `CarrierTactics.weave` adds a velocity
+  of `weave_mps` whose direction turns once in `weave_period_s`, on a plane and phase from the run's own seed (a hash of
+  the carrier's name and its raid's number; sim time), while it stands off and while it waits for its fighters. It keeps out
+  (`keep_out`) of every hostile station's guns (`StationGrid.reach_m`, the furthest any mount fires from the station's
+  centre, plus `grid_margin_m`) and of groups of hostile fighters (`wing_size` within `wing_span_m`, seen within `watch_m`,
+  kept `wing_keepout_m` off). Hit within `attack_memory_s` it is under attack: it turns its stern to whoever hit it and
+  opens the distance at `flee_mps`. Cornered (`cornered`: under attack with its drive empty) it launches every docked
+  fighter in one tick (`CarrierDock.scramble`), turns round those on their way home and calls nobody home until it can
+  jump or the attack stops. Its run for the gate steers at `route_via`: the gate, or a point beside a keep-out when a way
+  round costs less (flying time plus `danger_weight` times the time inside keep-outs), so with every way dangerous it
+  still goes. A carrier's fighters are exempt from the low-attention tier while they are its own (parked there they read
+  as lost, and a carrier far from the player called the rest home or fled at once: the bug the maintainer saw).
 - **In a mission** (M8-T08). A spawn's `carrier.name` names the raid's carrier while the raid lasts and makes it a mission
   actor (`MissionStage`): a `destroyed` trigger on it holds only when it was destroyed, not when it got away
   (`MissionWorld.set_left`). A fighter riding in docked counts as in play (`CarrierJumps.RIDING_META`), one back on a cradle

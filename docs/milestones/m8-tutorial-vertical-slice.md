@@ -732,6 +732,35 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     `test_civilian_escort` 23 of 23 (4 new; the fought run ends at 435 s, inside 6 to 8 minutes) and `test_strike_carrier`
     16 of 16 (7 new or rewritten). No native or Python change. `bench_quick.sh` was not run (no per-tick work added: the
     carrier decides at 2 Hz).
+  - **Play-test rules (2026-11-20, the maintainer's flight in free flight):**
+    - **The bug** ("it arrived with raiders on its cradles and launched only a few"): beyond the tier's 10 km radius the
+      launched raiders were parked in the low-attention tier, read as lost, and the carrier called the rest home or fled
+      with `all_docked` at once. Reproduced with the raid 14 km from the player (six launched, six in the tier, the carrier
+      fleeing within seconds). A carrier's fighters are now exempt from the tier while they are its own. The cradles
+      themselves draw correctly (checked on the GPU: six shown, none after the launch).
+    - **Cornered** (hit within 15 s, its drive not recharged): every docked fighter leaves its cradle in the same tick
+      (`CarrierDock.scramble`), those on their way home turn back, and nobody is called home until it can jump or the
+      attack stops. This changes D83 in one case: at 50 % damage with its drive empty it flees without calling them home.
+    - **It hangs back and never sits still:** a seeded weave (12 m/s, a turn in about 90 s; a hash of its name and its
+      raid's number, sim time), 2 km outside the reach of a hostile station's guns (`StationGrid.reach_m`, about 10 km from
+      Babylon 5's centre) and 4 km from any group of two or more hostile fighters; it turns its stern to whoever hit it
+      and runs from them at 60 m/s.
+    - **Fighters coming aboard.** While any are on their way home and nobody is near to move off, it holds one straight
+      leg of its weave (a steady course to dock on, still under way). And a returning fighter no longer follows the
+      carrier's turning beyond 400 m of it (`CarrierDock`): the docking path flew in the hull's turning frame at any
+      range, so kilometres out a slow turn asked for hundreds of m/s sideways and the fighter flew off for good. That is
+      what stalled a wave in the escort before (one raider drifting away for ever).
+    - **The run for the gate** steers round the keep-outs when that costs less (flying time plus 4 times the time inside
+      them); with no safe way it still goes. The gate needs no drive, as before.
+    - **Where:** GDScript, per carrier at 2 Hz (`CarrierTactics` pure, `CarrierJumps` the glue); nothing per tick per
+      ship was added, so nothing went native. The distances are data (`data/capitals/capitals.json`).
+    - **Tests** (scratch copy of HEAD plus the staged change, `GUT_SLOW=1`): compile check 1 010 scripts; GUT 10 files,
+      156 tests, 149 passed, 0 failed, 7 pending (the AI escort runs and one tutorial test); the escort's scripted fought
+      run ends at 968 s (908 s before); `test_strike_carrier` 24 of 24 (8 new: the tier bug, the scramble with the drive empty and not with it
+      ready, the scramble of fighters called home, home from 9 km onto a steady course, outside the guns' reach, never
+      still, the gate run round the guns),
+      `test_carrier_logic` 23 of 23 (6 new), the escort, encounter, tutorial, raider flight, jump holds, mission skip
+      and station grid files.
   - **Play-test fix (2026-11-19, the maintainer's flight):** the civilian stopped after the second wave and never went on to
     NAV BETA, and NAV BETA was not in the target menu's objectives list. (1) It had arrived early, a raid chased it off, and
     with its route flown it idled where the chase ended, kilometres short (it also coasts about 3 km past its route's end

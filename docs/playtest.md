@@ -1501,6 +1501,18 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
       once they are aboard. Shoot one raider to under a fifth of its hull: it goes home alone. Say if 3 left, 20 % hull, 50 %
       carrier damage, the 90 s limit, the 240 s recharge and the 60 m/s run feel right (`data/capitals/capitals.json`).
 - The escort with the carriers moved to the M8 acceptance checklist ("The civilian escort in Gamma Leporis").
+- [ ] **Far from you it still launches them all (H, 2026-11-20):** `encounters force raid` with the raid 10 km or more away
+      (or fly off first): every docked raider is launched and stays out; before, the low-attention tier parked the launched
+      ones and the carrier took them for lost. `state carriers.launched` matches `carriers.fighters`.
+- [ ] **Cornered, it scrambles (H, 2026-11-20):** shoot a carrier in the four minutes after its jump in (`carrier status`
+      says `drive recharging`): every docked raider leaves its cradle at once, and none is called home while you keep
+      hitting it (15 s without a hit ends that). With `carrier charge` first it launches them in turn as before.
+- [ ] **It keeps clear and never sits still (H, 2026-11-20):** a carrier standing off weaves slowly (12 m/s, a turn in about
+      90 s), stays 2 km outside the reach of Babylon 5's guns (about 10 km from the station's centre) and 4 km from any group
+      of two or more Starfuries, and runs from whoever hits it at 60 m/s with its stern to them. Say if the weave reads as
+      evasive or as drifting, and if the distances are right (`data/capitals/capitals.json`).
+- [ ] **Its run for the gate goes round the guns (H, 2026-11-20):** with the station between a fleeing carrier and the
+      gate, it flies round the grid's reach instead of through it; with no safe way it goes all the same.
 - [x] **It hangs back:** fly at a carrier that is standing off: inside 2.5 km it turns its stern to you and backs away at up to
       30 m/s. Say if the stand-off, the speed and the turn rate (4 degrees a second) feel right.
 - [x] **Its death (H):** `carrier kill` with fighters docked: the capital explosion, and each docked fighter blows up on its

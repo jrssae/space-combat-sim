@@ -248,7 +248,11 @@ func test_it_flees_once_it_has_taken_half_its_hull_in_damage() -> void:
 	await _fly(3.0, func() -> bool: return run.state == CarrierRun.State.FLEEING)
 	assert_eq(run.state, CarrierRun.State.FLEEING, "50 % damage: it flees (D83)")
 	assert_eq(run.flee_reason, CarrierTactics.FLEE_HURT)
-	assert_eq(cap.dock.returning_count() + cap.dock.docked_count(), 6, "and calls every fighter home")
+	assert_eq(cap.dock.returning_count() + cap.dock.docked_count(), 0,
+			"under attack with its drive empty it keeps its fighters out (the play-test rules of 2026-11-20)")
+	assert_true(_run("carrier charge").ok)
+	await _fly(2.0, func() -> bool: return cap.dock.returning_count() + cap.dock.docked_count() == 6)
+	assert_eq(cap.dock.returning_count() + cap.dock.docked_count(), 6, "able to jump, it calls every fighter home")
 	assert_true(_run("carrier hurt").ok)
 	assert_lt(cap.damageable.hull.fraction(), float(run.options["retreat_hull"]), "the console's `hurt` takes it under the same share")
 
@@ -334,6 +338,202 @@ func test_a_carrier_with_no_cradles_holds_its_course_until_its_drive_has_recharg
 	assert_eq(run.state, CarrierRun.State.LEAVING, "recharged, it opens its point out")
 	await _fly(30.0, func() -> bool: return carriers.carriers_departed > departed)
 	assert_eq(carriers.carriers_departed, departed + 1)
+
+
+# --- the maintainer's play-test of 2026-11-20 ----------------------------------------------------------------------------
+
+
+func _station() -> Station:
+	return get_tree().get_nodes_in_group(Station.GROUP)[0] as Station
+
+
+# The carrier's speed against the frame's rest, m/s.
+func _speed(cap: CapitalStandin) -> float:
+	return (cap.linear_velocity - main.world.rest_velocity()).length()
+
+
+func test_far_from_the_player_its_launched_fighters_stay_its_own() -> void:
+	# The bug: beyond the tier's radius its launched fighters were parked in the low-attention tier, read as lost, and the
+	# carrier called the rest home or fled at once ("it launched only a few").
+	assert_true(_run("transit docked").ok)
+	var run: CarrierRun = carriers.runs()[0]
+	var cap: CapitalStandin = run.carrier
+	main.ship.global_position += Vector3(0.0, 14000.0, 0.0)  # the raid is now well beyond the tier's 10 km
+	await _fly(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	await _fly(15.0)
+	assert_eq(run.state, CarrierRun.State.STANDOFF, "it stands off: nobody is lost")
+	assert_lt(run.recalled_at_s, 0.0, "and nobody is called home")
+	assert_eq(cap.dock.launches, 6, "all six were launched")
+	assert_eq(cap.dock.returning_count() + cap.dock.docked_count(), 0)
+	for body: RigidBody3D in run.fighters:
+		assert_true(body.is_visible_in_tree(), "a launched fighter flies on its own body")
+		assert_false(body.has_meta(TierDirector.TIER_META), "not parked in the tier")
+		assert_true((body as Ship).tier_exempt, "exempt while it is the carrier's")
+	var one: Ship = run.fighters[0] as Ship
+	run.options["wait_s"] = 0.5
+	one.global_position = cap.global_position + Vector3(9000.0, 0.0, 0.0)
+	assert_true(_run("carrier charge").ok)
+	assert_true(_run("carrier recall").ok)
+	await _fly(20.0, func() -> bool: return run.left_behind > 0)
+	assert_gt(run.left_behind, 0)
+	assert_false(one.tier_exempt, "left behind, it is the tier's again")
+
+
+func test_hit_with_its_drive_empty_it_launches_every_docked_fighter_at_once() -> void:
+	assert_true(_run("transit docked").ok)
+	var run: CarrierRun = carriers.runs()[0]
+	var cap: CapitalStandin = run.carrier
+	await _fly(30.0, func() -> bool: return run.state == CarrierRun.State.HOLDING)
+	assert_eq(cap.dock.docked_count(), 6, "clear of its point, its fighters still on their cradles")
+	assert_false(JumpCapability.drive_ready(cap, SimClock.now()), "the jump in emptied its drive")
+	_hull_to(cap, 0.97)
+	await _fly(0.2)
+	assert_eq(cap.dock.docked_count(), 0, "hit, and unable to jump away: every cradle lets go")
+	assert_eq(cap.dock.busy_count(), 6, "all six leaving together (one at a time takes 2 s to start and 1.75 s more)")
+	await _fly(10.0, func() -> bool: return cap.dock.launches == 6)
+	assert_eq(cap.dock.launches, 6)
+	assert_eq(carriers.fighters_launched, 6)
+	for body: RigidBody3D in run.fighters:
+		assert_false(Damageable.of(body).hull.destroyed, "unhurt by leaving together")
+
+
+func test_hit_with_its_drive_ready_it_launches_them_in_turn() -> void:
+	assert_true(_run("transit docked").ok)
+	var run: CarrierRun = carriers.runs()[0]
+	var cap: CapitalStandin = run.carrier
+	await _fly(30.0, func() -> bool: return run.state == CarrierRun.State.HOLDING)
+	assert_true(_run("carrier charge").ok)
+	_hull_to(cap, 0.97)
+	await _fly(0.2)
+	assert_gte(cap.dock.docked_count(), 5, "able to jump away, it is not cornered: no scramble")
+
+
+func test_cornered_it_throws_out_the_fighters_it_had_called_home() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var raid: Array[RigidBody3D] = run.fighters.duplicate()
+	for i: int in 3:
+		_kill(raid[i])
+	await _fly(float(run.options["wait_s"]) + 5.0, func() -> bool: return cap.dock.docked_count() == 3)
+	assert_eq(cap.dock.docked_count(), 3, "three left: home and docked")
+	_hull_to(cap, 0.9)
+	await _fly(1.0, func() -> bool: return cap.dock.docked_count() == 0)
+	assert_eq(cap.dock.docked_count(), 0, "under attack with its drive empty: out again, all three")
+	await _fly(6.0)
+	assert_eq(cap.dock.returning_count() + cap.dock.docked_count(), 0, "and not called home while that lasts")
+	assert_true(_run("carrier charge").ok)
+	await _fly(3.0, func() -> bool: return cap.dock.returning_count() + cap.dock.docked_count() == 3)
+	assert_eq(cap.dock.returning_count() + cap.dock.docked_count(), 3, "able to jump, it calls them home again")
+	var departed: int = carriers.carriers_departed
+	await _fly(float(run.options["wait_s"]) + 90.0, func() -> bool: return carriers.carriers_departed > departed)
+	assert_eq(carriers.carriers_departed, departed + 1, "and jumps out")
+	assert_gte(run.recovered, 2, "with those that made it aboard")
+
+
+func test_called_home_from_far_off_they_reach_a_carrier_that_is_turning() -> void:
+	# Found with the weave: the docking path followed the carrier's turn at any range, so a fighter kilometres out was asked
+	# for hundreds of m/s sideways and flew away for ever (the wave never ended).
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var raid: Array[RigidBody3D] = run.fighters.duplicate()
+	var side: Vector3 = cap.global_basis.x
+	for i: int in raid.size():
+		raid[i].global_position = cap.global_position + side * 9000.0 + cap.global_basis.y * 200.0 * float(i)
+		raid[i].linear_velocity = cap.linear_velocity
+	main.ship.global_position = cap.global_position - side * 15000.0  # nobody near for it to back away from
+	for i: int in 3:
+		_kill(raid[i])
+	await _fly(3.0, func() -> bool: return cap.dock.returning_count() == 3)
+	assert_eq(cap.dock.returning_count(), 3, "three left, 9 km out: called home")
+	await _fly(8.0)  # its helm and engines settle onto the course it holds for them
+	var course: Vector3 = cap.linear_velocity - main.world.rest_velocity()
+	var bow: Vector3 = -cap.global_basis.z
+	var swung: float = 0.0
+	var veered: float = 0.0
+	var furthest: float = 0.0
+	for i: int in 40:
+		await _fly(5.0, func() -> bool: return cap.dock.docked_count() == 3)
+		if cap.dock.returning_count() > 0:
+			swung = maxf(swung, rad_to_deg(bow.angle_to(-cap.global_basis.z)))
+			veered = maxf(veered, rad_to_deg(course.angle_to(cap.linear_velocity - main.world.rest_velocity())))
+			assert_gt(_speed(cap), 0.5 * float(run.options["weave_mps"]), "under way all the while")
+		for k: int in range(3, raid.size()):
+			if not JumpCapability.is_destroyed(raid[k]) and not cap.dock.is_docked(raid[k] as Ship):
+				furthest = maxf(furthest, raid[k].global_position.distance_to(cap.global_position))
+		if cap.dock.docked_count() == 3:
+			break
+	assert_eq(cap.dock.docked_count(), 3, "all three made it home")
+	assert_lt(swung, 10.0, "the carrier held its heading for them (%.0f degrees)" % swung)
+	assert_lt(veered, 15.0, "and a steady course (%.0f degrees)" % veered)
+	assert_lt(furthest, 9500.0, "none flew off on the way (%.0f m)" % furthest)
+	assert_eq(cap.damageable.hull.fraction(), 1.0, "and none rammed it")
+
+
+func test_standing_off_it_stays_outside_the_stations_guns() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var station: Station = _station()
+	var reach_m: float = station.grid.reach_m()
+	var margin_m: float = float(run.options["grid_margin_m"])
+	assert_gt(reach_m, 6000.0, "the heavy cannons reach 6 km from their mounts")
+	var out: Vector3 = (cap.global_position - station.global_position).normalized()
+	cap.global_position = station.global_position + out * (reach_m + 0.4 * margin_m)  # inside the margin it keeps
+	cap.linear_velocity = main.world.rest_velocity()
+	main.ship.global_position = cap.global_position + out * 12000.0  # nobody near to move it
+	var nearest: float = INF
+	for i: int in 24:
+		await _fly(5.0)
+		nearest = minf(nearest, cap.global_position.distance_to(station.global_position))
+	assert_gt(nearest, reach_m, "never inside the reach of the guns (%.0f m, reach %.0f m)" % [nearest, reach_m])
+	assert_gt(cap.global_position.distance_to(station.global_position), reach_m + margin_m - 400.0, "and back out by its margin")
+	assert_eq(run.state, CarrierRun.State.STANDOFF)
+
+
+func test_it_never_sits_still() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var station: Station = _station()
+	var out: Vector3 = (cap.global_position - station.global_position).normalized()
+	cap.global_position = station.global_position + out * (station.grid.reach_m() + float(run.options["grid_margin_m"]) + 8000.0)
+	cap.linear_velocity = main.world.rest_velocity()
+	main.ship.global_position = cap.global_position + out * 12000.0  # nothing to back away from, nothing to keep clear of
+	await _fly(20.0)
+	var weave_mps: float = float(run.options["weave_mps"])
+	var first: Vector3 = cap.linear_velocity - main.world.rest_velocity()
+	var turned: float = 0.0
+	for i: int in 30:
+		await _fly(3.0)
+		assert_between(_speed(cap), 0.5 * weave_mps, CarrierJumps.CARRIER_SPEED_MPS, "always under way, slowly")
+		turned = maxf(turned, rad_to_deg(first.angle_to(cap.linear_velocity - main.world.rest_velocity())))
+	assert_gt(turned, 90.0, "and its course keeps turning: a weave, not a straight line")
+	assert_eq(run.state, CarrierRun.State.STANDOFF)
+	assert_true(_run("carrier charge").ok)
+	assert_true(_run("carrier recall").ok)
+	await _fly(3.0, func() -> bool: return run.move == CarrierTactics.MOVE_WAIT)
+	assert_eq(run.move, CarrierTactics.MOVE_WAIT)
+	await _fly(4.0)
+	assert_gt(_speed(cap), 0.5 * weave_mps, "waiting for its fighters it still does not sit still")
+
+
+func test_its_run_for_the_gate_goes_round_the_stations_guns() -> void:
+	var run: CarrierRun = await _bring_in_docked()
+	var cap: CapitalStandin = run.carrier
+	var station: Station = _station()
+	var gate: Jumpgate = main.gates.gate()
+	var keep_m: float = station.grid.reach_m() + float(run.options["grid_margin_m"])
+	var from_gate: Vector3 = (station.global_position - gate.global_position).normalized()
+	cap.global_position = station.global_position + from_gate * (keep_m + 3000.0)  # the station lies between it and the gate
+	cap.linear_velocity = main.world.rest_velocity()
+	main.ship.global_position = cap.global_position + from_gate * 20000.0
+	run.options["wait_s"] = 1.0
+	assert_true(_run("carrier recall").ok)
+	await _fly(5.0, func() -> bool: return run.move == CarrierTactics.MOVE_GATE)
+	assert_eq(run.move, CarrierTactics.MOVE_GATE, "its drive recharging, it runs for the gate")
+	var course: Vector3 = (cap.cruise_velocity - main.world.rest_velocity()).normalized()
+	var to_station: Vector3 = station.global_position - cap.global_position
+	var miss_m: float = (to_station - course * to_station.dot(course)).length()
+	assert_gt(miss_m, station.grid.reach_m(), "its course passes outside the guns' reach (%.0f m off the station)" % miss_m)
+	assert_gt(course.dot((gate.global_position - cap.global_position).normalized()), 0.5, "while still making for the gate")
 
 
 func test_it_backs_away_from_an_attacker_with_its_stern_to_it() -> void:

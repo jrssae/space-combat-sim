@@ -42,6 +42,14 @@ var flee_reason: StringName = CarrierTactics.STAYS
 var move: StringName = &""
 var gate: Jumpgate = null
 var left_via: StringName = &""
+## When it was last hit (sim seconds; never: -INF) and by whom (an instance id, 0 unknown), and the seed of its weave.
+var attacked_at_s: float = -INF
+var attacker_id: int = 0
+var weave_seed: int = 0
+## The steady velocity (against the frame's rest) it holds while fighters come aboard; zero when none are.
+var recovery_course: Vector3 = Vector3.ZERO
+## Each fighter's tier exemption before it became this carrier's (a body -> bool), given back when it is its no longer.
+var tier_was: Dictionary = {}
 ## The raid was ended by its script or the console (`CarrierJumps.end_raid`).
 var raid_ended: bool = false
 ## When the carrier last looked for the nearest enemy and decided (sim seconds).

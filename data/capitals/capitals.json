@@ -12,7 +12,16 @@
    "fighter_return_hull": 0.2,
    "retreat_hull": 0.5,
    "wait_s": 90.0,
-   "flee_mps": 60.0
+   "flee_mps": 60.0,
+   "grid_margin_m": 2000.0,
+   "wing_keepout_m": 4000.0,
+   "wing_size": 2,
+   "wing_span_m": 1500.0,
+   "watch_m": 15000.0,
+   "weave_mps": 12.0,
+   "weave_period_s": 90.0,
+   "attack_memory_s": 15.0,
+   "danger_weight": 4.0
   }
  }
 }

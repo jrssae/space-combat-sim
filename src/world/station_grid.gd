@@ -240,6 +240,16 @@ func set_on(on: bool) -> void:
 		sim.core.set_grid_off(faction, not on)
 
 
+## How far from the station's centre its guns reach, m: the furthest any mount's fire goes (M8-T08: what a raider carrier
+## stays outside of). 0 with no mount.
+func reach_m() -> float:
+	var reach: float = 0.0
+	for mount: TurretMount in mounts:
+		if mount.weapon != null:
+			reach = maxf(reach, mount.position.length() + mount.weapon.turret_range_m)
+	return reach
+
+
 ## Covering fire (M8-T34): every gun that reaches takes hostiles within `radius_m` of `ship` first, nearest it first; null ends it.
 func set_cover(ship: Node3D, radius_m: float) -> void:
 	var sim: SimCore = _sim()
