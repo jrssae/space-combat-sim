@@ -1308,6 +1308,12 @@ the Fury stops, rolls to the bay's turn and goes in rolling with it. `state dock
 - [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK): `ALPHA 2: COPY, DOCKING FOR
       REPAIRS`, it flies off to the bay (its roster row reads DOCKING), is gone a while (DOCKED), comes out of a Cobra bay and forms up
       again (its usual readout). Hurt one below 25 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
+- [ ] **(H) The wing breaks off while you dock:** dock with wingmen in formation. As the autopilot takes your ship they leave the
+      formation and do not follow you toward the bay. Under FORM UP, HOLD FIRE or HOLD POSITION they go to a stand-off 1.5 km
+      to the side of the lane and below it, hold there and do not fire (roster `HOLD`); under any other order they fight what
+      comes on their own and stand by there otherwise (roster `ATK ...` or `STAND BY`). A wingman docking itself keeps doing
+      that (`DOCKING`, `DOCKED`). When you come out of the Cobra bay they rejoin you under the order they had; abort the dock
+      (hold X) and they rejoin at once. Say if the stand-off is too far or too near, and if they rejoin quickly enough.
 - [ ] **(H) Fighters first at the bay:** with civilians about (`traffic dock`, `traffic auto on`), dock, launch and dock again. A
       transport on its way down the lane moves a few hundred metres aside and waits; you fly in past it. You wait only for a
       ship already on the lane's last 700 m, in the tunnel, or coming out, and then beside the lane (150 m below it), not on

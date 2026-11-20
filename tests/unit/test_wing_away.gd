@@ -126,3 +126,18 @@ func test_an_away_member_is_never_the_one_sent_across_to_even_the_arms() -> void
 	_lose(wing, [1])
 	wing.close_gaps()
 	assert_eq(wing.slot_of(docked), 3, "the arm's last ship would cross, but it is away: it stays")
+
+
+func test_a_wing_whose_leader_is_away_keeps_its_orders_meaning() -> void:
+	# Maintainer, 2026-11-20: while the player docks its wingmen follow their last order, hold fire or fight.
+	var wing := Wing.new()
+	assert_false(wing.leader_away)
+	for order: AiContext.Order in [AiContext.Order.FORM_HOLD_FIRE, AiContext.Order.HOLD_POSITION]:
+		wing.order = order
+		assert_true(wing.holds_fire())
+		assert_eq(wing.away_order(), AiContext.Order.FORM_HOLD_FIRE, "%s: still no shot" % AiContext.order_word(order))
+	for order: AiContext.Order in [AiContext.Order.FORM_ON_ME, AiContext.Order.ATTACK_MY_TARGET, AiContext.Order.ENGAGE_AT_WILL,
+			AiContext.Order.COVER_ME]:
+		wing.order = order
+		assert_false(wing.holds_fire())
+		assert_eq(wing.away_order(), AiContext.Order.ENGAGE_AT_WILL, "%s: they fight on their own" % AiContext.order_word(order))

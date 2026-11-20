@@ -556,7 +556,11 @@ static func _activity(wing: Wing, member: Combatant, described: Dictionary) -> S
 	var docking: String = wing.dock_status(member)
 	if not docking.is_empty():
 		return docking
-	return "holding" if str(described.get("state", "")) == "holding" else str(described.get("behaviour", "none"))
+	var behaviour: String = str(described.get("behaviour", "none"))
+	if wing.leader_away and (behaviour == "follow_path" or behaviour == "idle"):
+		# Broken off while the leader docks, with nothing to fight: holding its fire, or standing by.
+		return "holding" if wing.holds_fire() else "standing_by"
+	return "holding" if str(described.get("state", "")) == "holding" else behaviour
 
 
 func _physics_process(delta: float) -> void:
@@ -582,12 +586,16 @@ func refresh(wing: Wing) -> void:
 	if not alive and (wing.leader == null or not wing.leader.is_player) and not wing.members().is_empty():
 		_lead(wing, wing.members()[0])  # the lowest slot leads on
 		alive = true
-	var order: AiContext.Order = wing.effective_order(alive)
+	# The player is docking (M8-T06): its wingmen break off. No leader to follow or form on, and the order `away_order` gives.
+	var detached: bool = wing.leader_away and wing.leader != null and wing.leader.is_player
+	if detached:
+		alive = false
+	var order: AiContext.Order = wing.away_order() if detached else wing.effective_order(alive)
 	var leader_id: int = 0
 	var target_id: int = 0
 	var link: UniversePos = null
 	var link_velocity := Vector3.ZERO
-	if wing.leader != null and wing.leader.targetable != null:
+	if wing.leader != null and wing.leader.targetable != null and not detached:
 		leader_id = wing.leader.targetable.get_instance_id()
 	if alive:
 		var ship: Ship = wing.leader.ship
@@ -613,7 +621,7 @@ func refresh(wing: Wing) -> void:
 		ctx.leader_id = leader_id
 		ctx.leader_target_id = target_id
 		ctx.engage_radius_m = wing.engage_radius_m
-		ctx.has_slot = true
+		ctx.has_slot = not detached
 		ctx.slot_offset = wing.slot_offset(wing.slot_of(member))
 		ctx.leader_link_position = link
 		ctx.leader_link_velocity = link_velocity

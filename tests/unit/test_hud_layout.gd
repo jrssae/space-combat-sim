@@ -559,6 +559,7 @@ func test_the_roster_tags_say_what_each_wingman_is_doing() -> void:
 	assert_eq(HudLayout.roster_tag("formation", "", true), "DOWN")
 	assert_eq(HudLayout.roster_tag("docking"), "DOCKING", "on its way to the docking bay (M8-T06)")
 	assert_eq(HudLayout.roster_tag("docked", "RAIDER 3"), "DOCKED", "inside, being repaired")
+	assert_eq(HudLayout.roster_tag("standing_by"), "STAND BY", "broken off while the leader docks, with nothing to fight")
 
 
 func test_the_roster_stacks_one_row_per_wingman_top_left() -> void:

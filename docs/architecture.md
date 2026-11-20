@@ -6653,6 +6653,13 @@ data/scenarios/station_dock.json the player 1.2 km off the bay with two wingmen,
   never moves an away member or puts a ship in its place (the ones behind it move up past it), so it comes back to the slot it left. The rosters (`WingDirector.hud_roster`, `roster`) read `docking` while it flies in
   (`Wing.set_docking`) and `docked` while it is inside or on the rack (`Wing.dock_status`; the HUD's DOCKING and DOCKED), then
   its pilot's behaviour again. After its launch its own pilot is put back and the wing briefs it at the next refresh.
+- **The wing breaks off while the player docks (maintainer, 2026-11-20).** `start_player` sets `Wing.leader_away` on the
+  wing the player leads; `WingDirector.refresh` then gives its members no leader, slot or link and the order
+  `Wing.away_order()`: FORM UP, HOLD FIRE under either hold-fire order (no shot), ENGAGE AT WILL under any other. Each
+  wingman not docking itself gets a route to its own stand-off (`wing_wait` in the data: 1.5 km to its side of the lane,
+  700 m below it, 800 m off the mouth, 150 m apart), which it holds; under a fighting order the route stands aside for an
+  attack (`Route.yield_to_attack`). The rosters read `holding` or `standing_by` meanwhile. When the visit ends (the launch's
+  hand-off, an abort, a respawn) `_drop` clears the flag and the routes and the wing is briefed as before, in the same tick.
 - **One at a time, fighters first (maintainer, 2026-11-19).** A fighter cleared to dock claims the bay
   (`DockingDirector.claims_bay`: on the lane or through the doors, or on its approach within `priority.claim_within_m`, 3 km,
   of the mouth). While one does, no civilian takes the lane from its entry point (`StationTraffic._bay_busy`), and a docking

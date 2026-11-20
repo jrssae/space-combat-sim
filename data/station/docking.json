@@ -31,6 +31,8 @@
  },
  "priority": {"_doc": "Fighters docking for repair take the bay before the station's traffic (maintainer, 2026-11-19). A fighter claims the bay on the lane, or on its approach within claim_within_m of the mouth. While one claims it, no civilian takes the lane, and one on the lane farther out than commit_out_m moves yield_off_m to its side and waits, then goes round to an entry point and comes in again; nearer in, or undocking, it goes on and the fighter waits wait_off_m below the lane, never on it.",
               "claim_within_m": 3000.0, "commit_out_m": 700.0, "yield_off_m": 300.0, "wait_off_m": 150.0},
+ "wing_wait": {"_doc": "The player's wingmen break off while the player docks (maintainer, 2026-11-20): each goes to a stand-off beside the bow, clear of the docking lane, the cargo bay's and the Cobra bays' ways out: side_m to its own side of the lane (spacing_m more per slot), below_m below it and out_m off the mouth, in the station's frame. Under a hold-fire order it holds there and does not fire; under any other it fights what comes and stands by there otherwise.",
+               "side_m": 1500.0, "below_m": 700.0, "out_m": 800.0, "spacing_m": 150.0, "cruise_mps": 120.0},
  "relaunch": {
   "wing": "alpha",
   "door": 1,

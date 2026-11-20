@@ -337,6 +337,23 @@ func slot_offset(slot: int) -> Vector3:
 	return formation.offset(slot, size)
 
 
+## The leader has left its wing for a while and comes back (M8-T06; maintainer, 2026-11-20: the player docking). The wingmen
+## break off: they do not follow it, and fly `away_order` until it is back.
+var leader_away: bool = false
+
+
+## Whether the wing's order is one of the hold-fire orders.
+func holds_fire() -> bool:
+	return order == AiContext.Order.FORM_HOLD_FIRE or order == AiContext.Order.HOLD_POSITION
+
+
+## The order the members fly while their leader is away (`leader_away`): under a hold-fire order they still hold their fire
+## (form up, hold fire, with nobody to form on: they are sent to a stand-off and hold there); under any other they fight on
+## their own.
+func away_order() -> AiContext.Order:
+	return AiContext.Order.FORM_HOLD_FIRE if holds_fire() else AiContext.Order.ENGAGE_AT_WILL
+
+
 ## The order the members fly: `order` while the leader lives, ENGAGE AT WILL while it is dead.
 func effective_order(leader_alive: bool) -> AiContext.Order:
 	return order if leader_alive else AiContext.Order.ENGAGE_AT_WILL

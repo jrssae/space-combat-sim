@@ -37,6 +37,8 @@ const ACTIONS: Array[StringName] = [&"status", &"player", &"wing", &"cancel", &"
 ## After the launches (-45), before the tier (-12) and the core's sync (-11).
 const PRIORITY: int = -44
 const NOTICE_S: float = 4.0
+## The route a wingman flies to its stand-off while the player docks.
+const STAND_OFF_ROUTE: String = "STANDING OFF"
 ## A fighter through the inner doors waits at most this long for them to shut behind it, seconds.
 const DOORS_WAIT_S: float = 20.0
 ## The docking shots, a pool per stage (M8-T31).
@@ -75,6 +77,13 @@ var claim_within_m: float = 3000.0
 var commit_out_m: float = 700.0
 var yield_off_m: float = 300.0
 var wait_off_m: float = 150.0
+## Where the player's wingmen stand off while the player docks (`wing_wait`): to their side of the lane, below it and off the
+## mouth, one `stand_spacing_m` farther per slot, flown at `stand_cruise_mps`.
+var stand_side_m: float = 1500.0
+var stand_below_m: float = 700.0
+var stand_out_m: float = 800.0
+var stand_spacing_m: float = 150.0
+var stand_cruise_mps: float = 120.0
 var corridor_m: float = 35.0
 var approach_mps: float = 140.0
 var via_mps: float = 45.0
@@ -115,6 +124,8 @@ var _key_light: CinematicKeyLight = CinematicKeyLight.new()
 var _wired: Station = null
 var _capability: ShipCapability = null
 var _notice_left_s: float = 0.0
+# The stand-off route each wingman was given while the player docks, by the wingman's instance id.
+var _stand_offs: Dictionary = {}
 var _offer_armed: bool = true
 var _started: int = 0
 var _player_pose: Variant = null
@@ -273,6 +284,7 @@ func start_player(why: StringName = DockVisit.WHY_HOLD) -> String:
 	_player_pose = null
 	shots.usable = _take_clear
 	shots.begin(&"approach", _play_shot, roundi(SimClock.now() * 10.0))
+	_break_wing_off()
 	_say("%s: DOCKING, AUTOPILOT ENGAGED" % Station.DOCKING_BAY_NAME)
 	return ""
 
@@ -482,6 +494,7 @@ func _physics_process(delta: float) -> void:
 			_step_wingman(entry, s, delta)
 	_watch_wing()
 	_watch_offer()
+	_keep_wing_clear(s)
 
 
 # The bay's `dock` interaction runs the player's docking (it answered "not available" before M8-T06).
@@ -789,6 +802,7 @@ func _drop(entry: Dictionary) -> void:
 		stop_shots()
 		_key_light.detach()
 		main.adapter.resync_edges(main.input_source)
+		_call_wing_back()
 		return
 	if not is_instance_valid(c) or not is_instance_valid(c.ship):
 		return
@@ -853,6 +867,77 @@ func _step_wingman(entry: Dictionary, s: Station, delta: float) -> void:
 			_fly_in(entry, s, local)
 			if s.airlock == null and done and visit.state == DockVisit.State.LANE:
 				_dock_now(entry)
+
+
+# --- the player's wing while the player docks (maintainer, 2026-11-20) --------------------------------------------------
+
+
+# The player's wing when the player leads it, or null.
+func _own_wing() -> Wing:
+	var wing: Wing = main.wings.player_wing() if main != null and main.wings != null else null
+	return wing if wing != null and wing.leader == main.combatant else null
+
+
+# The autopilot has the player's ship: its wingmen break off. They stop following it toward the bay and fly on their last
+# order (`Wing.away_order`) until it is launched again.
+func _break_wing_off() -> void:
+	var wing: Wing = _own_wing()
+	if wing == null:
+		return
+	wing.leader_away = true
+	main.wings.refresh(wing)
+	_keep_wing_clear(station())
+
+
+# While the player docks, each wingman that is not docking itself has a stand-off beside the bow to go to: under a hold-fire
+# order it holds there; under any other it fights what comes (the route stands aside for an attack) and waits there otherwise.
+func _keep_wing_clear(s: Station) -> void:
+	var wing: Wing = _own_wing()
+	if s == null or plan == null or wing == null or not wing.leader_away or _player_entry().is_empty():
+		return
+	for member: Combatant in wing.members():
+		var pilot: AiPilot = member.driver.brain as AiPilot if member.driver != null else null
+		if pilot == null or not wing.dock_status(member).is_empty():
+			continue  # docking itself: it keeps doing that
+		var key: int = member.get_instance_id()
+		if _stand_offs.has(key) and pilot.context.route == _stand_offs[key]:
+			continue
+		var route := Route.new()
+		route.name = STAND_OFF_ROUTE
+		route.pace = Route.PACE_NONE
+		route.cruise_mps = stand_cruise_mps
+		route.yield_to_attack = not wing.holds_fire()
+		route.add(main.world.to_universe(s.global_transform * _stand_off_point(s, member, wing.slot_of(member))), &"", 1.0e9)
+		BehaviourFollowPath.attach(pilot, route)
+		_stand_offs[key] = route
+
+
+# A wingman's stand-off in the station's frame: on its own side of the docking lane, below it and off the mouth.
+func _stand_off_point(s: Station, member: Combatant, slot: int) -> Vector3:
+	var axis: Vector3 = _axis()
+	var side: Vector3 = axis.cross(Vector3.UP).normalized()
+	var local: Vector3 = s.global_transform.affine_inverse() * member.ship.global_position
+	var offset: float = (local - plan.mouth).dot(side)
+	if absf(offset) < 1.0:
+		offset = 1.0 if slot % 2 == 0 else -1.0  # on the lane's line: the slots part to both sides
+	return plan.mouth - axis * stand_out_m + side * signf(offset) * (stand_side_m + stand_spacing_m * float(maxi(slot - 1, 0))) \
+			+ _below() * stand_below_m
+
+
+# The player is launched again, or its docking was called off: the wingmen leave their stand-offs and rejoin it under the
+# wing's order, as before.
+func _call_wing_back() -> void:
+	var wing: Wing = _own_wing()
+	if wing != null:
+		wing.leader_away = false
+	for member: Combatant in (wing.members() if wing != null else ([] as Array[Combatant])):
+		var pilot: AiPilot = member.driver.brain as AiPilot if member.driver != null else null
+		var key: int = member.get_instance_id()
+		if pilot != null and _stand_offs.has(key) and pilot.context.route == _stand_offs[key]:
+			pilot.context.route = null
+	_stand_offs.clear()
+	if wing != null:
+		main.wings.refresh(wing)
 
 
 # A wingman of the player's wing below the hull threshold docks by itself and says so.
@@ -1202,6 +1287,12 @@ func _load_data() -> void:
 	commit_out_m = maxf(float(priority.get("commit_out_m", commit_out_m)), join_out_m)
 	yield_off_m = maxf(float(priority.get("yield_off_m", yield_off_m)), 50.0)
 	wait_off_m = maxf(float(priority.get("wait_off_m", wait_off_m)), 2.0 * corridor_m)
+	var wing_wait: Dictionary = d.get("wing_wait", {})
+	stand_side_m = maxf(float(wing_wait.get("side_m", stand_side_m)), 500.0)
+	stand_below_m = maxf(float(wing_wait.get("below_m", stand_below_m)), 0.0)
+	stand_out_m = maxf(float(wing_wait.get("out_m", stand_out_m)), 0.0)
+	stand_spacing_m = maxf(float(wing_wait.get("spacing_m", stand_spacing_m)), 50.0)
+	stand_cruise_mps = maxf(float(wing_wait.get("cruise_mps", stand_cruise_mps)), 10.0)
 	_boxes = DockKeepOut.boxes_from(d.get("keep_out"))
 	if not shots.pool.error.is_empty():
 		push_warning("DockingDirector: %s" % shots.pool.error)

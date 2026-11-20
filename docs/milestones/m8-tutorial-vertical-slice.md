@@ -628,6 +628,20 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   29 s each with a civilian on the lane and a queue behind it, the civilians dock after, no rams), `test_dock_autopilot` (8,
   the eased hold), `test_station_traffic`, `test_station_run`, `test_station_commands`, `test_station_sheltered`,
   `test_encounters`, `test_freighter_cargo`, `test_console_command_list`.
+- **Fix (2026-11-20, the maintainer's play-test: "ai wing starfuries must break off when the player docks ... they follow
+  their last order of hold fire vs attack until the player's starfury is re-launched"):** when the dock autopilot takes the
+  player's ship, its wing is flagged `Wing.leader_away`: the wingmen get no leader, slot or link, so they stop following it
+  toward the bay, and fly `Wing.away_order()`. Under FORM UP, HOLD FIRE or HOLD POSITION they go to a stand-off beside the
+  bow (`wing_wait` in `data/station/docking.json`: 1.5 km to their side of the lane, 700 m below, 800 m off the mouth), hold
+  there and do not fire; under FORM ON ME, ATTACK, ENGAGE or COVER they engage at will, with the stand-off to wait at when
+  nothing is about. A wingman docking itself keeps doing that. The rosters read HOLD or STAND BY (or the attack). At the
+  launch's hand-off, an abort or a respawn they are briefed under the wing's own order again in the same tick.
+  **Tests** (staged scratch copy, HEAD `5585cf6a` plus this fix): the compile check clean (1009 scripts); 21 GUT files, 247
+  tests, 0 failures: the new `test_docking_wing` (4: under `form_hold` they hold clear, never fire with a raider in reach and
+  form up again after the launch; under FORM ON ME with raiders they engage and rejoin; an abort brings them back at once; a
+  wingman docking itself keeps docking), `test_wing_away` (8), `test_hud_layout`, `test_docking`, `test_docking_traffic`,
+  `test_wing`, `test_wing_orders`, `test_wing_gaps`, `test_flights`, `test_flight_fight`, `test_station_traffic`,
+  `test_station_run`, `test_station_commands`.
 - **Done, the three follow-ups (2026-11-19):** **AI flights:** `DockingDirector._watch_wing` goes through every wing, so
   Babylon 5's flights of three dock by themselves below 25 % with their home in range; a flight's lead first hands the flight
   to its first wingman (`WingDirector.hand_lead`) and docks as one of its wingmen, so the flight flies on and the docked ship's
