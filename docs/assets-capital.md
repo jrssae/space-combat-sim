@@ -184,3 +184,109 @@ over by its cradle. The `jump_point` anchor is where it opens the point it leave
 - Whether the 7 cm texel reads well enough from 50 m before T05's shared detail layer.
 - The decks' sheen: square-on to the sun a deck shows one bright highlight; the plating stays readable beside it.
 - VRAM and frame cost on the target GPU (the sheets were shot on oscar's R9 280X).
+
+## M10 lengths (T01)
+
+Stage 1 of M10-T01 (Q4, Q22, Q48): every M10 hull's quoted length with its sources, the reference STL's proportions, the
+fit through a jumpgate's mouth and the pipeline. **Awaiting the maintainer's approval; no generator starts before it.**
+Per-hull descriptions, renders and the full axis mappings (with signs) follow in stage 2, in `docs/design-references.md`.
+
+**Sources** (as reached on 2026-11-20; the fan wiki is read through its API, the charts as images):
+
+- **TE**: Tim Earls, *Size Comparison Charts* 1.0 to 1.3 (19 and 26 January 1999). Earls was the visual-effects art
+  director in seasons 4 and 5; the charts are the nearest thing to production figures. `isnnews.net/warlock/resources/sizecharts/Chart1.jpg` to `Chart4.jpg`.
+- **TBP**: The Babylon Project wiki (`babylon5.fandom.com`) infobox or text; most of its lengths cite TE.
+- **ITF**: Sierra's cancelled game *Into the Fire* (1999), its docking-bay data as quoted on TBP.
+- **OG**: *The Official Guide to Babylon 5* (Sierra CD-ROM), as quoted on TBP.
+- **SotG**: Mongoose, *Babylon 5: Ships of the Galaxy* (RPG), as transcribed on `d6holocron.com`; several figures are marked
+  "estimated" there. **MD**: Mongoose, *Babylon 5: The Drakh*, same site.
+- **B5W**: Agents of Gaming, *Babylon 5 Wars* (miniatures game), as quoted on TBP. Its scale runs about a quarter of TE's
+  (Hyperion 245 m against 1 025 m).
+- **WPL**: the draft "List of starships in Babylon 5" (`en.wikipedia.org/wiki/User:Jclemens/...`); it quotes TE, Mongoose and
+  episode dialogue.
+- **FN**: the length written into the STL's file name. **est.**: my estimate, no published figure.
+
+**Columns.** *Axes*: the STL axes that carry length, width and height (up assumed to be file z, the print orientation; the
+bow's sign is read in stage 2). *Box*: width x height in metres at the chosen length, from the STL's bounding box. *Gate*:
+whether that box passes the mouth, an ellipse 2 400 by 1 510 m (Q22): **yes** (the box's corners inside the ellipse),
+**rolled** (only turned 90 degrees about its length), **no**. *Opens*: the first list of hulls that open their own jump
+points (Q22; T03 finalises it): **own**, **gate** (uses a gate or another ship's point), **shimmer** (Q44).
+
+### Capital ships
+
+| Id | Task | Hull | Length (m) | Sources | Alternatives | Axes L/W/H | Box W x H (m) | Gate | Opens | Pipeline | Flags |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `ea_omega` | T21 | Omega destroyer | **1 714.3** | TE 1.0, 1.2; TBP | ~1 700 (forums); 989 (an RPG sheet, outlier) | x/y/z | 474 x 545 | yes | own | capital | |
+| `ea_hyperion` | T22 | Hyperion heavy cruiser | **1 025.39** | TE 1.2; TBP (beam 286.5); WPL | 245 (B5W) | y/x/z | 249 x 267 | yes | own (TBP: jump engine) | capital | **Launches 6 Starfuries and 2 shuttles** (TBP, WPL) |
+| `ea_nova` | T23 | Nova dreadnought | **1 502.1** | TE 1.2 (labelled "EA Gunboat"); TBP; SotG | | y/x/z | 210 x 446 | yes | own | capital | TE names it a gunboat; TBP and SotG give the figure to the Nova |
+| `ea_warlock` | T24 | Warlock destroyer | **1 992.4** | TE 1.0, 1.2 | | y/x/z | 575 x 349 | yes | own | capital | |
+| `narn_gquan` | T25 | G'Quan heavy cruiser | **1 500** (est.) | none canon | 450 (B5W); 1 000 (the STL is modelled exactly 1 000 units long); "over 1 km" (unsourced) | y/x/z | 943 x 206 | yes | own (TBP: jump yes) | capital | **No published length.** B5W sizes it with the Primus (450 against 455 m); at the Primus's 1 586 m that is about 1 500 to 1 600 m. Launches 6 to 12 Frazi (B5W, Traveller) |
+| `centauri_vorchan` | T26 | Vorchan warship | **360** | ITF (360 long, 475 beam, 305 draught) | | x/y/z | 465 x 300 | yes | gate (Q22: a small cruiser; TBP says it jumps) | capital | ITF's three dimensions match the STL within 3 %; the beam is wider than the length (two crossed crescents) |
+| `centauri_primus` | T27 | Primus battlecruiser | **1 586** | ITF (1 586 x 1 023 x 455); FN | 455 (B5W) | y/x/z | 888 x 284 | yes | own | capital | ITF's beam and draught are 15 % and 60 % bigger than the STL's; the STL is flatter. **Launches**: OG says no fighter bays; B5W and Traveller 12 to 24 Sentri. The mass-driver STL has the same box, so the driver sits inside the envelope |
+| `minbari_sharlin` | T28 | Sharlin warcruiser | **1 600** | TBP; WPL (Mongoose, after Brandon Bray: 1 600 long, about 1 900 tall) | | x/y/z | 557 x 1 952 | rolled | own | capital | Taller than long: the STL's height-to-length (1.22) matches the 1 900/1 600 quote. Passes the mouth only on its side; it opens its own points anyway |
+| `drazi_sunhawk` | T29 | Sunhawk | **197** | ITF and SotG (197 x 135 x 49) | 350 (FN; WPL, mass 280 kt) | x/y/z | 142 x 45 | yes | gate (no Drazi jump engine; SotG lists no hyperdrive) | capital | ITF's proportions match the STL (1 : 0.69 : 0.25 against 1 : 0.72 : 0.23). Can carry one Sky Serpent on a dorsal cradle (TBP, WPL) |
+| `drazi_stormfalcon` | T30 | Stormfalcon | **820** | SotG (est.); FN | | x/y/z | 706 x 200 | yes | own (SotG hyperdrive) | capital | SotG complement: 12 Star Snake light fighters, 1 Sky Serpent, 2 shuttles |
+| `brakiri_avioki` | T31 | Avioki cruiser | **1 024** | SotG; TBP ("over a kilometre") | | x/y/z | 711 x 1 338 | yes | own (SotG, TBP) | capital | The STL's blade wing is taller (826 units) than the hull is long (632); if 1 024 m were the blade, the ship is 30 % smaller. SotG complement: 2 assault shuttles, **no fighters** (the table says Falkosi) |
+| `vree_xill` | T32 | Xill | **350** (diameter) | SotG (est.) | 500 (a hidden, unsourced TBP note) | x (diameter)/y/z | 350 x 97 | yes | gate (Q22) | capital | OG: jump engine, 15 antimatter cannons, 1 500 troops |
+| `isa_whitestar` | T33 | White Star | **475.6** | TE 1.0, 1.3; TBP; WPL | | x/y/z | 222 x 78 | yes | own (its signature) | capital | Opening its own points is canon and iconic; an exception to Q22's "small ships use gates" |
+| `isa_victory` | T34 | Victory destroyer | **2 990.31** | TE 1.0 (as *Excalibur*); TBP; SotG | 2 012 ("a mile and a quarter", episode dialogue per WPL) | x/y/z | 1 968 x 1 646 | **no** | own | capital | At 2 012 m it would fit (1 324 x 1 107) |
+| `shadow_battlecrab` | T35 | Shadow battlecrab | **1 500** (largest dimension) | SotG ("Shadow cruiser") | 1 000 (merzo.net chart); 1 to 2 km (h2g2); TBP: "variable" | x/y/z | 641 x 310 | yes | shimmer (Q44) | capital + organic (T06) | The STL's largest extent (148 units) is the span of the legs, not the run of the body (63); which one 1 500 m means is unclear. Fighters: 6 (B5W) to 36 (SotG, Traveller) |
+| `vorlon_heavy_cruiser` | T36 | Vorlon heavy cruiser | **1 330** | ITF (via TBP); SotG "Heavy Cruiser" | 131 (FN = TBP's length of the **Vorlon transport**); 925 (SotG "Vorlon Destroyer", the STL's file name) | y/x/z (round) | 198 x 198 (body only) | yes (petals in stage 2) | own | capital + organic | **Identity**: the file says "Destroyer" and 131 m, which is the transport's length; the show's transport and cruiser share the shape. B5W: 6 Vorlon fighters, 2 shuttles |
+| `drakh_carrier` | T37 | Drakh carrier | **5 000** (est.) | none canon | 14 000 (MD); "much larger than a cruiser" (TBP; the cruiser is 3 316 m, TE 1.0, same shape) | y/x/z | 1 540 x 761 | yes (up to about 6 100 m) | **gate** (canon: no jump engine; it ran for a gate in "Lines of Communication") | capital | At MD's 14 km it is 4 312 x 2 130 m and cannot pass a gate, against the episode. MD complement: 10 heavy or 40 light raiders, 40 shuttles |
+| `drazi_firehawk` | T59 | Firehawk | **270** | SotG (est.) | 350 (FN) | x/y/z | 195 x 61 | yes | gate (Q22; SotG gives it a hyperdrive) | capital | **Identified**: SotG's Drazi "Firehawk Advanced Cruiser", a Mongoose design (not seen in the show), sized between the Sunhawk and the Stormfalcon to carry a solar cannon; **no fighters**. Its STL has the Sunhawk's box to 1 % (the same hull with other weapons) |
+| `vorlon_dreadnought` | T60 | Vorlon dreadnought | **1 528** | FN | "over 1 300" (a B5 game, per WPL and TBP) | y/x/z | 461 x 302 | yes | own | capital + organic | No source lists its fighters |
+
+### Fighters
+
+| Id | Task | Craft | Length (m) | Sources | Alternatives | Axes L/W/H | Box W x H (m) | Flags |
+|---|---|---|---|---|---|---|---|---|
+| `narn_frazi` | T38 | Frazi | **17.53** | TE 1.1; TBP; SotG | | y/x/z | 8.8 x 3.6 | |
+| `centauri_sentri` | T38 | Sentri | **22.25** | TE 1.1; TBP | 22.26 (SotG) | x/y/z | 36.0 x 9.5 | Span wider than length; TE's drawing agrees (about 38 m) |
+| `minbari_nial` | T39 | Nial | **22.23** | TE 1.1 ("Minbari Fighter"); TBP | | y/x/z | 7.7 x 7.9 | **"Liara"**: no such craft on TBP or the web (the nearest name is the *Liandra*, a 160 m Ranger ship); the file's three-armed fighter is the Nial |
+| `drazi_sky_serpent` | T39 | Sky Serpent | **19.12** | TE 1.1 ("Drazi Fighter"); TBP; FN (19 m) | 15.3 (ITF); 30 (SotG, a two-seat variant) | y/x/z | 13.1 x 4.7 | |
+| `brakiri_falkosi` | T40 | Falkosi | **15** | SotG (est.) | | y/x/z | 12.1 x 8.7 | The only figure |
+| `drakh_fighter` | T40 | Drakh fighter | **17.8** | MD ("light raider", est.) | 76.2 (MD "heavy raider") | y/x/z | 9.1 x 8.6 | |
+| `shadow_fighter` | T41 | Shadow fighter | **15.3** | ITF (via TBP); SotG | | x/y/z | 10.9 x 6.3 | |
+| `shadow_scout` | T41 | Shadow scout | **201** | FN | 350 (SotG) | x/y/z | 168 x 120 | A small capital ship, not a fighter: **capital framework + organic parts (T06)**, with the battlecrab. Shimmers (Q44) |
+| `vorlon_fighter` | T42 | Vorlon light fighter | **21.92** | TE 1.1; TBP | 25.5 (a B5 game, per WPL; SotG) | y/x/z | 15.9 x 15.9 (petals open) | TBP: Vorlon fighters seem to jump on their own (for T04) |
+| `ea_thunderbolt` | T50 | Thunderbolt | **16.24** | TE 1.1 | 15.3 (TBP, SotG) | turned 42 degrees about file z, then 168 x 228 x 89 units | 22.0 x 8.6 (if the shorter in-plane extent is the length) | **The STL is not axis-aligned**: refview needs a turn first (stage 2) |
+
+All fighters: the fighter pipeline (the Starfury's); none opens a jump point (Q22).
+
+### Big civilians and small craft
+
+| Id | Task | Hull | Length (m) | Sources | Alternatives | Axes L/W/H | Box W x H (m) | Gate | Opens | Pipeline | Flags |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| `ea_panama` | T51 | Panama transport | **180** (est.) | none | | y/x/z | 45 x 29 | yes | gate | **civilian** (table: capital) | "Panama" is not on TBP; the show images match TBP's "White Star" type commercial transport (no length, no jump engine). Two of the maintainer's stills seem to show it inside a docking bay: at 180 m its section just fits B5's main bay core (45.5 x 30 m) |
+| `ea_explorer` | T52 | Explorer | **6 103** | SotG; WPL (citation needed); TBP ("over six kilometres") | | y/x/z | 846 x 2 526 (975 without the mast) | no (the mast), hull yes | own (builds gates) | capital | The long antenna mast is 2.5 km tall at this length |
+| `ea_asimov` | T53 | Asimov liner | **600** | TBP (unsourced) | | y/x/z (sphere) | 347 x 347 | yes | gate (TBP: no jump engine) | capital | **Its STL and T56's are one hull** (sphere, ring, engines; 100-unit sphere in both) |
+| `ea_construction_tender` | T55 | Construction tender | **50** (est.) | none | | y/x/z | 70 x 24 (truss span) | yes | gate | **civilian** (table: capital) | No class of this name found; the still is a work pod by a construction frame. A tug with claws and a truss: tens of metres |
+| `ea_mining_transport` | T56 | Mining transport | **600** (est., the Asimov's hull) | none | | y/x/z | 330 x 330 | yes | gate | capital | The STL is the Asimov's sphere with cargo doors (closed 182, open 206 units long); the show still in its folder (an orange-engined freighter) is a different ship |
+| `ea_shuttle` | T57 | EA shuttle | **18.64** | TE 1.1; TBP | 18 to 25 by variant (SotG) | y/x/z | 9.2 x 5.3 | | | civilian | |
+| `ea_atmo_shuttle` | T57 | EA atmospheric shuttle | **25.59** | TE 1.1; TBP ("Kestrel" class) | | y/x/z | 45.6 x 8.6 | | | civilian | Wingspan 1.8 times the length (TE's drawing: about 1.45) |
+| `centauri_shuttle` | T58 | Centauri shuttle | **36** | SotG | | x/y/z | 52 x 13.5 | | | civilian | |
+| `minbari_flyer` | T58 | Minbari Flyer | **29.19** | TE 1.1; TBP | | x/y/z | 13.5 x 6.0 | | gate (TBP: jump yes; Q22: small craft never) | civilian | |
+
+Cross-check on a hull already built: SotG gives the raider strike carrier "118 m (estimated)", 5 % over the 112 m chosen
+in T19 (Q26).
+
+### Open questions for the maintainer (stage 1)
+
+1. **Approve the lengths** above, or name others. The unsourced ones are mine: the G'Quan (1 500), the Drakh carrier
+   (5 000), the Panama (180), the construction tender (50), the mining transport (600, the Asimov's hull).
+2. **Sunhawk**: 197 m (ITF and SotG, matching the STL's proportions) or 350 m (the file name and WPL)? The Firehawk's 270 m
+   assumes 197.
+3. **Drakh carrier**: about 5 km so it passes a gate as in the episode, or Mongoose's 14 km with its own jump points?
+4. **Victory**: 2 990 m (TE; too big for a gate) or 2 012 m (episode dialogue; fits)?
+5. **Vorlon heavy cruiser**: a 1 330 m warship as the task says, though the file is named "Destroyer" and carries the
+   transport's 131 m? (The transport could reuse the generator later at 131 m.)
+6. **Battlecrab**: does 1 500 m measure the leg span (the STL's largest extent) or the body's run?
+7. **T56** shares T53's hull: one generator with a liner and a mining-transport variant (doors as moving parts, Q43)?
+8. **Launches**: the Hyperion carries 6 Starfuries (sources agree); the Avioki and the Firehawk carry no fighters in SotG;
+   the Primus has no fighter bays in OG but 12 to 24 Sentri elsewhere. Keep the table's choices, or follow the sources?
+9. **Pipelines**: the Panama (180 m) and the construction tender (50 m) are civilian-sized (the Saturn 8, 258 m, is on the
+   civilian pipeline); the Shadow scout (201 m, organic) goes on the capital framework with the battlecrab. Agree?
+10. **Jump points, first list** (for T03): own for the Omega, Hyperion, Nova, Warlock, G'Quan, Primus, Sharlin,
+    Stormfalcon, Avioki, White Star (canon, though small), Victory, the Vorlons and the Explorer; gates for the Vorchan,
+    Sunhawk, Firehawk, Xill, Drakh carrier (canon) and every civilian; the Shadows shimmer. Only the Victory (at 2 990 m),
+    the Explorer (its mast) and a 14 km Drakh carrier cannot pass a gate; the Sharlin passes only rolled.
