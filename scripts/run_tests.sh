@@ -153,14 +153,15 @@ godot_import "${REPORTS}/import.log"
 compile_check "${REPORTS}/check_scripts.log"
 
 echo "== GUT"
-# The whole run takes about 40 minutes on the maintainer's machine, a CI shard about 20 (six shards). A shard's timeout (40 minutes)
-# fires before CI's 60-minute job limit, so a hang ends with GUT's log and this script's message, not a cancelled job.
-gut_timeout=3600
+# The whole run takes about two hours on the maintainer's machine (M8-T17: 115 minutes of GUT), a CI shard about 20 minutes (six
+# shards). A shard's timeout (40 minutes) fires before CI's 60-minute job limit, so a hang ends with GUT's log and this script's
+# message, not a cancelled job.
+gut_timeout=10800
 if [[ -n "${GUT_SHARD:-}" ]]; then
     gut_timeout=2400
 elif [[ "${mode}" == "full" ]]; then
-    # The balance fights add about half an hour: with them the run passed the hour and was cut short (M5-T20).
-    gut_timeout=7200
+    # The balance fights add about half an hour or more on top (M5-T20).
+    gut_timeout=14400
 fi
 gut_status=0
 run_logged "${REPORTS}/gut.log" "${GODOT_READ[@]}" timeout "${gut_timeout}" "${GODOT}" --headless --path . -s addons/gut/gut_cmdln.gd \
