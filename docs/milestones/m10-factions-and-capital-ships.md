@@ -76,6 +76,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q47 | Minbari, ISA and Drakh exteriors | Semi-organic: organic shapes with visible seams and panels (the hexagonal grid on Minbari and ISA hulls, Q45), not seamless |
 | Q48 | Starting beside M8 (2026-11-20) | M10 starts now, in a worktree on branch `m10`, while M8 finishes in the main checkout; `m8` is merged into `m10` (no more fast-forwards of `m8` onto `m10`). T01 stops after the lengths table and the gate-mouth check for the maintainer's approval, then writes the per-hull descriptions while the first generators start. At most two agents at a time; Fable tasks first once unblocked |
 | Q49 | T01's lengths and identifications (2026-11-20) | `docs/assets-capital.md`, "M10 lengths (T01)", approved with these changes. Sunhawk and Firehawk both **197 m** (the files' 350 m are wrong). Drakh carrier **3 316 m** (the Drakh cruiser's figure, same shape), uses gates (canon). Victory **2 012 m** (fits a gate, still opens its own points as a destroyer). **Vorlon remap**: T36 is the **Vorlon destroyer**, 131 m, from `Vorlon_Destroyer (missing pedals) - 131m.stl` and the two petal STLs; T60 is the **Vorlon heavy cruiser**, 1 528 m, from `Vorlon Dreadnought - 1528m.stl`; there is no separate Vorlon dreadnought. Battlecrab: 1 500 m is the leg span (largest extent). **Launches follow the sources strictly**: Hyperion 6 Starfuries and 2 shuttles; Avioki, Firehawk and Primus none (so the Falkosi and the Sentri have no carrier in M10). Pipelines: the Panama and the construction tender on the civilian pipeline; the Shadow scout on the capital framework with the battlecrab's organic parts; T53 and T56 one generator with a liner and a mining variant (doors moving, Q43). The jump-point first list is T03's starting point, the White Star opening its own points included |
+| Q50 | T01's open points (2026-11-20) | The White Star launches **4 Nials** and the Victory **Starfuries, Thunderbolts and Kestrel shuttles**, as the sources give (the Thunderbolt flies once M11 makes it flyable; until then its slots launch Starfuries). The mining transport is **632 m** closed (716 m open), sharing the Asimov liner's sphere and scale. The Explorer's **bow is the end with the dome and the launch bay** |
 
 ## The hulls
 
@@ -100,8 +101,8 @@ identification, its length (Q4) and the fighters it launches.
 | T30 | Stormfalcon | Drazi | heavy cruiser and carrier | `Drazi_Stormfalcon_cruiser_820m.stl` | Sky Serpent (and 12 Star Snakes, which have no reference) |
 | T31 | Avioki cruiser | Brakiri | cruiser | `Brakiri_Avioki_cruiser.stl` | none: 2 assault shuttles (Q49) |
 | T32 | Xill | Vree | saucer warship | `Vree_Xill_cruiser.stl` | none (no Vree fighter reference) |
-| T33 | White Star | ISA | light warship | `ISA Whitestar.stl` | none |
-| T34 | Victory-class destroyer | ISA | destroyer | `ISA Destroyer.stl` | none |
+| T33 | White Star | ISA | light warship | `ISA Whitestar.stl` | 4 Nial (Q50) |
+| T34 | Victory-class destroyer | ISA | destroyer | `ISA Destroyer.stl` | Starfury, Thunderbolt (after M11), Kestrel shuttle (Q50) |
 | T35 | Shadow battlecrab | Shadows | warship, organic | `Shadow_Battlecrab.stl` | Shadow fighters |
 | T36 | Vorlon destroyer (131 m, Q49) | Vorlons | destroyer, organic | `Vorlon_Destroyer (missing pedals) - 131m.stl` (the body), with the petals from `Vorlon_Destroyer-Open_petal_position.stl` and `Vorlon_Destroyer-Closed_petal_position.stl` | none (no source lists any) |
 | T37 | Drakh carrier | Drakh | carrier | `Drakh carrier.STL` | Drakh fighters |

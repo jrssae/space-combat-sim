@@ -1322,7 +1322,7 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 - **Stern** (60 to 100 %). The hull splits into the **fork**: two long tapered prongs (x ±25, to 100 %), and between them
   a flat **diamond tail fin** in the vertical plane (65 to 100 %, about 70 m tall).
 - **Weapons and bays (TBP).** A quantum discharge beam cannon (the bow), 2 neutron cannons, 2 twin fusion cannons (the
-  pods' gun blocks); TBP lists **4 Nial fighters** (the table says none; for T03). Opens its own jump points (canon).
+  pods' gun blocks); TBP lists **4 Nial fighters** (launched: Q50). Opens its own jump points (canon).
 - **Subsystems.** Bridge: the canopy (45 %). Reactor: the mid hull's core. Engines: the fork and the pods' sterns
   (gravimetric, pale glows).
 - **Colours (show).** **Violet-purple iridescent** plating in organic patches with white highlights, dark blue-black
@@ -1341,7 +1341,7 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   degrees below horizontal to x ±620, y -560. Each wing tip carries a **pod** (about 200 m long, 70 m across) with fins.
 - **Weapons and bays (TBP).** Fusion beam cannons (the main hull's flank housings, fired as a giant green beam in the
   show), an enhanced weapons array, defence grid, interceptors; TBP lists **Starfuries, Thunderbolts and Kestrel
-  shuttles** (the table says none; for T03). Opens its own jump points.
+  shuttles** (launched: Q50; Thunderbolts once M11 makes them flyable). Opens its own jump points.
 - **Subsystems.** Bridge: the forward hull. Reactor: the main hull's core (75 %). Hangar: the ventral block. Engines:
   the stern and the wing pods.
 - **Colours (show).** **Dark charcoal to black** hull with light grey edges and panel lines, blue-white running lights
@@ -1545,8 +1545,8 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 ### EA Explorer class (`ea_explorer`, T52)
 
 - **Reference.** `EA Explorer class.stl`, mapping `--right=-x --up=+z --aft=+y`, 6 103 m. Box 846 m wide, 2 526 m tall with
-  its **antenna mast** (975 m without). Show: `ea_explorer/` (two images). **The bow is chosen at the sphere end and is
-  not certain**: T52 confirms it against the show (still 01 has the spheres at one end and a ring at the other).
+  its **antenna mast** (975 m without). Show: `ea_explorer/` (two images). **The bow is the end with the dome and the
+  launch bay** (the maintainer, Q50); T52 checks which end of the STL carries them (still 01 has the spheres at one end and a ring at the other).
 - **Shape.** A long **spine** about 200 m across: at one end a cluster of **spherical tanks** and a big sphere (0 to 10 %),
   then a long open **lattice truss** (10 to 32 %), a **rotating section** (32 to 45 %: a drum of ribbed rings, about
   330 m across), modules along a second truss (45 to 75 %), a pair of tall **radiator vanes** standing up and down (75 to
@@ -1568,8 +1568,7 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   than the liner. **Closed**: 632 m at the liner's scale. **Open**: the sphere parts across its middle and its two halves
   separate by **24.2 units (84 m)**, the hold between them crossed by posts; 716 m long. Both STLs are one mesh moved
   (735 760 triangles each), so the doors are two rigid halves on a slide: one moving part, two states for the 90 %
-  compare. At the approved 600 m for the mining transport the sphere would shrink 5 %; keeping the liner's sphere (632 m
-  closed) is simpler for one generator (for T53/T56 to settle).
+  compare. Settled (Q50): the mining transport keeps the liner's sphere and scale, **632 m closed** and 716 m open.
 - **Subsystems.** Bridge: the command hub. Reactor: the engine frame's forward end. Engines: the four. Passenger decks
   or the hold: the sphere.
 - **Colours (show).** White sphere with **green bands** and rows of windows, grey hub and engines.

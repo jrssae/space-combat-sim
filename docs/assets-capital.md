@@ -262,7 +262,7 @@ All fighters: the fighter pipeline (the Starfury's); none opens a jump point (Q2
 | `ea_explorer` | T52 | Explorer | **6 103** | SotG; WPL (citation needed); TBP ("over six kilometres") | | y/x/z | 846 x 2 526 (975 without the mast) | no (the mast), hull yes | own (builds gates) | capital | The long antenna mast is 2.5 km tall at this length |
 | `ea_asimov` | T53 | Asimov liner | **600** | TBP (unsourced) | | y/x/z (sphere) | 347 x 347 | yes | gate (TBP: no jump engine) | capital | **One generator with T56** (Q49): the liner variant |
 | `ea_construction_tender` | T55 | Construction tender | **50** (est.) | none | | y/x/z | 70 x 24 (truss span) | yes | gate | **civilian** (Q49) | No class of this name found; the still is a work pod by a construction frame. A tug with claws and a truss |
-| `ea_mining_transport` | T56 | Mining transport | **600** (the Asimov's hull) | none | | y/x/z | 330 x 330 | yes | gate | capital | **T53's generator, the mining variant** (Q49): the Asimov's sphere with cargo doors (closed 182, open 206 units long), doors moving (Q43); the show still in its folder (an orange-engined freighter) is a different ship |
+| `ea_mining_transport` | T56 | Mining transport | **632** closed, 716 open (Q50; the Asimov's sphere and scale) | none | | y/x/z | 330 x 330 | yes | gate | capital | **T53's generator, the mining variant** (Q49): the Asimov's sphere with cargo doors (closed 182, open 206 units long), doors moving (Q43); the show still in its folder (an orange-engined freighter) is a different ship |
 | `ea_shuttle` | T57 | EA shuttle | **18.64** | TE 1.1; TBP | 18 to 25 by variant (SotG) | y/x/z | 9.2 x 5.3 | | | civilian | |
 | `ea_atmo_shuttle` | T57 | EA atmospheric shuttle | **25.59** | TE 1.1; TBP ("Kestrel" class) | | y/x/z | 45.6 x 8.6 | | | civilian | Wingspan 1.8 times the length (TE's drawing: about 1.45) |
 | `centauri_shuttle` | T58 | Centauri shuttle | **36** | SotG | | x/y/z | 52 x 13.5 | | | civilian | |
@@ -329,7 +329,7 @@ is the approved length unless noted.
 | `shadow_scout` | `Shadow_Scout_fighter_201m.stl` | `+y +z +x` | |
 | `vorlon_fighter` | `Vorlon_Light_Fighter (pedals open).stl` | `+x +z -y` | |
 | `ea_thunderbolt` | `EA_Thunderbolt_fighter.stl` | turn +42 degrees about file z, then `-x +z +y` | `refview` has no turn: T50 adds one |
-| `ea_panama`, `ea_explorer`, `ea_construction_tender`, `ea_shuttle`, `ea_atmo_shuttle` | (their files) | `-x +z +y` | the Explorer's bow is not certain (T52) |
+| `ea_panama`, `ea_explorer`, `ea_construction_tender`, `ea_shuttle`, `ea_atmo_shuttle` | (their files) | `-x +z +y` | the Explorer's bow is the end with the dome and the launch bay (Q50) |
 | `ea_asimov`, `ea_mining_transport` | `EA Asimov liner.stl`, `EA_Mining_Transport.stl`, `..._doors_open.stl` | `-x +z +y` | one scale (3.47 m a unit): the liner 600 m, the mining transport 632 m closed and 716 m open (`--length 632.4` and `716.3`) |
 | `centauri_shuttle`, `minbari_flyer` | (their files) | `+y +z +x` | |
 
@@ -343,5 +343,4 @@ would close edge to edge.
 **Mining transport doors (Q43).** The two STLs are one mesh moved: the sphere parts across its middle and the halves
 slide apart 24.2 units (84 m at the liner's scale), the hold crossed by posts. One rigid moving part, two states.
 
-**Launches the hull tables may still miss.** TBP lists 4 Nials for the White Star and Starfuries, Thunderbolts and Kestrel
-shuttles for the Victory; the hull table has none for both. For T03 under Q49's "follow the sources".
+**Launches settled (Q50).** The White Star launches 4 Nials; the Victory Starfuries, Thunderbolts and Kestrel shuttles.
