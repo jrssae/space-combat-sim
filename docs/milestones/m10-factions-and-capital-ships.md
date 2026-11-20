@@ -314,7 +314,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 
 | Task | Track | Title | Depends on | Agent | Status |
 |---|---|---|---|---|---|
-| T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | in progress |
+| T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | not started |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | not started |
@@ -393,6 +393,15 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   mappings, measurements).
 - **Order (Q48):** the lengths table and the gate-mouth check go to the maintainer first; the per-hull descriptions follow.
 - **Done when:** AC1; the maintainer has approved the lengths table.
+- **Done (2026-11-20).** Stage 1: the lengths table with sources (Tim Earls' 1999 size charts, the Babylon Project wiki,
+  Into the Fire, Ships of the Galaxy, Babylon 5 Wars), the gate-mouth check and the first jump-point list, approved with
+  the changes of Q49 (`docs/assets-capital.md`, "M10 lengths (T01)"). Stage 2: a section per hull, fighter and small craft
+  in `docs/design-references.md`, "M10 hulls (M10-T01)" (shape by station, weapons and bays from the sources, bridge,
+  reactor, hangars and engines, colours from the show images); every axis mapping in `docs/assets-capital.md`; the
+  Vorlon destroyer's petals measured (they wrap the head closed and open to a 90 m flower; the petal changes shape), the
+  mining transport's doors (one rigid half slides 84 m) and the Primus's mass driver (ventral, inside the plain hull's
+  box). Renders in `reports/refs/<id>/`. Open for the hull tasks: the Explorer's bow (T52), the Thunderbolt STL's 42-degree
+  turn (T50), the mining transport's scale (T53/T56), TBP's White Star and Victory launches (T03).
 
 ### M10-T62 Section measure for open STLs (Q36)
 
