@@ -1142,3 +1142,90 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   the stern block and the two gravitic pods.
 - **Colours (show).** Very dark navy-grey plating, almost black, with orange-amber running lights and engine glow;
   "WARLOCK" lettering in still 03.
+
+### Narn G'Quan-class heavy cruiser (`narn_gquan`, T25)
+
+- **Reference.** `Narn Gquon battlecruiser.stl`, mapping `--right=-x --up=+z --aft=+y`, 1 500 m (Q49; no published
+  length). Box 943 m wide (the outrigger pods), 206 m tall. Show: `narn_gquan/` (three stills).
+- **Shape.** Shaped like the Narn fighter it echoes (its designer's intent, TBP): a long, flat **arrowhead** with a
+  needle bow. The main hull is a lozenge in plan, widest (about 530 m) at 40 % and tapering to the bow point at 0 % and
+  to a waist at 60 %; it is thin (about 50 m at the edges, 100 m on the centreline). Its top and bottom are faceted
+  plates meeting at a sharp rim.
+- **Wings.** Two long swept **wing blades** cross the hull at 45 to 70 %, from the centreline out to **pods** at
+  x ±450 (z 60 to 70 %), each pod a slim nacelle about 130 m long with gun barrels pointing forward; a second pair of
+  narrower aft blades sweeps from the pods back to the stern's flanks (85 to 100 %).
+- **Exposed machinery.** Between the hull's two halves aft of 55 % the inner works are open: a central spine with ribbed
+  tanks and pipes (55 to 85 %), and at the stern **four engines** (88 to 100 %, about 40 m each) in a diamond, with
+  ribbed housings. The front half of the spine (15 to 40 %) is a raised plated keel with the command blister at 38 %.
+- **Weapons and bays (TBP).** 2 heavy laser cannons and 2 twin particle cannons (the pod barrels and the bow), 2 energy
+  mine launchers; a **hangar bay** (In the Beginning) in the open spine's flank; Frazi fighters (B5W 6, Traveller 12).
+- **Subsystems.** Bridge: the command blister at 38 %. Reactor: the ribbed tanks amidships (60 to 75 %). Hangar: the
+  open spine. Engines: the stern four.
+- **Colours (show).** Dark oxblood red and black in the Narn **zigzag band pattern**, light grey edges on the rim and the
+  wing blades, green panels near the spine; engines glow orange-red.
+
+### Centauri Vorchan-class warship (`centauri_vorchan`, T26)
+
+- **Reference.** `Centauri Vorchan Cruiser.stl` (350 000 triangles), mapping `--right=+y --up=+z --aft=+x`, 360 m.
+  Box 465 m wide, 300 m tall: two **crossed crescents** make it wider and taller than long (ITF: 360 x 475 x 305).
+  Show: `centauri_vorchan/` (three stills).
+- **Beak** (0 to 25 %). A curved, ribbed **beak** like a bird's head, about 30 m tall and 40 m wide, hooked down at its
+  tip (y -25), plated on its upper face with a windowed panel; a narrow neck behind it (25 to 40 %).
+- **Body** (40 to 100 %). A long tapering spine about 80 m wide at 45 % narrowing to a point at the stern, with
+  machinery bays along its top, two dorsal tanks (70 to 80 %) and a long plasma accelerator trough down the centreline.
+- **Crescents.** A **horizontal crescent** wing (x ±230) and a **vertical crescent** fin (y ±150), both about 30 m deep
+  and 4 m thick, their roots along the body from 45 % to 100 % and their horns swept forward to 47 %; small gun posts
+  stand along the horizontal crescent's leading edge (six a side).
+- **Weapons (TBP).** 2 twin plasma accelerators (the centreline trough), missiles, guided mines; at least 4 tractor beam
+  emitters under the hull behind the beak. No fighters.
+- **Subsystems.** Bridge: the beak. Reactor: the dorsal tanks. Engines: the stern point (gravimetric, a faint glow).
+- **Colours (show).** Deep purple-maroon hull with black and dark red, ornate gold-bronze trim on the beak; red glow at
+  the gun.
+
+### Centauri Primus-class battlecruiser (`centauri_primus`, T27)
+
+- **Reference.** `Centauri_Primus_1586m.stl`, mapping `--right=-x --up=+z --aft=+y`; the mass-driver variant
+  `Centauri_Primus_w_mass_driver.stl`, `--right=+y --up=+z --aft=+x` (Q41). 1 586 m. Box 888 m wide, 284 m tall in both.
+  Show: `centauri_primus/` (eight stills; the two long forward barrels fire orange from their tips).
+- **The bow is the twin barrels' end.** The two long tubes are the forward heavy pulse cannons (they fire in the show,
+  and the mass driver's muzzle points the same way); the single long spike is the stern.
+- **Guns** (0 to 30 %). **Two long barrels** at x ±110, y 0, from the bow back into the hull at 30 %, about 12 m thick,
+  with ribbed sleeves near their roots.
+- **Main hull** (25 to 60 %). A flat, wide body about 330 m across and 60 m tall: a raised dome over the centre (40 %),
+  flat engine-room plating either side, rows of turret mounts. The hull's planform steps out at 55 %.
+- **Wings** (45 to 60 %). Swept wings out to x ±445 with a long stiffening rod along each leading edge and a smaller rod
+  inboard; the wing tips are blunt.
+- **Fins** (60 to 70 %). Two **crescent fins**, one up (to y +140) and one down (to y -140), their horns curving aft.
+- **Stern** (60 to 100 %). The body tapers into a **long spike** to the stern (100 %), about 25 m at its root. Engines:
+  the show's blue glows at the hull's aft face either side of the spike (62 %).
+- **Mass driver (Q41).** A ventral fitting on the variant only: a housing and a long barrel under the forward hull from
+  16 % to 46 % (z 258 to 734 m), 253 m wide across its mounts, down to y -115; inside the plain hull's box. The two STLs
+  are otherwise one mesh (they match to 2 m), so one generator takes `mass_driver: bool`.
+- **Weapons (TBP, OG).** 4 heavy X-ray laser cannons, 4 twin particle cannons, 4 twin light particle cannons; the mass
+  driver as a retrofit. **No fighter bays** (OG; Q49).
+- **Subsystems.** Bridge: the dome (40 %). Reactor: under the dome. Engines: the aft face (62 %). Jump engine: amidships.
+- **Colours (show).** Dark purple-black hull with maroon and ochre, light grey-pink on the wings and fins, red lights
+  along the hull, blue engine glow, orange muzzle flashes.
+
+### Minbari Sharlin-class warcruiser (`minbari_sharlin`, T28)
+
+- **Reference.** `Minbari_Sharlin_cruiser.stl` (168 000 triangles), mapping `--right=+y --up=+z --aft=+x`, 1 600 m. Box
+  557 m wide, **1 952 m tall** (the fins). Show: `minbari_sharlin/01.jpg`. Skin: hexagonal grid (Q45), semi-organic
+  (Q47).
+- **Main hull** (10 to 65 %). A deep, rounded hull of **ribbed lobes**: seen from ahead a fan of five lobes, each a long
+  smooth roll about 100 m across, spreading from the keel (y -250) to the shoulders (y +200); between and under them a
+  row of **ribs** (about 20, like a whale's baleen) runs the length at y -150 to -300. The hull is widest (about 400 m)
+  at 30 %.
+- **Bow** (0 to 15 %). Gun stalks and sensor rods project forward from the hull's face (to 0 %).
+- **Dorsal fin.** A tall swept blade from the hull's top at 25 to 55 % up and back to its tip at y +970, z 1 200; a long
+  row of slots runs up its leading edge.
+- **Ventral fins.** Two blades from the keel at 35 to 60 %, splayed outward (x ±270 at their tips) and swept down and
+  back to y -970, z 1 200; gun pods on short stalks on their leading edges.
+- **Stern** (60 to 100 %). Two engine nacelles on the flanks (55 to 75 %), and a long tapering **tail cone** on the axis
+  (y -100) to the stern point at 100 %, with a broad flat plate in the horizontal plane round it (65 to 80 %).
+- **Weapons and bays (TBP).** 12 fusion lasers, 6 neutron cannons, an EM pulse cannon (the bow and the fin stalks),
+  tractor beams; Minbari stealth (Q13). **15 Nial fighters**: the bays are among the keel ribs.
+- **Subsystems.** Bridge: the hull's upper face at 20 %. Reactor: the hull's core (35 %). Hangars: the keel ribs.
+  Engines: the flank nacelles and the tail (gravimetric).
+- **Colours (show).** Iridescent pale blue to blue-white, glowing where lit, with darker blue in the hollows; the
+  hexagonal grid (Q45) over it.
