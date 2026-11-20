@@ -74,6 +74,7 @@ the only modelling left is space stations.
 | Q29 | How a raid's fighters come in with the strike carrier | Docked on its cradles, launched once it is clear of its point | Maintainer, 2026-11-13: **both, chosen by data per raid**: docked then launched, or out of the carrier's point beside it as M6-T23 does today |
 | Q30 | What the weaponless strike carrier does in a raid | Hangs back at a stand-off from the raid's target, turns away from attackers, recalls its fighters and jumps out when its hull falls below a threshold or the raid ends; fighters not docked within a time limit are left behind | Maintainer, 2026-11-13: the proposed answer |
 | Q32 | (maintainer, 2026-11-19) Which ship models does M10 build? | - | Maintainer, 2026-11-19: **every remaining ship model**, so that after M10 only space stations are left to model. Added to M10: the Thunderbolt model (M11 keeps only its `ShipSpec`, cockpit and unlock), the Panama class, the Explorer class, the Asimov liner, the Narn Khnar super freighter, the construction tender, the EA mining transport (M18's mining colony ship), the EA, atmospheric and Centauri shuttles, the Minbari Flyer, the Drazi Firehawk and the Vorlon dreadnought (T50 to T60). Big hulls use the capital framework (T05); small civilians use M5's civilian pipeline (`docs/assets-civilian.md`, the 90 % rule). The stations stay out |
+| Q33 | (maintainer, 2026-11-19, from M8.5's maintainability survey) Where does the ship catalogue as data go: a new task, or part of T02 (factions as data)? | Before the hull tasks | Maintainer, 2026-11-19: **a new task, T61**, before T05 and the hull tasks: `data/ships/catalogue.json` read by `ShipCatalog`, so registering a hull is one entry and one `.tres` (M8.5's Q4) |
 
 ## The hulls
 
@@ -249,7 +250,7 @@ Out (explicitly):
 - A capital-scale `ShipSpec` (mass, inertia, thrust from the engine hardpoints, turn rates, `can_open_jump_point`, the
   sections) flown through the native flight step; a `RigidBody3D` with zero damping (`DAMP_MODE_REPLACE`), forces
   re-applied every tick; compound collision from the manifest; rotating sections as `AnimatableBody3D` (the Omega's drum).
-- Hit volumes per section in the native core, so the hit sweep, the rams and the turrets' line of fire (Q33) see the real
+- Hit volumes per section in the native core, so the hit sweep, the rams and the turrets' line of fire (M5's Q33) see the real
   shape; `Targetable` kind `CAPITAL`, broadcast range by class; the low-attention tier carries capitals and hulks as rows.
 - Jump capability per class (Q22): the larger classes open points, the list from T01 and T03.
 - `CapitalStandin` and its box hulls (`capital_hulls`) are removed once the bench draws real hulls (T45).
@@ -351,7 +352,7 @@ Out (explicitly):
 
 ## Working rules for M10
 
-- **Tracks.** A (references and the asset framework: T01, T05, T06), B (design with the maintainer: T03, T04), C (damage:
+- **Tracks.** A (references, the ship catalogue and the asset framework: T01, T61, T05, T06; T61 comes before T07 and every hull task, which registers its hull through it), B (design with the maintainer: T03, T04), C (damage:
   T08 to T11), D (weapons: T12 to T15), E (capitals in the game, AI and the helm: T07, T16 to T18, T49), F (hulls and fighters: T19 to
   T42, T50 to T60), G (factions, mechanics, sound, bench, scenarios: T02, T43 to T46), with T47 and T48 last. Inside a track the order
   holds. The hulls can run in parallel once T05 (and T06 for the organic ones) and T07 are done, if the maintainer says
@@ -377,9 +378,10 @@ Out (explicitly):
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | Data and small code on existing seams | not started |
 | T03 | B | Weapons and balance concept: kinds per faction and hull, beams and interceptors (Q9), blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | The maintainer's design call | not started |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | The maintainer's design call on the show's mechanics | not started |
+| T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, the other per-file ship lists folded in, `docs/catalogue/ships.md` generated (Q33; numbered last because it was added after the others had numbers) | - | Opus | Registering a hull becomes one entry and one `.tres` before 40-odd hulls arrive | not started |
 | T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers | T01, M7-T03 | Fable | The base every hull generator stands on | not started |
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | A new way of building hulls and a new shader layer | not started |
-| T07 | E | Capital ships in the game: the capital `ShipSpec`, native flight, compound collision, section hit volumes, `Targetable`, tier, jump points | T05 | Opus | A 1 to 3 km Newtonian body in Jolt and the core | not started |
+| T07 | E | Capital ships in the game: the capital `ShipSpec`, native flight, compound collision, section hit volumes, `Targetable`, tier, jump points | T05, T61 | Opus | A 1 to 3 km Newtonian body in Jolt and the core | not started |
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | The damage model capitals need | not started |
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | One native kernel for every blast | not started |
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | Hulks in the core and the tier | not started |
@@ -477,6 +479,20 @@ Out (explicitly):
   for phasing and arrivals; the targeting and lock code each jamming rule touches.
 - **Settled in the discussion:** which mechanics, each one's rules and numbers, its counters, which factions it works against.
 - **Done when:** the maintainer approves the written D12.11.
+
+### M10-T61 Ship catalogue as data (Q33)
+
+- **Goal:** one place per hull type before the hull tasks arrive. Today a type's facts sit in about ten places, with
+  `ShipCatalog`'s three hand-kept dictionaries (path, faction, civilian) at the centre (M8.5's survey).
+- **Files:** `data/ships/catalogue.json`: per type id the `ShipSpec` path, faction, role (fighter, civilian, capital class),
+  default AI profile and the flags other code keeps in its own lists (preview, docking class, encounter pool). `ShipCatalog`
+  keeps its functions and reads the file; `look_scene.gd`, `target_preview_model.gd`, `docking_plan.gd` and
+  `encounter_director.gd` read it instead of their own lists. `docs/catalogue/ships.md` generated from it and the manifests
+  (id, faction, role, length, mass, hull points, guns and turrets, jump capable, carries fighters), with a sync test in the
+  quick tier, and added to `docs/README.md`'s mission reading list.
+- **Rules:** every type id kept as it is (recordings, fixtures and saved careers hold them); parity recordings green.
+- **Done when:** every existing id gives the same spec, faction and role as before (a recorded comparison); a test hull
+  registers with one entry and one `.tres`; the sync test passes.
 
 ### M10-T05 Capital asset framework
 
