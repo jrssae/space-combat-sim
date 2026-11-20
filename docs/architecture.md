@@ -5505,6 +5505,18 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   with `HitInfo.CAUSE_VORTEX`, credited to no one. The HUD's acknowledgement line warns a pilot sitting where a vortex is about to
   form (`VortexHazard.warning`). Ships waiting in the low-attention tier have no body in the world and are not reached. Console
   `gate trap [raider|player]`; `gate.vortex_kills`.
+  Fix (2026-11-20): each opening keeps the ships it brings through or takes away (`JumpVortex.spare`/`spares`): every arrival,
+  seen or placed unseen, even one lingering in its mouth; fighters docked on the carrier that opened it; ships the gate opened its
+  departure for. Its sweeps spare them.
+- **AI keep-out (M8-T17, maintainer 2026-11-20).** From a vortex's announcement until it folds, every AI pilot but its spared ships
+  treats a capsule round its axis (mouth to base, the mouth's larger semi-axis plus 300 m) as no-go: inside it leaves at once, coming
+  in too fast it stops short, a wish through it is turned round it. Per think in the native brains (`keep_out.rs`, after the
+  avoidance filter in `Brain::think`), the volumes in universe positions so a rebase never moves them; `VortexKeepOuts` sends them
+  (`ScsBrains.set_keep_outs`) only when a vortex opens, folds, spares a ship or drifts. Provider `keep_out`.
+- **The player's wing at a jump (M8-T17, maintainer 2026-11-20; `GateWingJump`).** Under FORM ON ME or FORM UP, HOLD FIRE the
+  wingmen are spared by the departure vortex, sent in by the gate once the player is in the funnel, taken away in the black (a
+  straggler within 4 km too) and burst out of the arrival beside the player. Under any other order the wing breaks off
+  (`Wing.leader_away`, as while docking), keeps clear like every AI pilot and rejoins when the jump ends. Other flights only keep clear.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
   acceptance pose of the still), `vortex [status|open|close|view]`; providers `gate`, `vortex`.
 - GPU (RX 6950 XT, headless gamescope): the vortex costs about 0.23 ms and one draw call, even filling the screen from inside; the

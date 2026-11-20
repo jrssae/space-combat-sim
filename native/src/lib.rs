@@ -13,6 +13,7 @@ mod constants;
 mod contact_field;
 mod flight_step;
 mod hit_sweep;
+mod keep_out;
 mod kernels;
 mod native_probe;
 mod pilot_kernels;

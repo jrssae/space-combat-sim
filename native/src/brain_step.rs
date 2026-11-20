@@ -10,6 +10,7 @@ use std::time::Instant;
 use godot::builtin::Vector3;
 
 use crate::brain_behaviours::{self, Brain, Field, Inputs, Scratch};
+use crate::keep_out::KeepOut;
 use crate::kernels::contact::{self, Grid, Query, Work as QueryWork};
 use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};
 use crate::row_commands::{CommandMap, IdMap, IdSet, RowCommand};
@@ -128,6 +129,7 @@ struct Shared<'a> {
     nearest_k: i64,
     static_k: i64,
     fault: i64,
+    keep_outs: &'a [KeepOut],
 }
 
 /// The brains' state and the batch's scratch: everything a job needs, moved to the step's thread with the job and back
@@ -197,6 +199,8 @@ pub struct Params {
     pub origin: [f64; 3],
     pub rows_version: i64,
     pub from_rows: bool,
+    /// The jump vortices' no-go volumes as the launch found them (M8-T17).
+    pub keep_outs: Vec<KeepOut>,
 }
 
 /// One tick's job: the brains' state, the rows it thinks over, the batch and the pool it may use.
@@ -378,6 +382,7 @@ fn run_batch(work: &mut Work, snap: &Snapshot, runner: &Runner, n: usize, rel: &
         nearest_k: work.nearest_k,
         static_k: work.static_k,
         fault: work.fault,
+        keep_outs: &p.keep_outs,
     };
     // The rows moved between the drivers' scan and the launch (a resync or a rebase): every think is declined and each
     // ship holds its last command, as T17's per-ship check did.
@@ -441,6 +446,7 @@ fn think_item(shared: &Shared, item: &mut Item, worker: &mut Worker) {
         nearest_k: shared.nearest_k,
         static_k: shared.static_k,
         lean: item.tier,
+        keep_outs: shared.keep_outs,
     };
     let Worker {
         query,

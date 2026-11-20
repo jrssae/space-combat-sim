@@ -162,6 +162,7 @@ impl Bench {
             nearest_k: k,
             static_k: 8,
             lean: false,
+            keep_outs: &[],
         };
         brain.think(
             &self.rows,
@@ -445,6 +446,7 @@ fn civilian_think(bench: &mut Bench, brain: &mut Brain, now_s: f64) -> Output {
         nearest_k: 12,
         static_k: 8,
         lean: false,
+        keep_outs: &[],
     };
     brain.think(
         &bench.rows,

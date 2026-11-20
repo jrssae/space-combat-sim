@@ -78,6 +78,8 @@ var console_points: JumpPointPool = null
 var _transit_console: TransitConsole = null
 var _player_pose: Variant = null  # the player's pose while last in sight, for the shots
 var _view_gate: Jumpgate = null
+## The player's wingmen at the jump: through with the player, or clear of the vortex (M8-T17).
+var wing_jump: GateWingJump = GateWingJump.new()
 var _view_point: JumpVortex = null
 ## When the run-in expects the ship at the mouth, s after its start (M8-T18; the camera takes are cut from it); -1 before the first.
 var run_in_eta_s: float = -1.0
@@ -294,6 +296,8 @@ func step_player(delta: float) -> FlightCommand:
 	_went_through = false
 	_placed = false
 	_handle(events)
+	if jump.is_active():
+		wing_jump.step()
 	_set_key_light(jump.is_active() and main.camera_rig.is_playing_shot())
 	if jump.is_active():
 		shots.tick(delta, _play)
@@ -327,6 +331,7 @@ func _handle(events: PackedStringArray) -> void:
 			GateJump.EV_START:
 				_assist_before = main.ship.assist_on
 				main.ship.assist_on = true
+				wing_jump.begin(main, jump_gate)
 			GateJump.EV_RUN_IN:
 				jump_gate.send_departure(main.ship, _on_player_through, GateJump.SWALLOW_S)
 				run_in_eta_s = _predicted_arrival_s()
@@ -335,6 +340,7 @@ func _handle(events: PackedStringArray) -> void:
 				shots.on_through(_play)  # a close shot cuts away to the gate before the ring's flash
 				_park_away()
 			GateJump.EV_ASK_ARRIVAL:
+				wing_jump.take_rest()  # the black hides the last of them going through
 				if jump_gate.vortex.is_active() and jump_gate.vortex.direction == JumpVortex.Direction.DEPARTURE:
 					jump_gate.vortex.stop()  # gone in the black: the arrival opens on the pylons' glow at the cut, no dead time
 				jump_gate.request_arrival(_place_player)
@@ -366,6 +372,7 @@ func _place_player() -> void:
 	ship.visible = true
 	ship.reset_physics_interpolation()
 	jump_gate.bring_through(ship, true, GateJump.BURST_OUT_S)
+	wing_jump.bring_out()
 	# Lit as it comes out, so it reads against the vortex (M8-T29): running lights on, the mains glowing while it coasts.
 	_lights_before = ship.running_lights
 	ship.running_lights = true
@@ -376,6 +383,7 @@ func _place_player() -> void:
 
 
 func _finish() -> void:
+	wing_jump.finish()
 	var ship: Ship = main.ship
 	var plumes: ThrusterVisuals = ship.get_node_or_null(^"ThrusterVisuals") as ThrusterVisuals
 	if plumes != null:

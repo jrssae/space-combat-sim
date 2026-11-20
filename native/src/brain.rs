@@ -18,6 +18,7 @@ use crate::brain_maths::{
 use crate::brain_step::{
     self, Done, DriverFrame, EVENTS_HEAD, Hosted, Job, Params, Snapshot, Work,
 };
+use crate::keep_out;
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
 use crate::threads::{Runner, StepThread, Threads};
@@ -139,6 +140,8 @@ pub struct ScsBrains {
     // False from a launch until `join_step` hands the job's results over: the hosted readers see the launch's view until
     // then, whatever an early join brought back, so a reader never sees a think before the tick that applies it.
     handed_over: bool,
+    // The jump vortices' no-go volumes (M8-T17), set per event by `VortexKeepOuts`, copied into each launch.
+    keep_outs: Vec<keep_out::KeepOut>,
     // What arrived for the hosted drivers while the brains were away, and what the frame's readers see meanwhile.
     pending: Vec<Pending>,
     mirror: Vec<HostedView>,
@@ -767,6 +770,7 @@ impl ScsBrains {
             origin: [origin_x, origin_y, origin_z],
             rows_version,
             from_rows: false,
+            keep_outs: self.keep_outs.clone(),
         };
         self.launch(params, threaded, true);
         true
@@ -835,6 +839,7 @@ impl ScsBrains {
             origin: [origin_x, origin_y, origin_z],
             rows_version,
             from_rows: true,
+            keep_outs: self.keep_outs.clone(),
         };
         self.launch(params, threaded, true);
         true
@@ -1045,6 +1050,19 @@ impl ScsBrains {
             period: period.max(1),
             tier_period: tier_period.max(1),
         };
+    }
+
+    /// The jump vortices' no-go volumes (M8-T17), as `VortexKeepOuts` sends them when one is announced, changes or folds:
+    /// `keep_out::FLOATS` numbers a volume (mouth and base centres as universe positions, the frame's rest velocity, the
+    /// radius, how many ships it leaves alone) and those ships' body ids from `ids` in turn. Every launch after reads them.
+    #[func]
+    fn set_keep_outs(&mut self, floats: PackedFloat64Array, ids: PackedInt64Array) {
+        self.keep_outs = keep_out::unpack(floats.as_slice(), ids.as_slice());
+    }
+
+    #[func]
+    fn keep_out_count(&self) -> i64 {
+        self.keep_outs.len() as i64
     }
 
     /// The relation matrix over the core's factions, a row per faction of `stride` entries (`Factions.Relation` values),

@@ -609,10 +609,10 @@ const BOLT_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin
 ## rules; they may import each other and the kernels, nothing else.
 ## M5-T16: the civilians' flight (`civilian.rs`) is one of them, and the behaviours may import it.
 const BRAIN_FILES: Array[String] = ["res://native/src/v3.rs", "res://native/src/brain_maths.rs",
-		"res://native/src/brain_behaviours.rs", "res://native/src/civilian.rs"]
+		"res://native/src/brain_behaviours.rs", "res://native/src/civilian.rs", "res://native/src/keep_out.rs"]
 const BRAIN_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::kernels::", "use crate::civilian;",
-		"use crate::surface;"]
+		"use crate::surface;", "use crate::keep_out::"]
 ## The big hulls' surfaces (M7-T06): the station's volumes, nearest points, the sweep and the drum's skin speed, held to the
 ## kernels' rules; they import the row tables and the vector maths only. The core's shell (`surface_rows.rs`) reaches them.
 const SURFACE_KERNEL_FILE: String = "res://native/src/surface.rs"
@@ -831,7 +831,7 @@ const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin:
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::brain_behaviours::", "use crate::kernels::",
 		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CommandMap, IdMap, IdSet, RowCommand};",
 		"use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};",
-		"use crate::threads::", "use crate::turret_kernels::"]
+		"use crate::threads::", "use crate::turret_kernels::", "use crate::keep_out::"]
 
 
 ## The low-attention tier's table and integrator (M4-T21): held to the kernels' rules; they import the row tables, the shared

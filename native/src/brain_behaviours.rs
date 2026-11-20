@@ -12,6 +12,7 @@ use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, hash_seed,
 };
 use crate::civilian;
+use crate::keep_out::{self, KeepOut};
 use crate::surface;
 use crate::kernels::{contact, pilot};
 use crate::rows::{Bolts, Rows};
@@ -156,6 +157,8 @@ pub struct Inputs<'a> {
     /// A low-attention tier row's think (M4-T22 fix round 2): it skips what a tier row cannot use, the rocks and mines, the
     /// incoming fire and the avoidance (a tier row collides with nothing and no bolt flies in a tier fight).
     pub lean: bool,
+    /// The jump vortices' no-go volumes this tick (M8-T17): every think keeps out of them, but those that leave it alone.
+    pub keep_outs: &'a [KeepOut],
 }
 
 /// The per-ship scratch a think fills: the picked lists and the context's split (owned by the caller, reused).
@@ -1230,6 +1233,7 @@ impl Brain {
         // Flying round a hull is avoiding it, whether or not the filter below changes anything more.
         self.avoiding = detouring;
         self.avoiding_urgent = false;
+        let mut steered: Option<Vector3> = None;
         if !inputs.lean
             && !out.flight.brake
             && !(scratch.contacts.is_empty() && scratch.statics.is_empty())
@@ -1307,6 +1311,37 @@ impl Brain {
                         out.flight.rot = brain_maths::face(&p.basis, dv, cap.rate_max, brain_maths::K_FACE);
                     }
                     out.fire = false;
+                }
+                steered = Some(avoided.v_des);
+            }
+        }
+        // A jump vortex announced or open kills what it forms or closes on (M8-T17): every wish keeps out of its volume.
+        if !inputs.keep_outs.is_empty() {
+            let cap = &self.ship.capability;
+            let wish = steered.unwrap_or(if self.has_desired_velocity && !out.flight.brake {
+                self.desired_velocity
+            } else {
+                p.velocity
+            });
+            let ship = keep_out::Ship {
+                position: p.position,
+                velocity: p.velocity,
+                radius: self.ship.radius,
+                a_brake: cap.a_retro.max(cap.a_main * 0.5),
+                body_id: inputs.own_body_id,
+                tie_hash: self.ship.tie_hash,
+            };
+            if let Some((v_des, urgent)) = keep_out::steer(inputs.keep_outs, inputs.origin, &ship, wish) {
+                self.avoiding = true;
+                self.avoiding_urgent |= urgent;
+                out.flight.brake = false;
+                let horizon = if urgent { URGENT_SEEK_HORIZON_S } else { brain_maths::HORIZON_S };
+                brain_maths::apply_seek(&mut out.flight, &brain_maths::seek(p.velocity, v_des, &p.basis, cap, horizon, true));
+                if urgent {
+                    let dv = sub(v_des, p.velocity);
+                    if f64::from(length(dv)) > brain_maths::COAST_BELOW_MPS {
+                        out.flight.rot = brain_maths::face(&p.basis, dv, cap.rate_max, brain_maths::K_FACE);
+                    }
                 }
             }
         }

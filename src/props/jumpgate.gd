@@ -292,6 +292,8 @@ func _step_departures() -> void:
 			_release_flown(entry)
 			_departures.remove_at(i)
 			continue
+		if vortex.is_active() and vortex.direction == JumpVortex.Direction.DEPARTURE:
+			vortex.spare(ship)  # on its way through: neither killed nor kept out by it (M8-T17)
 		var local: Vector3 = to_local(ship.global_position)
 		var was_z: float = entry["z"]
 		entry["z"] = local.z
@@ -307,7 +309,6 @@ func _step_departures() -> void:
 			if not open_vortex(JumpVortex.Direction.DEPARTURE):
 				continue  # an arrival is running: it opens once that one has closed
 			vortex.extend(DEPARTURE_KEEP_S)
-			vortex.spare(ship)  # it opened for this ship: flying in is not straying into it (M8-T17)
 	if _departures.is_empty() and vortex.direction == JumpVortex.Direction.DEPARTURE and vortex.passing == 0:
 		vortex.close()
 

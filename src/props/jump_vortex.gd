@@ -128,6 +128,8 @@ var _active: bool = false
 var _formed: bool = false  # this opening has formed (its ships swept)
 var _close_swept: bool = false  # and closed (swept again)
 var _spared: Dictionary = {}  # instance id -> true: the ships this opening brings through or takes away
+## Bumped whenever the spared ships change, so `VortexKeepOuts` sends its volumes again.
+var spared_version: int = 0
 var _materials: Array[ShaderMaterial] = []  # by direction, shared with every vortex of these colours
 var _colours: Dictionary = DEFAULT_COLOURS.duplicate()
 var _rig: LightRig = null
@@ -217,6 +219,13 @@ const GROUP: StringName = &"jump_vortices"
 func _ready() -> void:
 	add_to_group(GROUP)
 	_sync_processing()
+	_make_keep_outs.call_deferred()
+
+
+# The World's `VortexKeepOuts` is made with its first vortex, so no node enters the tree when one opens.
+func _make_keep_outs() -> void:
+	if is_inside_tree():
+		VortexKeepOuts.wake(self)
 
 
 func _exit_tree() -> void:
@@ -307,6 +316,7 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	_formed = false
 	_close_swept = false
 	_spared.clear()
+	spared_version += 1
 	_sounded = false
 	openings += 1
 	funnel.material_override = _materials[direction]
@@ -317,6 +327,7 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	_sync_processing()
 	if not driven:
 		update_visuals()
+	VortexKeepOuts.wake(self)  # AI pilots keep clear from now until it folds (M8-T17)
 	return true
 
 
@@ -362,8 +373,17 @@ func extend(hold_s: float) -> void:
 
 ## Spares `body` from this opening's sweeps: it is coming out of it or going in on purpose (cleared by the next opening).
 func spare(body: Node) -> void:
-	if body != null:
+	if body != null and not _spared.has(body.get_instance_id()):
 		_spared[body.get_instance_id()] = true
+		spared_version += 1
+
+
+## The body ids this opening leaves alone (its opener among them), for the AI's keep-out.
+func spared_ids() -> PackedInt64Array:
+	var out := PackedInt64Array(_spared.keys())
+	if is_instance_valid(opener) and not _spared.has(opener.get_instance_id()):
+		out.append(opener.get_instance_id())
+	return out
 
 
 ## Whether this opening's sweeps leave `body` whole: its opener, a ship it brings through or takes away, or one riding its opener.
