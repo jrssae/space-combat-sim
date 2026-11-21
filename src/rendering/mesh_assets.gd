@@ -9,6 +9,8 @@ const LIVERY_SHADER: Shader = preload("res://assets/shaders/hull_livery.gdshader
 const HULL_GLASS_SHADER: Shader = preload("res://assets/shaders/hull_glass.gdshader")
 ## The station hull's material (M7-T24), by path so an import cache without its class still loads.
 const STATION_HULL := preload("res://src/rendering/station_hull_material.gd")
+## The material of a hull with a sheen layer (M10-T06: organic and semi-organic skins), by path for the same reason.
+const HULL_SHEEN := preload("res://src/rendering/hull_sheen_material.gd")
 ## The shader's table sizes (`hull_livery.gdshader`).
 const MAX_STRIPES: int = 48
 const MAX_PATTERNS: int = 12
@@ -110,7 +112,7 @@ static func piece_materials(dir: String, entry: Dictionary) -> Dictionary:
 	for surface: Dictionary in entry.get("surfaces", []):
 		# The station's tiers draw with its own hull material (M7-T24); other pieces with the standard one.
 		var material: Material = STATION_HULL.make(dir, surface) if STATION_HULL.wants(surface) \
-				else textured_material(dir, surface)
+				else paint_material(dir, surface)
 		out[String(surface.get("name", ""))] = _with_sheen(material, not bool(surface.get("blend", false)))
 	_cache[key] = out
 	return out
@@ -165,8 +167,7 @@ static func load_textured(dir: String, entry: Dictionary, sheen: bool = true) ->
 		elif not livery.is_empty():
 			mesh.surface_set_material(i, _with_sheen(livery_material(dir, surface, livery), sheen))
 		else:
-			var material: StandardMaterial3D = textured_material(dir, surface)
-			mesh.surface_set_material(i, _with_sheen(material, sheen and not bool(surface.get("blend", false))))
+			mesh.surface_set_material(i, _with_sheen(paint_material(dir, surface), sheen and not bool(surface.get("blend", false))))
 	_cache[path] = mesh
 	return mesh
 
@@ -177,6 +178,11 @@ static func _surface_named(surfaces: Array, name: String, index: int) -> Diction
 		if String(surface.get("name", "")) == name:
 			return surface
 	return surfaces[index] if index < surfaces.size() else {}
+
+
+## A surface's material: the standard one, or the sheen layer's for a surface that names a `sheen` (M10-T06).
+static func paint_material(dir: String, surface: Dictionary) -> Material:
+	return HULL_SHEEN.make(dir, surface) if HULL_SHEEN.wants(surface) else textured_material(dir, surface)
 
 
 ## A PBR material for one surface of a textured mesh: the albedo (sRGB), the normal map, occlusion, roughness and metal from the

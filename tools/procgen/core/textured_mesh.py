@@ -286,9 +286,13 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
             (OPAQUE_SURFACE + surface_suffix, GLASS_SURFACE + surface_suffix), ((1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 0.3)),
             None if interior is None else np.asarray(interior(mesh.face_centroids(), mesh.face_normals()), dtype=bool))
         paths += cut_files
-    for name, level in (detail_levels or {}).items() if any(p.seams for p in parts) else ():
-        lesser = bake_maps(dataclasses.replace(atlas, part_seams=tuple(p.seams.up_to(level) for p in parts)), style, seed, occlusion,
-                           paintable, normal_scale)
+    drawn = any(p.seams for p in parts)
+    for name, level in (detail_levels or {}).items():
+        # A hull with no drawn layout (a seamless organic skin, M10-T06) has a second set only where it is written smaller.
+        if not drawn and int((detail_shrink or {}).get(name, 1)) <= 1:
+            continue
+        lesser = maps if not drawn else bake_maps(dataclasses.replace(atlas, part_seams=tuple(p.seams.up_to(level) for p in parts)), style,
+                                                  seed, occlusion, paintable, normal_scale)
         files = {key: f"{asset_id}_{key}_{name}.png" for key in DETAIL_KEYS}
         shrink = int((detail_shrink or {}).get(name, 1))
         if shrink > 1:  # a lighter set shrinks the glow map with the others (M10-T05: a low set a mip level down)

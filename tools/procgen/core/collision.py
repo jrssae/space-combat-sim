@@ -131,6 +131,7 @@ def convex_points(points: np.ndarray, max_points: int = MAX_HULL_POINTS) -> tupl
             chosen.append(index)
             continue
         outside = (pts @ faces.normals.T - faces.offsets).max(axis=1)
+        outside[chosen] = 0.0  # a corner already kept is on the hull, whatever rounding says: never kept twice
         index = int(np.argmax(outside))
         residual = max(float(outside[index]), 0.0)
         if residual <= 1e-9 * size or len(chosen) >= max_points:

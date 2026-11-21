@@ -128,6 +128,9 @@ class Mesh:
     A primitive that knows its parametrisation also writes a UV per face corner in metres (``face_uv``) and a chart id per
     face (``face_chart``; ``NO_CHART`` where the atlas packer must unwrap the face itself), so a texture atlas (M4-T30a) keeps
     its texels the same size on a cylinder and a box. Both ride through every transform and ``concatenate``.
+
+    ``vertex_normal`` (M10-T06) is a normal per vertex the builder knows better than the faces do: an organic body's, from its
+    field, so a hull cut into sections shades as one skin across the cuts. Without it the normals come from the faces.
     """
 
     vertices: np.ndarray
@@ -136,6 +139,7 @@ class Mesh:
     materials: tuple[Material, ...]
     face_chart: np.ndarray | None = None
     face_uv: np.ndarray | None = None
+    vertex_normal: np.ndarray | None = None
 
     def __post_init__(self) -> None:
         self.vertices = np.asarray(self.vertices, dtype=np.float64).reshape(-1, 3)
@@ -150,6 +154,8 @@ class Mesh:
             self.face_uv = np.zeros((self.face_count, 3, 2), dtype=np.float64)
         else:
             self.face_uv = np.asarray(self.face_uv, dtype=np.float64).reshape(-1, 3, 2)
+        if self.vertex_normal is not None:
+            self.vertex_normal = np.asarray(self.vertex_normal, dtype=np.float64).reshape(-1, 3)
         self.validate()
 
     # -- queries --
@@ -176,6 +182,8 @@ class Mesh:
             raise ValueError("one chart id and three corner UVs per face are required")
         if not np.all(np.isfinite(self.face_uv)):
             raise ValueError("non-finite UV")
+        if self.vertex_normal is not None and (self.vertex_normal.shape[0] != self.vertex_count or not np.all(np.isfinite(self.vertex_normal))):
+            raise ValueError("one finite normal per vertex is required")
 
     @property
     def chart_count(self) -> int:
@@ -210,7 +218,10 @@ class Mesh:
         return (self.face_centroids() * areas[:, None]).sum(axis=0) / total
 
     def vertex_normals(self) -> np.ndarray:
-        """Area-weighted normals per vertex; shared vertices smooth, duplicated ones stay hard."""
+        """The builder's normals where it gave them; else area-weighted per vertex: shared vertices smooth, duplicated ones
+        stay hard."""
+        if self.vertex_normal is not None:
+            return self.vertex_normal.copy()
         a, b, c = self.corners()
         weighted = np.cross(b - a, c - a)  # 2 * area * normal
         acc = np.zeros_like(self.vertices)
@@ -240,7 +251,8 @@ class Mesh:
         reflecting = np.linalg.det(r) <= 0
         faces = self.faces[:, ::-1] if reflecting else self.faces
         uv = self.face_uv[:, ::-1] if reflecting else self.face_uv
-        return Mesh(verts, faces.copy(), self.face_material.copy(), self.materials, self.face_chart.copy(), uv.copy())
+        normals = None if self.vertex_normal is None else unit(self.vertex_normal @ np.linalg.inv(r))
+        return Mesh(verts, faces.copy(), self.face_material.copy(), self.materials, self.face_chart.copy(), uv.copy(), normals)
 
     def translated(self, offset: Sequence[float]) -> Mesh:
         return self.transformed(np.eye(3), offset)
@@ -251,7 +263,7 @@ class Mesh:
     def flipped(self) -> Mesh:
         """Reverse every face so normals point the other way (interior surfaces)."""
         return Mesh(self.vertices.copy(), self.faces[:, ::-1].copy(), self.face_material.copy(), self.materials,
-                    self.face_chart.copy(), self.face_uv[:, ::-1].copy())
+                    self.face_chart.copy(), self.face_uv[:, ::-1].copy(), None if self.vertex_normal is None else -self.vertex_normal)
 
     def face_subset(self, mask: np.ndarray) -> Mesh:
         """The faces selected by ``mask`` (vertices and materials kept as they are)."""
@@ -263,11 +275,12 @@ class Mesh:
             self.materials,
             self.face_chart[mask].copy(),
             self.face_uv[mask].copy(),
+            None if self.vertex_normal is None else self.vertex_normal.copy(),
         )
 
     def with_material(self, material: Material) -> Mesh:
         return Mesh(self.vertices.copy(), self.faces.copy(), np.zeros(self.face_count, dtype=np.int64), (material,),
-                    self.face_chart.copy(), self.face_uv.copy())
+                    self.face_chart.copy(), self.face_uv.copy(), None if self.vertex_normal is None else self.vertex_normal.copy())
 
     @staticmethod
     def empty() -> Mesh:
@@ -301,8 +314,10 @@ class Mesh:
             offset += mesh.vertex_count
         if not meshes:
             return Mesh.empty()
+        # One mesh with its builder's normals is enough for the whole to carry normals: the others give their faces'.
+        normals = np.concatenate([m.vertex_normals() for m in meshes]) if any(m.vertex_normal is not None for m in meshes) else None
         return Mesh(np.concatenate(verts), np.concatenate(faces), np.concatenate(face_mat), tuple(materials),
-                    np.concatenate(charts), np.concatenate(uvs))
+                    np.concatenate(charts), np.concatenate(uvs), normals)
 
 
 # --- primitives ------------------------------------------------------------------------------
@@ -761,7 +776,8 @@ def assign_material_by_predicate(mesh: Mesh, material: Material, mask: np.ndarra
         table.append(material)
     face_mat = mesh.face_material.copy()
     face_mat[np.asarray(mask, dtype=bool)] = table.index(material)
-    return Mesh(mesh.vertices.copy(), mesh.faces.copy(), face_mat, tuple(table), mesh.face_chart.copy(), mesh.face_uv.copy())
+    return Mesh(mesh.vertices.copy(), mesh.faces.copy(), face_mat, tuple(table), mesh.face_chart.copy(), mesh.face_uv.copy(),
+                None if mesh.vertex_normal is None else mesh.vertex_normal.copy())
 
 
 @dataclass
