@@ -50,6 +50,8 @@ var target_box: Rect2 = Rect2()
 var target_color: Color = Factions.NEUTRAL_COLOR
 var target_relation: Factions.Relation = Factions.Relation.NEUTRAL
 var target_name: String = ""
+## The target's transponder line (its faction's name, M10-T02); "" for a beacon or an unidentified contact.
+var target_iff: String = ""
 var target_range_m: float = 0.0
 var target_closing_mps: float = 0.0
 ## 0..1, or -1 without a hull (no bar).

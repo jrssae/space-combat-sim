@@ -79,6 +79,7 @@ func _register_console() -> void:
 		&"selected": {"get": _console_selected, "set": _console_set_selected, "type": TYPE_STRING,
 				"choices": _console_choices, "doc": "Selected target by display name, or none"},
 		&"range_m": {"get": _console_range, "unit": "m", "doc": "Range to the selected target"},
+		&"faction": {"get": _console_faction, "doc": "The selected target's transponder: its faction id, or none"},
 		&"closing_mps": {"get": _console_closing, "unit": "m/s",
 				"doc": "Closing speed of the selected target (positive = closing)"},
 		&"candidates": {"get": _console_candidates, "doc": "Targets in sensor range, nearest first"},
@@ -526,6 +527,11 @@ func _console_choices() -> PackedStringArray:
 func _console_range() -> Variant:
 	var readout: TargetReadout = selected_readout()
 	return readout.range_m if readout != null else null
+
+
+func _console_faction() -> Variant:
+	var readout: TargetReadout = selected_readout()
+	return String(readout.faction) if readout != null else "none"
 
 
 func _console_closing() -> Variant:

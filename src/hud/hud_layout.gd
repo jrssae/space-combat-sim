@@ -216,6 +216,7 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 		return
 	f.target_present = true
 	f.target_name = t.display_name
+	f.target_iff = "" if t.role == Targetable.Role.BEACON else Factions.table().display_name(t.faction).to_upper()
 	f.target_range_m = t.range_m
 	f.target_closing_mps = t.closing_mps
 	f.target_hull = t.hull_fraction
@@ -227,6 +228,7 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 	if input.target_unknown:
 		# Too far to tell what it is (M5-T25): no name, no hull, no faction colour.
 		f.target_name = TargetMenu.UNKNOWN_LABEL
+		f.target_iff = ""
 		f.target_hull = -1.0
 		f.target_relation = Factions.Relation.NEUTRAL
 		f.target_color = Factions.UNIDENTIFIED_COLOR

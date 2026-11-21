@@ -280,6 +280,8 @@ func _draw_target_marks(f: HudFrame, s: float, w: float, labelled: bool) -> void
 		else:
 			_brackets(box, color, w, maxf(8.0 * s, box.size.x * 0.28))
 		if labelled:
+			if not f.target_iff.is_empty():
+				_text(f.target_iff, Vector2(box.position.x, box.position.y - 8.0 * s), 13.0 * s, color)  # the transponder's answer
 			_text(label, Vector2(box.position.x, bottom + 20.0 * s), 15.0 * s, color)
 			if f.target_hull >= 0.0:
 				_bar(Rect2(Vector2(box.position.x, bottom + 27.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
@@ -312,7 +314,8 @@ func _draw_target_panel(f: HudFrame, surface: HudSurface, s: float, w: float) ->
 	if not f.target_present:
 		_text("NO TARGET", at, 18.0 * s, Color(LINE_COLOR.r, LINE_COLOR.g, LINE_COLOR.b, 0.5))
 		return
-	_fitted(f.target_name, at, 20.0 * s, f.target_color, surface.target_text_width)
+	_fitted(f.target_name if f.target_iff.is_empty() else "%s  %s" % [f.target_name, f.target_iff], at, 20.0 * s, f.target_color,
+			surface.target_text_width)
 	if f.cue_present:
 		# A place with an interaction (M8-T18): the range, then the cue's closing speed and state, and its bar where a hull would be.
 		_fitted("%s  %s" % [_range_text(f.target_range_m), f.cue_text], at + Vector2(0.0, 26.0 * s), 16.0 * s, f.cue_color,

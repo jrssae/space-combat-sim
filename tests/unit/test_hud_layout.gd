@@ -745,6 +745,18 @@ func test_an_unidentified_target_has_no_name_hull_or_faction_colour() -> void:
 	assert_almost_eq(unknown.target_range_m, 7000.0, TOL)
 
 
+func test_the_target_box_carries_the_transponders_faction_unless_unidentified() -> void:
+	var input: HudInput = _hud_input()
+	input.faction = Factions.EARTH_ALLIANCE
+	input.target = _target(Vector3(0.0, 0.0, -3000.0))
+	input.target.faction = &"renegades"
+	var f: HudFrame = HudLayout.compute(input)
+	assert_eq(f.target_iff, "EARTHFORCE RENEGADES", "the renegades are told apart by IFF")
+	assert_eq(f.target_color, Factions.HOSTILE_COLOR)
+	input.target_unknown = true
+	assert_eq(HudLayout.compute(input).target_iff, "", "no transponder answer from beyond identification range")
+
+
 func test_the_waypoints_radar_entry_is_marked() -> void:
 	var input: HudInput = _hud_input()
 	var beacon := TargetInfo.new(31, "NAV BETA", Factions.NEUTRAL, Vector3(0.0, 0.0, -2000.0))
