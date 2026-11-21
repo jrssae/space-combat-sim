@@ -41,6 +41,14 @@ func build(dir: String, entry: Dictionary) -> void:
 		radius_m = maxf(radius_m, corner.length())
 
 
+## Puts the piece in its style's second colouring (1) or its first (0): a hull with a sheen layer (M10-T06), per ship.
+func set_skin_variant(variant: float) -> void:
+	if _mesh_node != null:
+		HullSheenMaterial.set_variant(_mesh_node, variant)
+	for node: MeshInstance3D in _section_nodes.values():
+		HullSheenMaterial.set_variant(node, variant)
+
+
 ## The textured mesh (null before it is generated, or for a piece drawn in sections).
 func mesh() -> Mesh:
 	return _mesh_node.mesh if _mesh_node != null else null

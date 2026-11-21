@@ -22,6 +22,9 @@ uniform float detail_sharpness = 4.0;
 
 #include "res://assets/shaders/hull_sheen_layer.gdshaderinc"
 
+// 1 on a ship of its style's second colouring (the red-based Vorlons): `HullSheenMaterial.variant_for` picks it per ship.
+instance uniform float skin_variant = 0.0;
+
 varying vec3 v_pos;
 varying vec3 v_nrm;
 
@@ -51,23 +54,24 @@ void fragment() {
 		vec3 tilt_view = mat3(VIEW_MATRIX) * (MODEL_NORMAL_MATRIX * (tilt * tile.a));
 		n = normalize(n + tilt_view - n * dot(tilt_view, n));
 	}
-	NORMAL = n;
-
-	float metallic = orm.b;
-	float roughness = orm.g;
-	vec3 emission = texture(emissive_map, UV).rgb * emission_energy;
+	// The clear coat on painted skin only, as the hulls' other shaders have it.
+	float on_paint = (1.0 - smoothstep(0.62, 0.78, orm.b)) * clamp((0.85 - orm.g) / 0.35, 0.0, 1.0);
+	SheenSurface skin = SheenSurface(paint, orm.b, orm.g, 0.5, texture(emissive_map, UV).rgb * emission_energy, vec3(0.0),
+			sheen * coat * on_paint, clamp(sheen_roughness + (orm.g - 0.5), 0.1, 1.0));
 	// The view from the fragment, in the hull's own frame, so the layer rides with the hull whichever way it is turned.
 	vec3 view_obj = normalize((inverse(MODEL_MATRIX) * (INV_VIEW_MATRIX * vec4(VIEW, 0.0))).xyz);
 	float footprint_m = max(length(dFdx(v_pos)), length(dFdy(v_pos)));
-	sheen_layer(v_pos, n_obj, view_obj, footprint_m, TIME, paint, metallic, roughness, emission);
+	sheen_layer(v_pos, n_obj, view_obj, footprint_m, TIME, skin_variant, skin);
 
-	ALBEDO = paint;
+	// The layer's lean on the normal (a scale's rim, the liquid's ripples), from the hull's frame into the view's.
+	vec3 lean = mat3(VIEW_MATRIX) * (MODEL_NORMAL_MATRIX * skin.tilt);
+	NORMAL = normalize(n + lean - n * dot(lean, n));
+	ALBEDO = skin.albedo;
 	AO = orm.r;
-	ROUGHNESS = roughness;
-	METALLIC = metallic;
-	EMISSION = emission;
-	// The clear coat on painted skin only, as the hulls' other shaders have it.
-	float on_paint = (1.0 - smoothstep(0.62, 0.78, orm.b)) * clamp((0.85 - orm.g) / 0.35, 0.0, 1.0);
-	CLEARCOAT = sheen * coat * on_paint;
-	CLEARCOAT_ROUGHNESS = clamp(sheen_roughness + (orm.g - 0.5), 0.1, 1.0);
+	ROUGHNESS = skin.roughness;
+	METALLIC = skin.metallic;
+	SPECULAR = skin.specular;
+	EMISSION = skin.emission;
+	CLEARCOAT = skin.coat;
+	CLEARCOAT_ROUGHNESS = skin.coat_roughness;
 }

@@ -51,7 +51,7 @@ class OrganicTestHullTests(unittest.TestCase):
         cls.dir_a, cls.dir_b, cls.dir_hex = root / "a", root / "b", root / "hex"
         cls.out_a = oth.build(BuildContext(cls.dir_a, seed=42, options=TEST_OPTIONS))
         cls.out_b = oth.build(BuildContext(cls.dir_b, seed=42, options=TEST_OPTIONS))
-        cls.out_hex = oth.build(BuildContext(cls.dir_hex, seed=42, options={**TEST_OPTIONS, "look": "hex", "sheen": "b", "detail_px": 128}))
+        cls.out_hex = oth.build(BuildContext(cls.dir_hex, seed=42, options={**TEST_OPTIONS, "look": "hex", "detail_px": 128}))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
         cls.hp = json.loads((cls.dir_a / "hardpoints.json").read_text(encoding="utf-8"))
         cls.offset = np.array(cls.manifest["centroid_offset"])
@@ -106,8 +106,9 @@ class OrganicTestHullTests(unittest.TestCase):
 
     def test_the_surface_wears_the_looks_sheen(self) -> None:
         surface = self.manifest["mesh"]["surfaces"][0]
-        self.assertEqual(surface["sheen"], looks.organic("vorlon", "a").surface["sheen"])
+        self.assertEqual(surface["sheen"], looks.organic("vorlon").surface["sheen"])
         self.assertGreater(surface["sheen"]["glow_energy"], 0.0)
+        self.assertEqual((surface["sheen"]["variant_share"], surface["sheen"]["variant_all"]), (0.2, 0.0), "a fifth of its ships red-based")
 
     # --- one skin, cut into sections -----------------------------------------------------------------------------------
     def test_the_body_is_one_closed_skin_shared_out_by_the_head_core_and_tail(self) -> None:
@@ -193,7 +194,7 @@ class OrganicTestHullTests(unittest.TestCase):
         self.assertEqual(manifest["skin"], "hex_grid")
         self.assertEqual(manifest["budget"]["triangles"], self.manifest["budget"]["triangles"])
         surface = manifest["mesh"]["surfaces"][0]
-        self.assertEqual(surface["sheen"], looks.organic("hex", "b").surface["sheen"])
+        self.assertEqual(surface["sheen"], looks.organic("hex").surface["sheen"])
         self.assertEqual(surface["world_detail"]["tile_m"], 16.0)
         self.assertTrue((self.dir_hex / surface["world_detail"]["albedo"]).is_file())
         normal = read_png(self.dir_hex / surface["normal"])

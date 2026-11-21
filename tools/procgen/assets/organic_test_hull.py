@@ -10,8 +10,8 @@ round the head (``parts/organic_petal.py``). Written by ``core/capital.py`` as a
 Layout (authored frame, metres; -z forward, the hull's axis on y = 0): the claws' tips near z = 0, the head z 30 to 130,
 the petals' hinges at z = 118, the core's lobes z 95 to 245, the tail to z = 268, the tendrils' tips at z = 300.
 
-Options: ``look`` (``vorlon``, the default, ``shadow`` or ``hex``: ``styles/organic.py``) and ``sheen`` (``a``, ``b``,
-``c``: the look sheet's options); ``cell_m`` (the body's grid, 1 m) and ``body_triangles``; and ``core/capital.build``'s
+Options: ``look`` (``vorlon``, the default, ``shadow`` or ``hex``: ``styles/organic.py``) and ``variant`` (true: the look's
+second colouring on every ship, for a look sheet); ``cell_m`` (the body's grid, 1 m) and ``body_triangles``; and ``core/capital.build``'s
 (``spacing``, ``atlas_px``, ``detail_px``).
 """
 
@@ -31,7 +31,7 @@ from ..styles import Style
 from ..styles import organic as looks
 
 ASSET_ID = "organic_test_hull"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2  # 2: the chosen sheens (stage 2)
 SHIP_CLASS = "cruiser"
 DEFAULT_LOOK = "vorlon"
 CELL_M = 1.0
@@ -118,7 +118,7 @@ def modules(style: Style, seed: int = 0, cell_m: float = CELL_M, body_triangles:
 
 
 def spec(ctx: BuildContext) -> cap.CapitalSpec:
-    style = looks.organic(str(ctx.option("look", DEFAULT_LOOK)), str(ctx.option("sheen", "a")))
+    style = looks.organic(str(ctx.option("look", DEFAULT_LOOK)), bool(ctx.option("variant", False)))
     return cap.CapitalSpec(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,

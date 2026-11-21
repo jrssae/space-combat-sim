@@ -5,15 +5,18 @@ the liveries are a layer: nothing is baked, a style only names numbers. A :class
 hands them over as ``CapitalStyle.surface = {"sheen": sheen.to_json()}`` and the framework writes them on every opaque
 surface of the manifest, where ``HullSheenMaterial`` reads them.
 
-Three effects, each off at zero:
+Its effects, each off at zero:
 
 * **iridescence**: a colour that depends on where the surface is seen from, mixed into the paint towards the rim. The
   colour over all directions is a spherical-harmonic function (nine RGB coefficients, :func:`sh_from_lobes`), so it shifts
-  smoothly as the ship or the camera turns;
-* **pattern**: mottling or scales in the hull's own space, which may drift (the Shadows' moving skin). It darkens the
-  paint, shifts its roughness and breaks the iridescence up;
+  smoothly as the ship or the camera turns, and may wander in slow waves of its own;
+* **pattern**: mottling, spots or scales in the hull's own space. It darkens the paint, shifts its roughness and breaks
+  the iridescence up. Mottling and spots may swell and fade as a cuttlefish's skin does (the Vorlons'); scales may drift,
+  and the gaps between them may run with a glossy black liquid (the Shadows');
 * **glow**: a faint light of the hull's own (the Vorlons' bioluminescence), even or gathered in the pattern's veins,
-  slowly pulsing.
+  slowly pulsing;
+* **variant**: a second colouring of the same hull, worn by a share of the ships (the red-based Vorlons). The game picks
+  it per ship from a seeded hash of the ship's own name (``HullSheenMaterial.variant_for``), never a shared generator.
 """
 
 from __future__ import annotations
@@ -28,6 +31,8 @@ import numpy as np
 
 RGB = tuple[float, float, float]
 SH_COUNT = 9
+SH_FIELDS = ("iri_sh", "variant_sh")
+GAME_ONLY = ("variant_share",)  # numbers the game reads from the manifest that are no uniform of the shader
 FIT_DIRECTIONS = 2048
 
 
@@ -82,14 +87,24 @@ class Sheen:
     ``pattern_edge`` how hard the blotches' edges are; ``pattern_cover`` the share of the skin they take;
     ``pattern_dark`` how much they darken the paint; ``pattern_tint`` the colour they pull the paint towards (by
     ``pattern_dark``); ``pattern_iri`` how much they dim the iridescence; ``pattern_rough`` the roughness they add;
-    ``pattern_speed_mps`` how fast the pattern drifts over the hull.
+    ``pattern_speed_mps`` how fast the pattern drifts over the hull; ``pattern_spots`` how dark the small soft dots
+    between the blotches are; ``pattern_pulse`` how far blotches and spots swell and shrink, each patch on its own beat
+    of about ``pattern_pulse_s`` seconds; ``pattern_relief`` how steeply a scale's rim slopes into its gap.
+
+    Liquid: ``liquid`` how wet the gaps between scales are (1: mirror smooth and black), rippling along the hull at
+    ``liquid_flow_mps``. ``iri_wave`` is how far the iridescence's colours wander, in waves ``iri_wave_s`` long.
 
     Glow: ``glow_colour`` times ``glow_energy`` is the hull's own light; ``glow_veins`` 0 for an even glow, 1 for the
     seams between blotches alone; ``glow_rim`` the extra at the rim; ``glow_pulse_s`` its breathing period (0: steady)
     and ``glow_pulse`` how deep it breathes.
 
     ``coat`` is the share of the game's clear coat (``settings.hull_sheen``, the painted hulls' gloss) this skin takes: a
-    black skin with the whole coat reads grey under the sun."""
+    black skin with the whole coat reads grey under the sun.
+
+    Variant: ``variant_share`` of the ships wear it (not a number of the shader's: the game draws the lot);
+    ``variant_tint`` is what the warm paint's brightness is multiplied by (cool paint, a Vorlon's blue petals, is
+    left); ``variant_sh`` and ``variant_glow`` are its iridescence and glow; ``variant_all`` 1 puts every ship in it
+    (look sheets)."""
 
     iri_sh: tuple[RGB, ...] = ((0.0, 0.0, 0.0),) * SH_COUNT
     iri_strength: float = 0.0
@@ -97,6 +112,8 @@ class Sheen:
     iri_power: float = 3.0
     iri_view: float = 0.5
     iri_metal: float = 0.0
+    iri_wave: float = 0.0
+    iri_wave_s: float = 0.0
     pattern_scale_m: float = 1.0
     pattern_cells: float = 0.0
     pattern_edge: float = 0.5
@@ -106,6 +123,12 @@ class Sheen:
     pattern_iri: float = 0.0
     pattern_rough: float = 0.0
     pattern_speed_mps: float = 0.0
+    pattern_spots: float = 0.0
+    pattern_pulse: float = 0.0
+    pattern_pulse_s: float = 0.0
+    pattern_relief: float = 0.0
+    liquid: float = 0.0
+    liquid_flow_mps: float = 0.0
     glow_colour: RGB = (0.0, 0.0, 0.0)
     glow_energy: float = 0.0
     glow_veins: float = 0.0
@@ -113,14 +136,21 @@ class Sheen:
     glow_pulse_s: float = 0.0
     glow_pulse: float = 0.0
     coat: float = 1.0
+    variant_share: float = 0.0
+    variant_tint: RGB = (1.0, 1.0, 1.0)
+    variant_sh: tuple[RGB, ...] = ((0.0, 0.0, 0.0),) * SH_COUNT
+    variant_glow: RGB = (0.0, 0.0, 0.0)
+    variant_all: float = 0.0
 
     def __post_init__(self) -> None:
-        if len(self.iri_sh) != SH_COUNT or any(len(c) != 3 for c in self.iri_sh):
-            raise ValueError(f"a sheen's iridescence is {SH_COUNT} RGB coefficients")
+        for sh in (self.iri_sh, self.variant_sh):
+            if len(sh) != SH_COUNT or any(len(c) != 3 for c in sh):
+                raise ValueError(f"a sheen's iridescence is {SH_COUNT} RGB coefficients")
         if self.pattern_scale_m <= 0.0:
             raise ValueError("a sheen's pattern needs a size")
         for name in ("iri_strength", "iri_base", "iri_view", "iri_metal", "pattern_cells", "pattern_edge", "pattern_cover", "pattern_dark",
-                     "pattern_iri", "glow_veins", "glow_pulse", "coat"):
+                     "pattern_iri", "glow_veins", "glow_pulse", "coat", "iri_wave", "pattern_spots", "pattern_pulse", "pattern_relief", "liquid",
+                     "variant_share", "variant_all"):
             if not 0.0 <= float(getattr(self, name)) <= 1.0:
                 raise ValueError(f"a sheen's {name} is a share, 0 to 1")
 
@@ -133,7 +163,7 @@ class Sheen:
         out: dict[str, Any] = {}
         for f in dataclasses.fields(self):
             value = getattr(self, f.name)
-            if f.name == "iri_sh":
+            if f.name in SH_FIELDS:
                 out[f.name] = [[float(c) for c in row] for row in value]
             elif isinstance(value, tuple):
                 out[f.name] = [float(c) for c in value]
@@ -142,4 +172,4 @@ class Sheen:
         return out
 
 
-__all__ = ["SH_COUNT", "Sheen", "sh_basis", "sh_colour", "sh_from_lobes", "sphere_directions"]
+__all__ = ["GAME_ONLY", "SH_COUNT", "SH_FIELDS", "Sheen", "sh_basis", "sh_colour", "sh_from_lobes", "sphere_directions"]

@@ -53,10 +53,32 @@ func test_the_material_wears_the_manifests_sheen() -> void:
 	for key: String in HullSheenMaterial.COLOURS:
 		var colour: Array = sheen[key]
 		assert_almost_eq(material.get_shader_parameter(StringName(key)) as Vector3, Vector3(colour[0], colour[1], colour[2]), Vector3.ONE * 1e-6, key)
-	var coefficients: PackedVector3Array = material.get_shader_parameter(&"iri_sh")
-	assert_eq(coefficients.size(), HullSheenMaterial.SH_COUNT, "the iridescence's nine coefficients")
-	assert_almost_eq(coefficients[0].x, float(sheen["iri_sh"][0][0]), 1e-6)
+	for key: String in HullSheenMaterial.HARMONICS:
+		var coefficients: PackedVector3Array = material.get_shader_parameter(StringName(key))
+		assert_eq(coefficients.size(), HullSheenMaterial.SH_COUNT, "%s: nine coefficients" % key)
+		assert_almost_eq(coefficients[0].x, float(sheen[key][0][0]), 1e-6, key)
 	assert_gt(float(sheen["glow_energy"]), 0.0, "the Vorlon look glows faintly (Q46)")
+
+
+func test_a_fifth_of_the_ships_wear_the_second_colouring_by_their_own_names() -> void:
+	var sheen: Dictionary = (manifest["mesh"]["surfaces"] as Array)[0]["sheen"]
+	assert_almost_eq(float(sheen["variant_share"]), 0.2, 1e-6)
+	var red: int = 0
+	for i: int in 2000:
+		var variant: float = HullSheenMaterial.variant_for(sheen, "VORLON %d" % i)
+		assert_true(variant == 0.0 or variant == 1.0)
+		red += int(variant)
+	assert_between(red, 340, 460, "about a fifth of 2 000 names")
+	assert_eq(HullSheenMaterial.variant_for(sheen, "KOSH"), HullSheenMaterial.variant_for(sheen, "KOSH"), "a name is one colour, every time")
+	assert_eq(HullSheenMaterial.variant_of_mesh(manifest["mesh"], "VORLON 7"), HullSheenMaterial.variant_for(sheen, "VORLON 7"))
+	assert_eq(HullSheenMaterial.variant_for({}, "VORLON 7"), 0.0, "a style with no second colouring has none")
+	assert_eq(HullSheenMaterial.variant_of_mesh({"surfaces": [{"name": "hull"}]}, "VORLON 7"), 0.0)
+	var piece := RenderPiece.new()
+	add_child_autofree(piece)
+	piece.build(dir, manifest["pieces"]["hull"])
+	piece.set_skin_variant(1.0)
+	var node := piece.get_child(0) as MeshInstance3D
+	assert_eq(float(node.get_instance_shader_parameter(HullSheenMaterial.VARIANT_PARAMETER)), 1.0, "the ship's own copy of the hull turns red")
 
 
 func test_a_surface_without_a_sheen_keeps_the_standard_material() -> void:

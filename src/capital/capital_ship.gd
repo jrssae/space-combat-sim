@@ -35,6 +35,9 @@ var flight_spec: ShipSpec = null
 var helm: CapitalHelm = null
 var rotors: Array[CapitalRotor] = []
 var hull_piece: RenderPiece = null
+## 1 when this ship wears its style's second colouring (M10-T06: about a fifth of the Vorlons are red-based), else 0: drawn from
+## the ship's own name, the same in every run. Its break-up chunks take the same value (`HullSheenMaterial.set_variant`).
+var skin_variant: float = 0.0
 ## The section the last hit or ram landed on, and how many landed per section (a readout for T08 and the console).
 var last_section: String = ""
 var section_hits: Dictionary = {}
@@ -229,6 +232,7 @@ func _build(loaded: ShipSpec, display_name: String) -> bool:
 	_half = 0.5 * Vector3(float(dims.get("span", 0.0)), float(dims.get("height", 0.0)), float(dims.get("length", 0.0)))
 	jump_drive.recharge_s = CapitalData.jump_recharge_s(capital_class)
 	_read_jump_anchor()
+	skin_variant = HullSheenMaterial.variant_of_mesh((pieces[CapitalSections.HULL] as Dictionary).get("mesh", {}), display_name)
 	_build_hull(pieces[CapitalSections.HULL], display_name)
 	for piece_name: String in sections.bodies():
 		if piece_name != CapitalSections.HULL and pieces.has(piece_name):
@@ -248,6 +252,7 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	hull_piece = RenderPiece.new()
 	hull_piece.name = "Hull"
 	hull_piece.build(_dir, entry)
+	hull_piece.set_skin_variant(skin_variant)
 	add_child(hull_piece)
 	targetable = Targetable.new()
 	targetable.name = "Targetable"
@@ -281,6 +286,7 @@ func _build_rotor(piece_name: String, entry: Dictionary) -> void:
 	var picture := RenderPiece.new()
 	picture.name = piece_name.to_pascal_case()
 	picture.build(_dir, entry)
+	picture.set_skin_variant(skin_variant)
 	rotor.visual_pivot.add_child(picture)
 	add_child(rotor)
 	rotors.append(rotor)

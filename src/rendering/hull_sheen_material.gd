@@ -8,12 +8,18 @@ extends RefCounted
 const SHADER: Shader = preload("res://assets/shaders/hull_organic.gdshader")
 const MAP_KEYS: Array[String] = ["albedo", "normal", "orm", "emissive"]
 ## The layer's numbers by kind; each is a uniform of the same name (`hull_sheen_layer.gdshaderinc`).
-const SCALARS: Array[String] = ["iri_strength", "iri_base", "iri_power", "iri_view", "iri_metal", "pattern_scale_m", "pattern_cells",
-		"pattern_edge", "pattern_cover", "pattern_dark", "pattern_iri", "pattern_rough", "pattern_speed_mps", "glow_energy", "glow_veins",
-		"glow_rim", "glow_pulse_s", "glow_pulse", "coat"]
-const COLOURS: Array[String] = ["pattern_tint", "glow_colour"]
-const IRIDESCENCE: String = "iri_sh"
+const SCALARS: Array[String] = ["iri_strength", "iri_base", "iri_power", "iri_view", "iri_metal", "iri_wave", "iri_wave_s",
+		"pattern_scale_m", "pattern_cells", "pattern_edge", "pattern_cover", "pattern_dark", "pattern_iri", "pattern_rough",
+		"pattern_speed_mps", "pattern_spots", "pattern_pulse", "pattern_pulse_s", "pattern_relief", "liquid", "liquid_flow_mps",
+		"glow_energy", "glow_veins", "glow_rim", "glow_pulse_s", "glow_pulse", "coat", "variant_all"]
+const COLOURS: Array[String] = ["pattern_tint", "glow_colour", "variant_tint", "variant_glow"]
+## The colours by direction: nine spherical-harmonic coefficients each.
+const HARMONICS: Array[String] = ["iri_sh", "variant_sh"]
 const SH_COUNT: int = 9
+## The share of a style's ships that wear its second colouring (a manifest number the game reads; no uniform).
+const VARIANT_SHARE: String = "variant_share"
+## The instance uniform that puts one ship in the second colouring.
+const VARIANT_PARAMETER: StringName = &"skin_variant"
 
 ## The materials made, with where their maps are, for `settings.texture_detail`.
 static var _made: Array[Dictionary] = []
@@ -58,12 +64,35 @@ static func apply_sheen(material: ShaderMaterial, sheen: Dictionary) -> void:
 		var colour: Variant = sheen.get(key)
 		if colour is Array and (colour as Array).size() == 3:
 			material.set_shader_parameter(StringName(key), Vector3(float(colour[0]), float(colour[1]), float(colour[2])))
-	var rows: Variant = sheen.get(IRIDESCENCE)
-	if rows is Array and (rows as Array).size() == SH_COUNT:
-		var coefficients := PackedVector3Array()
-		for row: Array in rows:
-			coefficients.append(Vector3(float(row[0]), float(row[1]), float(row[2])))
-		material.set_shader_parameter(StringName(IRIDESCENCE), coefficients)
+	for key: String in HARMONICS:
+		var rows: Variant = sheen.get(key)
+		if rows is Array and (rows as Array).size() == SH_COUNT:
+			var coefficients := PackedVector3Array()
+			for row: Array in rows:
+				coefficients.append(Vector3(float(row[0]), float(row[1]), float(row[2])))
+			material.set_shader_parameter(StringName(key), coefficients)
+
+
+## Whether the ship called `ship_key` wears its style's second colouring: 1 for the sheen's `variant_share` of all names, else
+## 0. A seeded hash of the ship's own name, so the same ship is the same colour in every run and no shared generator is drawn on.
+static func variant_for(sheen: Dictionary, ship_key: String) -> float:
+	var share: float = float(sheen.get(VARIANT_SHARE, 0.0))
+	if share <= 0.0:
+		return 0.0
+	return 1.0 if float(hash([VARIANT_SHARE, ship_key]) & 0xFFFFFF) / 16777216.0 < share else 0.0
+
+
+## The same for a hull's mesh entry (a manifest `mesh` section): its first sheen-wearing surface's answer, 0 with none.
+static func variant_of_mesh(mesh_entry: Dictionary, ship_key: String) -> float:
+	for surface: Dictionary in mesh_entry.get("surfaces", []):
+		if wants(surface):
+			return variant_for(surface["sheen"] as Dictionary, ship_key)
+	return 0.0
+
+
+## Puts one drawn copy of a hull (its mesh node, a chunk's) in the colouring `variant` (0 or 1).
+static func set_variant(node: GeometryInstance3D, variant: float) -> void:
+	node.set_instance_shader_parameter(VARIANT_PARAMETER, variant)
 
 
 ## Gives a material the maps of the texture set in use.
