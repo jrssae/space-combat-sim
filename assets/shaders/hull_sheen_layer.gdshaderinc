@@ -3,8 +3,9 @@
 // `HullSheenMaterial` sets them as these uniforms. Its effects, each off at zero:
 //   iridescence: a colour by direction (nine spherical-harmonic coefficients) mixed into the paint towards the rim, which may
 //     shift in slow waves along the hull;
-//   pattern: mottling, spots or scales in the hull's own space. Mottling and spots may swell and fade as a squid's skin does,
-//     scales may drift, and the gaps between scales may run with a glossy black liquid (the Shadows');
+//   pattern: mottling, spots or cells in the hull's own space. Mottling and spots may swell and fade as a squid's skin does;
+//     cells may drift, their seams may stand up as ridges, and each cell between the ridges may be a pool of glossy liquid,
+//     its surface drawn up at its edges and dished in its middle (the Shadows');
 //   glow: a faint light of the hull's own (the Vorlons' bioluminescence);
 //   variant: a second colouring of the same hull (the red-based Vorlons), chosen per ship by the including shader.
 // Everything that moves reads TIME: a visual only, gameplay never sees it.
@@ -34,6 +35,8 @@ uniform float pattern_pulse_s = 0.0;
 uniform float pattern_relief = 0.0;
 uniform float liquid = 0.0;
 uniform float liquid_flow_mps = 0.0;
+uniform float liquid_dish = 0.0;
+uniform vec3 liquid_tint = vec3(0.0);
 uniform vec3 glow_colour = vec3(0.0);
 uniform float glow_energy = 0.0;
 uniform float glow_veins = 0.0;
@@ -125,7 +128,7 @@ void sheen_layer(vec3 pos, vec3 normal, vec3 view, float footprint_m, float time
 	float ink = 0.0;
 	float vein = 0.0;
 	float tone = 0.5;
-	float gap = 0.0;
+	float pool = 0.0;
 	vec3 p = pos / pattern_scale_m;
 	if (pattern_dark + pattern_iri + pattern_rough + glow_veins + liquid > 0.0) {
 		float drift = time * pattern_speed_mps / pattern_scale_m;
@@ -149,16 +152,19 @@ void sheen_layer(vec3 pos, vec3 normal, vec3 view, float footprint_m, float time
 		}
 		float seam = 0.0;
 		if (pattern_cells > 0.0) {
-			// Scales: each slides along the hull and breathes a little; the gaps between them are the pattern's ink.
+			// Cells: each slides along the hull and breathes a little; the seams between them are the pattern's ink.
 			vec3 own, to_middle;
 			vec2 d = sheen_cells(p * 1.3 + drift * vec3(0.0, 0.0, 1.0) + 0.25 * sin(drift * 0.7 + p.yzx * 1.7), own, to_middle);
 			float width = mix(0.02, 0.3, pattern_cover) + edge * 0.5;
-			seam = 1.0 - smoothstep(0.0, width, d.y - d.x);
+			float from_seam = d.y - d.x;
+			seam = 1.0 - smoothstep(0.0, width, from_seam);
 			tone = own.y;
-			// A scale's rim slopes down into the gap round it.
-			vec3 outward = -to_middle - normal * dot(-to_middle, normal);
-			float slope = (1.0 - smoothstep(width, 2.5 * width, d.y - d.x)) * (1.0 - seam);
-			s.tilt += pattern_relief * pattern_cells * slope * outward / max(length(outward), 1e-4);
+			// The seam is a ridge: its flank falls away towards the cell's middle. Beyond it the cell's surface goes on falling,
+			// more and more gently, to a flat middle: a pool drawn up where it meets the ridge.
+			vec3 inward = to_middle - normal * dot(to_middle, normal);
+			float flank = sin(3.14159265 * clamp(from_seam / width, 0.0, 1.0));
+			float dish = (1.0 - smoothstep(width, width + 0.45, from_seam)) * smoothstep(0.5 * width, width, from_seam);
+			s.tilt += pattern_cells * (pattern_relief * flank + liquid_dish * 0.45 * dish) * inward / max(length(inward), 1e-4);
 		}
 		ink = mix(blot, seam, pattern_cells);
 		vein = mix(blot_vein, seam, pattern_cells);
@@ -168,7 +174,7 @@ void sheen_layer(vec3 pos, vec3 normal, vec3 view, float footprint_m, float time
 		vein = mix(0.25, vein, sharp);
 		tone = mix(0.5, tone, sharp * pattern_cells);
 		s.tilt *= sharp;
-		gap = seam * sharp * pattern_cells;
+		pool = pattern_cells * (1.0 - ink);
 	}
 	s.albedo = mix(s.albedo, pattern_tint, pattern_dark * ink);
 	s.roughness = clamp(s.roughness + pattern_rough * (ink + (tone - 0.5) * 0.6), 0.04, 1.0);
@@ -199,13 +205,14 @@ void sheen_layer(vec3 pos, vec3 normal, vec3 view, float footprint_m, float time
 		s.metallic = mix(s.metallic, 1.0, amount * iri_metal);
 	}
 	if (liquid > 0.0) {
-		// The gaps run with a black liquid: mirror smooth, wet, and rippling along the hull.
-		float wet = liquid * gap;
+		// Each cell is a pool of liquid: smooth, wet, and slowly rippling along the hull.
+		float wet = liquid * pool;
 		float run = time * liquid_flow_mps / pattern_scale_m;
-		vec3 q = p * 9.0;
+		vec3 q = p * 6.0;
 		vec3 ripple = vec3(sin(q.y * 1.7 + q.z * 2.3 - run * 9.0), sin(q.z * 1.9 + q.x * 2.1 - run * 7.0), sin(q.x * 2.3 + q.y * 1.3 + run * 8.0));
-		ripple += 0.6 * sin(q.zxy * 4.1 + run * vec3(13.0, -11.0, 15.0));
-		s.tilt += wet * 0.3 * (ripple - normal * dot(ripple, normal));
+		ripple += 0.6 * sin(q.zxy * 3.1 + run * vec3(13.0, -11.0, 15.0));
+		s.tilt += wet * 0.05 * (ripple - normal * dot(ripple, normal));
+		s.albedo = mix(s.albedo, liquid_tint, wet);
 		s.metallic = mix(s.metallic, 0.0, wet);
 		s.roughness = mix(s.roughness, 0.1, wet);
 		s.specular = mix(s.specular, 1.0, wet);

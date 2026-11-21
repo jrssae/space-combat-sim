@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # The organic looks' sheet (M10-T06): the organic test hull in each look of tools/procgen/styles/organic.py (vorlon, its
-# red-based second colouring, shadow, hex), photographed on this machine's GPU lit and dark, near and far, and laid out as
+# red-based second colouring, shadow, and the hexagonal minbari, white_star and victory), photographed on this machine's GPU lit and dark, near and far, and laid out as
 # one sheet, a column a look. A hull task copies this for its own look sheet.
 #
 # Usage: scripts/organic_sheet.sh <out_dir> [sheet_name]      (default sheet name: sheen_looks)
@@ -25,7 +25,7 @@ OPTIONS_DIR="${SCRATCH}/assets/generated/${ASSET}_options"
 atlas=()
 [[ -z "${ORGANIC_ATLAS_PX:-}" ]] || atlas=(--option "atlas_px=${ORGANIC_ATLAS_PX}")
 
-for look in vorlon shadow hex; do
+for look in vorlon shadow minbari white_star victory; do
     "${PY}" -m tools.procgen build "${ASSET}" --out "${OPTIONS_DIR}/${look}" --option "look=\"${look}\"" "${atlas[@]}"
 done
 "${PY}" - "${OPTIONS_DIR}" "${ASSET}" <<'PY'
@@ -48,7 +48,7 @@ path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 PY
 "${GODOT}" --headless --path "${SCRATCH}" --import >/dev/null 2>&1 || true
 
-LOOKS=(vorlon vorlon_red shadow hex)
+LOOKS=(vorlon vorlon_red shadow minbari white_star victory)
 shots=()
 for look in "${LOOKS[@]}"; do
     id="${ASSET}:${look}"

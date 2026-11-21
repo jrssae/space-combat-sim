@@ -83,7 +83,7 @@ class SheenTests(unittest.TestCase):
 
 class OrganicStyleTests(unittest.TestCase):
     def test_the_looks_and_the_second_colouring(self) -> None:
-        self.assertEqual(organic.LOOKS, ("vorlon", "shadow", "hex"))
+        self.assertEqual(organic.LOOKS, ("vorlon", "shadow", "minbari", "white_star", "victory"))
         plain, red = organic.organic("vorlon").surface["sheen"], organic.organic("vorlon", variant=True).surface["sheen"]
         self.assertEqual((plain["variant_all"], red["variant_all"]), (0.0, 1.0))
         self.assertEqual({k: v for k, v in plain.items() if k != "variant_all"}, {k: v for k, v in red.items() if k != "variant_all"},
@@ -93,11 +93,12 @@ class OrganicStyleTests(unittest.TestCase):
         with self.assertRaises(ValueError, msg="the Shadows have one colouring"):
             organic.organic("shadow", variant=True)
 
-    def test_the_vorlons_and_the_shadows_are_seamless_and_the_hex_look_is_plated(self) -> None:
+    def test_the_vorlons_and_the_shadows_are_seamless_and_the_hex_looks_are_plated(self) -> None:
         self.assertIsInstance(organic.organic("vorlon").skin, Seamless)  # Q46
         self.assertIsInstance(organic.organic("shadow").skin, Seamless)
-        self.assertIsInstance(organic.organic("hex").skin, HexGrid)  # Q45, Q47
-        self.assertTrue(organic.organic("hex").style.material("hull").paneled)
+        for look in organic.HEX_COLOURS:
+            self.assertIsInstance(organic.organic(look).skin, HexGrid)  # Q45, Q47
+            self.assertTrue(organic.organic(look).style.material("hull").paneled)
         self.assertFalse(organic.organic("vorlon").style.material("hull").paneled)
 
     def test_the_vorlons_are_mottled_alive_and_a_fifth_of_them_red(self) -> None:
@@ -119,36 +120,77 @@ class OrganicStyleTests(unittest.TestCase):
         self.assertEqual(worn["variant_share"], 0.2, "a fifth of the hulls are red-based")
         luma = 0.2126 * skin[0] + 0.7152 * skin[1] + 0.0722 * skin[2]
         red = np.array(worn["variant_tint"]) * luma
-        self.assertGreater(red[0], 3.0 * red[1], "red-based")
+        self.assertGreater(red[0], 2.0 * red[1], "red-based")
         self.assertGreater(red[1], red[2])
+        self.assertLess(red[0], 0.25, "a copper-brown, not an orange (the show's heavy cruiser)")
         both = [sheen.sh_colour(worn[key], sheen.sphere_directions(200)).mean(axis=0) for key in ("iri_sh", "variant_sh")]
         self.assertGreater(both[0][1], both[0][0], "green-gold on the yellow-green hulls")
         self.assertGreater(both[1][0], both[1][1], "a red-gold sheen on the red ones")
 
-    def test_the_shadows_are_black_scaled_and_wet_between_the_scales(self) -> None:
+    def test_the_shadows_are_black_with_ridged_seams_and_a_pool_of_liquid_in_every_cell(self) -> None:
         shadow = organic.organic("shadow")
         worn = shadow.surface["sheen"]
         self.assertLess(max(shadow.style.material("hull").albedo), 0.03, "the Shadows are black")
-        self.assertEqual(worn["pattern_cells"], 1.0, "scales")
+        self.assertEqual(worn["pattern_cells"], 1.0, "cells with seams between them")
         self.assertGreaterEqual(worn["pattern_scale_m"], 4.0, "big ones")
         self.assertGreater(worn["pattern_speed_mps"], 0.0, "that move")
         self.assertLessEqual(worn["pattern_speed_mps"], 0.2, "slowly")
-        self.assertEqual(worn["liquid"], 1.0, "a glossy black liquid in the gaps")
+        # The maintainer's correction (2026-11-21): the seams are the high points, the liquid is the cells' own surface.
+        self.assertGreater(worn["pattern_relief"], 0.5, "the seams stand up as ridges")
+        self.assertEqual(worn["liquid"], 1.0, "each cell a glossy wet surface")
+        self.assertGreater(worn["liquid_dish"], 0.5, "drawn up at its edges, lower in its middle")
         self.assertGreater(worn["liquid_flow_mps"], 0.0, "that flows")
-        self.assertEqual(worn["pattern_tint"], [0.0, 0.0, 0.0])
+        self.assertEqual(worn["liquid_tint"], [0.0, 0.0, 0.0], "black")
+        self.assertGreater(shadow.style.material("hull").roughness_value, 0.6, "the ridges are matt: the gloss is the liquid's")
+        self.assertGreater(worn["glow_energy"], 0.0, "a faint violet in the seams")
+        self.assertLess(worn["glow_energy"], 0.02)
+        self.assertEqual(worn["glow_veins"], 1.0)
+        self.assertGreater(worn["glow_colour"][2], worn["glow_colour"][0])
         violet = sheen.sh_colour(worn["iri_sh"], sheen.sphere_directions(200)).mean(axis=0)
         self.assertGreater(violet[2], violet[0])
         self.assertGreater(violet[0], violet[1], "a purple sheen: blue over red over green")
         self.assertLessEqual(worn["iri_strength"], 0.3, "and only a hint of it")
         self.assertEqual(worn["variant_share"], 0.0)
 
-    def test_the_hex_look_has_a_hint_of_sheen_and_soft_mottling(self) -> None:
-        worn = organic.organic("hex").surface["sheen"]
-        self.assertEqual(worn["iri_base"], 0.0, "at the rim only")
-        self.assertLessEqual(worn["iri_strength"], 0.25)
-        self.assertGreater(worn["pattern_dark"], 0.0)
-        self.assertLess(worn["pattern_edge"], 0.5, "soft-edged")
-        self.assertEqual((worn["liquid"], worn["glow_energy"]), (0.0, 0.0))
+    def test_a_hexagonal_hull_wears_its_own_colour_set(self) -> None:
+        self.assertEqual(tuple(organic.HEX_COLOURS), ("minbari", "white_star", "victory"))
+        for name, colours in organic.HEX_COLOURS.items():
+            style = organic.organic(name)
+            self.assertEqual(style.surface, organic.hex_style(colours).surface)
+            worn = style.surface["sheen"]
+            self.assertEqual(worn["iri_base"], 0.0, "a hint of sheen, at the rim only")
+            self.assertLessEqual(worn["iri_strength"], 0.25)
+            self.assertGreater(worn["pattern_dark"], 0.0, "soft mottling")
+            self.assertEqual(worn["pattern_tint"], list(colours.mottle))
+            self.assertEqual((worn["liquid"], worn["glow_energy"], worn["variant_share"]), (0.0, 0.0, 0.0))
+            self.assertEqual(style.style.material("hull").albedo, colours.skin)
+            with self.assertRaises(ValueError):
+                organic.organic(name, variant=True)
+        # A hull task hands its own set and its own hexagon size.
+        own = organic.HexColours("drakh", (0.05, 0.08, 0.04), (0.04, 0.06, 0.03), (0.03, 0.05, 0.03), (0.01, 0.02, 0.01), (0.1, 0.3, 0.1),
+                                 (0.0, 0.1, 0.0), (0.0, 0.0, 0.0))
+        style = organic.hex_style(own, cell_m=8.0)
+        self.assertEqual((style.skin.cell_m, style.style.material("hull").albedo, style.name), (8.0, (0.05, 0.08, 0.04), "organic_drakh"))
+
+    def test_the_minbari_are_blue_the_white_star_silver_and_violet_the_victory_charcoal_and_red(self) -> None:
+        minbari, white_star, victory = (organic.organic(name) for name in ("minbari", "white_star", "victory"))
+        # The Minbari: blue everywhere: the paint, the mottling and every colour the sheen can show (no purple: red under green).
+        skin, mottle = minbari.style.material("hull").albedo, minbari.surface["sheen"]["pattern_tint"]
+        self.assertTrue(skin[2] > 2.0 * skin[1] > 2.0 * skin[0], "blue")
+        self.assertTrue(mottle[2] > 3.0 * mottle[1] and mottle[1] > mottle[0] and mottle[2] < skin[2], "dark blue")
+        colours = sheen.sh_colour(minbari.surface["sheen"]["iri_sh"], sheen.sphere_directions(400))
+        self.assertTrue(np.all(colours[:, 2] > colours[:, 1]) and np.all(colours[:, 1] > colours[:, 0]), "blue over green over red, every way")
+        # The White Star: a near-grey silver, its veins violet-blue.
+        silver, veins = white_star.style.material("hull").albedo, white_star.surface["sheen"]["pattern_tint"]
+        self.assertLess(max(silver) - min(silver), 0.08)
+        self.assertGreater(min(silver), 0.3)
+        self.assertGreater(white_star.style.material("hull").metallic, 0.6)
+        self.assertTrue(veins[2] > 3.0 * veins[0] and veins[0] > veins[1], "violet-blue")
+        # The Victory class: charcoal, its markings a dull red.
+        charcoal, marks = victory.style.material("hull").albedo, victory.surface["sheen"]["pattern_tint"]
+        self.assertLess(max(charcoal), 0.06)
+        self.assertLess(max(charcoal) - min(charcoal), 0.015)
+        self.assertTrue(marks[0] > 3.0 * marks[1] and marks[0] < 0.15, "dull red")
 
 
 if __name__ == "__main__":

@@ -10,9 +10,9 @@ const MAP_KEYS: Array[String] = ["albedo", "normal", "orm", "emissive"]
 ## The layer's numbers by kind; each is a uniform of the same name (`hull_sheen_layer.gdshaderinc`).
 const SCALARS: Array[String] = ["iri_strength", "iri_base", "iri_power", "iri_view", "iri_metal", "iri_wave", "iri_wave_s",
 		"pattern_scale_m", "pattern_cells", "pattern_edge", "pattern_cover", "pattern_dark", "pattern_iri", "pattern_rough",
-		"pattern_speed_mps", "pattern_spots", "pattern_pulse", "pattern_pulse_s", "pattern_relief", "liquid", "liquid_flow_mps",
+		"pattern_speed_mps", "pattern_spots", "pattern_pulse", "pattern_pulse_s", "pattern_relief", "liquid", "liquid_flow_mps", "liquid_dish",
 		"glow_energy", "glow_veins", "glow_rim", "glow_pulse_s", "glow_pulse", "coat", "variant_all"]
-const COLOURS: Array[String] = ["pattern_tint", "glow_colour", "variant_tint", "variant_glow"]
+const COLOURS: Array[String] = ["pattern_tint", "liquid_tint", "glow_colour", "variant_tint", "variant_glow"]
 ## The colours by direction: nine spherical-harmonic coefficients each.
 const HARMONICS: Array[String] = ["iri_sh", "variant_sh"]
 const SH_COUNT: int = 9

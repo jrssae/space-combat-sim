@@ -10,9 +10,9 @@ Its effects, each off at zero:
 * **iridescence**: a colour that depends on where the surface is seen from, mixed into the paint towards the rim. The
   colour over all directions is a spherical-harmonic function (nine RGB coefficients, :func:`sh_from_lobes`), so it shifts
   smoothly as the ship or the camera turns, and may wander in slow waves of its own;
-* **pattern**: mottling, spots or scales in the hull's own space. It darkens the paint, shifts its roughness and breaks
-  the iridescence up. Mottling and spots may swell and fade as a cuttlefish's skin does (the Vorlons'); scales may drift,
-  and the gaps between them may run with a glossy black liquid (the Shadows');
+* **pattern**: mottling, spots or cells in the hull's own space. It darkens the paint, shifts its roughness and breaks
+  the iridescence up. Mottling and spots may swell and fade as a cuttlefish's skin does (the Vorlons'); cells may drift,
+  their seams may stand up as ridges, and each cell may be a pool of glossy liquid, drawn up at its edges (the Shadows');
 * **glow**: a faint light of the hull's own (the Vorlons' bioluminescence), even or gathered in the pattern's veins,
   slowly pulsing;
 * **variant**: a second colouring of the same hull, worn by a share of the ships (the red-based Vorlons). The game picks
@@ -83,16 +83,18 @@ class Sheen:
     surface's own facing (0: the colours are fixed on the hull) or the mirrored view (1: they slide as the camera moves);
     ``iri_metal`` how much the lit iridescence mirrors its colour (a metallic lustre) instead of scattering it.
 
-    Pattern: ``pattern_scale_m`` the size of a blotch; ``pattern_cells`` 0 for soft mottling, 1 for scales;
+    Pattern: ``pattern_scale_m`` the size of a blotch; ``pattern_cells`` 0 for soft mottling, 1 for cells with seams
+    between them (the seams are then the pattern's ink);
     ``pattern_edge`` how hard the blotches' edges are; ``pattern_cover`` the share of the skin they take;
     ``pattern_dark`` how much they darken the paint; ``pattern_tint`` the colour they pull the paint towards (by
     ``pattern_dark``); ``pattern_iri`` how much they dim the iridescence; ``pattern_rough`` the roughness they add;
     ``pattern_speed_mps`` how fast the pattern drifts over the hull; ``pattern_spots`` how dark the small soft dots
     between the blotches are; ``pattern_pulse`` how far blotches and spots swell and shrink, each patch on its own beat
-    of about ``pattern_pulse_s`` seconds; ``pattern_relief`` how steeply a scale's rim slopes into its gap.
+    of about ``pattern_pulse_s`` seconds; ``pattern_relief`` how steeply the seams between cells stand up as ridges.
 
-    Liquid: ``liquid`` how wet the gaps between scales are (1: mirror smooth and black), rippling along the hull at
-    ``liquid_flow_mps``. ``iri_wave`` is how far the iridescence's colours wander, in waves ``iri_wave_s`` long.
+    Liquid: ``liquid`` how wet each cell's surface between the seams is (1: smooth and glossy), of colour
+    ``liquid_tint``, rippling along the hull at ``liquid_flow_mps``; ``liquid_dish`` how far the pool is drawn up where
+    it meets its ridge (higher at its edges, lower in its middle). ``iri_wave`` is how far the iridescence's colours wander, in waves ``iri_wave_s`` long.
 
     Glow: ``glow_colour`` times ``glow_energy`` is the hull's own light; ``glow_veins`` 0 for an even glow, 1 for the
     seams between blotches alone; ``glow_rim`` the extra at the rim; ``glow_pulse_s`` its breathing period (0: steady)
@@ -129,6 +131,8 @@ class Sheen:
     pattern_relief: float = 0.0
     liquid: float = 0.0
     liquid_flow_mps: float = 0.0
+    liquid_dish: float = 0.0
+    liquid_tint: RGB = (0.0, 0.0, 0.0)
     glow_colour: RGB = (0.0, 0.0, 0.0)
     glow_energy: float = 0.0
     glow_veins: float = 0.0
@@ -149,7 +153,7 @@ class Sheen:
         if self.pattern_scale_m <= 0.0:
             raise ValueError("a sheen's pattern needs a size")
         for name in ("iri_strength", "iri_base", "iri_view", "iri_metal", "pattern_cells", "pattern_edge", "pattern_cover", "pattern_dark",
-                     "pattern_iri", "glow_veins", "glow_pulse", "coat", "iri_wave", "pattern_spots", "pattern_pulse", "pattern_relief", "liquid",
+                     "pattern_iri", "glow_veins", "glow_pulse", "coat", "iri_wave", "pattern_spots", "pattern_pulse", "pattern_relief", "liquid", "liquid_dish",
                      "variant_share", "variant_all"):
             if not 0.0 <= float(getattr(self, name)) <= 1.0:
                 raise ValueError(f"a sheen's {name} is a share, 0 to 1")

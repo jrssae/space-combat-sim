@@ -1,6 +1,6 @@
 """``organic_test_hull`` (M10-T06, D12.2): the organic part library's whole output on its test hull: one seamless body
 cut into sections, limbs and petals, the class budget, both texture sets of a hull with no drawn layout, the sheen on its
-surfaces, collision that covers it section by section, hardpoints, determinism, and the plated (hex) look.
+surfaces, collision that covers it section by section, hardpoints, determinism, and a plated (hexagonal) look.
 
 The expected numbers are typed in from the generator's docstring and docs/assets-capital.md, not read from the generator.
 """
@@ -51,7 +51,7 @@ class OrganicTestHullTests(unittest.TestCase):
         cls.dir_a, cls.dir_b, cls.dir_hex = root / "a", root / "b", root / "hex"
         cls.out_a = oth.build(BuildContext(cls.dir_a, seed=42, options=TEST_OPTIONS))
         cls.out_b = oth.build(BuildContext(cls.dir_b, seed=42, options=TEST_OPTIONS))
-        cls.out_hex = oth.build(BuildContext(cls.dir_hex, seed=42, options={**TEST_OPTIONS, "look": "hex", "detail_px": 128}))
+        cls.out_hex = oth.build(BuildContext(cls.dir_hex, seed=42, options={**TEST_OPTIONS, "look": "minbari", "detail_px": 128}))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
         cls.hp = json.loads((cls.dir_a / "hardpoints.json").read_text(encoding="utf-8"))
         cls.offset = np.array(cls.manifest["centroid_offset"])
@@ -194,7 +194,7 @@ class OrganicTestHullTests(unittest.TestCase):
         self.assertEqual(manifest["skin"], "hex_grid")
         self.assertEqual(manifest["budget"]["triangles"], self.manifest["budget"]["triangles"])
         surface = manifest["mesh"]["surfaces"][0]
-        self.assertEqual(surface["sheen"], looks.organic("hex").surface["sheen"])
+        self.assertEqual(surface["sheen"], looks.organic("minbari").surface["sheen"])
         self.assertEqual(surface["world_detail"]["tile_m"], 16.0)
         self.assertTrue((self.dir_hex / surface["world_detail"]["albedo"]).is_file())
         normal = read_png(self.dir_hex / surface["normal"])
