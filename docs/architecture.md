@@ -4224,6 +4224,14 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 
 ### 18.5 Missions as built (T05)
 
+- **Rule for mission text: never write a control's name** (M8-T33, the maintainer: a line shows the control an action is
+  mapped to now, not the default). A dialog line, a briefing, an objective or a script's string that means a control writes
+  an action placeholder, `{action:<name>}` (`Tap {action:autotrack}.`), or `{action:a,b}` where the pad and the keyboard use
+  different actions for one thing (`{action:target_cycle,target_next}`). `ControlText` resolves it as the comms panel shows the
+  line, for the device the pilot used last (`InputSource.device`: the pad's glyph, or the key and the mouse button), from the
+  live `InputMap`, so a rebind or a change of device shows while the line is still up. `tests/unit/
+  test_text_names_no_control.gd` reads every file in `data/dialog/`, `data/missions/` and `data/scenarios/` and fails on a
+  control named in prose (its table `CONTROL_NAMES`) or a placeholder that names no action.
 - **Tick.** `MissionRunner` (400) runs after `WaveDirector` (300) and before the `RebaseSettler`: time, the player's actions, the
   snapshot for the watched names, the objectives (and the result rules), then `wake`, where the waiting step tests its trigger.
   The first step starts in a call deferred from the runner's `_ready`, so it runs before the first tick and before any console
@@ -6864,6 +6872,7 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   flight and take it out. The instructor joins the flight for the launch (the squadron launch with one flight carries the
   player's flight, then the player) and for the wing-orders drill, there under a pilot that fights. At the alarm
   `m.scramble("alpha", 11)` launches the whole wing at once: the player's two slots first (ALPHA 2 and 3), then three flights of their own.
+- **Controls in lines.** The tutorial's lines name controls by action placeholder only (§18.5's rule, `ControlText`).
 - **After the play-test (2026-11-21).** `m.put(ship, at, facing)` places a ship at rest (a cut between scenes: it ends a shot
   on the player and a launch's burn); `m.dismiss(names)` takes ships out with no explosion; `m.tour(stop, captions)`;
   `m.player_target()` and the trigger `targeted` (`TriggerSpec.targeted(actor)`, forced: the actor is selected for the

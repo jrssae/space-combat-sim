@@ -294,6 +294,22 @@ func test_every_check_passes_on_the_keyboard_and_mouse() -> void:
 		assert_eq(outcome, "no way" if NO_KEYS_WAY.has(id) else "passed", "%s on the keyboard and mouse" % id)
 
 
+## M8-T33: the source knows which device the pilot used last, so a comms line names a control as that device binds it.
+func test_the_source_notes_the_device_last_used() -> void:
+	for event: InputEvent in InputMap.action_get_events(InputAdapter.AUTOTRACK):
+		_release_everything()
+		source.device = InputSource.Device.KEYS if _on_device(event, true) else InputSource.Device.PAD
+		_set_binding(event, true)
+		assert_true(source.is_pressed(InputAdapter.AUTOTRACK))
+		assert_eq(source.device, InputSource.Device.PAD if _on_device(event, true) else InputSource.Device.KEYS,
+				"%s is the %s" % [event.as_text(), "pad" if _on_device(event, true) else "keyboard and mouse"])
+	_release_everything()
+	assert_true(source.is_pressed(InputAdapter.AUTOTRACK) == false)
+	var before: InputSource.Device = source.device
+	source.is_pressed(InputAdapter.AUTOTRACK)
+	assert_eq(source.device, before, "hands off, it stays what it was")
+
+
 func test_whatever_the_pad_can_do_the_keyboard_can() -> void:
 	for id: StringName in book.ids():
 		if not NO_PAD_WAY.has(id):

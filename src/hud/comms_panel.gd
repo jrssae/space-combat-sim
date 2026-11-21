@@ -30,6 +30,8 @@ var drawn_text: String = ""
 var draws: int = 0
 ## Lines started so far, and squelches played.
 var lines_shown: int = 0
+## Returns the `InputSource.Device` the pilot used last; unset, the pad. A line's `{action:...}` placeholders are named for it.
+var device_source: Callable = Callable()
 
 var _canvas: CommsCanvas = null
 
@@ -59,7 +61,7 @@ func _ready() -> void:
 		&"showing": {"get": is_showing, "doc": "A comms line is on screen"},
 		&"line": {"get": func() -> String: return String(queue.current.id) if is_showing() else "none", "doc": "The id of the line showing"},
 		&"speaker": {"get": func() -> String: return callsign() if is_showing() else "none", "doc": "The callsign of who is speaking"},
-		&"text": {"get": func() -> String: return queue.current.text if is_showing() else "", "doc": "The subtitle showing"},
+		&"text": {"get": shown_text, "doc": "The subtitle showing, its controls named as bound now"},
 		&"queued": {"get": func() -> int: return queue.queued_count() if queue != null else 0, "doc": "Lines waiting their turn"},
 		&"remaining_s": {"get": func() -> float: return queue.remaining_s() if queue != null else 0.0, "unit": "s",
 				"doc": "Time left on the line showing"},
@@ -89,7 +91,7 @@ func paint(canvas: Control) -> void:
 		return
 	var layout: CommsLayout = CommsLayout.compute(canvas.size)
 	var font: Font = HudPainter.font()
-	var text: String = queue.current.text
+	var text: String = shown_text()
 	var width: float = layout.text_width()
 	var text_height: float = font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, width, layout.text_px).y
 	var plate: Rect2 = layout.plate(text_height)
@@ -109,6 +111,20 @@ func paint(canvas: Control) -> void:
 	drawn_color = color
 	drawn_text = text
 	draws += 1
+
+
+## The line as it reads now ("" with none): its controls named as the pilot's device binds them at this moment, so a
+## rebind or a change of device shows while the line is still up.
+func shown_text() -> String:
+	if not is_showing():
+		return ""
+	var device: InputSource.Device = device_source.call() if device_source.is_valid() else InputSource.Device.PAD
+	return ControlText.resolve(queue.current.text, device)
+
+
+func _process(_delta: float) -> void:
+	if is_showing() and queue.current.text.contains(ControlText.OPEN) and shown_text() != drawn_text:
+		_redraw()
 
 
 func _unbind() -> void:

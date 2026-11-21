@@ -11,6 +11,8 @@ var _from_keyboard: Dictionary = {}  # action -> true when the value comes from 
 
 
 func hold(action: StringName, strength: float = 1.0, from_keyboard: bool = false) -> void:
+	if strength > 0.0:
+		device = Device.KEYS if from_keyboard else Device.PAD
 	_strengths[action] = strength
 	if from_keyboard:
 		_from_keyboard[action] = true

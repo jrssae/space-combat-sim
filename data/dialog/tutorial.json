@@ -28,7 +28,7 @@
    "id": "check_autotrack_off",
    "speaker": "instructor",
    "voice": "tu_check_autotrack_off",
-   "text": "Auto-track is on. It holds your nose on your target, so you cannot turn. Switch it off."
+   "text": "Auto-track is on. It holds your nose on your target, so you cannot turn. Tap {action:autotrack} to switch it off."
   },
   {
    "id": "check_pitch",
@@ -148,25 +148,25 @@
    "id": "instructor_x_intro",
    "speaker": "instructor",
    "voice": "tu_instructor_x_intro",
-   "text": "Your X control. A tap tracks your target: the ship turns to follow it. A hold runs what the target offers, when you are in reach."
+   "text": "Your {action:autotrack} control. A tap tracks your target: the ship turns to follow it. A hold runs what the target offers, when you are in reach."
   },
   {
    "id": "instructor_x_more",
    "speaker": "instructor",
    "voice": "tu_instructor_x_more",
-   "text": "A jumpgate offers a jump. A docking bay offers docking. X will do more as you meet new places."
+   "text": "A jumpgate offers a jump. A docking bay offers docking. {action:autotrack} will do more as you meet new places."
   },
   {
    "id": "check_target_menu",
    "speaker": "instructor",
    "voice": "tu_check_target_menu",
-   "text": "Open the target menu. Hold the target control and pick NAV ONE."
+   "text": "Open the target menu: hold {action:target_cycle,target_next} and pick NAV ONE."
   },
   {
    "id": "check_autotrack",
    "speaker": "instructor",
    "voice": "tu_check_autotrack",
-   "text": "Tap X. Auto-track the buoy."
+   "text": "Tap {action:autotrack}. Auto-track the buoy."
   },
   {
    "id": "instructor_course_intro",
@@ -226,7 +226,7 @@
    "id": "check_target_next",
    "speaker": "instructor",
    "voice": "tu_check_target_next",
-   "text": "Tap the target control. Take the nearest drone, then the next."
+   "text": "Tap {action:target_cycle,target_next}. Take the nearest drone, then the next."
   },
   {
    "id": "instructor_lead",
@@ -352,13 +352,13 @@
    "id": "check_interact",
    "speaker": "instructor",
    "voice": "tu_check_interact",
-   "text": "Hold X to run what your target offers."
+   "text": "Hold {action:autotrack} to run what your target offers."
   },
   {
    "id": "instructor_gate_hold",
    "speaker": "instructor",
    "voice": "tu_instructor_gate_hold",
-   "text": "The gate is offering the jump. Hold X now. The autopilot flies you in."
+   "text": "The gate is offering the jump. Hold {action:autotrack} now. The autopilot flies you in."
   },
   {
    "id": "instructor_gate_back",

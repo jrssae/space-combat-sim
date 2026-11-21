@@ -1466,6 +1466,18 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     the request range; no tour caption; the drone beat ending on the ordered kill with the other recalled at the tour;
     the new course time; one label for a targeted objective; the `targeted` trigger. The fought raid (`GUT_BALANCE=1`)
     ends by itself at 392 s.
+  - **Fix (2026-11-21, the maintainer: "we must always show the button or control that it is currently mapped to, not the
+    default"):** no mission text names a control. Eight tutorial lines write `{action:autotrack}` or
+    `{action:target_cycle,target_next}` where they said "X" or "the target control"; the escort's dialog and the scenarios
+    named none. `ControlText` resolves a placeholder as the comms panel draws the line, for the device used last
+    (`InputSource.device`, new: the pad's glyph, or key and mouse button), from the live `InputMap`; the panel redraws when
+    the words change, so a rebind or a change of device shows on the line that is up. Guard:
+    `test_text_names_no_control` (table-driven, every dialog file, mission script string and scenario text; architecture
+    §18.5 has the rule). Tests (staged scratch copy, HEAD `f02a6760` plus this fix): compile check 1024 scripts clean; 12
+    unit and neighbour files, 146 of 146 (new: `test_control_text` 7, `test_text_names_no_control` 3; the device noted by
+    the real input source in `test_control_check_devices`); `test_tutorial` and `test_tutorial_lessons`, 19 passed, 1
+    pending (the balance gate), 0 failed, with one new: the target-menu line on the pad, on the keyboard, after a rebind
+    of each, the line still up.
 
 ### M8-T30 Cobra-bay launch: camera variety and a quicker hand-off
 

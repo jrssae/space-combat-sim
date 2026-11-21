@@ -1275,6 +1275,9 @@ launch, flight_checks, camera_lights, x_button, course, combat, wing_orders, tou
       it, the approach cue calling the brake. "Hold X" is said only when the gate's own prompt is on the status line.
 - [ ] **(H) One label:** with the jumpgate (or a course buoy) both the objective and your target, one mark with one name
       and one range shows, the target's. Select something else and the objective's marker is back.
+- [ ] **(H) Controls named as bound:** rebind auto-track or the target button in the controls menu, then fly the X-button
+      lesson: the instructor's line shows your binding. On the pad it shows the pad's button, on the keyboard the key and
+      the mouse button, and it changes on a line that is still up when you move from one to the other.
 - [ ] **(H) The closing lines:** the instructor's remarks at the end of each block and the debrief read naturally, none
       saying a thing twice.
 - [ ] **(H) The wing at the alarm:** ALPHA 2 and ALPHA 3 call their launch and nine more follow (all eleven together), with

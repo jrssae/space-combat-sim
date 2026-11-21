@@ -4,8 +4,13 @@ extends RefCounted
 ## GodotInputSource polls real devices; tests use FakeInputSource. Override every method; the base returns
 ## neutral values so a missing override can never thrust the ship.
 
+## The pad, or the keyboard and mouse.
+enum Device { PAD, KEYS }
+
 ## While false, key and mouse bindings read as released (the debug console has the keyboard).
 var keyboard_mouse_enabled: bool = true
+## The device the pilot used last (M8-T33): a comms line names a control as this one binds it (`ControlText`).
+var device: Device = Device.PAD
 
 
 ## Called once per sample before any read (calibration and other per-tick bookkeeping).

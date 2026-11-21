@@ -3,7 +3,12 @@ extends TutorialSteps
 ## cuts to the two ships at rest in clear space, where the turns are taught before thrust and before anything is flown behind
 ## the instructor; auto-track is switched off first when it is on, and nothing is said when it is off; the view lesson asks
 ## for the view the pilot is not in; at the gate the pilot is told to target it, and the hold of X is called only once the
-## gate takes the request.
+## gate takes the request. A line names a control as it is bound now, on the device the pilot is using.
+
+
+func after_each() -> void:
+	super.after_each()
+	ControlProfiles.store.default_profile().apply_to_input_map()  # a test here rebinds
 
 
 # --- the start in space ----------------------------------------------------------------------------------------------------
@@ -158,3 +163,48 @@ func test_at_the_gate_the_pilot_is_told_to_target_it_and_to_hold_x_only_once_the
 
 func _from_origin(at: UniversePos) -> Vector3:
 	return UniversePos.new(0.0, 0.0, 0.0, main.world.origin.system_id).offset_to(at)
+
+
+# --- controls named as bound ------------------------------------------------------------------------------------------------
+
+
+func _rebind(action: StringName, event: InputEvent) -> void:
+	InputMap.action_erase_events(action)
+	InputMap.action_add_event(action, event)
+
+
+# The pilot touches the stand-in pad, or the keyboard, without flying anything.
+func _use(keyboard: bool) -> void:
+	source.hold(InputAdapter.TOGGLE_OVERLAY, 0.01, keyboard)
+	source.release(InputAdapter.TOGGLE_OVERLAY)
+
+
+func test_a_line_names_its_control_as_bound_now_and_follows_a_rebind_and_a_change_of_device() -> void:
+	ControlProfiles.store.default_profile().apply_to_input_map()
+	await _fly()
+	await _goto(&"x_button")
+	await _await_check(&"target_menu", 3600)
+	await _wait_for("the instructor's call for the target menu", func() -> bool: return _line() == &"check_target_menu", 600)
+	var comms: CommsPanel = main.mission.comms
+	assert_string_contains(_api().dialog.current.text, "{action:target_cycle,target_next}", "the line is written with a placeholder")
+	_use(false)
+	var pad_button: String = BindingNames.first(InputMap.action_get_events(&"target_cycle"), BindingNames.pad_name)
+	assert_eq(comms.shown_text(), "Open the target menu: hold %s and pick NAV ONE." % pad_button, "on the pad: its button")
+	assert_false(comms.shown_text().contains("{"), "no placeholder reaches the screen")
+	_use(true)
+	var key: String = BindingNames.first(InputMap.action_get_events(&"target_next"), BindingNames.key_name)
+	assert_string_contains(comms.shown_text(), "hold %s" % key, "on the keyboard: its key, the line still up")
+	assert_ne(key, pad_button + "?")
+	var k := InputEventKey.new()
+	k.physical_keycode = KEY_K
+	_rebind(&"target_next", k)
+	assert_eq(comms.shown_text(), "Open the target menu: hold K and pick NAV ONE.", "a rebind made now shows now")
+	assert_eq(String(_run("get dialog.text").text()).contains("hold K"), true, "the console reads the same words")
+	var y := InputEventJoypadButton.new()
+	y.button_index = JOY_BUTTON_Y
+	_rebind(&"target_cycle", y)
+	_use(false)
+	assert_eq(comms.shown_text(), "Open the target menu: hold Y and pick NAV ONE.", "back on the pad, with its new button")
+	await _ticks(2)
+	assert_string_contains(main.mission.hint.buttons, "Y", "the hint beside it follows too")
+	assert_string_contains(main.mission.hint.buttons, "K")
