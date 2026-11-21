@@ -281,6 +281,8 @@ within a pixel; the splat column is gone with the splats.
 | `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 2026-11-07 |
 | `ea_shuttle` | whole craft (no shift; M10-T57) | 0.984 | 0.984 | 0.971 | 1.000 | 0.999 | 0.998 | 2026-11-20 |
 | `ea_atmo_shuttle` | whole craft (best shift x +0.06 m, the model's vanes sit 0.15 m to starboard; unshifted 0.979, 0.974, 0.917; M10-T57) | 0.973 | 0.974 | 0.932 | 1.000 | 0.999 | 0.988 | 2026-11-20 |
+| `ea_panama` | whole hull (no shift; M10-T51) | 0.982 | 0.983 | 0.972 | 1.000 | 0.999 | 1.006 | 2026-11-21 |
+| `ea_construction_tender` | whole craft (no shift; M10-T55) | 0.934 | 0.959 | 0.926 | 1.000 | 1.000 | 1.000 | 2026-11-21 |
 
 **The generator sections below** record each task as it was built on splats (T12 to T22). Their geometry, hardpoints and
 fidelity stand; their splat counts, level shares, lighting records and splat-check numbers are history since M5-T27,
@@ -651,6 +653,86 @@ by type. Callsigns `SHUTTLE` and `KESTREL` (TBP's class name for the atmospheric
 ```
 .venv/bin/python3 -I tools/refview/compare.py "references/EA Shuttle.stl" ea_shuttle --length 18.64 --right=-x --up=+z --aft=+y
 .venv/bin/python3 -I tools/refview/compare.py references/EA_Atmospheric_Shuttle.stl ea_atmo_shuttle --length 25.59 --right=-x --up=+z --aft=+y
+```
+
+## `ea_panama` and `ea_construction_tender` (M10-T51, M10-T55)
+
+`tools/procgen/assets/ea_work_ships.py` (both builds), parts in `tools/procgen/parts/ea_panama.py` and
+`parts/ea_construction_tender.py`, looks in `tools/procgen/styles/ea_work_ships.py`, built through the shuttles'
+`build_craft` on the shared civilian pipeline (`core/civilian.py`). Both are unarmed (Q49, Q53).
+
+**Lopsided hulls.** The pipeline gained a third side for a piece, `LONE`: built where it is authored, neither symmetrised
+(`CENTRE`) nor mirrored (`RIGHT`). Every piece of the Panama is `LONE`; on the tender the claws, the shoulder blocks and
+the landing gear are. The body origin stays on the reference box's centre plane (x = 0).
+
+**Classes (Q38).** The Panama is a **cruiser**: one 4 096 px atlas. It is a civilian, but 180 m long and it flies into
+Babylon 5's docking bay, so it is seen from a few metres; a 2 048 px atlas would put a texel at 10 cm. The tender is a
+**small craft**: one 2 048 px atlas. Both write the low texture set a mip level down.
+
+**As built (2026-11-21, seed 42).**
+
+| | `ea_panama` | `ea_construction_tender` |
+|---|---|---|
+| Size (L x W x H) | 180.00 x 44.83 x 29.61 m (41.7 x 26.3 m without the aerials) | 50.00 x 69.70 x 24.01 m |
+| Triangles (budget) | 3 862 (60 000) | 11 712 (30 000) |
+| Texel, atlas fill | 5.2 cm, 0.72 | 6.5 cm, 0.66 |
+| Texture memory, high / low set (budget) | 53.3 / 13.3 MB (56.0 / 16.0) | 13.3 / 3.3 MB (16.0 / 6.0) |
+| Video memory on the GPU, high / low set (RX 6950 XT, read off the sheet runs) | about 53 / 13 MB | about 14 / 4 MB |
+| Chunks | `bow`, `hold_fore`, `hold_aft`, `stern` | `body`, `stern`, `boom_l`, `boom_r`, `claws_l`, `claws_r` |
+| Collision primitives | 49 | 92 |
+| Sample spacing | 1.5 m | 0.4 m |
+
+| Craft | Parts (authored frame: x to starboard, y up, z aft from the bow, x and y on the reference's box centre) |
+|---|---|
+| `ea_panama` | The **hold** (z 43.3 to 153.9, cut at 98 into two chunks): a wedge in section, mirrored top to bottom about y -0.175: a flat port face at x -20.85, a round tube (radius 3.3) along its upper and its lower edge, the roof falling 0.215 a metre to a blunt starboard edge at x 19.3; open aft, with a wall set 4.4 m into it. On it: a raised band along the port face, a plate over its after end (the cargo lock), a broad slab and a small one on the roof and under the keel aft. The **fore body** (z 21.6 to 43.3): the same wedge smaller, with a tube along its starboard edge whose nose stands forward of it. The **bow spine** on the port side (x -15, z 0 to 21.6) with a tapered nose, a fairing and rods. The **stern**: an octagonal core to z 169, an engine each side of it (x -11.7 and 11.5: a drum, a waist, a bell to z 180, four rails), a flattened tank above and below the core, two drums by the port engine, a disc tank on the port side. Six thin aerials at two stations (no hit volume). |
+| `ea_construction_tender` | The **body**: a hexagonal prism (x ±5.7, y -5.9 to 7.1, z 14.8 to 36.5) with a glazed pyramid nose (tip at z 9.6), a box and four tubes along its corners, housings at the bow corners with canted drums, shoulder blocks (z 26.9 to 32; the two sides differ in height, as the reference). Two **grab arms** on the centre line (y 7.1 and -5.6, z 0 to 15). The **stern** block (z 36.5 to 46.3) with a fan panel, two domes and two pointed tanks. A **boom** each side (x 4 to 27.2, z 38.5 to 43.3): four chords falling 0.035 a metre outboard, six leaning uprights fore and aft, cross bars, a zigzag of diagonals over and under, two tanks inside. A **pod** at each tip (x ±29.92, y 4.646, z 32.2 to 50): a drum between two collars, a bell at each end, three small thrusters. Four **claws**, each three sickle blades 16.6 m long at 120° round its own axis on an arm from a ball joint; the starboard pair points 24° outboard, the port pair 30°. The **landing gear**: a mount, four legs and feet, 0.95 m to port of the centre line. |
+
+**Fidelity (Q10).** Both pass the 90 % rule (the table in "Fidelity" above). The tender's claws were placed by a fit of
+each claw's three silhouettes against the reference's (hub, axis and roll), since the reference poses the two sides
+differently. What the tender's front view loses is the reference's pipe runs and brackets inside the boom.
+
+**Looks (Q11).** The `ea_civilian` texture pack, then the paint. The maintainer chose both from A/B/C sheets on 2026-11-21
+(`references/screenshots/M10-T51 T55 Panama and tender/`):
+
+- **Panama: option B**, the still in open space: a warm brown-grey (#8A7F72, tubes #6E655C) that wanders strongly from
+  plate to plate (plates 1 to 9 m), a **pale roof and keel** (#B5AB9B) with five cargo hatches each, dark tanks
+  (#5C5650), two rows of lit ports along the port face and one each side of the bow spine, the throats warm white
+  (#FFC8A0). Not chosen: A, dark grey with a lighter roof and tan tanks; C, near-black with red trim and bands.
+- **Construction tender: option A**, the still's work pods: yellow ochre all over (#C29A2C, panels #A5852A), grey
+  machinery (#45464A), pale tanks, **yellow claws and grabs striped black**, four black bands round each pod, the after
+  bells cold blue-white (#BFD8FF). Not chosen: B, fleet grey with yellow tools; C, worn orange with dark claws.
+
+**Engine glow.** Only the throat's plate and a 1 m collar round it are lit in the Panama's bells; their insides are dark
+metal (a Saturn's bell is lit all the way to its lip). From astern at 60 m the two throats show less lit area than one
+Saturn 8 bell (the look sheet's last row). On the tender only the pods' after bells are lit; the forward ones brake.
+
+**Hardpoints.** The shuttles' contract (`turrets: []`, `docking_ports[]`).
+
+| | `ea_panama` | `ea_construction_tender` |
+|---|---|---|
+| Thrust line and centre of mass | y -0.175 (the section's mirror line), x 0 | y 4.646 (the pods' axes), x 0 |
+| `pods[]` main | `l`, `r`: the throats, (-11.7 and 11.5, -0.175, 175.0), radius 1.55 | `l`, `r`: the pods' after bells, (±29.92, 4.646, 48.6), radius 1.4 |
+| `pods[]` retro | the fore body's face, (±4.0, -0.175, 21.6) | the pods' forward bells, (±29.92, 4.646, 33.5) |
+| `rcs[]` | four round the fore body, four round the hold's after end (8) | three thrusters round each pod, two on each bow housing (10) |
+| `cockpit_camera`, `nav_lights.cabin` | in the bow spine, (-15.0, 0, 9.5) | behind the nose's glass, (0, 0.7, 13.6) |
+| `nav_lights` port and starboard, top | the port band and the starboard edge amidships (not mirror images); the upper tube's crown | the pods' outboard thrusters; the stern's domes |
+| `docking_ports[]` | `port_lock` at (-22.4, -0.175, 142.7), out to port: the plate on the port side aft | none |
+| Collision | per hull section a tall port box, boxes stepping down to starboard and a slab lying in the roof and one in the keel; boxes for the fittings, a capsule and a box per engine | boxes and slabs for the hexagon's sides, a capsule per arm, leg and pod, three boxes along each blade's sickle (36 in all) |
+
+Every visible surface sample lies inside a primitive grown by one sample spacing, and no primitive reaches more than
+0.5 m past the hull's box (`test_ea_work_ships.py`); the Panama's aerials are left out of it.
+
+**In the game.** `assets/ships/ea_panama.tres` (16 000 t, two engines of 8 MN: 1.0 m/s², 1.1/1.5/3 deg/s, 600 hull
+points) and `assets/ships/ea_construction_tender.tres` (400 t, two pods of 0.4 MN: 2.0 m/s², braking at half that,
+12/12/18 deg/s, 300 hull points); first numbers, to be tuned when a mission flies them. Hull points and "unarmed" are
+T03's (`data/capitals/loadouts.json`, where the Panama's class is now `cruiser`, as its budget). Both are catalogue
+civilians of `earth_alliance` with `random_pool: false` and no docking class: random traffic, encounters and station
+traffic do not draw them, so older scenarios' seeded picks stay as they were; a mission places them by type. Callsigns
+`PANAMA` and `TENDER`.
+
+```
+.venv/bin/python3 -I tools/refview/compare.py "references/EA Panama class.STL" ea_panama --length 180 --right=-x --up=+z --aft=+y
+.venv/bin/python3 -I tools/refview/compare.py references/EA_construction_tender.stl ea_construction_tender --length 50 --right=-x --up=+z --aft=+y
 ```
 
 ## Styles

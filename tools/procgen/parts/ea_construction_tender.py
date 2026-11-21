@@ -22,7 +22,7 @@ from ..core.geometry import Material, Mesh, basis_from_z, lathe, prism, unit
 from ..styles import Style
 from . import Anchor, Collision
 from .ea_panama import at_z, bar, drum_y, ellipsoid
-from .ea_shuttle import block, box_of, faceted, loft_solid, piece
+from .ea_shuttle import block, box_of, face_slabs, faceted, loft_solid, piece
 
 LENGTH_M = 50.0
 X_AXIS, Y_AXIS, Z_AXIS = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
@@ -64,6 +64,8 @@ BLADE = (
     ((15.2, 2.4), (13.0, 1.75)), ((16.6, 1.8), (16.6, 1.72)),
 )  # fmt: skip
 BLADE_THICK = 0.28
+# A blade's hit volumes, following its sickle: name, from and to along the axis, from and to off it.
+BLADE_BOXES = (("", 0.0, 8.0, 0.3, 4.55), ("_mid", 8.0, 12.5, 2.4, 4.4), ("_tip", 12.5, 16.6, 1.7, 3.5))
 BLADE_ROLL_DEG = (97.5, -22.5, -142.5)
 # Each claw: name, chunk, the hub (where its blades' stations start), its axis, how far its arm reaches back to the joint.
 CLAWS = (
@@ -135,20 +137,25 @@ def body_pieces(style: Style) -> list[Piece]:
         balls.append(ellipsoid((sx * 5.6, 5.9, 40.9), (1.05, 1.15, 1.8), tank, segments=12, rings=6))
     hexbox = lambda shape, a, b: box_of(np.array([[-shape[2], shape[4], a], [shape[2], shape[3], b]]), "core")  # noqa: E731
     waist = lambda shape, a, b: box_of(np.array([[-shape[0], shape[1] - 2.6, a], [shape[0], shape[1] + 2.6, b]]), "waist")  # noqa: E731
+    # A slab lying in each of a hexagon's four slanted faces, so they are covered without a box standing proud of them.
+    slants = lambda shape, a, b: face_slabs([hexagon(shape, a), hexagon(shape, b)], ("up_r", None, "up_l", "down_l", None, "down_r"), 1.6)  # noqa: E731
     return [
         piece("nose", "body", [nose, *ribs], 2_000.0, solid=loft_solid(2, nose_rings),
-              collision=[box_of(np.array([[-2.9, -2.6, 12.4], [2.9, 4.0, z0]]), "nose"), box_of(np.array([[-1.2, -0.5, tip[2]], [1.2, 1.9, 12.4]]), "tip")],
+              collision=[box_of(np.array([[-5.0, -3.9, 13.6], [5.0, 4.3, z0]]), "base"), box_of(np.array([[-3.6, -2.6, 11.3], [3.6, 3.5, 13.6]]), "nose"),
+                         box_of(np.array([[-1.7, -0.8, tip[2] - 0.6], [1.7, 2.3, 12.0]]), "tip")],
               anchors={"eye": Anchor(EYE, (0.0, 0.0, -1.0))}),
         piece("hull_body", "body", [faceted(mid, hull, cap_start=inside, cap_end=inside), case, *tubes], 60_000.0, solid=loft_solid(2, mid),
-              collision=[hexbox(HEX, z0, cut), waist(HEX, z0, cut), box_of(np.array([[-5.3, -6.65, TUBE_Z[0]], [5.3, 8.15, TUBE_Z[1]]]), "case")]),
+              collision=[hexbox(HEX, z0, cut), waist(HEX, z0, cut), *slants(HEX, z0, cut), box_of(np.array([[-5.3, -6.65, TUBE_Z[0]], [5.3, 8.15, TUBE_Z[1]]]), "case")]),
         piece("housings", "body", [*housings, *drums], 6_000.0,
-              collision=[box_of(np.array([[-5.6, 4.2, 13.6], [5.6, 8.8, 18.0]]), "up"), box_of(np.array([[-5.6, -7.5, 13.6], [5.6, -3.0, 18.0]]), "down")]),
+              collision=[box_of(np.array([[-7.4, 4.2, 12.5], [7.4, 8.8, 18.0]]), "up"), box_of(np.array([[-7.4, -7.5, 12.5], [7.4, -3.0, 18.0]]), "down")]),
         piece("shoulders", "body", shoulders, 8_000.0, LONE,  # the reference's two sides differ in height
               collision=[box_of(b, f"s{k}") for k, b in enumerate(shoulder_boxes)]),
         piece("hull_stern", "stern", [faceted(stern, hull, cap_start=hull, cap_end=panel), fan, roof_box, *domes], 40_000.0, solid=loft_solid(2, stern),
-              collision=[hexbox(STERN_HEX, cut, z1), waist(STERN_HEX, cut, z1)], anchors={"top": Anchor((0.0, 8.9, 40.9), Y_AXIS)}),
+              collision=[hexbox(STERN_HEX, cut, z1), waist(STERN_HEX, cut, z1), *slants(STERN_HEX, cut, z1),
+                         box_of(np.array([[-2.6, 7.4, 38.0], [2.6, 8.9, 43.6]]), "roof")], anchors={"top": Anchor((0.0, 8.9, 40.9), Y_AXIS)}),
         piece("stern_fittings", "stern", [*side_tanks, *brackets, *balls], 5_000.0,
-              collision=[box_of(np.array([[sx * 5.6, -2.75, 31.9], [sx * 9.4, 4.3, 42.9]]), f"side{k}") for k, sx in enumerate((1.0, -1.0))]),
+              collision=[box_of(np.array([[sx * lo, y0, za], [sx * hi, y1, zb]]), f"{name}{k}") for k, sx in enumerate((1.0, -1.0))
+                         for name, lo, hi, y0, y1, za, zb in (("side", 5.6, 9.4, -2.75, 4.3, 31.9, 42.9), ("ball", 4.5, 6.7, 4.7, 7.1, 39.1, 42.7))]),
     ]
 
 
@@ -175,7 +182,7 @@ def arm_pieces(style: Style) -> list[Piece]:
         tube = tube_z(0.0, y, [(4.2, 0.0), (4.2, 0.85), (5.0, 0.85), (5.0, 0.7), (6.4, 0.7), (6.4, 1.0), (10.0, 1.0), (10.0, 1.12), (13.6, 1.12), (13.6, 0.9),
                                (15.0, 0.9), (15.0, 0.0)], [dark, dark, dark, dark, dark, panel, panel, panel, panel, panel, panel], 14)
         out.append(piece(name, "body", [tube, *_grab(y, hazard)], 1_500.0, fine=0.5,
-                         collision=[Collision("capsule", (0.0, y, 9.8), radius=1.1, height=10.4, name="arm"),
+                         collision=[Collision("capsule", (0.0, y, 9.5), radius=1.1, height=11.2, name="arm"),
                                     box_of(np.array([[-0.25, y - 1.55, 0.0], [0.25, y + 1.55, 4.6]]), "grab")],
                          anchors={"tip": Anchor((0.0, y, 0.0), (0.0, 0.0, -1.0))}))
     return out
@@ -192,7 +199,10 @@ def gear_pieces(style: Style) -> list[Piece]:
             at = GEAR_X + sx * x
             inward = 0.25 if z < 22.0 else -0.25  # each foot's drum sits a little nearer the mount than its pad
             root = (GEAR_X + sx * 1.2, -8.6, 21.0 if z < 22.0 else 22.9)
-            meshes.append(bar(root, (at, -10.15, z + inward), 0.5, dark, 6))
+            foot = (at, -10.15, z + inward)
+            meshes.append(bar(root, foot, 0.5, dark, 6))
+            boxes.append(Collision("capsule", 0.5 * (np.array(root) + np.array(foot)), basis=basis_from_z(np.array(foot) - np.array(root)), radius=0.5,
+                                   height=float(np.linalg.norm(np.array(foot) - np.array(root))) + 1.0, name=f"leg{2 * k + (sx < 0)}"))
             meshes.append(drum_y((at, -10.45, z + inward), 0.92, 1.7, panel, 0.15, 12))
             meshes.append(drum_y((at, -11.55, z), 0.35, 0.5, dark, 0.05, 8))
             meshes.append(drum_y((at, -11.82, z), 1.2, 0.36, dark, 0.08, 12))
@@ -231,7 +241,7 @@ def boom_pieces(style: Style) -> list[Piece]:
         tanks.append(lathe(profile, 12, tank).transformed(basis_from_z(b - a, Y_AXIS), a))
     mid_y = 0.5 * (boom_y(15.0, BOOM_TOP) + boom_y(15.0, BOOM_BOTTOM))
     return [piece("boom_r", "boom_r", [*bars, *tanks], 9_000.0, RIGHT, fine=0.4,
-                  collision=[box_of(np.array([[5.7, mid_y - 2.7, zf - CHORD_R], [x1, mid_y + 2.7, za + CHORD_R]]), "truss")],
+                  collision=[box_of(np.array([[x0, mid_y - 2.7, zf - CHORD_R], [x1, mid_y + 2.7, za + CHORD_R]]), "truss")],
                   anchors={"joint": Anchor((5.9, mid_y, 0.5 * (zf + za)))})]
 
 
@@ -253,6 +263,7 @@ def pod_pieces(style: Style) -> list[Piece]:
         jets.append(jet.transformed(basis_from_z(aim), (x, y, 41.15)))
     return [piece("pod_r", "boom_r", [body, *jets], 12_000.0, RIGHT, fine=0.7,
                   collision=[Collision("capsule", (x, y, 0.5 * (z0 + z1)), radius=POD_R, height=z1 - z0, name="pod"),
+                             box_of(np.array([[x - 2.2, y - 2.2, z0], [x + 2.2, y + 2.2, z1]]), "bells"),
                              box_of(np.array([[x - 1.2, y - JET_REACH, 39.95], [x + JET_REACH, y + JET_REACH, 42.35]]), "jets")],
                   anchors={"main": Anchor((x, y, z1 - 1.4), Z_AXIS), "retro": Anchor((x, y, z0 + 1.3), (0.0, 0.0, -1.0)), "centre": Anchor((x, y, 41.0)),
                            "side": Anchor((x + JET_REACH, y, 41.15), X_AXIS), "top": Anchor((x, y + JET_REACH, 41.15), Y_AXIS)})]
@@ -281,7 +292,9 @@ def claw_piece(style: Style, name: str, group: str, hub: Sequence[float], axis: 
         out = math.cos(a) * frame[:, 1] + math.sin(a) * frame[:, 2]
         turn = np.column_stack([frame[:, 0], out, np.cross(frame[:, 0], out)])  # the blade's plane: along the axis and out from it
         meshes.append(flat.transformed(turn, hub))
-        boxes.append(Collision("box", hub + turn @ np.array([8.3, 2.4, 0.0]), basis=turn, size=(16.6, 4.3, 0.5), name=f"blade{k}"))
+        for tag, u0, u1, r0, r1 in BLADE_BOXES:
+            boxes.append(Collision("box", hub + turn @ np.array([0.5 * (u0 + u1), 0.5 * (r0 + r1), 0.0]), basis=turn, size=(u1 - u0, r1 - r0, 0.5),
+                                   name=f"blade{k}{tag}"))
     along = lambda d: hub + d * frame[:, 0]  # noqa: E731
     meshes.append(bar(along(-reach_back), along(1.4), 0.8, panel, 12))
     meshes.append(bar(along(-0.2), along(1.5), 1.05, dark, 12))

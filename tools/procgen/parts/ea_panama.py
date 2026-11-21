@@ -215,15 +215,26 @@ def fore_outline() -> tuple[np.ndarray, Runs]:
 
 
 # --- the hull ----------------------------------------------------------------------------------------------------------------
-def _wedge_boxes(z0: float, z1: float, port_x: float, top: float, steps: Sequence[tuple[float, float, float]]) -> list[Collision]:
-    """Hit volumes of a wedge section between two stations: the tall port column, then boxes stepping down to starboard
-    (``steps``: x from, x to, half height)."""
+SLAB_M = 2.0  # how deep the roof's and the keel's hit volumes reach under the skin
+
+
+def _wedge_boxes(z0: float, z1: float, port_x: float, top: float, steps: Sequence[tuple[float, float, float]], at_0: float) -> list[Collision]:
+    """Hit volumes of a wedge section between two stations: the tall port column, boxes stepping down to starboard
+    (``steps``: x from, x to, half height) for its inside, and a slab lying in the roof and one in the keel so the sloped
+    skin is covered without a box standing proud of it."""
     out = [box_of(np.array([[port_x, AXIS_Y - top, z0], [steps[0][0], AXIS_Y + top, z1]]), "port")]
     out += [box_of(np.array([[x0, AXIS_Y - h, z0], [x1, AXIS_Y + h, z1]]), f"step{k}") for k, (x0, x1, h) in enumerate(steps)]
+    xa, xb = steps[0][0], steps[-1][1]
+    for name, sign in (("roof", 1.0), ("keel", -1.0)):
+        turn = rotation_z(math.radians(sign * SLOPE_DEG))
+        a = np.array([xa, AXIS_Y + sign * (roof_y(xa, at_0) - AXIS_Y)])
+        b = np.array([xb, AXIS_Y + sign * (roof_y(xb, at_0) - AXIS_Y)])
+        mid = 0.5 * (a + b) - sign * 0.5 * SLAB_M * turn[:2, 1]
+        out.append(Collision("box", (mid[0], mid[1], 0.5 * (z0 + z1)), basis=turn, size=(float(np.linalg.norm(b - a)), SLAB_M, z1 - z0), name=name))
     return out
 
 
-HOLD_STEPS = ((-14.2, -7.0, 8.4), (-7.0, 0.0, 6.9), (0.0, 7.0, 5.4), (7.0, 13.0, 4.0), (13.0, 19.3, 2.7))
+HOLD_STEPS = ((-14.2, -7.0, 8.4), (-7.0, 0.0, 6.9), (0.0, 7.0, 5.4), (7.0, 13.0, 4.0), (13.0, 19.3, 2.2))
 FORE_STEPS = ((-15.6, -9.0, 5.9), (-9.0, -2.0, 4.4), (-2.0, 4.7, 3.1), (4.7, 11.7, 3.6))
 
 
@@ -247,9 +258,9 @@ def hold_pieces(style: Style) -> list[Piece]:
                    rect_ring(2, 154.2, (-22.4, AXIS_Y - 7.6), (PORT_X + 0.1, AXIS_Y + 7.6))]
     pieces = [
         lone("hold_fore", "hold_fore", fore, 900_000.0, solid=loft_solid(2, [at_z(quad, z0), at_z(quad, cut)]),
-             collision=_wedge_boxes(z0, cut, PORT_X, top, HOLD_STEPS)),
+             collision=_wedge_boxes(z0, cut, PORT_X, top, HOLD_STEPS, ROOF_AT_0)),
         lone("hold_aft", "hold_aft", aft, 900_000.0, solid=loft_solid(2, [at_z(quad, cut), at_z(quad, STERN_WALL_Z)]),
-             collision=_wedge_boxes(cut, z1, PORT_X, top, HOLD_STEPS)),
+             collision=_wedge_boxes(cut, z1, PORT_X, top, HOLD_STEPS, ROOF_AT_0)),
         lone("port_band_fore", "hold_fore", block((-21.4, AXIS_Y - 5.25, 47.5), (PORT_X + 0.05, AXIS_Y + 5.25, cut), dark), 20_000.0,
              collision=[box_of(np.array([[-21.4, AXIS_Y - 5.25, 47.5], [PORT_X, AXIS_Y + 5.25, cut]]), "band")]),
         lone("port_band_aft", "hold_aft", block((-21.4, AXIS_Y - 5.25, cut), (PORT_X + 0.05, AXIS_Y + 5.25, 131.0), dark), 14_000.0,
@@ -279,7 +290,7 @@ def fore_pieces(style: Style) -> list[Piece]:
     quad = np.array([[FORE_PORT_X, AXIS_Y + top - 0.6], [tx, AXIS_Y + tr], [tx, AXIS_Y - tr], [FORE_PORT_X, AXIS_Y - top + 0.6]])
     return [
         lone("fore_body", "bow", [body, nose], 250_000.0, solid=loft_solid(2, [at_z(quad, z0), at_z(quad, z1)]),
-             collision=[*_wedge_boxes(z0, z1, FORE_PORT_X, top - 0.4, FORE_STEPS),
+             collision=[*_wedge_boxes(z0, z1, FORE_PORT_X, top - 0.4, FORE_STEPS, FORE_ROOF_AT_0),
                         box_of(np.array([[tx - 2.7, AXIS_Y - 2.55, 17.3], [tx + 2.4, AXIS_Y + 2.55, z0]]), "tube_nose")]),
         lone("fore_box", "bow", block((-15.6, 6.3, 40.0), (-12.6, 9.3, z1 + 0.2), dark), 4_000.0,
              collision=[box_of(np.array([[-15.6, 6.3, 40.0], [-12.6, 9.3, z1]]), "box")]),
@@ -322,8 +333,13 @@ def engine_mesh(style: Style, x: float) -> list[Mesh]:
     """One engine: a drum in the hold's open end, a waist, a long bell, and four rails round it held by a ring at the bell."""
     nozzle, throat, dark = style.material("nozzle"), style.material("nozzle_throat"), style.material("hull_dark")
     outer = [(ENGINE_PROFILE[0][0], 0.0), *ENGINE_PROFILE]
-    bell = lathe([*outer, ENGINE_THROAT, (ENGINE_THROAT[0], 0.0)], 24, [dark, dark, dark, dark, dark, nozzle, nozzle, throat, throat],
-                 creases=(1, 2, 3, 4, 5, 6, 7, 8)).translated((x, AXIS_Y, 0.0))
+    # The bell's inside is dark metal: only the throat's plate and a short collar round it are lit, so two bells this size do
+    # not flood the stern.
+    tz, tr = ENGINE_THROAT
+    lit_z = tz + 1.0
+    lit_r = tr + (ENGINE_PROFILE[-1][1] - tr) * (lit_z - tz) / (LENGTH_M - tz)
+    bell = lathe([*outer, (lit_z, lit_r), ENGINE_THROAT, (tz, 0.0)], 24, [dark, dark, dark, dark, dark, nozzle, nozzle, nozzle, throat, throat],
+                 creases=(1, 2, 3, 4, 5, 6, 7, 8, 9)).translated((x, AXIS_Y, 0.0))
     fittings = []
     for a in (0.0, 0.5 * math.pi, math.pi, 1.5 * math.pi):
         rx, ry = x + RAIL_R * math.cos(a), AXIS_Y + RAIL_R * math.sin(a)
@@ -344,7 +360,8 @@ def stern_pieces(style: Style) -> list[Piece]:
                 collision=[box_of(np.array([[-CORE_HALF, AXIS_Y - CORE_HALF, STERN_WALL_Z], [CORE_HALF, AXIS_Y + CORE_HALF, CORE_END_Z]]), "core")])]
     for name, x in zip(("engine_l", "engine_r"), ENGINE_X, strict=True):
         out.append(lone(name, "stern", engine_mesh(style, x), 60_000.0, fine=0.6,
-                        collision=[Collision("capsule", (x, AXIS_Y, 166.0), radius=3.0, height=27.0, name="engine")],
+                        collision=[Collision("capsule", (x, AXIS_Y, 164.0), radius=3.4, height=30.0, name="engine"),
+                                   box_of(np.array([[x - 3.9, AXIS_Y - 3.9, 172.0], [x + 3.9, AXIS_Y + 3.9, LENGTH_M]]), "bell")],
                         anchors={"main": Anchor((x, AXIS_Y, ENGINE_THROAT[0]), Z_AXIS), "centre": Anchor((x, AXIS_Y, 160.0)),
                                  "side": Anchor((x + math.copysign(RAIL_R + 0.3, x), AXIS_Y, 170.0), (math.copysign(1.0, x), 0.0, 0.0))}))
     for name, sign in (("tank_up", 1.0), ("tank_down", -1.0)):
@@ -360,7 +377,8 @@ def stern_pieces(style: Style) -> list[Piece]:
     disc = (-19.25, AXIS_Y + 0.1, 162.3)
     arm = block((-19.0, AXIS_Y - 0.25, 149.6), (-16.3, AXIS_Y + 0.25, 169.0), dark)
     out.append(lone("tank_port", "stern", [ellipsoid(disc, (2.25, 6.7, 6.7), tank), arm], 20_000.0,
-                    collision=[box_of(np.array([[disc[0] - 1.6, disc[1] - 5.2, disc[2] - 5.2], [disc[0] + 1.6, disc[1] + 5.2, disc[2] + 5.2]]), "tank")],
+                    collision=[box_of(np.array([[disc[0] - 1.6, disc[1] - 5.2, disc[2] - 5.2], [disc[0] + 1.6, disc[1] + 5.2, disc[2] + 5.2]]), "tank"),
+                               box_of(np.array([[-19.0, AXIS_Y - 0.25, 149.6], [-16.3, AXIS_Y + 0.25, 169.0]]), "arm")],
                     anchors={"side": Anchor((disc[0] - 2.25, disc[1], disc[2]), (-1.0, 0.0, 0.0))}))
     return out
 

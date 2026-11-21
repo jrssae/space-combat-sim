@@ -1546,6 +1546,8 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   The bow spine stands on the port side (x -15); the fore body (12 to 24 %) is the same wedge at a smaller size with a
   tube along its starboard edge. Aft: an octagonal core between two engines (x -11.7 and 11.5) with a flattened tank above
   and below it, two drums by the port engine and a disc tank on the port side. `tools/procgen/parts/ea_panama.py`.
+- **As built (M10-T51).** The maintainer chose the brown-grey patchwork with a pale roof and dark tanks; unarmed (Q53);
+  `docs/assets-civilian.md`, "`ea_panama` and `ea_construction_tender`".
 
 ### EA Explorer class (`ea_explorer`, T52)
 
@@ -1592,6 +1594,7 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   at the shoulders, each **three sickle blades** round its own axis, and the port pair is splayed wider than the starboard
   pair. The boom is a box lattice with two tanks inside each half; the landing gear has **four feet** and stands 0.95 m to
   port of the centre line. `tools/procgen/parts/ea_construction_tender.py`.
+- **As built (M10-T55).** The maintainer chose yellow ochre all over with yellow claws striped black; `docs/assets-civilian.md`.
 
 ### EA shuttle (`ea_shuttle`, T57)
 

@@ -9,14 +9,9 @@ the civilian pipeline (``core/civilian.py``). Neither carries a weapon.
 Classes by the budgets (M10 Q38; docs/assets-capital.md, "Class budgets"): the Panama is a **cruiser** (one 4 096 px atlas:
 it flies into Babylon 5's bay, so it is seen from a few metres at 180 m long), the tender a **small craft** (one
 2 048 px atlas). Both write the low texture set a mip level down.
-
-Option ``look`` (``a``, ``b`` or ``c``) picks the surface option until the maintainer has chosen one.
 """
 
 from __future__ import annotations
-
-from dataclasses import replace
-from typing import Any
 
 import numpy as np
 
@@ -29,7 +24,7 @@ from ..parts import Part
 from ..parts import ea_construction_tender as tp
 from ..parts import ea_panama as pp
 from ..styles.ea_civilian import WINDOW_STRENGTH
-from ..styles.ea_work_ships import DEFAULT_OPTION, WorkLook, panama_looks, tender_looks
+from ..styles.ea_work_ships import PANAMA_LOOK, TENDER_LOOK, WorkLook
 from .ea_shuttles import NAV_CLEARANCE_M, Craft, Port, build_craft
 
 PANAMA_ID = "ea_panama"
@@ -57,7 +52,7 @@ def _dressed(pieces: list[cv.Piece], layout: SeamLayout) -> list[cv.Piece]:
 
 def dress_panama(pieces: list[cv.Piece], look: WorkLook) -> tuple[list[cv.Piece], Marks]:
     """The Panama's seams and paint: frames along the hold, cargo hatches in the roof and the keel, the patchwork, the rows of
-    lit ports along the port face and on the bow spine, then the look's bands and trim lines."""
+    lit ports along the port face and on the bow spine, then the look's bands."""
     slope = np.array([-pp.ROOF_SLOPE, 1.0, 0.0]) / float(np.hypot(pp.ROOF_SLOPE, 1.0))  # out of the roof
     along = np.array([1.0, pp.ROOF_SLOPE, 0.0]) / float(np.hypot(pp.ROOF_SLOPE, 1.0))  # across the roof, to starboard
     frames = [57.1, 70.9, 84.7, 98.0, 112.3, 126.1, 140.0]
@@ -86,15 +81,6 @@ def dress_panama(pieces: list[cv.Piece], look: WorkLook) -> tuple[list[cv.Piece]
     for z, width, colour in look.bands:
         for part in ("hold_fore", "hold_aft"):
             marks.setdefault(part, []).append(Marking.band(part, (0.0, 0.0, 0.0), Z_AXIS, z + 0.5 * width, width, capture_albedo(colour)))
-    if look.trim is not None:
-        # Thin lines along the hull: on each tube's crown, and on the starboard edge.
-        trim = capture_albedo(look.trim)
-        for part, z0, z1 in (("hold_fore", pp.HOLD_Z[0], pp.HOLD_Z[1]), ("hold_aft", pp.HOLD_Z[1], pp.HOLD_Z[2])):
-            mid, span = 0.5 * (z0 + z1), z1 - z0
-            for sign in (1.0, -1.0):
-                crown = (pp.TUBE_X, pp.AXIS_Y + sign * (pp.TUBE_OFF + pp.TUBE_R), mid)
-                marks.setdefault(part, []).append(Marking.rect(part, crown, Z_AXIS, X_AXIS, (0.0, sign, 0.0), (span, 0.7), trim))
-            marks.setdefault(part, []).append(Marking.rect(part, (pp.EDGE_X + pp.EDGE_R, pp.AXIS_Y, mid), Z_AXIS, Y_AXIS, X_AXIS, (span, 0.7), trim))
     return dressed, {name: tuple(m) for name, m in marks.items()}
 
 
@@ -199,29 +185,18 @@ def no_docks(by_name: dict[str, Part]) -> list[tuple[str, np.ndarray, np.ndarray
     return []
 
 
-_PANAMA_LOOK, _TENDER_LOOK = panama_looks()[DEFAULT_OPTION], tender_looks()[DEFAULT_OPTION]
-PANAMA = Craft(PANAMA_ID, 1.5, ("bow", "hold_fore", "hold_aft", "stern"), _PANAMA_LOOK, pp.assemble, dress_panama, pp.AXIS_Y,
+PANAMA = Craft(PANAMA_ID, 1.5, ("bow", "hold_fore", "hold_aft", "stern"), PANAMA_LOOK, pp.assemble, dress_panama, pp.AXIS_Y,
                (("l", "left", "engine_l", pp.ENGINE_THROAT[1]), ("r", "right", "engine_r", pp.ENGINE_THROAT[1])), 0.0,
                (4.0, pp.AXIS_Y, pp.FORE_Z[0], 1.0), panama_ports, panama_lights, panama_joints, panama_docks,
                ship_class="cruiser", atlas_px=4096)  # fmt: skip
-TENDER = Craft(TENDER_ID, 0.4, ("body", "stern", "boom_l", "boom_r", "claws_l", "claws_r"), _TENDER_LOOK, tp.assemble, dress_tender, tp.POD_AT[1],
+TENDER = Craft(TENDER_ID, 0.4, ("body", "stern", "boom_l", "boom_r", "claws_l", "claws_r"), TENDER_LOOK, tp.assemble, dress_tender, tp.POD_AT[1],
                (("l", "left", "pod_l", 1.4), ("r", "right", "pod_r", 1.4)), 0.0, (tp.POD_AT[0], tp.POD_AT[1], tp.POD_Z[0] + 1.3, 1.4),
                tender_ports, tender_lights, tender_joints, no_docks)  # fmt: skip
-LOOKS: dict[str, Any] = {PANAMA_ID: panama_looks, TENDER_ID: tender_looks}
-
-
-def _in_look(craft: Craft, ctx: BuildContext) -> Craft:
-    """The craft in the surface option the build asks for."""
-    looks = LOOKS[craft.asset_id]()
-    option = str(ctx.option("look", DEFAULT_OPTION))
-    if option not in looks:
-        raise ValueError(f"{craft.asset_id} has no look {option!r} (one of {sorted(looks)})")
-    return replace(craft, look=looks[option])
 
 
 def build_panama(ctx: BuildContext) -> AssetOutputs:
-    return build_craft(_in_look(PANAMA, ctx), ctx)
+    return build_craft(PANAMA, ctx)
 
 
 def build_tender(ctx: BuildContext) -> AssetOutputs:
-    return build_craft(_in_look(TENDER, ctx), ctx)
+    return build_craft(TENDER, ctx)

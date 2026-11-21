@@ -1,6 +1,6 @@
-"""``ea_panama`` and ``ea_construction_tender`` (M10-T51 and M10-T55, stage 1): files, the mesh contract with both texture
-sets, class budgets, sizes and frames, outward faces, the lopsided and the mirrored pieces, chunk cuts, the hardpoint
-contract, the three surface options and determinism.
+"""``ea_panama`` and ``ea_construction_tender`` (M10-T51 and M10-T55): files, the mesh contract with both texture sets, class
+budgets, sizes and frames, outward faces, the lopsided and the mirrored pieces, chunk cuts, collision coverage, the
+hardpoint contract, the loadout (unarmed, Q53), the chosen looks and determinism.
 The expected numbers are typed in from docs/design-references.md ("EA Panama-class transport", "EA construction tender")
 and docs/assets-capital.md ("M10 lengths (T01)", "Class budgets"), not read from the generators.
 """
@@ -20,22 +20,35 @@ from tools.procgen.assets import ea_shuttles as es
 from tools.procgen.assets import ea_work_ships as ws
 from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
+from tools.procgen.core.color import capture_albedo
 from tools.procgen.core.budgets import CLASS_BUDGETS, LOW_SHRINK, low_set_mb, over_budget, texture_mb
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.image import read_png
 from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
-from tools.procgen.styles.ea_work_ships import DEFAULT_OPTION, OPTIONS
+from tools.procgen.styles.ea_work_ships import PANAMA_LOOK, TENDER_LOOK
 from tools.procgen.tests.mesh_checks import TEST_OPTIONS, assert_chunks_cut_the_hull, assert_hull_mesh, glowing_points
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
     "yaw_left", "yaw_right", "roll_left", "roll_right",
 }  # fmt: skip
+ROOT = Path(__file__).resolve().parents[3]
 B5_BAY_CORE_M = (45.5, 30.0)  # the main docking bay's core, wide and tall (docs/assets-capital.md, "M10 lengths (T01)")
 
 
 def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
+    basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
+    local = (points - np.array(c["position"])) @ basis
+    if c["type"] == "box":
+        return np.all(np.abs(local) <= 0.5 * np.array(c["size"]) + inflate, axis=1)
+    half = 0.5 * c["height"] - c["radius"]
+    along = np.clip(local[:, 2], -half, half)
+    axis_point = np.column_stack([np.zeros_like(along), np.zeros_like(along), along])
+    return np.linalg.norm(local - axis_point, axis=1) <= c["radius"] + inflate
 
 
 def mirror_gap(vertices: np.ndarray) -> float:
@@ -62,6 +75,9 @@ class WorkShipChecks:
     TEXEL_MAX_M: float
     CHUNKS: tuple[str, ...]
     THRUST_Y: float
+    HULL_POINTS: int
+    PAINT_SRGB: int  # the chosen look's hull colour
+    NO_HIT_VOLUME: tuple[str, ...] = ()  # pieces too thin to be hit: aerials
 
     @classmethod
     def setUpClass(cls) -> None:
@@ -75,6 +91,10 @@ class WorkShipChecks:
         cls.hp = json.loads((cls.dir_a / es.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.offset = np.array(cls.manifest["centroid_offset"])
         cls.pieces = cls.CRAFT.assemble(cls.CRAFT.look.style)
+        cls.spacing = float(cls.manifest["surface_spacing_m"])
+        solid = [p for p in cls.pieces if not p.name.startswith(cls.NO_HIT_VOLUME)] if cls.NO_HIT_VOLUME else cls.pieces
+        sampled = cv.sample_pieces(solid, BuildContext(cls.dir_a, seed=42), cls.spacing, buried_margin=es.BURIED_MARGIN_M)
+        cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -209,24 +229,50 @@ class WorkShipChecks:
         self.assertGreater(lights["top_lamp"][1], lights["top"][1])
         self.assertEqual(lights["cabin"], self.hp["cockpit_camera"]["position"])
 
-    # --- looks, determinism, options -----------------------------------------------------------------------------------------
-    def test_three_surface_options_and_the_default(self) -> None:
-        looks = ws.LOOKS[self.asset_id]()
-        self.assertEqual(tuple(looks), OPTIONS)
-        self.assertEqual(len({look.style.name for look in looks.values()}), 3)
-        self.assertIs(type(self.CRAFT.look), type(looks[DEFAULT_OPTION]))
-        self.assertEqual(self.CRAFT.look.style.name, looks[DEFAULT_OPTION].style.name)
+    def test_collision_primitives_cover_the_visible_surface_and_stay_close(self) -> None:
+        inside = np.zeros(len(self.xyz), dtype=bool)
+        for c in self.hp["collision"]:
+            inside |= inside_primitive(self.xyz, c, inflate=self.spacing)
+        missed = self.xyz[~inside] + self.offset
+        self.assertTrue(bool(inside.all()), f"every visible surface sample; {len(missed)} missed (authored frame): {np.round(missed[:10], 2).tolist()}")
+        lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
+        for c in self.hp["collision"]:
+            basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
+            np.testing.assert_allclose(basis.T @ basis, np.eye(3), atol=1e-4, err_msg=c["name"])
+            self.assertAlmostEqual(float(np.linalg.det(basis)), 1.0, places=3, msg=c["name"])
+            if c["type"] == "box":
+                corners = np.array([[a, b, d] for a in (-1, 1) for b in (-1, 1) for d in (-1, 1)]) * 0.5 * np.array(c["size"])
+                extent = corners @ basis.T + np.array(c["position"])
+            else:
+                half = 0.5 * c["height"] - c["radius"]
+                ends = np.array([[0, 0, -half], [0, 0, half]]) @ basis.T + np.array(c["position"])
+                extent = np.concatenate([ends - c["radius"], ends + c["radius"]])
+            self.assertTrue(np.all(extent.min(axis=0) >= lo - 0.5) and np.all(extent.max(axis=0) <= hi + 0.5), c["name"])
 
-    def test_another_option_repaints_the_same_hull(self) -> None:
+    def test_the_loadout_is_this_hull_unarmed(self) -> None:
+        entry = json.loads((ROOT / "data" / "capitals" / "loadouts.json").read_text(encoding="utf-8"))["hulls"][self.asset_id]
+        self.assertEqual((entry["weapons"], entry["interceptors"], entry["launches"], entry["lays_mines"]), ({}, {}, {}, None), "unarmed (Q53)")
+        self.assertEqual(entry["class"], self.SHIP_CLASS, "the loadout's class is the budget's")
+        self.assertEqual((entry["hull"], entry["jump"]), (self.HULL_POINTS, "gate"))
+        spec = (ROOT / "assets" / "ships" / f"{self.asset_id}.tres").read_text(encoding="utf-8")
+        self.assertIn(f'asset_id = "{self.asset_id}"', spec)
+        self.assertIn(f"hull_max = {float(self.HULL_POINTS)}", spec, "the ShipSpec carries the loadout's hull points")
+
+    # --- looks, determinism, options -----------------------------------------------------------------------------------------
+    def test_the_look_is_the_maintainers_choice(self) -> None:
+        look = self.CRAFT.look
+        self.assertEqual(look.style.name, self.asset_id)
+        np.testing.assert_allclose(look.style.material("hull").albedo, capture_albedo(self.PAINT_SRGB), atol=1e-9)
+
+    def test_a_different_seed_changes_the_wear_but_not_the_design(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            other = self.BUILD(BuildContext(Path(tmp), seed=42, options={**TEST_OPTIONS, "look": "c"}))
+            other = self.BUILD(BuildContext(Path(tmp), seed=7, options=TEST_OPTIONS))
             albedo = self.manifest["mesh"]["surfaces"][0]["albedo"]
             self.assertNotEqual(sha256(Path(tmp) / albedo), sha256(self.dir_a / albedo))
             self.assertEqual(other.manifest["dimensions_m"], self.manifest["dimensions_m"])
             self.assertEqual(other.manifest["mesh"]["triangles"], self.manifest["mesh"]["triangles"])
-            self.assertEqual((other.manifest["aabb_min"], other.manifest["aabb_max"]), (self.manifest["aabb_min"], self.manifest["aabb_max"]))
-            with self.assertRaises(ValueError):
-                self.BUILD(BuildContext(Path(tmp) / "x", options={**TEST_OPTIONS, "look": "z"}))
+            hp = json.loads((Path(tmp) / es.HARDPOINTS_NAME).read_text(encoding="utf-8"))
+            self.assertEqual([c["name"] for c in hp["collision"]], [c["name"] for c in self.hp["collision"]])
 
     def test_same_seed_gives_byte_identical_output(self) -> None:
         for out in self.out_a.files:
@@ -246,6 +292,23 @@ class EaPanamaTests(WorkShipChecks, unittest.TestCase):
     SHIP_CLASS, ATLAS_PX, TEXEL_MAX_M = "cruiser", 4096, 0.06
     CHUNKS = ("bow", "hold_fore", "hold_aft", "stern")
     THRUST_Y = -0.175  # the height the section is mirrored about
+    HULL_POINTS = 600
+    PAINT_SRGB = 0x8A7F72  # the maintainer's choice (2026-11-21): brown-grey patchwork, pale roof, dark tanks
+    NO_HIT_VOLUME = ("aerials",)
+
+    def test_the_look_is_the_patchwork_with_a_pale_roof(self) -> None:
+        self.assertIs(self.CRAFT.look, PANAMA_LOOK)
+        self.assertEqual((PANAMA_LOOK.bands, PANAMA_LOOK.stripes), ((), None))
+        self.assertGreater(PANAMA_LOOK.plate_tone, 0.15, "plates wander strongly in tone")
+        paint = {role: PANAMA_LOOK.style.material(role).albedo for role in ("hull", "hull_patch", "hazard")}
+        self.assertGreater(sum(paint["hull_patch"]), sum(paint["hull"]), "the roof is paler than the sides")
+        self.assertLess(sum(paint["hazard"]), sum(paint["hull"]), "the tanks are dark")
+
+    def test_only_the_bells_throats_are_lit_not_their_insides(self) -> None:
+        glow = glowing_points(self.dir_a, self.manifest["mesh"]) + self.offset
+        stern = glow[glow[:, 2] > 150.0]
+        self.assertGreater(len(stern), 0)
+        self.assertLess(float(stern[:, 2].max()), 176.5, "the glow stays deep in each bell, a collar round its throat")
 
     def test_every_piece_is_authored_where_it_sits(self) -> None:
         self.assertEqual({p.side for p in self.pieces}, {cv.LONE}, "a lopsided hull: nothing mirrored, nothing symmetrised")
@@ -294,6 +357,17 @@ class EaConstructionTenderTests(WorkShipChecks, unittest.TestCase):
     SHIP_CLASS, ATLAS_PX, TEXEL_MAX_M = "small_craft", 2048, 0.08
     CHUNKS = ("body", "stern", "boom_l", "boom_r", "claws_l", "claws_r")
     THRUST_Y = 4.646  # the pods' axes
+    HULL_POINTS = 300
+    PAINT_SRGB = 0xC29A2C  # the maintainer's choice (2026-11-21): ochre all over, yellow claws striped black
+
+    def test_the_look_is_ochre_with_striped_claws(self) -> None:
+        self.assertIs(self.CRAFT.look, TENDER_LOOK)
+        self.assertEqual(TENDER_LOOK.stripes, 0x1E1E1E)
+        albedo = read_png(self.dir_a / self.manifest["mesh"]["surfaces"][0]["albedo"])[..., :3].astype(int)
+        yellow = (albedo[..., 0] > 40) & (albedo[..., 0] > albedo[..., 1]) & (albedo[..., 1] > 2 * albedo[..., 2])
+        black = albedo.max(axis=2) < 24
+        self.assertGreater(float(yellow.mean()), 0.2, "ochre and yellow paint (the atlas holds albedo, darker than the paint looks lit)")
+        self.assertGreater(float(black.mean()), 0.005, "black stripes and dark machinery")
 
     def test_the_body_boom_and_pods_are_mirror_symmetric(self) -> None:
         keep = [p.part.mesh.vertices for p in cv.with_twins(self.pieces) if p.side != cv.LONE]
@@ -313,8 +387,8 @@ class EaConstructionTenderTests(WorkShipChecks, unittest.TestCase):
         self.assertGreater(splay["claw_up_l"], splay["claw_up_r"] + 0.05, "the port claws are splayed wider than the starboard ones")
 
     def test_a_claw_has_three_blades(self) -> None:
-        boxes = [c["name"] for c in self.hp["collision"] if c["name"].startswith("claw_up_r_blade")]
-        self.assertEqual(len(boxes), 3)
+        boxes = {c["name"][: len("claw_up_r_blade0")] for c in self.hp["collision"] if c["name"].startswith("claw_up_r_blade")}
+        self.assertEqual(boxes, {"claw_up_r_blade0", "claw_up_r_blade1", "claw_up_r_blade2"})
 
     def test_the_pods_are_at_the_booms_tips_and_drive_the_ship(self) -> None:
         mains = {pod["name"]: self.authored(pod["main"]["position"]) for pod in self.hp["pods"]}

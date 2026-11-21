@@ -43,6 +43,12 @@
       "look_sheet": "pool", "callsign": "SHUTTLE", "random_pool": false},
     {"id": "ea_atmo_shuttle", "spec": "res://assets/ships/ea_atmo_shuttle.tres", "asset": "ea_atmo_shuttle",
       "faction": "earth_alliance", "role": "civilian", "ai_profile": "civilian", "name": "EA atmospheric shuttle",
-      "look_sheet": "pool", "callsign": "KESTREL", "random_pool": false}
+      "look_sheet": "pool", "callsign": "KESTREL", "random_pool": false},
+    {"id": "ea_panama", "spec": "res://assets/ships/ea_panama.tres", "asset": "ea_panama",
+      "faction": "earth_alliance", "role": "civilian", "ai_profile": "civilian", "name": "Panama transport",
+      "look_sheet": "pool", "callsign": "PANAMA", "random_pool": false},
+    {"id": "ea_construction_tender", "spec": "res://assets/ships/ea_construction_tender.tres", "asset": "ea_construction_tender",
+      "faction": "earth_alliance", "role": "civilian", "ai_profile": "civilian", "name": "EA construction tender",
+      "look_sheet": "pool", "callsign": "TENDER", "random_pool": false}
   ]
 }

@@ -403,11 +403,11 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T41 | F | Shadow fighter and Shadow scout | T38, T06, T35 | Fable | not started |
 | T42 | F | Vorlon light fighter | T38, T06 | Fable | not started |
 | T50 | F | EA Thunderbolt fighter, model only | T01, T62; the Starfury's generator and style | Fable | done |
-| T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | in progress |
+| T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | done |
 | T52 | F | EA Explorer class | T19, T62 | Fable | not started |
 | T53 | F | EA Asimov liner | T19, T62 | Fable | not started |
 | T54 | F | not needed: reference removed by the maintainer, 2026-11-20 | - | - | not needed |
-| T55 | F | EA construction tender | T19, T62 | Fable | in progress |
+| T55 | F | EA construction tender | T19, T62 | Fable | done |
 | T56 | F | EA mining transport (Q43): the mining variant of T53's generator | T53 | Fable | not started |
 | T57 | F | EA shuttle and EA atmospheric shuttle | T01, T62 | Fable | done |
 | T58 | F | Centauri shuttle and Minbari Flyer | T57, T06 | Fable | not started |
@@ -672,6 +672,27 @@ On top of it:
   Tests: `test_ea_shuttles.py` (56) and `tests/integration/test_ea_shuttles.gd` (3: import with the low set, flight,
   in play and break-up). Look sheets, option sheets and compare overlays: `references/screenshots/M10-T57 EA shuttles/`;
   judging the look is (H).
+- **T51 and T55 done (2026-11-21).** `ea_panama` (180 m, 3 862 triangles) and `ea_construction_tender` (50 m, 69.7 m
+  across its boom, 11 712 triangles): `tools/procgen/assets/ea_work_ships.py`, `parts/ea_panama.py`,
+  `parts/ea_construction_tender.py`, `styles/ea_work_ships.py`, through the shuttles' `build_craft`; as built in
+  `docs/assets-civilian.md`, "`ea_panama` and `ea_construction_tender`". The 90 % compare (top, side, front IoU): 0.982,
+  0.983, 0.972 and 0.934, 0.959, 0.926, sizes within 0.6 %. **The reference models differ from T01's descriptions**
+  (`docs/design-references.md`, "As measured"): the Panama is lopsided, a wedge in section, tall to port, its bow spine
+  on the port side; the tender has four three-bladed claws, posed differently port and starboard, two grab arms on the
+  centre line and a landing gear 0.95 m to port. So **the civilian pipeline gained a `LONE` side** (`core/civilian.py`): a
+  piece built as authored, neither symmetrised nor mirrored. The maintainer chose the Panama's option B (brown-grey
+  patchwork, pale roof, dark tanks) and the tender's option A (ochre, yellow claws striped black). Classes (Q38): the
+  Panama a **cruiser** (one 4 096 px atlas, 53.3 / 13.3 MB; it flies into Babylon 5's bay, and its section without the
+  aerials, 41.7 x 26.3 m, fits the bay's core), the tender a small craft (13.3 / 3.3 MB); about 53 / 13 and 14 / 4 MB of
+  video memory measured. `data/capitals/loadouts.json` now gives the Panama the class `cruiser` (it said `small_craft`);
+  both stay unarmed with T03's hull points (600, 300; Q53). The Panama's engine glow was cut to the throats (less lit
+  area than a Saturn's bell). Hardpoints as the shuttles' (`docking_ports[]`: the Panama's port-side cargo lock; none on
+  the tender). `ShipSpec`s `assets/ships/ea_panama.tres` and `ea_construction_tender.tres` (first numbers) and one
+  catalogue entry each, `random_pool: false` and no docking class: a mission places them.
+  Tests: `test_ea_work_ships.py` (59, with collision coverage and the loadout check), `tests/integration/
+  test_ea_work_ships.gd` (3: import with the low set, flight, in play and break-up), a case in `test_ship_catalog.gd`.
+  Look sheets, option sheets and compare overlays: `references/screenshots/M10-T51 T55 Panama and tender/`; judging the
+  look is (H).
 
 ### M10-T43 to T47 Mechanics, sounds, bench, scenarios and performance
 
