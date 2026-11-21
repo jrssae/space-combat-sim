@@ -21,6 +21,13 @@ const VIA_OWN: StringName = &""
 const VIA_GATE: StringName = &"gate"
 const VIA_CARRIER: StringName = &"carrier"
 const VIAS: Array[StringName] = [VIA_OWN, VIA_GATE, VIA_CARRIER]
+## A ship that holds its route's end (`hold_route_end`) is sent back once it is further than this from it, m; its way back
+## is planned to take about `RETURN_S`, at no less than `RETURN_MIN_MPS`.
+const HOLD_END_M: float = 500.0
+const RETURN_S: float = 40.0
+const RETURN_MIN_MPS: float = 15.0
+## Taken so much further off that its way back asks for this many times its planned speed, it is sent again.
+const REPLAN_FACTOR: float = 1.5
 ## A ship sent out through the gate flies its run-in at this speed (the player's autopilot's run-in is 250 m/s).
 const DEPART_CRUISE_MPS: float = 200.0
 var world: WorldFrame = null
@@ -38,7 +45,14 @@ var system_id: StringName = &"local"
 ## Mixed into spawned pilots' brain seeds (the scenario's seed: the same seed flies the same mission).
 var seed_value: int = 0
 
-var _actors: Dictionary = {}  # MissionWorld.key -> Combatant or NavBuoy
+## The run's counted numbers (`MissionApi.fact`, M8 D79).
+var facts: MissionFacts = null
+var _main: Main = null
+var _actors: Dictionary = {}  # MissionWorld.key -> Combatant, NavBuoy or a raid's named carrier (CapitalStandin)
+var _carrier_fates: Dictionary = {}  # a carrier's key -> true once it left play whole, false once destroyed
+var _own_pilots: Dictionary = {}  # an actor's key -> the pilot it flew before `pilot` gave it another
+var _routes: Callable = Callable()  # a scenario route by its name (`Main.scenario_route`)
+var _holds_end: Dictionary = {}  # an actor's key -> {cruise_mps: its own route's, back: its route back or null} (`hold_route_end`)
 
 
 ## Wires the stage to `main`'s nodes and learns the actors already in play.
@@ -49,14 +63,21 @@ func setup(main: Main, p_jumps: JumpPointPool) -> void:
 	player = main.combatant
 	jumps = p_jumps
 	gates = main.gates
+	_routes = main.scenario_route
 	camera_rig = main.camera_rig
 	launches = main.launches
 	system_id = main.world.origin.system_id
 	seed_value = main.scenario_seed
+	_main = main
+	facts = MissionFacts.new()
+	facts.setup(main)
 	if player != null:
 		_actors["player"] = player
 	for buoy: NavBuoy in main.buoys:
 		_actors[MissionWorld.key(buoy.display_name)] = buoy
+	if gates != null:
+		for gate: Jumpgate in gates.gates:
+			_actors[MissionWorld.key(gate.display_name)] = gate  # a waypoint and a place to fly to (M8 D79)
 	for combatant: Combatant in ships.alive():
 		register(combatant)
 	if not ships.acquired.is_connected(register):
@@ -68,7 +89,11 @@ func teardown() -> void:
 	if ships != null and is_instance_valid(ships) and ships.acquired.is_connected(register):
 		ships.acquired.disconnect(register)
 	_actors.clear()
+	_carrier_fates.clear()
+	_holds_end.clear()
+	_own_pilots.clear()
 	camera_rig = null
+	_main = null
 
 
 ## Knows `combatant` by the name it flies under now, and keeps it out of the low-attention tier: a parked tier body would read
@@ -82,13 +107,23 @@ func register(combatant: Combatant) -> void:
 
 ## Updates the snapshot for `names` (lower case): position, alive and route. One unit of work each.
 func refresh(snapshot: MissionWorld, names: PackedStringArray) -> void:
+	if facts != null:
+		facts.refresh(snapshot)
+		var capitals: int = 0
+		for k: String in _actors:
+			capitals += 1 if _actors[k] is CapitalStandin and _node_of(k) != null else 0
+		snapshot.set_fact(&"capitals_in_play", float(capitals))
+	var selected: int = _selected_id()
 	for actor: String in names:
 		snapshot.work += 1
 		var k: String = MissionWorld.key(actor)
 		var node: Node3D = _node_of(k)
+		snapshot.set_targeted(k, selected != 0 and node != null and target_id(k) == selected)
 		if node == null:
 			# A name the stage knows was in play once (load, a pool hand-out): gone, not "not arrived yet".
-			if _actors.has(k):
+			if _carrier_left(k):
+				snapshot.set_left(k)
+			elif _actors.has(k):
 				snapshot.set_gone(k)
 			else:
 				snapshot.set_alive(k, false)
@@ -100,6 +135,8 @@ func refresh(snapshot: MissionWorld, names: PackedStringArray) -> void:
 			var route: Route = _route_of(combatant)
 			if route != null and route.count() > 0:
 				snapshot.set_route(k, route.waypoint(route.count() - 1).position, path.phase == BehaviourFollowPath.Phase.DONE)
+				if _holds_end.has(k):
+					_hold_route_end(k, combatant, route, node, path.phase == BehaviourFollowPath.Phase.DONE)
 
 
 ## A forced trigger moved `actor` to `at`: placed there, velocity and spin kept. A ship goes through `Ship.reset_to`, as D51
@@ -139,6 +176,62 @@ func release(actor: String) -> void:
 			wings.refresh(wing)  # the next member takes the lead from the parked ship
 	elif thing is NavBuoy:
 		(thing as NavBuoy).set_destroyed(true)
+	elif thing is CapitalStandin:
+		_carrier_fates[k] = true  # taken out whole: a skip earns no kill
+		CarrierJumps.attach(world).dismiss(thing as CapitalStandin)
+
+
+## From now on the AI ship `ship_name` goes back to the end of the route it leads whenever it has flown it and is no longer
+## there (M8-T08: a civilian chased off after arriving idled where the chase ended, kilometres from its goal). False, with
+## an error, when there is no such AI ship in play.
+func hold_route_end(ship_name: String) -> bool:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	if combatant == null or _node_of(k) == null or _path_of(combatant) == null:
+		push_error("Mission: hold_route_end: no AI ship '%s' leading a route" % ship_name)
+		return false
+	var route: Route = _route_of(combatant)
+	_holds_end[k] = {"cruise_mps": route.cruise_mps if route != null else Route.DEFAULT_CRUISE_MPS, "back": null}
+	return true
+
+
+## Sends the AI ship `ship_name` on along the scenario's route `route_name` from its first waypoint (M8-T26: the escort's
+## civilian flies its last leg only once the last wave has come). One that holds its route's end holds the new one's.
+## False, with an error, when there is no such ship or route.
+func fly_route(ship_name: String, route_name: String) -> bool:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	var pilot := combatant.driver.brain as AiPilot if combatant != null and _node_of(k) != null and combatant.driver != null else null
+	var route := _routes.call(route_name) as Route if _routes.is_valid() else null
+	if pilot == null or route == null or route.count() == 0:
+		push_error("Mission: fly_route: no AI ship '%s' in play or no route '%s' in the scenario" % [ship_name, route_name])
+		return false
+	BehaviourFollowPath.attach(pilot, route)
+	if _holds_end.has(k):
+		_holds_end[k] = {"cruise_mps": route.cruise_mps, "back": null}
+	return true
+
+
+# One look at a ship that holds its route's end: once it has flown `route` and is off its end it is sent back, slower the
+# nearer it is, so it stops inside `HOLD_END_M` instead of coasting past again; taken much further off on its way back (a
+# raid chased it), it is sent again at the speed that distance asks for.
+func _hold_route_end(k: String, combatant: Combatant, route: Route, node: Node3D, flown: bool) -> void:
+	var hold: Dictionary = _holds_end[k]
+	if not flown and route != hold["back"]:
+		return  # still on its own route
+	var end: UniversePos = route.waypoint(route.count() - 1).position
+	var away_m: float = world.to_universe(node.global_position).distance_to(end)
+	var cruise_mps: float = clampf(away_m / RETURN_S, RETURN_MIN_MPS, maxf(float(hold["cruise_mps"]), RETURN_MIN_MPS))
+	if (flown and away_m <= HOLD_END_M) or (not flown and cruise_mps <= REPLAN_FACTOR * route.cruise_mps):
+		return
+	var back := Route.new()
+	back.name = route.name
+	back.pace = Route.PACE_NONE
+	back.loop = false
+	back.cruise_mps = cruise_mps
+	back.add(end)
+	hold["back"] = back
+	BehaviourFollowPath.attach(combatant.driver.brain as AiPilot, back)
 
 
 ## A forced `arrived` finished `actor`'s route: its follow-path behaviour is told it is at the end.
@@ -181,10 +274,10 @@ func spawn(entry: Dictionary) -> Combatant:
 	if placed == null:
 		push_error("Mission: spawn %s: the %s pool refused" % [ship_name, type])
 		return null
+	register(placed)  # before it may dock on its carrier: a mission's ship stays out of the tier after its launch
 	if StringName(entry.get("arrival", &"none")) == &"jump" and jumps != null:
 		_jump_in(placed, entry, at, basis)
 	placed.damageable.invulnerable = bool(entry.get("invulnerable", false))
-	register(placed)
 	if not String(entry.get("wing", "")).is_empty():
 		wings.join(String(entry["wing"]), placed)
 	return placed
@@ -200,6 +293,7 @@ func _jump_in(placed: Combatant, entry: Dictionary, at: UniversePos, basis: Basi
 				if carriers != null else null
 		if run != null:
 			carriers.bring_through(run, placed.ship, placed.ship.linear_velocity)
+			_register_carrier(run)
 		return
 	if not JumpCapability.can_open(placed.ship):
 		push_error("Mission: spawn %s: a %s cannot open a jump point; say via \"gate\" or via \"carrier\"" % [
@@ -330,6 +424,162 @@ func launching() -> bool:
 	return launches != null and is_instance_valid(launches) and launches.locks_controls()
 
 
+## Starts the squadron-launch cinematic from wing `wing`'s arm, the player last from door `door` (M8-T03; empty and 0 for the
+## data's); "" or why not.
+func launch_squadron(wing: String = "", door: int = 0, flights: int = 0) -> String:
+	if launches == null or not is_instance_valid(launches):
+		return "no launch director in this scene"
+	return launches.launch_squadron(wing, door, flights)
+
+
+## Plays the station tour's stop `stop` ("" for the whole tour, M7-T12), with or without its caption; "" or why not.
+func tour(stop: String, captions: bool = true) -> String:
+	if _main == null or _main.tours == null:
+		return "no tour in this scene"
+	_main.tours.captions = captions
+	return _main.tours.start(stop)
+
+
+func touring() -> bool:
+	return _main != null and _main.tours != null and _main.tours.playing
+
+
+func stop_tour() -> void:
+	if touring():
+		_main.tours.stop()
+
+
+## Keeps the station's run of civilians going between the gate and the bays, or lets it run out (M7-T56); "" or why not.
+func traffic(on: bool) -> String:
+	if _main == null or _main.traffic == null or not _main.traffic.lanes_ready():
+		return "no station traffic in this scene"
+	_main.traffic.auto_forced = true
+	_main.traffic.auto = on
+	return ""
+
+
+## Launches `count` more Starfuries of the station's wing `wing` from its Cobra arm (the places not flown, at most); "" or why not.
+func scramble(wing: String, count: int) -> String:
+	if _main == null or _main.traffic == null:
+		return "no station traffic in this scene"
+	return _main.traffic.scramble(wing, count)
+
+
+## Sends the AI ship `ship_name` along `points` (metres from the scenario's origin) at `cruise_mps`, waiting for the player when
+## `paced`; a point may name a demo to show there (`Manoeuvres.NAMES`). "" or why not.
+func fly(ship_name: String, points: Array, cruise_mps: float, paced: bool, demo: StringName = &"") -> String:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	var pilot := combatant.driver.brain as AiPilot if combatant != null and combatant.driver != null and _node_of(k) != null else null
+	if pilot == null:
+		return "no AI ship %s in play" % ship_name
+	var route := Route.new()
+	route.name = ship_name
+	route.cruise_mps = cruise_mps
+	route.loop = false
+	route.pace = Route.PACE_PLAYER if paced else Route.PACE_NONE
+	if paced and player != null and player.targetable != null:
+		route.pace_id = player.targetable.get_instance_id()
+	for i: int in points.size():
+		var p: Vector3 = points[i]
+		route.add(UniversePos.new(p.x, p.y, p.z, system_id), demo if i == points.size() - 1 else &"")
+	if route.count() == 0:
+		route.add(world.to_universe(combatant.ship.global_position), demo)  # where it is: the demo starts at once
+	BehaviourFollowPath.attach(pilot, route)
+	return ""
+
+
+## The place `ahead_m` out of the scene's jumpgate along the way its arrivals fly, or null with no gate.
+func gate_point(ahead_m: float) -> UniversePos:
+	var gate: Jumpgate = gates.gate() if gates != null else null
+	if gate == null:
+		return null
+	return world.to_universe(gate.global_position + (gate.global_basis * gate.arrival_forward).normalized() * ahead_m)
+
+
+## Gives the AI ship `ship_name` a pilot of `profile` (`AiProfile.PATHS`), or with "" its own pilot back (M8-T33: the
+## tutorial's instructor flies as a fighting wingman for a drill, then instructs again). "" or why not.
+func pilot(ship_name: String, profile: String) -> String:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	if combatant == null or combatant.driver == null or _node_of(k) == null:
+		return "no AI ship %s in play" % ship_name
+	if profile.is_empty():
+		if _own_pilots.has(k):
+			combatant.driver.brain = _own_pilots[k]
+			_own_pilots.erase(k)
+		return ""
+	var made: Dictionary = BrainFactory.from_behaviour({"type": "ai", "profile": profile},
+			world.to_universe(combatant.ship.global_position), hash([ship_name, seed_value, profile, _own_pilots.size()]))
+	if not bool(made["ok"]):
+		return String(made["error"])
+	if not _own_pilots.has(k):
+		_own_pilots[k] = combatant.driver.brain
+	combatant.driver.brain = made["brain"]
+	return ""
+
+
+## Puts the AI ship `ship_name` in the player's flight (a free slot of it), or takes it out again; "" or why not.
+func join_flight(ship_name: String, join: bool) -> String:
+	var k: String = MissionWorld.key(ship_name)
+	var combatant := _actors.get(k) as Combatant
+	var flight: Wing = wings.player_wing() if wings != null else null
+	if combatant == null or _node_of(k) == null:
+		return "no ship %s in play" % ship_name
+	if flight == null:
+		return "the player leads no flight"
+	if not join:
+		wings.remove_member(flight, combatant)
+		wings.refresh(flight)
+		return ""
+	if flight.slot_of(combatant) > 0:
+		return ""
+	return "" if wings.join(flight.name, combatant) == flight else "%s could not join %s" % [ship_name, flight.name]
+
+
+## Puts the ship `ship_name` at `at`, nose along `facing`, at rest against the station's frame: a cut between scenes, for use
+## as a cinematic ends or with the controls held (M8-T33: the tutorial's lessons start at rest in clear space). A shot still
+## filming the player is ended, since it would follow the ship across the cut. "" or why not.
+func put(ship_name: String, at: UniversePos, facing: Vector3) -> String:
+	var k: String = MissionWorld.key(ship_name)
+	var ship := _node_of(k) as Ship
+	if ship == null:
+		return "no ship %s in play" % ship_name
+	if ship == world.focus:
+		world.return_home()
+		if camera_rig != null and camera_rig.playing_shot() != null:
+			camera_rig.stop_shot()
+		if launches != null and is_instance_valid(launches):
+			launches.skip()  # a launch's burn would carry the ship on from where it is put
+	var up: Vector3 = Vector3.UP if absf(facing.normalized().dot(Vector3.UP)) < 0.99 else Vector3.BACK
+	ship.reset_to(Transform3D(Basis.looking_at(facing, up), world.universe_to_local(at)))
+	return ""
+
+
+## Selects the actor `actor` as the player's target (a skipped `targeted` trigger).
+func select(actor: String) -> void:
+	if player != null and player.ship != null and player.ship.targeting != null and _node_of(MissionWorld.key(actor)) != null:
+		player.ship.targeting.select_by_name(actor.to_upper())
+
+
+## The name of the player's selected target, "" for none.
+func player_target() -> String:
+	var targeting: TargetingController = player.ship.targeting if player != null and player.ship != null else null
+	return targeting.selected_name() if targeting != null and _selected_id() != 0 else ""
+
+
+func _selected_id() -> int:
+	var targeting: TargetingController = player.ship.targeting if player != null and player.ship != null \
+			and is_instance_valid(player.ship) else null
+	return targeting.selected_id() if targeting != null else 0
+
+
+## Control's docking offer is the mission's to say: the HUD line stays off (M8-T06).
+func own_dock_offer() -> void:
+	if _main != null and _main.docking != null:
+		_main.docking.offer_line = false
+
+
 ## Jumps the player's launch to the hand-off (a skipped step).
 func skip_launch() -> void:
 	if launches != null and is_instance_valid(launches):
@@ -386,19 +636,49 @@ func target_id(actor: String) -> int:
 	return marker.get_instance_id() if marker != null else 0
 
 
+# A raid's carrier is an actor under the name its raid gives it (M8-T08), so an objective can ask for it destroyed.
+func _register_carrier(run: CarrierRun) -> void:
+	var cap: CapitalStandin = run.carrier
+	var k: String = MissionWorld.key(cap.targetable.display_name) if is_instance_valid(cap) else ""
+	if k.is_empty() or str(run.options.get("name", "")).is_empty() or _actors.get(k) == cap:
+		return
+	_actors[k] = cap
+	_carrier_fates.erase(k)
+
+
+# Whether the carrier `k` left play whole (it jumped out, or went through a gate) instead of being destroyed. Its fate is
+# kept from the first look: its pool restores a destroyed hull for a later raid.
+func _carrier_left(k: String) -> bool:
+	var cap := _actors.get(k) as CapitalStandin
+	if cap == null or not is_instance_valid(cap):
+		return false
+	if not _carrier_fates.has(k):
+		_carrier_fates[k] = not cap.damageable.hull.destroyed
+	return bool(_carrier_fates[k])
+
+
 # The node of a live actor (the ship's body or the buoy), or null when it is unknown, parked, destroyed or flying another name.
+# A fighter riding in on its carrier's cradle is live, though it is out of play until its launch (M8-T08).
 func _node_of(k: String) -> Node3D:
 	var thing: Object = _actors.get(k)
 	if thing == null or not is_instance_valid(thing):
 		return null
+	if thing is CapitalStandin:
+		var cap := thing as CapitalStandin
+		var in_play: bool = cap.is_inside_tree() and cap.visible and cap.process_mode != Node.PROCESS_MODE_DISABLED \
+				and not cap.damageable.hull.destroyed and MissionWorld.key(cap.targetable.display_name) == k
+		return cap if in_play and not _carrier_fates.has(k) else null
 	if thing is Combatant:
 		var c := thing as Combatant
-		if c.ship == null or not c.ship.is_inside_tree() or not c.ship.visible or c.ship.process_mode == Node.PROCESS_MODE_DISABLED \
-				or c.damageable.hull.destroyed:
+		var hidden: bool = not c.ship.visible or c.ship.process_mode == Node.PROCESS_MODE_DISABLED if c.ship != null else true
+		if c.ship == null or not c.ship.is_inside_tree() or c.damageable.hull.destroyed \
+				or (hidden and not c.ship.has_meta(CarrierJumps.RIDING_META)):
 			return null
 		if c != player and MissionWorld.key(c.targetable.display_name) != k:
 			return null  # the pool gave this ship to someone else
 		return c.ship
+	if thing is Jumpgate:
+		return thing as Jumpgate
 	if thing is NavBuoy:
 		var buoy := thing as NavBuoy
 		return buoy if buoy.is_inside_tree() and buoy.visible and not buoy.is_destroyed() else null

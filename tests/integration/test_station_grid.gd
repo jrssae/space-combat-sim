@@ -270,19 +270,25 @@ func test_a_battery_fires_its_four_barrels_in_turn_and_its_pulses_can_miss() -> 
 	var order: Array[int] = []
 	var fired_at: Array[float] = []
 	var starts: Array[Vector3] = []
+	var tips: Array[Vector3] = []
 	var note := func(at: Vector3) -> void:
 		order.append(int((scene.sim.core.battery_state(i5.slot())[1] as PackedFloat64Array)[1]))
 		fired_at.append(SimClock.now())
 		starts.append(at)
+		var s: Dictionary = scene.state(i5)
+		i5.turn_to(float(s["azimuth"]), float(s["elevation"]))  # the model as the next frame shows it
+		tips.append(i5.pitch.global_transform * (muzzles[i5.last_barrel] / StationGrid.MODEL_SCALE[StationGrid.Kind.INTERCEPTOR]))
 	i5.shot_fired.connect(note)
 	await _ticks(130)
 	i5.shot_fired.disconnect(note)
 	assert_gte(order.size(), 6, "I5 kept firing")
 	for k: int in order.size():
 		assert_eq(order[k], (k + order[0]) % 4 if k > 0 else order[0], "the barrels fire in turn")
+		# M8-T10: the column falls within metres of I5's axis, where the mount turns far between a left and a right barrel
+		# and their tips come close, so each start is checked against its own barrel, not against the start before.
+		assert_lt(starts[k].distance_to(tips[k]), 0.03, "from the drawn tip of the barrel that fired")
 		if k > 0:
 			assert_gte(fired_at[k] - fired_at[k - 1], 0.25 - 1e-4, "a quarter second between pulses")
-			assert_gt(starts[k].distance_to(starts[k - 1]), 2.0, "from the next barrel's muzzle")
 		if k >= 4:
 			assert_gte(fired_at[k] - fired_at[k - 4], StationGrid.BARREL_RECHARGE_S - 1e-4, "a barrel waits for its recharge")
 	var r: PackedInt64Array = _shots()

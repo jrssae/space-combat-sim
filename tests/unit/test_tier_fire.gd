@@ -516,7 +516,6 @@ func test_a_tier_kill_by_a_roll_frees_its_wing_slot_raises_the_kill_and_the_slot
 	main.wings.replenish(wing)
 	await _ticks(2)
 	var member: Combatant = wing.members()[0]
-	var slot: int = wing.slot_of(member)
 	member.damageable.invulnerable = false
 	var kills: Array = []
 	main.director.ship_destroyed.connect(func(c: Combatant, info: HitInfo) -> void: kills.append([c, info]))
@@ -531,7 +530,9 @@ func test_a_tier_kill_by_a_roll_frees_its_wing_slot_raises_the_kill_and_the_slot
 	assert_eq(kills.size(), 1, "the rolled kill raised ship_destroyed (what the score counts)")
 	assert_false(main.ships.alive().has(member), "the ship went back to the pool")
 	assert_false(wing.members().has(member), "and left its wing")
-	assert_true(wing.empty_slots().has(slot), "its slot is owed")
+	# The wing closes up behind it (M8-T13), so the slot owed is the one at the back.
+	assert_eq(wing.empty_slots(), PackedInt32Array([3]), "a slot is owed")
+	assert_true(wing.is_lost(3), "and reads lost")
 	var refilled: Array[Combatant] = main.wings.replenish(wing)
 	assert_eq(refilled.size(), 1, "the slot is refilled by a new pilot")
 

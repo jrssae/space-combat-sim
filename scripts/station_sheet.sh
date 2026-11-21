@@ -4,7 +4,7 @@
 # numbers (scripts/station_sheet_node.gd). The station's maps are measured first (their bytes and the card's VRAM delta).
 #
 # Usage: scripts/station_sheet.sh <out dir>        Environment: SHEET_RES (1920x1080), SHEET_SETTLE (90 frames), SHEET_VIEWS
-# (t19, fly or doors: M7-T19's sets; t05, cargo, strip or markers: M7-T05's; t21, t22: M7-T21's, M7-T22's; t25, t25tunnel, t25seq: M7-T25's (the docking bay, its mouth close up, and live its doors and traffic); t32: M7-T32's (the cargo bay); t24: M7-T24's (the surfaces at the views a player sees); empty: the look sheet), SHEET_DETAIL (low or high: the texture set; empty: the setting's), SHEET_DISPLAY, SHEET_TIMEOUT (180 s), GODOT_BIN.
+# (t19, fly or doors: M7-T19's sets; t05, cargo, strip or markers: M7-T05's; t21, t22: M7-T21's, M7-T22's; t02: M8-T02's (the sawtooth doors shut, half open, open and mid-ripple); t25, t25tunnel, t25seq: M7-T25's (the docking bay, its mouth close up, and live its doors and traffic); t32: M7-T32's (the cargo bay); t24: M7-T24's (the surfaces at the views a player sees); empty: the look sheet), SHEET_DETAIL (low or high: the texture set; empty: the setting's), SHEET_DISPLAY, SHEET_TIMEOUT (180 s), GODOT_BIN.
 # It takes the Godot (read) and GPU locks itself (scripts/godot_lock.sh).
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"

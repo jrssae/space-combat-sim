@@ -128,7 +128,7 @@ func paint(canvas: Control) -> void:
 		canvas.draw_texture_rect(wire.get_texture(), wire_rect, false)
 	elif not model.placeholder.is_empty():
 		var px: int = _fit(font, model.placeholder, PLACEHOLDER_PX * s, room)
-		var width: float = font.get_string_size(model.placeholder, HORIZONTAL_ALIGNMENT_LEFT, -1.0, px).x
+		var width: float = GameFonts.line_width(font, model.placeholder, px)
 		_line(canvas, font, model.placeholder, wire_rect.get_center() + Vector2(-width * 0.5, float(px) * 0.35), px, model.title_color)
 	elif model.kind == TargetPreviewModel.Kind.OBJECTIVE or model.kind == TargetPreviewModel.Kind.BEACON:
 		# A place with no hull: the waypoint's diamond.
@@ -158,7 +158,7 @@ func paint(canvas: Control) -> void:
 			var color: Color = row.get("color", line)
 			canvas.draw_rect(Rect2(bar.position, Vector2(bar.size.x * clampf(float(row["bar"]), 0.0, 1.0), bar.size.y)), color, true)
 			canvas.draw_rect(bar, line, false, maxf(1.5 * s, 1.0))
-		var width: float = font.get_string_size(value, HORIZONTAL_ALIGNMENT_LEFT, -1.0, row_px).x
+		var width: float = GameFonts.line_width(font, value, row_px)
 		_line(canvas, font, value, Vector2(right - width, y), row_px, line)
 		drawn_lines.append("%s %s" % [label, value])
 		y += TargetPreviewLayout.ROW_STEP_PX * s
@@ -171,8 +171,8 @@ func paint(canvas: Control) -> void:
 func _line(canvas: Control, font: Font, text: String, at: Vector2, px: int, color: Color) -> void:
 	if text.is_empty():
 		return
-	canvas.draw_string(font, at + Vector2(1.5, 1.5), text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, px, SHADOW_COLOR)
-	canvas.draw_string(font, at, text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, px, color)
+	GameFonts.draw_line(canvas, font, at + Vector2(1.5, 1.5), text, px, SHADOW_COLOR)
+	GameFonts.draw_line(canvas, font, at, text, px, color)
 	drawn_lines.append(text)
 
 
@@ -187,7 +187,7 @@ func _wrapped(canvas: Control, font: Font, text: String, at: Vector2, room: floa
 # The size at which `text` fits `room`, from `px` down.
 func _fit(font: Font, text: String, px: float, room: float) -> int:
 	var size: int = maxi(roundi(px), MIN_TEXT_PX)
-	var width: float = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0, size).x
+	var width: float = GameFonts.line_width(font, text, size)
 	if width > room and width > 0.0:
 		size = maxi(int(floorf(float(size) * room / width)), MIN_TEXT_PX)
 	return size

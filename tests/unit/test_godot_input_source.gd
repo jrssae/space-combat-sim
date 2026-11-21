@@ -159,6 +159,29 @@ func test_the_left_stick_points_a_radial_menu_and_the_right_stick_does_not() -> 
 	assert_almost_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_point, Vector2(0.0, 1.0), Vector2(1e-5, 1e-5), "left stick up")
 
 
+func test_the_numbered_keys_pick_a_radial_menus_entries_and_the_dpad_does_nothing() -> void:
+	# M8-T24 (D90, maintainer 2026-11-19), through the real InputMap: keys 1-9 are entries 1-9; the D-pad neither picks nor closes.
+	var adapter := InputAdapter.new()
+	adapter.begin_radial(source)
+	for button: JoyButton in [JOY_BUTTON_DPAD_UP, JOY_BUTTON_DPAD_RIGHT, JOY_BUTTON_DPAD_DOWN, JOY_BUTTON_DPAD_LEFT]:
+		_button(button, true)
+		var ui: UiCommand = adapter.sample_radial(source, 1.0 / 60.0)
+		assert_eq(ui.radial_entry, -1, "D-pad %d picks nothing" % button)
+		assert_false(ui.comms_open, "D-pad %d closes nothing (D-pad Right is the pad's comms button)" % button)
+		assert_eq(ui.radial_point, Vector2.ZERO, "and points nowhere")
+		_button(button, false)
+	_key(KEY_CTRL, true)
+	assert_true(adapter.sample_radial(source, 1.0 / 60.0).comms_open, "Ctrl still closes the comms menu")
+	_key(KEY_CTRL, false)
+	var keys: Array[Key] = [KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9]
+	for i: int in keys.size():
+		_key(keys[i], true)
+		assert_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_entry, i, "key %d" % (i + 1))
+		_key(keys[i], false)
+	adapter.sample_radial(source, 1.0 / 60.0)
+	assert_eq(adapter.sample_radial(source, 1.0 / 60.0).radial_entry, -1, "nothing pressed")
+
+
 func test_the_stick_vector_ignores_keys() -> void:
 	_key(KEY_Z, true)  # strafe left, by key
 	var by_key: Vector2 = source.get_vector(&"strafe_left", &"strafe_right", &"strafe_down", &"strafe_up", 0.15)
@@ -210,7 +233,8 @@ func _release_everything() -> void:
 		_axis(axis as JoyAxis, 0.0)
 	for button: int in 15:
 		_button(button as JoyButton, false)
-	for key: Key in [KEY_E, KEY_W, KEY_Q, KEY_S, KEY_A, KEY_D, KEY_B, KEY_G, KEY_CAPSLOCK, KEY_Z]:
+	for key: Key in [KEY_E, KEY_W, KEY_Q, KEY_S, KEY_A, KEY_D, KEY_B, KEY_G, KEY_CAPSLOCK, KEY_Z, KEY_1, KEY_2, KEY_3, KEY_4, KEY_5,
+			KEY_6, KEY_7, KEY_8, KEY_9, KEY_CTRL]:
 		_key(key, false)
 	Input.flush_buffered_events()
 

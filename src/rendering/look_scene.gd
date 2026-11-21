@@ -10,10 +10,14 @@ extends Node
 ## M4-T30d: the sheet also parks the hulls that are not pooled ships (`PROP_ASSETS`): a nav buoy, a ship's break-up chunks spread
 ## apart (`raider_fighter_chunks`, `starfury_aurora_chunks`), a capital stand-in of each class (`capital_cruiser`, `capital_destroyer`,
 ## `capital_carrier`) and the Babylon 5 station (`babylon5_station`, M7-T04).
+##
+## M12-T19: the sheet parks a capital hull (`HULL_ASSETS`) as its bare textured mesh, its nearest corner `distance_m` away, with a
+## Delta-V on one cradle for scale. `<asset>:<option>` shows a surface option built beside it
+## (`<asset>_options/<option>/<asset>/`, for the A/B/C sheets).
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
 ## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
-const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side"]
+const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side", &"front"]
 const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_fighter": ShipPool.DEFAULT_TYPE,
 		"saturn_3_freighter": &"saturn_3_freighter", "saturn_4_transport": &"saturn_4_transport",
 		"saturn_4_tanker": &"saturn_4_tanker", "saturn_8_transport": &"saturn_8_transport", "saturn_8_tanker": &"saturn_8_tanker",
@@ -22,6 +26,11 @@ const POOL_TYPES: Dictionary = {"starfury_aurora": ShipPool.ALLY_TYPE, "raider_f
 ## The hulls that are not pooled ships, for the sheets (M4-T30d).
 const PROP_ASSETS: Array[String] = ["nav_buoy", "raider_fighter_chunks", "starfury_aurora_chunks", "capital_cruiser", "capital_destroyer",
 		"capital_carrier", "babylon5_station"]
+## The capital hulls shown as their bare mesh (M12-T19), and the cradle that holds the scale fighter.
+const HULL_ASSETS: Array[String] = ["raider_strike_carrier"]
+const SCALE_FIGHTER: String = "raider_fighter"
+const SCALE_CRADLE: String = "outer_000"
+const DOCK_GAP_M: float = 0.05
 ## How far apart a ship's chunks are spread for their sheet, as a share of their distance from the ship's centre.
 const CHUNK_SPREAD: float = 0.8
 ## How the parked ship faces the camera: turned this much off nose-on, seen a little from above.
@@ -85,7 +94,8 @@ func parked() -> Combatant:
 func show(asset_id: String, distance_m: float, light: StringName, view: StringName = &"three_quarter") -> String:
 	if not _resolve():
 		return "sheet needs the world, the ship pool, the player's ship and the key star"
-	if not POOL_TYPES.has(asset_id) and not PROP_ASSETS.has(asset_id):
+	var is_hull: bool = HULL_ASSETS.has(asset_id.get_slice(":", 0))
+	if not POOL_TYPES.has(asset_id) and not PROP_ASSETS.has(asset_id) and not is_hull:
 		return "no pooled ship or prop draws %s (one of %s, %s)" % [asset_id, ", ".join(POOL_TYPES.keys()), ", ".join(PROP_ASSETS)]
 	var camera: Camera3D = get_viewport().get_camera_3d()
 	if camera == null:
@@ -97,7 +107,7 @@ func show(asset_id: String, distance_m: float, light: StringName, view: StringNa
 		_player_was_visible = player.visible
 	else:
 		_release()
-	var error: String = _show_prop(asset_id, camera, distance_m, light, view) if PROP_ASSETS.has(asset_id) \
+	var error: String = _show_prop(asset_id, camera, distance_m, light, view) if PROP_ASSETS.has(asset_id) or is_hull \
 			else _show_ship(asset_id, camera, distance_m, light, view)
 	if not error.is_empty():
 		_release()
@@ -127,6 +137,8 @@ func _sheet_basis(camera: Camera3D, at: Vector3, view: StringName) -> Basis:
 	var basis := Basis.looking_at(to_camera, cam.basis.y).rotated(cam.basis.y, deg_to_rad(YAW_DEG)).rotated(cam.basis.x, deg_to_rad(-PITCH_DEG))
 	if view == &"top":
 		basis = Basis.looking_at(cam.basis.y, to_camera)
+	elif view == &"front":
+		basis = Basis.looking_at(to_camera, cam.basis.y)
 	elif view == &"side":
 		basis = Basis.looking_at(-cam.basis.x, cam.basis.y)
 	return basis.orthonormalized()
@@ -173,7 +185,13 @@ func _release() -> void:
 func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: StringName, view: StringName) -> String:
 	var at: Vector3 = camera.global_position - camera.global_basis.z * distance_m
 	var basis: Basis = _sheet_basis(camera, at, view)
-	if asset_id == "nav_buoy":
+	if HULL_ASSETS.has(asset_id.get_slice(":", 0)):
+		var hull: Node3D = _hull_prop(asset_id)
+		if hull == null:
+			return "%s is not generated (run scripts/gen_assets.sh, then import)" % asset_id
+		_prop = hull
+		at -= camera.global_basis.z * _reach_towards(hull.get_meta(&"aabb") as AABB, basis, camera.global_basis.z)
+	elif asset_id == "nav_buoy":
 		var buoy: NavBuoy = NavBuoy.create("SHEET BUOY")
 		buoy.spin_dps = 0.0
 		_prop = buoy
@@ -211,6 +229,57 @@ func _show_prop(asset_id: String, camera: Camera3D, distance_m: float, light: St
 	player.visible = false
 	set_light(light)
 	return ""
+
+
+# A capital hull's textured mesh with the scale fighter docked on one cradle; null when the hull is not generated.
+func _hull_prop(asset_id: String) -> Node3D:
+	var hull_id: String = asset_id.get_slice(":", 0)
+	var root: String = asset_root
+	if asset_id.contains(":"):
+		root = asset_root.path_join("%s_options" % hull_id).path_join(asset_id.get_slice(":", 1))
+	var mesh: Mesh = MeshAssets.for_asset(hull_id, root)
+	if mesh == null:
+		return null
+	var node := Node3D.new()
+	var hull := MeshInstance3D.new()
+	hull.mesh = mesh
+	node.add_child(hull)
+	node.set_meta(&"aabb", mesh.get_aabb())
+	var fighter: Mesh = MeshAssets.for_asset(SCALE_FIGHTER, asset_root)
+	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(root.path_join(hull_id).path_join("hardpoints.json")))
+	if fighter == null or not (data is Dictionary):
+		return node
+	for cradle: Dictionary in (data as Dictionary).get("cradles", []):
+		if String(cradle.get("name", "")) == SCALE_CRADLE:
+			var docked := MeshInstance3D.new()
+			docked.mesh = fighter
+			docked.transform = docked_transform(cradle, fighter.get_aabb())
+			node.add_child(docked)
+	return node
+
+
+## Where a fighter with the box `fighter` rests on a cradle hardpoint (the carrier's frame): its belly on the pad, its box centred
+## over the pad, its nose along the cradle's `forward` and its back along `up`.
+static func docked_transform(cradle: Dictionary, fighter: AABB) -> Transform3D:
+	var up: Vector3 = _vec3(cradle.get("up"), Vector3.UP).normalized()
+	var basis: Basis = Hardpoints.look_basis(_vec3(cradle.get("forward"), Vector3.FORWARD), up)
+	var centre: Vector3 = fighter.get_center()
+	var rest := Vector3(centre.x, fighter.position.y - DOCK_GAP_M, centre.z)  # the point of the fighter that meets the pad
+	return Transform3D(basis, _vec3(cradle.get("position"), Vector3.ZERO) - basis * rest)
+
+
+static func _vec3(value: Variant, fallback: Vector3) -> Vector3:
+	if value is Array and (value as Array).size() == 3:
+		return Vector3(float(value[0]), float(value[1]), float(value[2]))
+	return fallback
+
+
+# How far a box turned by `basis` reaches against `direction` (towards the camera), so a big hull is parked by its near corner.
+static func _reach_towards(box: AABB, basis: Basis, direction: Vector3) -> float:
+	var reach: float = 0.0
+	for i: int in 8:
+		reach = maxf(reach, -(basis * box.get_endpoint(i)).dot(direction))
+	return reach
 
 
 # From `Main` (the parent) when a test did not wire the nodes itself.

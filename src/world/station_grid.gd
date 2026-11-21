@@ -56,9 +56,9 @@ const HEAVY_FLASH_SCALE: float = 9.0
 const MEET_FLASH_SCALE: float = 0.6
 ## Each mount's cone round its base's up, degrees (a hemisphere and a little below it).
 const ARC_DEG: float = 200.0
-## How the turret shot sounds per kind: pitch and level (dB).
+## How the turret shot sounds per kind: pitch, and level (dB) on top of `turret_fire`'s `SoundMix` level.
 const SOUND_PITCH: Dictionary[Kind, float] = {Kind.LIGHT: 1.0, Kind.HEAVY: 0.55, Kind.INTERCEPTOR: 1.6}
-const SOUND_DB: Dictionary[Kind, float] = {Kind.LIGHT: -13.0, Kind.HEAVY: -8.0, Kind.INTERCEPTOR: -16.0}
+const SOUND_DB: Dictionary[Kind, float] = {Kind.LIGHT: 1.0, Kind.HEAVY: 6.0, Kind.INTERCEPTOR: -2.0}
 const PROVIDER: StringName = &"grid"
 const ACTIONS: Array[StringName] = [&"info", &"free", &"hold", &"repair"]
 
@@ -227,6 +227,42 @@ func set_free(side: StringName, on: bool) -> void:
 		sim.core.set_grid_free(faction, side, on)
 
 
+## Whether the grid fires at all (M8-T34, Control's "defense grid on/off"): off, no gun or interceptor fires; the weapons-free
+## latch is kept for when it comes back on.
+func is_on() -> bool:
+	var sim: SimCore = _sim()
+	return sim == null or not sim.core.grid_is_off(faction)
+
+
+func set_on(on: bool) -> void:
+	var sim: SimCore = _sim()
+	if sim != null:
+		sim.core.set_grid_off(faction, not on)
+
+
+## How far from the station's centre its guns reach, m: the furthest any mount's fire goes (M8-T08: what a raider carrier
+## stays outside of). 0 with no mount.
+func reach_m() -> float:
+	var reach: float = 0.0
+	for mount: TurretMount in mounts:
+		if mount.weapon != null:
+			reach = maxf(reach, mount.position.length() + mount.weapon.turret_range_m)
+	return reach
+
+
+## Covering fire (M8-T34): every gun that reaches takes hostiles within `radius_m` of `ship` first, nearest it first; null ends it.
+func set_cover(ship: Node3D, radius_m: float) -> void:
+	var sim: SimCore = _sim()
+	if sim != null:
+		sim.core.set_grid_cover(faction, ship.get_instance_id() if ship != null else 0, radius_m)
+
+
+## The body the grid covers now (its instance id), or 0.
+func cover_body() -> int:
+	var sim: SimCore = _sim()
+	return int(sim.core.grid_cover_body(faction)) if sim != null else 0
+
+
 ## `[light pulse shots, heavy cannon shots, projectiles shot down, of them missiles, shots the hull blocked, interceptor pulses
 ## fired]`.
 func readouts() -> PackedInt64Array:
@@ -287,6 +323,8 @@ func _register_console() -> void:
 	DebugConsole.registry.register_provider(PROVIDER, ConsoleVars.new({
 		&"mounts": {"get": func() -> String: return _mounts_text(),
 				"doc": "The grid's mounts by kind (D75: 12 light pulse, 2 heavy cannons, 9 interceptors) and how many the core holds"},
+		&"on": {"get": func() -> bool: return is_on(), "doc": "The grid fires at all (M8-T34: Control's defense grid on/off)"},
+		&"cover": {"get": func() -> int: return cover_body(), "doc": "The body covering fire protects (M8-T34), 0 for none"},
 		&"free": {"get": func() -> String: return ", ".join(free_sides()) if not free_sides().is_empty() else "holding",
 				"doc": "The sides the grid is weapons free against (it never fires first; a hostile shot at the station frees it)"},
 		&"knocked_out": {"get": func() -> String: return _knocked_out_text(),

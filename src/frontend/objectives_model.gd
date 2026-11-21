@@ -5,7 +5,7 @@ extends RefCounted
 ##
 ## An objective is `{id: StringName, text: String, primary: bool, state: StringName}` with state `hidden`, `active`, `done`
 ## or `failed` (the mission core's `ObjectiveBook.snapshot()`). A panel is `{title: String, lines: Array[Dictionary]}` and a
-## line is `{text, mark, state, primary, optional}`.
+## line is `{text, mark, state, primary, optional}`, with `headline: true` on a mission's name.
 
 const MARKS: Dictionary = {&"active": "[ ]", &"done": "[x]", &"failed": "[!]"}
 const TITLE_OBJECTIVES: String = "OBJECTIVES"
@@ -48,10 +48,17 @@ static func content(objectives: Array[Dictionary], request: Dictionary) -> Dicti
 static func briefing(title: String, text: String) -> Dictionary:
 	var shown: Array[Dictionary] = []
 	if not title.is_empty():
-		shown.append(_plain(title))
+		shown.append(headline(title))
 	for paragraph: String in text.split("\n", false):
 		shown.append(_plain(paragraph))
 	return {"title": TITLE_BRIEFING, "lines": shown}
+
+
+## A mission's name as a panel line: drawn in the title font.
+static func headline(text: String) -> Dictionary:
+	var line: Dictionary = _plain(text)
+	line["headline"] = true
+	return line
 
 
 static func _plain(text: String) -> Dictionary:

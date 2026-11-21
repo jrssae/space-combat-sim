@@ -204,3 +204,28 @@ func test_the_summary_is_one_value_per_key_for_the_console() -> void:
 	assert_eq(summary["shots_hit"], 54)
 	assert_eq(summary["accuracy"], "45%")
 	assert_eq(summary["objectives"], "reach done, raiders done, protect failed, report active, bonus hidden")
+
+
+# --- the mission's own lines and a checkpoint (M8 D79) -------------------------------------------------------------------
+
+
+func test_the_missions_lines_show_under_the_verdict() -> void:
+	var model: DebriefModel = DebriefModel.from_result(_result({"debrief_lines": PackedStringArray(["Buoy course: par", "Assignment: Squadron pilot"])}))
+	var texts: Array = (model.panel()["lines"] as Array).map(func(line: Dictionary) -> String: return str(line["text"]))
+	assert_has(texts, "Buoy course: par")
+	assert_lt(texts.find("Assignment: Squadron pilot"), texts.find("Fly to NAV ALPHA") if texts.has("Fly to NAV ALPHA") else texts.size())
+	assert_eq(model.summary()["notes"], "Buoy course: par | Assignment: Squadron pilot")
+
+
+func test_the_options_are_retry_and_front_end_unless_a_lost_mission_left_a_checkpoint() -> void:
+	var plain: DebriefModel = DebriefModel.from_result(_result({"success": false, "reason": "player destroyed"}))
+	assert_eq(plain.options().map(func(o: Dictionary) -> StringName: return o["id"]), [&"retry", &"front_end"])
+	assert_eq(plain.options()[0]["text"], "Retry")
+	var lost: DebriefModel = DebriefModel.from_result(_result({"success": false, "reason": "player destroyed",
+			"checkpoint": {"step": &"raid", "label": "the raid's start", "notes": {}}}))
+	assert_eq(lost.options().map(func(o: Dictionary) -> StringName: return o["id"]), [&"checkpoint", &"retry", &"front_end"])
+	assert_eq(lost.options()[0]["text"], "Restart from the raid's start")
+	assert_eq(lost.options()[1]["text"], "Restart whole mission")
+	assert_eq(lost.summary()["options"], "checkpoint, retry, front_end")
+	var won: DebriefModel = DebriefModel.from_result(_result({"checkpoint": {"step": &"raid", "label": "the raid's start"}}))
+	assert_eq(won.options().size(), 2, "a mission won offers no checkpoint")

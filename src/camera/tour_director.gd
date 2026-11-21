@@ -32,6 +32,9 @@ var tour_count: int = 0
 var tour_seed: int = -1
 ## Every shot played so far: `{point, variant, start_s}` with the start in sim seconds (for the console and tests).
 var played: Array[Dictionary] = []
+## Whether a stop's caption shows in the lower bar. A mission that talks over the tour turns it off (M8-T33: the caption
+## lay over Control's line).
+var captions: bool = true
 
 var _clock_s: float = 0.0
 var _turns: Dictionary = {}  # an arm stop's turn about the drum's axis, onto the arm the tour films
@@ -166,7 +169,7 @@ func _play_next() -> void:
 	played.append({"point": entry["point"], "variant": entry["variant"], "start_s": _clock_s})
 	main.camera_rig.play_shot(entry["shot"], _actor_pose, _origin_to_local)
 	_caption.text = entry["caption"]
-	_caption.visible = true
+	_caption.visible = captions
 	point_started.emit(entry["point"], entry["caption"])
 
 

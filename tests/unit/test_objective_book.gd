@@ -212,3 +212,12 @@ func test_an_objectives_subject_is_its_triggers_actors_and_place() -> void:
 	assert_null(report["point"])
 	assert_eq((book.subject(&"nonsense")["actors"] as PackedStringArray).size(), 0)
 	assert_eq(book.error, "", "asking is not a refused call")
+
+
+func test_an_objectives_own_subject_comes_before_its_triggers_actors() -> void:
+	# M8-T08: the escort is about NAV BETA first, then the civilian its fail trigger names.
+	var book := ObjectiveBook.new()
+	assert_eq(book.declare([{"id": "escort", "text": "Escort the SATURN 4 to NAV BETA", "active": true, "subject": "NAV BETA",
+			"fail": {"kind": "destroyed", "name": "SATURN 4"}}]), "")
+	assert_eq(book.subject(&"escort")["actors"], PackedStringArray(["NAV BETA", "SATURN 4"]))
+	assert_ne(ObjectiveBook.new().declare([{"id": "x", "subject": 3}]), "", "a subject is a name")

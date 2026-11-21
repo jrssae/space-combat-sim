@@ -123,6 +123,18 @@ func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_t
 	assert_true(main.ship.targeting.select_id(gate.targetable.get_instance_id()), "the gate targeted, as in play")
 	assert_true(main.overlay.visible, "the debug readout shows, as it does by default")
 	var waits: Array[int] = [0, 180, 1]  # ticks after the jump before, before asking again
+	# Takes placed off the ship itself (M8-T29: trailing it, close or wide), and takes aimed at it; the gate's own takes watch it
+	# from afar or frame the gate.
+	var on_ship: Dictionary = {}
+	var at_ship: Dictionary = {}
+	var pool: GateShotPool = main.gates.shots.pool
+	for slot: StringName in GateShotPool.SLOTS:
+		for id: String in pool.ids(slot):
+			var keys: Array = pool.keys(slot, id, "gate")
+			var name := StringName("gate_%s_%s" % [slot, id])
+			on_ship[name] = keys.all(func(key: Dictionary) -> bool: return String(key["position"]["actor"]) == "player")
+			at_ship[name] = keys.all(func(key: Dictionary) -> bool: return String(key["look_at"]["actor"]) == "player")
+	var openings: Array[String] = []
 	for n: int in waits.size():
 		await _ticks(waits[n])
 		var label: String = "jump %d" % (n + 1)
@@ -130,7 +142,8 @@ func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_t
 		assert_eq(main.gates.start_jump(gate), "", label)
 		var departures: int = 0
 		var arrivals: int = 0
-		var was_active: bool = false
+		var was_active: bool = gate.vortex.is_active()  # the last jump's blue vortex may still be open (M8-T29: quicker jumps)
+		var was_direction: JumpVortex.Direction = gate.vortex.direction  # the arrival opens the tick the departure ends (M8-T29)
 		var worst_off_axis_deg: float = 0.0
 		var worst_off_ship_deg: float = 0.0
 		var farthest_m: float = 0.0
@@ -139,12 +152,13 @@ func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_t
 		for i: int in 90 * 60:
 			await _ticks(1)
 			var active: bool = gate.vortex.is_active()
-			if active and not was_active:
+			if active and (not was_active or gate.vortex.direction != was_direction):
 				if gate.vortex.direction == JumpVortex.Direction.DEPARTURE:
 					departures += 1
 				else:
 					arrivals += 1
 			was_active = active
+			was_direction = gate.vortex.direction
 			var state: GateJump.State = main.gates.jump.state
 			if main.camera_rig.is_playing_shot() and main.overlay.bracket().is_shown():
 				squares += 1
@@ -153,11 +167,14 @@ func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_t
 				var to_ship: Vector3 = main.ship.get_global_transform_interpolated().origin - cam.global_position
 				if cam != main.camera_rig.cinematic_camera or main.gates._actor_pose("player") != main.ship.get_global_transform_interpolated():
 					watched_other += 1
-				farthest_m = maxf(farthest_m, to_ship.length())
+				var shot_id: StringName = main.camera_rig.playing_shot().id if main.camera_rig.is_playing_shot() else &""
+				var trailing: bool = bool(on_ship.get(shot_id, true))
+				if trailing:
+					farthest_m = maxf(farthest_m, to_ship.length())
 				# Whole, in front of the mouth: down the funnel it shrinks, and a tick's lag is a large angle at that size.
-				if gate.local_of(main.ship.global_position).z < 0.0:
+				if gate.local_of(main.ship.global_position).z < 0.0 and bool(at_ship.get(shot_id, true)):
 					worst_off_ship_deg = maxf(worst_off_ship_deg, rad_to_deg((-cam.global_basis.z).angle_to(to_ship)))
-				if state == GateJump.State.RUN_IN:
+				if state == GateJump.State.RUN_IN and trailing:
 					worst_off_axis_deg = maxf(worst_off_axis_deg, rad_to_deg((-cam.global_basis.z).angle_to(axis)))
 			if not main.gates.jump.is_active():
 				break
@@ -166,7 +183,10 @@ func test_jumping_again_opens_the_vortex_once_each_way_and_the_camera_stays_on_t
 		assert_eq(arrivals, 1, "%s: the blue vortex opened once" % label)
 		assert_eq(gate.vortex.openings - openings_before, 2, "%s: two openings in all" % label)
 		assert_eq(watched_other, 0, "%s: the cinematic camera follows the player's own ship every tick" % label)
-		assert_lt(farthest_m, 200.0, "%s: the camera stays by the ship" % label)
+		assert_lt(farthest_m, 800.0, "%s: a trailing camera stays by the ship (the wide trail is at most about 710 m back)" % label)
+		var opening: String = main.gates.shots.sequence()[0]
+		assert_false(not openings.is_empty() and openings[openings.size() - 1] == opening, "%s: not the last jump's opening (M8-T29)" % label)
+		openings.append(opening)
 		assert_lt(worst_off_ship_deg, 30.0, "%s: with the ship in the picture" % label)
 		assert_lt(worst_off_axis_deg, 35.0, "%s: looking into the gate all the way in, not swinging round with a turning ship" % label)
 		assert_eq(squares, 0, "%s: no target square over the gate while the cinematic plays" % label)

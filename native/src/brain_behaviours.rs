@@ -12,6 +12,7 @@ use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, hash_seed,
 };
 use crate::civilian;
+use crate::keep_out::{self, KeepOut};
 use crate::surface;
 use crate::kernels::{contact, pilot};
 use crate::rows::{Bolts, Rows};
@@ -49,6 +50,9 @@ pub const ORDER_ENGAGE_AT_WILL: u8 = 0;
 pub const ORDER_ATTACK_MY_TARGET: u8 = 1;
 pub const ORDER_FORM_ON_ME: u8 = 2;
 pub const ORDER_COVER_ME: u8 = 3;
+/// The hold-fire orders (M8-T19): in formation slots on the leader, or stopped where the ship is, and no shot either way.
+pub const ORDER_FORM_HOLD_FIRE: u8 = 4;
+pub const ORDER_HOLD_POSITION: u8 = 5;
 
 const SENSOR_RANGE_M: f64 = 5000.0;
 const KEEP_ATTACKER_S: f64 = brain_maths::PROVOKED_S;
@@ -153,6 +157,8 @@ pub struct Inputs<'a> {
     /// A low-attention tier row's think (M4-T22 fix round 2): it skips what a tier row cannot use, the rocks and mines, the
     /// incoming fire and the avoidance (a tier row collides with nothing and no bolt flies in a tier fight).
     pub lean: bool,
+    /// The jump vortices' no-go volumes this tick (M8-T17): every think keeps out of them, but those that leave it alone.
+    pub keep_outs: &'a [KeepOut],
 }
 
 /// The per-ship scratch a think fills: the picked lists and the context's split (owned by the caller, reused).
@@ -357,6 +363,28 @@ pub struct Context {
     pub route: Option<Route>,
     pub attack_target_id: i64,
     pub current_target_id: i64,
+    /// A flight of three's rules (M8-T19): `cover` draws the pilot onto whoever attacks a flight-mate (`wing_ids`); a
+    /// wingman farther than `cohesion_m` from its lead (0: no limit) has `strayed` and attacks nothing until it is back
+    /// within `rejoined_m`. `strayed` is the brain's own, worked out every think.
+    pub cover: bool,
+    pub cohesion_m: f64,
+    pub rejoined_m: f64,
+    pub strayed: bool,
+    /// The evasion's leash (M8-T06, `AiContext.leash_m`): a wingman evading farther than this from its lead breaks toward
+    /// the lead instead of on away (0: none).
+    pub leash_m: f64,
+    /// A long rejoin (M8-T17, `AiContext.catch_up_m`, `catch_up_mps`; data/wings/flights.json): a ship in formation farther
+    /// than `catch_up_m` from its slot closes at up to `catch_up_mps`, braking back to formation's own closing in time
+    /// (0: none).
+    pub catch_up_m: f64,
+    pub catch_up_mps: f64,
+    /// Weapons free in formation (M8-T13, `AiContext.form_engage_m`, `form_leash_m`, `form_off_slot_s`; data/wings/
+    /// flights.json): under FORM ON ME a ship in formation shoots at a hostile within `form_engage_m` of its leader from any
+    /// bearing, turning its guns on it while its thrusters keep the slot; it lets the slot slip at most `form_leash_m`, for at
+    /// most `form_off_slot_s`, then flies back before it shoots again (0: only what crosses its leader's nose).
+    pub form_engage_m: f64,
+    pub form_leash_m: f64,
+    pub form_off_slot_s: f64,
 }
 
 impl Context {
@@ -379,7 +407,27 @@ impl Context {
         self.link = None;
         self.link_velocity = Vector3::ZERO;
         self.wing_ids.clear();
+        self.cover = false;
+        self.cohesion_m = 0.0;
+        self.rejoined_m = 0.0;
+        self.strayed = false;
+        self.leash_m = 0.0;
+        self.catch_up_m = 0.0;
+        self.catch_up_mps = 0.0;
+        self.form_engage_m = 0.0;
+        self.form_leash_m = 0.0;
+        self.form_off_slot_s = 0.0;
     }
+}
+
+/// Whether `order` lets the pilot attack nothing: form on me and both hold-fire orders.
+fn stands_down(order: u8) -> bool {
+    matches!(order, ORDER_FORM_ON_ME | ORDER_FORM_HOLD_FIRE | ORDER_HOLD_POSITION)
+}
+
+/// Whether `order` forbids every shot (M8-T19).
+fn holds_fire(order: u8) -> bool {
+    matches!(order, ORDER_FORM_HOLD_FIRE | ORDER_HOLD_POSITION)
 }
 
 // This tick's perception of the own ship, as `Perception` carries it.
@@ -451,6 +499,9 @@ struct Tick<'a> {
     ctx_slot_offset: Vector3,
     ctx_link: Option<[f64; 3]>,
     ctx_link_velocity: Vector3,
+    ctx_leash_m: f64,
+    ctx_catch_up: (f64, f64),
+    ctx_form_fire: (f64, f64, f64),
 }
 
 impl Tick<'_> {
@@ -582,6 +633,9 @@ impl<'a> Tick<'a> {
             ctx_slot_offset: ctx.slot_offset,
             ctx_link: ctx.link,
             ctx_link_velocity: ctx.link_velocity,
+            ctx_leash_m: ctx.leash_m,
+            ctx_catch_up: (ctx.catch_up_m, ctx.catch_up_mps),
+            ctx_form_fire: (ctx.form_engage_m, ctx.form_leash_m, ctx.form_off_slot_s),
         }
     }
 }
@@ -1100,6 +1154,7 @@ impl Brain {
             }
         }
         tick.d = d;
+        self.ctx.strayed = strayed(&tick, &self.ctx);
         // `AiPilot.think`.
         self.select(&tick, inputs.dt);
         let mut out = Output::default();
@@ -1125,9 +1180,26 @@ impl Brain {
                         .think(&tick, &self.ship, inputs.dt, &mut cmd, &mut wish)
                 }
                 KIND_GUARD => self.guard.think(&tick, &self.ship, &mut cmd, &mut wish),
-                KIND_FORMATION => self
-                    .formation
-                    .think(&tick, &self.ship, inputs.dt, &mut cmd, &mut wish),
+                KIND_FORMATION => {
+                    // A ship in its slot shoots at what comes into its guns' reach unless the order holds its fire
+                    // (M8-T19); only a pilot that attacks at all, and never a passive one.
+                    let gunner = (!holds_fire(self.ctx.order)
+                        && !self.attack.passive
+                        && self.index_of(KIND_ATTACK) >= 0)
+                        .then(|| Gunner {
+                            tactics: self.profile.tactics,
+                            aim: self.attack.aim_offset_at(tick.p.now_s),
+                        });
+                    fire = self.formation.think(
+                        &tick,
+                        &self.ship,
+                        inputs.dt,
+                        self.ctx.order == ORDER_HOLD_POSITION,
+                        gunner,
+                        &mut cmd,
+                        &mut wish,
+                    )
+                }
                 KIND_RALLY => self.rally.think(&tick, &self.ship, &mut cmd, &mut wish),
                 KIND_FOLLOW_PATH => self.path.think(
                     &tick,
@@ -1159,6 +1231,7 @@ impl Brain {
                 KIND_ATTACK => self.attack.target_id(),
                 KIND_RAM => self.ram.target_id(),
                 KIND_FOLLOW_PATH => self.path.target_id(&self.ctx.route),
+                KIND_FORMATION => self.formation.target_id(),
                 _ => TARGET_NONE,
             };
             self.ctx.current_target_id = self.wanted_target_id.max(0);
@@ -1181,6 +1254,7 @@ impl Brain {
         // Flying round a hull is avoiding it, whether or not the filter below changes anything more.
         self.avoiding = detouring;
         self.avoiding_urgent = false;
+        let mut steered: Option<Vector3> = None;
         if !inputs.lean
             && !out.flight.brake
             && !(scratch.contacts.is_empty() && scratch.statics.is_empty())
@@ -1258,6 +1332,37 @@ impl Brain {
                         out.flight.rot = brain_maths::face(&p.basis, dv, cap.rate_max, brain_maths::K_FACE);
                     }
                     out.fire = false;
+                }
+                steered = Some(avoided.v_des);
+            }
+        }
+        // A jump vortex announced or open kills what it forms or closes on (M8-T17): every wish keeps out of its volume.
+        if !inputs.keep_outs.is_empty() {
+            let cap = &self.ship.capability;
+            let wish = steered.unwrap_or(if self.has_desired_velocity && !out.flight.brake {
+                self.desired_velocity
+            } else {
+                p.velocity
+            });
+            let ship = keep_out::Ship {
+                position: p.position,
+                velocity: p.velocity,
+                radius: self.ship.radius,
+                a_brake: cap.a_retro.max(cap.a_main * 0.5),
+                body_id: inputs.own_body_id,
+                tie_hash: self.ship.tie_hash,
+            };
+            if let Some((v_des, urgent)) = keep_out::steer(inputs.keep_outs, inputs.origin, &ship, wish) {
+                self.avoiding = true;
+                self.avoiding_urgent |= urgent;
+                out.flight.brake = false;
+                let horizon = if urgent { URGENT_SEEK_HORIZON_S } else { brain_maths::HORIZON_S };
+                brain_maths::apply_seek(&mut out.flight, &brain_maths::seek(p.velocity, v_des, &p.basis, cap, horizon, true));
+                if urgent {
+                    let dv = sub(v_des, p.velocity);
+                    if f64::from(length(dv)) > brain_maths::COAST_BELOW_MPS {
+                        out.flight.rot = brain_maths::face(&p.basis, dv, cap.rate_max, brain_maths::K_FACE);
+                    }
                 }
             }
         }
@@ -1392,6 +1497,8 @@ impl Brain {
             k if k == i32::from(KIND_FORMATION) => {
                 out[0] = self.formation.slot_error_m;
                 out[1] = f64::from(u8::from(self.formation.on_link));
+                out[2] = f64::from(u8::from(self.formation.firing));
+                out[3] = f64::from(u8::from(self.formation.holding));
             }
             k if k == i32::from(KIND_GUARD) => out[0] = self.guard.post_error_m,
             k if k == i32::from(KIND_FOLLOW_PATH) => {
@@ -1602,12 +1709,15 @@ fn keep(rows: &Rows, chosen: &mut Vec<i32>, i: i32, own_body_id: i64, at: Vector
 
 // `AiContext.may_attack` for hostile `h` (a place in the hostile list).
 fn may_attack(tick: &Tick, ctx: &Context, h: usize) -> bool {
+    if ctx.strayed {
+        return false;
+    }
     let row = tick.hostile_row(h);
     if tick.d.guarding && !tick.in_guard_zone(row) {
         return false;
     }
     match ctx.order {
-        ORDER_FORM_ON_ME => false,
+        order if stands_down(order) => false,
         ORDER_ATTACK_MY_TARGET => {
             ctx.leader_target_id != 0 && tick.rows.ids[row] == ctx.leader_target_id
         }
@@ -1628,8 +1738,11 @@ fn may_attack(tick: &Tick, ctx: &Context, h: usize) -> bool {
 
 // `AiContext.has_attackable`.
 fn has_attackable(tick: &Tick, ctx: &Context) -> bool {
+    if ctx.strayed {
+        return false;
+    }
     match ctx.order {
-        ORDER_FORM_ON_ME => return false,
+        order if stands_down(order) => return false,
         ORDER_ENGAGE_AT_WILL if !tick.d.guarding => return !tick.lists.hostiles.is_empty(),
         _ => {}
     }
@@ -1637,7 +1750,25 @@ fn has_attackable(tick: &Tick, ctx: &Context) -> bool {
 }
 
 fn may_retreat(ctx: &Context) -> bool {
-    ctx.order != ORDER_FORM_ON_ME
+    !stands_down(ctx.order)
+}
+
+// Whether a flight's wingman is too far from its lead to fight (M8-T19, `Context.strayed`): past `cohesion_m` it has
+// strayed, and stays so until it is back within `rejoined_m`, so the flight fights as a group. The lead is where its row
+// is, or where the wing's link puts it while it is out of sight.
+fn strayed(tick: &Tick, ctx: &Context) -> bool {
+    if ctx.cohesion_m <= 0.0 {
+        return false;
+    }
+    let lead_at = if tick.d.leader >= 0 {
+        tick.rows.positions[tick.d.leader as usize]
+    } else if let Some(link) = ctx.link {
+        tick.p.local_of(link)
+    } else {
+        return false;
+    };
+    let away_m = f64::from(distance(tick.p.position, lead_at));
+    away_m > if ctx.strayed { ctx.rejoined_m } else { ctx.cohesion_m }
 }
 
 // --- ram ---------------------------------------------------------------------------------------------------------------
@@ -2150,6 +2281,8 @@ struct EvadeState {
     reason: u8,
     base_velocity: Vector3,
     fresh: bool,
+    // Past the leash (`Context.leash_m`): the evasion is carrying the ship back toward its lead.
+    leashed: bool,
     lock_until_jinks: i64,
     jink_scale: f64,
     spread_deg: f64,
@@ -2170,6 +2303,8 @@ impl EvadeState {
     const JINK_MAX_S: f32 = 4.0;
     const JINK_SPEED_MPS: f32 = 100.0;
     const REVERSAL_SPREAD_DEG: f64 = 45.0;
+    const LEASH_CLOSE_MPS: f32 = 150.0;
+    const LEASH_BACK: f64 = 0.5;
     const REASON_NAMES: [&'static str; 4] = ["", "tail", "fire", "hit"];
 
     fn new(seed: i64) -> Self {
@@ -2184,6 +2319,7 @@ impl EvadeState {
             reason: 0,
             base_velocity: Vector3::ZERO,
             fresh: true,
+            leashed: false,
             lock_until_jinks: 0,
             jink_scale: 1.0,
             spread_deg: Self::REVERSAL_SPREAD_DEG,
@@ -2205,6 +2341,7 @@ impl EvadeState {
         self.threat_id = 0;
         self.reason = 0;
         self.fresh = true;
+        self.leashed = false;
         self.lock_until_jinks = 0;
         self.threat_since_s = f64::NEG_INFINITY;
     }
@@ -2280,6 +2417,7 @@ impl EvadeState {
 
     fn enter(&mut self) {
         self.fresh = true;
+        self.leashed = false;
         self.lock_until_jinks = 0;
     }
 
@@ -2311,8 +2449,14 @@ impl EvadeState {
                 self.new_jink(line_of_fire);
             }
         }
+        self.keep_to_leash(tick);
         let across = self.across(line_of_fire);
-        let v_des = add(self.base_velocity, scale(across, Self::JINK_SPEED_MPS));
+        let mut v_des = add(self.base_velocity, scale(across, Self::JINK_SPEED_MPS));
+        if tick.ctx_leash_m > 0.0 {
+            // On a leash it jinks among its wing, or comes back into it: it keeps off its wingmates as a ship rejoining
+            // its slot does (M7-T76). M8-T13's seeded fight lost two to a jink across the formation without this.
+            v_des = FormationState::kept_apart(tick, ship, v_des);
+        }
         let dv = sub(v_des, p.velocity);
         cmd.rot = brain_maths::face(
             &p.basis,
@@ -2325,6 +2469,34 @@ impl EvadeState {
             brain_maths::K_FACE,
         );
         seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
+    }
+
+    // `BehaviourEvade._keep_to_leash`: a wingman on a leash does not let a chaser drag it off. Past the leash the jinks
+    // ride on a course back toward its lead (its row, else where the wing's link puts it); back, it stays with the lead.
+    fn keep_to_leash(&mut self, tick: &Tick) {
+        if tick.ctx_leash_m <= 0.0 {
+            return;
+        }
+        let p = &tick.p;
+        let (lead_at, lead_velocity) = if tick.d.leader >= 0 {
+            let l = tick.d.leader as usize;
+            (tick.rows.positions[l], tick.rows.velocities[l])
+        } else if let Some(link) = tick.ctx_link {
+            (p.local_of(link), tick.ctx_link_velocity)
+        } else {
+            self.leashed = false;
+            return;
+        };
+        let to_lead = sub(lead_at, p.position);
+        let away_m = length(to_lead);
+        let was = self.leashed;
+        let limit = if was { Self::LEASH_BACK * tick.ctx_leash_m } else { tick.ctx_leash_m };
+        self.leashed = f64::from(away_m) > limit;
+        if self.leashed {
+            self.base_velocity = add(lead_velocity, scale(div_s(to_lead, away_m), Self::LEASH_CLOSE_MPS));
+        } else if was {
+            self.base_velocity = lead_velocity;
+        }
     }
 
     // `BehaviourEvade._likely_shooter`: the nearest hostile aiming at us, else the one pointing closest.
@@ -2405,6 +2577,10 @@ const ATTACK_W_DAMAGED: f64 = 0.1;
 const ATTACK_KEEP_BONUS: f64 = 0.1;
 /// At a hostile big hull, whoever fired at the ship last outranks every other target (M7-T10, the maintainer's raid rule).
 const ATTACK_W_ANSWER: f64 = 1.0;
+/// In a flight (M8-T19) whoever attacks a flight-mate outranks every other target, and a wingman otherwise goes for its
+/// lead's target, so the three fight one enemy together.
+const ATTACK_W_COVER: f64 = 1.0;
+const ATTACK_W_GROUP: f64 = 0.5;
 const ATTACK_CLOSING_FULL_MPS: f64 = 200.0;
 const ATTACK_SCORE_BASE: f64 = 0.3;
 const ATTACK_SCORE_SPAN: f64 = 0.5;
@@ -2523,8 +2699,13 @@ impl AttackState {
         self.target_id = 0;
         self.target_is_objective = false;
         let mut best = f64::NEG_INFINITY;
-        let mut at_will = ctx.order == ORDER_ENGAGE_AT_WILL && !tick.d.guarding;
+        let mut at_will = ctx.order == ORDER_ENGAGE_AT_WILL && !tick.d.guarding && !ctx.strayed;
         let mut provoker: i64 = 0;
+        let lead_target: i64 = if ctx.cover && ctx.cohesion_m > 0.0 && tick.d.leader >= 0 {
+            tick.rows.target_ids[tick.d.leader as usize]
+        } else {
+            0
+        };
         if self.passive {
             at_will = false;
             if p.last_attacker_id != 0 && p.now_s - p.last_hit_s <= brain_maths::PROVOKED_S {
@@ -2577,6 +2758,14 @@ impl AttackState {
             if id == answer {
                 value += ATTACK_W_ANSWER;
             }
+            if ctx.cover {
+                if ctx.wing_ids.contains(&tick.rows.target_ids[row]) {
+                    value += ATTACK_W_COVER;
+                }
+                if lead_target > 0 && id == lead_target {
+                    value += ATTACK_W_GROUP;
+                }
+            }
             if value > best {
                 best = value;
                 self.target = row as i32;
@@ -2603,7 +2792,7 @@ impl AttackState {
             }
         }
         if self.target < 0 {
-            if tick.d.objective >= 0 && ctx.order != ORDER_FORM_ON_ME && !self.passive {
+            if tick.d.objective >= 0 && !stands_down(ctx.order) && !ctx.strayed && !self.passive {
                 self.target = tick.d.objective;
                 self.target_id = tick.rows.ids[tick.d.objective as usize];
                 self.target_is_objective = true;
@@ -3415,6 +3604,51 @@ struct FormationState {
     last_s: f64,
     cos_slow_down: f64,
     max_lean_rad: f64,
+    // Shooting from the slot (M8-T19): the hostile the nose follows (0 none) and whether the trigger is held.
+    fire_target_id: i64,
+    firing: bool,
+    // Stopped where it was under the order to hold position (M8-T19).
+    holding: bool,
+    // On a long rejoin (M8-T17): closing faster than formation's own until it has braked back to it.
+    catching_up: bool,
+    // Weapons free in formation (M8-T13): since when the slot has slipped while shooting, and whether it flies back first.
+    off_since_s: f64,
+    returning: bool,
+}
+
+/// A long rejoin's closing cap (M8-T17): a ship in formation `distance_m` from its slot, closing at `towards_mps`, on the rejoin
+/// already (`on`) or not, with the band's `beyond_m` and `fast_mps`, formation's own far closure `base_mps` from `settle_m` in,
+/// and the braking it plans with, m/s^2. The cap follows the braking curve down to `base_mps` at `settle_m`, at most
+/// `fast_mps`; the rejoin starts beyond `beyond_m` and ends once the ship is back to formation's own closing or inside
+/// `settle_m`. Returns the cap (0 when it is off) and whether the rejoin goes on.
+#[allow(clippy::too_many_arguments)]
+pub fn catch_up_cap(
+    distance_m: f64,
+    towards_mps: f64,
+    on: bool,
+    beyond_m: f64,
+    fast_mps: f64,
+    base_mps: f64,
+    settle_m: f64,
+    brake_mps2: f64,
+) -> (f64, bool) {
+    let on = if distance_m > beyond_m && beyond_m > 0.0 {
+        true
+    } else {
+        on && distance_m > settle_m && towards_mps > base_mps
+    };
+    if !on {
+        return (0.0, false);
+    }
+    let curve = (base_mps * base_mps + 2.0 * brake_mps2.max(0.1) * (distance_m - settle_m).max(0.0)).sqrt();
+    (curve.min(fast_mps).max(base_mps), true)
+}
+
+// What a ship in formation shoots with (M8-T19): its attack's fire gate and this tick's aim error.
+#[derive(Clone, Copy)]
+struct Gunner {
+    tactics: Tactics,
+    aim: (f32, f32),
 }
 
 impl FormationState {
@@ -3453,6 +3687,10 @@ impl FormationState {
     const SWING_BURN_MPS2: f64 = 8.0;
     // A wish closing on a big hull slower than this is no fall, m/s.
     const HOLD_MATCHED_MPS: f64 = 3.0;
+    // A ship in its slot turns its guns on a hostile this far off its leader's nose at most, deg (M8-T19).
+    const FIRE_ARC_DEG: f64 = 40.0;
+    // A long rejoin brakes on this share of the ship's stronger of its mains and retros, so it never overshoots (M8-T17).
+    const CATCH_UP_BRAKE_SHARE: f64 = 0.75;
 
     fn new(profile: &Profile) -> Self {
         FormationState {
@@ -3471,6 +3709,12 @@ impl FormationState {
             last_s: f64::NEG_INFINITY,
             cos_slow_down: deg_to_rad(180.0 - brain_maths::RETRO_CONE_DEG).cos(),
             max_lean_rad: deg_to_rad(Self::MAX_LEAN_DEG),
+            fire_target_id: 0,
+            firing: false,
+            holding: false,
+            catching_up: false,
+            off_since_s: f64::NEG_INFINITY,
+            returning: false,
         }
     }
 
@@ -3484,6 +3728,12 @@ impl FormationState {
         self.last_crumb_s = f64::NEG_INFINITY;
         self.trailing = false;
         self.swing_axis = None;
+        self.fire_target_id = 0;
+        self.firing = false;
+        self.holding = false;
+        self.catching_up = false;
+        self.off_since_s = f64::NEG_INFINITY;
+        self.returning = false;
     }
 
     fn enter(&mut self) {
@@ -3491,6 +3741,10 @@ impl FormationState {
     }
 
     fn score(&mut self, tick: &Tick, ctx: &Context) -> f64 {
+        // Holding position needs no leader: the ship stops where it is.
+        if ctx.order == ORDER_HOLD_POSITION {
+            return Self::SCORE;
+        }
         if !ctx.has_slot || (tick.d.leader < 0 && ctx.link.is_none()) {
             return 0.0;
         }
@@ -3501,8 +3755,29 @@ impl FormationState {
         }
     }
 
-    fn think(&mut self, tick: &Tick, ship: &Ship, dt: f64, cmd: &mut FlightCmd, wish: &mut Wish) {
+    // Returns whether the trigger is held.
+    #[allow(clippy::too_many_arguments)]
+    fn think(
+        &mut self,
+        tick: &Tick,
+        ship: &Ship,
+        dt: f64,
+        hold: bool,
+        gunner: Option<Gunner>,
+        cmd: &mut FlightCmd,
+        wish: &mut Wish,
+    ) -> bool {
         let p = &tick.p;
+        self.fire_target_id = 0;
+        self.firing = false;
+        self.holding = hold;
+        // Hold position (M8-T19): the brake stops the ship against the reference and keeps it there.
+        if hold {
+            self.on_link = false;
+            self.trailing = false;
+            cmd.brake = true;
+            return false;
+        }
         let leader = tick.d.leader;
         let slot;
         let mut slot_velocity;
@@ -3549,7 +3824,7 @@ impl FormationState {
             slot = p.local_of(link);
             slot_velocity = tick.ctx_link_velocity;
         } else {
-            return;
+            return false;
         }
         let to_slot = sub(slot, p.position);
         self.slot_error_m = f64::from(length(to_slot));
@@ -3568,7 +3843,7 @@ impl FormationState {
                     brain_maths::K_FACE,
                 );
                 seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
-                return;
+                return false;
             }
         }
         let aim = if leader >= 0 {
@@ -3581,11 +3856,35 @@ impl FormationState {
             slot
         };
         let error = add(sub(aim, p.position), scale(sub(slot_velocity, p.velocity), Self::LEAD_S));
-        let cap = if self.slot_error_m <= Self::FAR_RANGE_M {
+        let mut cap = if self.slot_error_m <= Self::FAR_RANGE_M {
             Self::NEAR_CLOSURE_MPS
         } else {
             self.far_closure_mps
         };
+        // A long rejoin (M8-T17): far off the ship closes fast, and brakes back to formation's own closing in time.
+        let (catch_up_m, catch_up_mps) = tick.ctx_catch_up;
+        if catch_up_mps > self.far_closure_mps {
+            let towards = if self.slot_error_m > 1e-3 {
+                f64::from(dot(sub(p.velocity, slot_velocity), to_slot)) / self.slot_error_m
+            } else {
+                0.0
+            };
+            let brake = Self::CATCH_UP_BRAKE_SHARE * ship.capability.a_retro.max(ship.capability.a_main);
+            let (fast_cap, on) = catch_up_cap(
+                self.slot_error_m,
+                towards,
+                self.catching_up,
+                catch_up_m,
+                catch_up_mps,
+                self.far_closure_mps,
+                Self::FAR_RANGE_M,
+                brake,
+            );
+            self.catching_up = on;
+            cap = cap.max(fast_cap);
+        } else {
+            self.catching_up = false;
+        }
         let mut v_des = add(
             add(
                 slot_velocity,
@@ -3598,7 +3897,8 @@ impl FormationState {
         v_des = Self::kept_apart(tick, ship, v_des);
         v_des = Self::held_off(tick, ship, v_des);
         let rate = ship.capability.rate_max;
-        if leader >= 0 && self.slot_error_m <= Self::ALIGN_RANGE_M {
+        let free = self.weapons_free(tick, gunner.is_some(), leader);
+        if leader >= 0 && (self.slot_error_m <= Self::ALIGN_RANGE_M || free.is_some()) {
             let l = leader as usize;
             let a_need = div_s(sub(v_des, p.velocity), brain_maths::HORIZON_S as f32);
             let nose = brain_maths::lean_toward(
@@ -3607,11 +3907,19 @@ impl FormationState {
                 minf(ship.capability.a_rcs_x, ship.capability.a_rcs_y),
                 self.max_lean_rad,
             );
-            let mut rot = brain_maths::face(&p.basis, nose, rate, brain_maths::K_FACE);
+            // In its slot the ship turns its guns on a hostile in reach, and the thrusters keep the slot (M8-T19).
+            let shot = gunner.and_then(|g| self.shot(tick, ship, &g, tick.forward_of(l), free));
+            let mut rot = brain_maths::face(
+                &p.basis,
+                shot.map_or(nose, |s| s.0),
+                rate,
+                brain_maths::K_FACE,
+            );
             rot.z =
                 brain_maths::align_roll(&p.basis, tick.up_of(l), rate, brain_maths::K_FACE) as f32;
             cmd.rot = rot;
             seek_velocity(cmd, p, &ship.capability, v_des, true, wish);
+            self.firing = shot.is_some_and(|s| s.1);
         } else {
             let leader_forward = if leader >= 0 {
                 Some(tick.forward_of(leader as usize))
@@ -3625,6 +3933,105 @@ impl FormationState {
                 brain_maths::K_FACE,
             );
             seek_velocity(cmd, p, &ship.capability, v_des, false, wish);
+        }
+        self.firing
+    }
+
+    // The shot a ship in its slot takes (M8-T19): where its nose goes and whether the trigger is held. The nearest hostile
+    // ship inside the guns' range and within `FIRE_ARC_DEG` of the leader's nose (`forward`) is led as an attack leads it;
+    // the trigger is held on the attack's own gate (the lead inside the cone, no friend in the lane). None with no such
+    // hostile. A big hull is left to an attack run on its mounts.
+    /// `free`, weapons free (M8-T13): also any hostile within that radius of this point (the leader), from any bearing.
+    fn shot(
+        &mut self,
+        tick: &Tick,
+        ship: &Ship,
+        gunner: &Gunner,
+        forward: Vector3,
+        free: Option<(Vector3, f64)>,
+    ) -> Option<(Vector3, bool)> {
+        let p = &tick.p;
+        let t = &gunner.tactics;
+        let cos_arc = deg_to_rad(Self::FIRE_ARC_DEG).cos();
+        let mut best: Option<(usize, f64)> = None;
+        for h in 0..tick.lists.hostiles.len() {
+            let range_m = tick.lists.ranges[h];
+            if range_m < 1e-3 || range_m >= t.fire_range_m || best.is_some_and(|(_, b)| range_m >= b) {
+                continue;
+            }
+            if tick.rows.surface(tick.hostile_row(h)).is_some() {
+                continue;
+            }
+            let in_arc = f64::from(dot(tick.lists.offsets[h], forward)) >= range_m * cos_arc;
+            let near_lead = free.is_some_and(|(at, radius)| {
+                f64::from(dist_sq(tick.rows.positions[tick.hostile_row(h)], at)) <= radius * radius
+            });
+            if !in_arc && !near_lead {
+                continue;
+            }
+            best = Some((h, range_m));
+        }
+        let (h, range_m) = best?;
+        let row = tick.hostile_row(h);
+        let id = tick.rows.ids[row];
+        let lead = brain_maths::solve(
+            add(p.position, p.muzzle_offset),
+            p.velocity,
+            tick.rows.positions[row],
+            tick.rows.velocities[row],
+            ship.muzzle_speed_mps,
+            ship.weapon_lifetime_s,
+        );
+        let mut lead_dir = if lead.ok {
+            lead.aim_dir
+        } else {
+            div_s(tick.lists.offsets[h], range_m as f32)
+        };
+        if gunner.aim != (0.0, 0.0) {
+            lead_dir = aim_offset(lead_dir, gunner.aim);
+        }
+        let lead_error_deg = rad_to_deg(brain_maths::angle_to(&p.basis, lead_dir));
+        let cone_deg = minf(t.fire_cone_deg, rad_to_deg((t.fire_miss_m / range_m).atan()));
+        self.fire_target_id = id;
+        Some((lead_dir, lead_error_deg < cone_deg && lane_clear(tick, range_m, id)))
+    }
+
+    // Weapons free in formation (M8-T13): under FORM ON ME with a gunner, the leader's place and the engage radius, while the
+    // slot has slipped no more than the leash for no longer than the limit; once past either the ship flies back to its slot
+    // (within `IN_SLOT_M`) before it may shoot off the leader's nose again. Never on a long rejoin. None otherwise.
+    fn weapons_free(&mut self, tick: &Tick, gunner: bool, leader: i32) -> Option<(Vector3, f64)> {
+        let (engage_m, leash_m, off_slot_s) = tick.ctx_form_fire;
+        let now = tick.p.now_s;
+        if !gunner || leader < 0 || engage_m <= 0.0 || self.catching_up {
+            self.off_since_s = f64::NEG_INFINITY;
+            self.returning = false;
+            return None;
+        }
+        if self.returning {
+            if self.slot_error_m > Self::IN_SLOT_M {
+                return None;
+            }
+            self.returning = false;
+            self.off_since_s = f64::NEG_INFINITY;
+        }
+        if self.slot_error_m <= Self::IN_SLOT_M {
+            self.off_since_s = f64::NEG_INFINITY;
+        } else if self.off_since_s == f64::NEG_INFINITY {
+            self.off_since_s = now;
+        }
+        if self.slot_error_m > leash_m || (self.off_since_s.is_finite() && now - self.off_since_s > off_slot_s) {
+            self.returning = true;
+            return None;
+        }
+        Some((tick.rows.positions[leader as usize], engage_m))
+    }
+
+    // The hostile the ship's guns follow from its slot, for its targeting computer.
+    fn target_id(&self) -> i64 {
+        if self.fire_target_id != 0 {
+            self.fire_target_id
+        } else {
+            TARGET_NONE
         }
     }
 
@@ -3906,9 +4313,17 @@ impl FormationState {
         if self.trailing {
             state = "trailing";
         }
+        if self.holding {
+            d.state = "holding".to_string();
+            return;
+        }
         d.state = state.to_string();
         d.numbers
             .push(("slot_error_m", snappedf(self.slot_error_m, 0.1)));
+        if self.fire_target_id != 0 {
+            d.names.push(("target", self.fire_target_id));
+            d.flags.push(("firing", self.firing));
+        }
     }
 }
 
@@ -3951,7 +4366,8 @@ impl RallyState {
     fn score(&mut self, tick: &Tick, ctx: &Context) -> f64 {
         self.to = -1;
         self.to_id = 0;
-        if ctx.wing_ids.is_empty() || has_attackable(tick, ctx) {
+        // A ship told to hold its position does not leave it for a wingmate's fight (M8-T19).
+        if ctx.wing_ids.is_empty() || ctx.order == ORDER_HOLD_POSITION || has_attackable(tick, ctx) {
             return 0.0;
         }
         let mut nearest = f64::INFINITY;

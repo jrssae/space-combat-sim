@@ -1,5 +1,8 @@
 {
-  "_comment": "The player's request for a gate jump (M7-T28): how close to the gate's mouth the ship must be to ask, and the answer shown when it is not (the HUD upper-cases it after the gate's name: JUMPGATE: OUT OF RANGE).",
+  "_comment": "The player's request for a gate jump (M7-T28, M8-T18 D84): how close to the gate's mouth the ship must be to ask, and the answer shown when it is not (the HUD upper-cases it after the gate's name: JUMPGATE: OUT OF RANGE). The reach grows with the closing speed: range_m, plus the distance flown during the hold_s hold of X, plus what the autopilot needs to slow to its run-in at the ship's braking (decel_mps2 when the ship's is not known), never more than range_cap_m (the 10 km the gate is offered from).",
   "range_m": 2000.0,
+  "hold_s": 2.0,
+  "decel_mps2": 30.0,
+  "range_cap_m": 10000.0,
   "out_of_range": "out of range"
 }

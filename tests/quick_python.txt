@@ -5,6 +5,7 @@ tools.procgen.tests.test_wing
 tools.procgen.tests.test_color
 tools.procgen.tests.test_image
 tools.procgen.tests.test_audio
+tools.procgen.tests.test_loudness
 tools.procgen.tests.test_manifest
 tools.procgen.tests.test_collision
 tools.procgen.tests.test_panorama

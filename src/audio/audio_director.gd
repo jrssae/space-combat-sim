@@ -43,15 +43,6 @@ const VOICES: int = 16
 const UI_VOICES: int = 4
 const WARNING_HULL: float = 0.25
 const WARNING_INTERVAL_S: float = 1.5
-## Gain (dB) of each gun's shot. The M5 guns hold a flat tone, so they play lower than M2's decaying shots (-3 dB) to keep
-## the same loudness per shot (K-weighted, M5-T18).
-const SHOT_DB: Dictionary[StringName, float] = {&"pulse_fire": -12.0, &"raider_fire": -13.0, &"turret_fire": -14.0}
-## Engine voices at full level: gain (dB) and distance scale of a pod's burst and an RCS cluster's. Four pods at full thrust
-## come out about as loud as a held shot, as the reference's roars sit beside its gun.
-const POD_DB: float = -9.0
-const RCS_DB: float = -10.0
-const POD_UNIT_SIZE: float = 25.0
-const RCS_UNIT_SIZE: float = 15.0
 ## How often the ships heard are re-ranked, s.
 const ENGINE_REALLOCATE_S: float = 0.25
 
@@ -90,7 +81,7 @@ func _ready() -> void:
 		var voice := AudioStreamPlayer3D.new()
 		voice.name = "Voice%d" % i
 		voice.bus = BUS
-		voice.unit_size = 60.0
+		voice.unit_size = SoundMix.UNIT_SIZE_M[&"shot"]
 		voice.max_distance = 6000.0
 		voice.add_to_group(WorldFrame.SHIFTABLE_GROUP)
 		add_child(voice)
@@ -113,6 +104,9 @@ func _ready() -> void:
 		&"engine_frame_work": {"get": func() -> int: return engine_frame_work,
 				"doc": "Engine voices and voiced ships touched in the last frame"},
 		&"shots_culled": {"get": func() -> int: return shots_culled, "doc": "Gun shots skipped as beyond earshot"},
+		&"master_peak_db": {"get": bus_peak_db.bind(AudioBuses.MASTER),
+				"doc": "Master bus peak now, dBFS (the limiter holds it under %.1f)" % SoundMix.LIMITER_CEILING_DB},
+		&"sfx_peak_db": {"get": bus_peak_db.bind(AudioBuses.SFX), "doc": "SFX bus peak now, dBFS (above 0: the limiter is working)"},
 		&"engine_rank_work": {"get": engine_allocate_work,
 				"doc": "Ships the last engine-voice re-rank walked (the ones in earshot, not all in play)"},
 	}), self)
@@ -169,8 +163,16 @@ func voices_active() -> int:
 	return n
 
 
-## Plays `sound_name` at the World-local `at`. With every voice busy the oldest is stolen. Returns the voice, or null when the
-## sound is not loaded.
+## A bus's peak level now (the louder channel), dBFS: the mix's headroom, read from the console and the tests.
+func bus_peak_db(bus: StringName) -> float:
+	var index: int = AudioServer.get_bus_index(bus)
+	if index < 0:
+		return AudioBuses.SILENT_DB
+	return maxf(AudioServer.get_bus_peak_volume_left_db(index, 0), AudioServer.get_bus_peak_volume_right_db(index, 0))
+
+
+## Plays `sound_name` at the World-local `at`, at its `SoundMix` level plus `volume_db`. With every voice busy the oldest is
+## stolen. Returns the voice, or null when the sound is not loaded.
 func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: float = 1.0) -> AudioStreamPlayer3D:
 	if not _streams.has(sound_name):
 		return null
@@ -181,7 +183,7 @@ func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: fl
 	voice.stream = _streams[sound_name]
 	voice.global_position = at
 	voice.reset_physics_interpolation()  # no blend from its last sound or a rebase
-	voice.volume_db = volume_db
+	voice.volume_db = SoundMix.level_db(sound_name) + volume_db
 	voice.pitch_scale = pitch
 	voice.play()
 	_played[sound_name] = times_played(sound_name) + 1
@@ -220,7 +222,7 @@ func _play_2d(sound_name: StringName, volume_db: float, bus: StringName) -> Audi
 			break
 	ui.stream = _streams[sound_name]
 	ui.bus = bus
-	ui.volume_db = volume_db
+	ui.volume_db = SoundMix.level_db(sound_name) + volume_db
 	ui.play()
 	_played[sound_name] = times_played(sound_name) + 1
 	return ui
@@ -310,16 +312,16 @@ func _on_setting_changed(key: StringName, value: Variant) -> void:
 func connect_combat(resolver: HitResolver, destruction: DestructionDirector, p_player: Combatant) -> void:
 	player = p_player
 	if resolver != null:
-		resolver.hit_resolved.connect(func(info: HitInfo) -> void: play(&"hit_hull", info.point, -4.0, randf_range(0.92, 1.08)))
+		resolver.hit_resolved.connect(func(info: HitInfo) -> void: play(&"hit_hull", info.point, 0.0, randf_range(0.92, 1.08)))
 	if destruction != null:
-		destruction.ship_destroyed.connect(func(_c: Combatant, _info: HitInfo) -> void: play(&"explosion", destruction.last_blast_position, 3.0))
-		destruction.buoy_destroyed.connect(func(buoy: NavBuoy, _info: HitInfo) -> void: play(&"explosion", buoy.global_position, 0.0, 1.15))
-		destruction.player_destroyed.connect(func(_info: HitInfo) -> void: play(&"explosion", destruction.last_blast_position, 3.0))
-		destruction.mine_exploded.connect(func(at: Vector3) -> void: play(&"explosion", at, 3.0, 0.85))
+		destruction.ship_destroyed.connect(func(_c: Combatant, _info: HitInfo) -> void: play(&"explosion", destruction.last_blast_position))
+		destruction.buoy_destroyed.connect(func(buoy: NavBuoy, _info: HitInfo) -> void: play(&"explosion", buoy.global_position, -3.0, 1.15))
+		destruction.player_destroyed.connect(func(_info: HitInfo) -> void: play(&"explosion", destruction.last_blast_position))
+		destruction.mine_exploded.connect(func(at: Vector3) -> void: play(&"explosion", at, 0.0, 0.85))
 	if player != null:
 		player.ship.targeting.target_changed.connect(func(id: int) -> void:
 			if id != TargetingSystem.NO_TARGET:
-				play_ui(&"target_blip", -6.0))
+				play_ui(&"target_blip"))
 
 
 ## Gives a ship its gun sounds, its turrets' and its engine voices. A hull without a cannon (a civilian) still gets the last.
@@ -328,10 +330,9 @@ func watch_ship(combatant: Combatant) -> void:
 		return
 	if combatant.cannon != null:
 		var shot: StringName = &"pulse_fire" if combatant.faction == Factions.EARTH_ALLIANCE else &"raider_fire"
-		var shot_db: float = SHOT_DB[shot]
 		# `shot_fired` sounds on both bolt paths; `projectile_fired` is silent for the AI cannons' rows (M4-T35).
 		combatant.cannon.shot_fired.connect(func(_index: int, at: Vector3) -> void:
-			play_shot(shot, at, shot_db, randf_range(0.96, 1.04)))
+			play_shot(shot, at, 0.0, randf_range(0.96, 1.04)))
 	if combatant.ship.is_node_ready():
 		_watch_turrets(combatant)
 	else:
@@ -341,14 +342,13 @@ func watch_ship(combatant: Combatant) -> void:
 
 # A turret's shot sounds where it leaves the barrel (M5-T21).
 func _watch_turrets(combatant: Combatant) -> void:
-	var turret_db: float = SHOT_DB[&"turret_fire"]
 	for mount: TurretMount in combatant.turrets:
 		if not mount.shot_fired.is_connected(_on_turret_fired):
-			mount.shot_fired.connect(_on_turret_fired.bind(turret_db))
+			mount.shot_fired.connect(_on_turret_fired)
 
 
-func _on_turret_fired(at: Vector3, volume_db: float) -> void:
-	play_shot(&"turret_fire", at, volume_db, randf_range(0.97, 1.03))
+func _on_turret_fired(at: Vector3) -> void:
+	play_shot(&"turret_fire", at, 0.0, randf_range(0.97, 1.03))
 
 
 ## Gives the station's defense grid its sounds (M7-T07): the turret shot pitched and levelled per kind, at the muzzle for every
@@ -474,7 +474,7 @@ func _add_engine_voices(combatant: Combatant) -> void:
 		clusters += 0 if is_pod else 1
 		node.stream = _loops.get(&"main_burst" if is_pod else &"rcs_burst")
 		node.bus = BUS
-		node.unit_size = POD_UNIT_SIZE if is_pod else RCS_UNIT_SIZE
+		node.unit_size = SoundMix.UNIT_SIZE_M[&"pod" if is_pod else &"rcs"]
 		node.max_distance = EngineVoices.AUDIBLE_RANGE_M
 		node.position = _engine.voice_position[v]
 		combatant.ship.add_child(node)
@@ -524,23 +524,23 @@ func _update_engines(delta: float) -> void:
 	engine_frame_work = work
 
 
-# Gives a voice's node its level (and a jet its brightness, a pod its nozzle), starting or stopping it on the way.
+# Gives a voice's node its gain (and a jet its brightness, a pod its nozzle), starting or stopping it on the way.
 func _apply_engine_voice(v: int) -> void:
 	var node: AudioStreamPlayer3D = _engine_nodes[v]
-	var level: float = _engine.level[v]
-	if level <= 0.0:
+	var gain: float = _engine.gain[v]
+	if gain <= 0.0:
 		if node.playing:
 			node.stop()
 		return
 	if _engine.voice_kind[v] == EngineVoices.Kind.POD:
-		node.volume_db = POD_DB + linear_to_db(level)
+		node.volume_db = SoundMix.level_db(&"main_burst") + linear_to_db(gain)
 		if _engine.at_retro[v] != _engine_node_at_retro[v]:
 			_engine_node_at_retro[v] = _engine.at_retro[v]
 			node.position = _engine.voice_retro_position[v] if _engine.at_retro[v] == 1 else _engine.voice_position[v]
 			node.reset_physics_interpolation()
 	else:
-		node.volume_db = RCS_DB + linear_to_db(level)
-		node.pitch_scale = EngineVoices.rcs_pitch(level)
+		node.volume_db = SoundMix.level_db(&"rcs_burst") + linear_to_db(gain)
+		node.pitch_scale = EngineVoices.rcs_pitch(_engine.rcs_level[_engine.voice_ship[v]])
 	if not node.playing and node.stream != null:
 		node.play(EngineVoices.start_offset(v, node.stream.get_length()))
 
@@ -555,7 +555,7 @@ func _update_warning(delta: float) -> void:
 	_warn_in_s -= delta
 	if _warn_in_s <= 0.0:
 		_warn_in_s = WARNING_INTERVAL_S
-		play_ui(&"warning_beep", -3.0)
+		play_ui(&"warning_beep")
 
 
 # --- console ---------------------------------------------------------------------------------------------------------

@@ -173,6 +173,253 @@ func test_a_wing_growing_for_a_launch_moves_none_of_its_wingmen() -> void:
 	assert_eq(wing.slot_offset(11).x, 0.0, "the twelfth on the centreline")
 
 
+# --- closing the gaps losses leave (M8-T13) --------------------------------------------------------------------------
+# A finger-four's arms, nearest the leader first: left 1, 4, 5, 8, 9; right 2, 3, 6, 7, 10; an eleven-slot wing's centre 11.
+
+
+# Shoots down the members in `slots`: they leave the wing and their slots read lost under their callsigns.
+func _lose(wing: Wing, slots: Array[int]) -> void:
+	for slot: int in slots:
+		var member: Combatant = wing.member_at(slot)
+		wing.remove_member(member)
+		wing.mark_lost(slot, member.display_name)
+
+
+# The callsigns by slot, "-" for an empty one.
+func _names(wing: Wing) -> Array[String]:
+	var out: Array[String] = []
+	for slot: int in range(1, wing.size + 1):
+		out.append(wing.member_at(slot).display_name if wing.member_at(slot) != null else "-")
+	return out
+
+
+# How many ships fly on the left arm, the right arm and the centre slot.
+func _arms(wing: Wing) -> Vector3i:
+	var count := Vector3i.ZERO
+	for slot: int in range(1, wing.size + 1):
+		if wing.member_at(slot) != null:
+			count[wing.formation.side(slot, wing.size) + 1] += 1
+	return Vector3i(count.x, count.z, count.y)
+
+
+# The wing flies a shape with no hole: each arm filled from the leader out, the arms within one ship of each other, and the
+# centre slot flown only when both arms are full.
+func _assert_no_holes(wing: Wing, what: String) -> void:
+	var open_arm_slot: bool = false
+	for arm_side: int in [-1, 1]:
+		var slots: Array[int] = []
+		for slot: int in range(1, wing.size + 1):
+			if wing.formation.side(slot, wing.size) == arm_side:
+				slots.append(slot)
+		slots.sort_custom(func(a: int, b: int) -> bool:
+			return wing.slot_offset(a).length_squared() < wing.slot_offset(b).length_squared())
+		var seen_empty: bool = false
+		for slot: int in slots:
+			if wing.member_at(slot) == null:
+				seen_empty = true
+			elif seen_empty:
+				fail_test("%s: slot %d is flown behind an empty slot of its arm (%s)" % [what, slot, _names(wing)])
+				return
+		open_arm_slot = open_arm_slot or seen_empty
+	var arms: Vector3i = _arms(wing)
+	assert_lte(absi(arms.x - arms.y), 1, "%s: the arms are within one ship (%s)" % [what, _names(wing)])
+	assert_false(arms.z > 0 and open_arm_slot, "%s: the centre slot is flown beside an open arm slot (%s)" % [what, _names(wing)])
+
+
+func test_a_finger_four_closes_up_behind_each_of_its_losses() -> void:
+	var front: Wing = _wing_with(3, [1, 2, 3])
+	_lose(front, [1])
+	assert_eq(front.close_gaps(), [Vector2i(3, 1)] as Array[Vector2i], "the left arm is empty and the right two deep: its last crosses")
+	assert_eq(_names(front), ["ALPHA 4", "ALPHA 3", "-"] as Array[String])
+	var middle: Wing = _wing_with(3, [1, 2, 3])
+	_lose(middle, [2])
+	assert_eq(middle.close_gaps(), [Vector2i(3, 2)] as Array[Vector2i], "ALPHA 4 moves up its own arm")
+	assert_eq(_names(middle), ["ALPHA 2", "ALPHA 4", "-"] as Array[String])
+	var back: Wing = _wing_with(3, [1, 2, 3])
+	_lose(back, [3])
+	assert_eq(back.close_gaps(), [] as Array[Vector2i], "nobody flew behind it")
+	assert_eq(_names(back), ["ALPHA 2", "ALPHA 3", "-"] as Array[String])
+
+
+func test_the_wingmen_behind_a_loss_each_move_up_one_place_on_their_arm() -> void:
+	var front: Wing = _wing_with(10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+	_lose(front, [1])
+	assert_eq(front.close_gaps(), [Vector2i(4, 1), Vector2i(5, 4), Vector2i(8, 5), Vector2i(9, 8)] as Array[Vector2i],
+			"the left arm moves up; the right arm, now one longer, stays")
+	assert_eq(front.empty_slots(), PackedInt32Array([9]), "the hole is at the back of the arm")
+	_assert_no_holes(front, "front")
+	var middle: Wing = _wing_with(10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+	_lose(middle, [6])
+	assert_eq(middle.close_gaps(), [Vector2i(7, 6), Vector2i(10, 7)] as Array[Vector2i])
+	assert_eq(middle.member_at(1).display_name, "ALPHA 2", "the other arm is left alone")
+	_assert_no_holes(middle, "middle")
+	var back: Wing = _wing_with(10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+	_lose(back, [10])
+	assert_eq(back.close_gaps(), [] as Array[Vector2i], "the last of an arm leaves no hole")
+
+
+func test_several_losses_at_once_close_up_and_even_the_arms() -> void:
+	var wing: Wing = _wing_with(10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+	_lose(wing, [1, 4, 6])
+	assert_eq(wing.close_gaps(), [Vector2i(5, 1), Vector2i(8, 4), Vector2i(9, 5), Vector2i(7, 6), Vector2i(10, 7)] as Array[Vector2i])
+	assert_eq(_arms(wing), Vector3i(3, 4, 0), "three left, four right: even enough, nobody crosses")
+	_assert_no_holes(wing, "three down")
+	_lose(wing, [1, 4])
+	var moves: Array[Vector2i] = wing.close_gaps()
+	assert_eq(moves, [Vector2i(5, 1), Vector2i(7, 4)] as Array[Vector2i], "the left moves up, then the right arm's last evens them")
+	assert_eq(_arms(wing), Vector3i(2, 3, 0))
+	_assert_no_holes(wing, "five down")
+	assert_eq(wing.members().size(), 5, "nobody is dropped")
+	assert_eq(wing.close_gaps(), [] as Array[Vector2i], "closed up, it stays as it is")
+
+
+func test_the_centre_ship_moves_out_to_an_arm_that_has_room() -> void:
+	# The centre slot is the last a newcomer takes, so ten ships fly five a side with nobody behind the leader.
+	var wing: Wing = _wing_with(11, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+	_lose(wing, [5])
+	assert_eq(wing.close_gaps(), [Vector2i(8, 5), Vector2i(9, 8), Vector2i(11, 9)] as Array[Vector2i])
+	assert_eq(_arms(wing), Vector3i(5, 5, 0))
+	assert_eq(wing.member_at(9).display_name, "ALPHA 12")
+	_assert_no_holes(wing, "eleven less one")
+
+
+func test_arms_that_are_already_even_send_nobody_across() -> void:
+	var pair: Wing = _wing_with(2, [1, 2])
+	_lose(pair, [1])
+	assert_eq(pair.close_gaps(), [] as Array[Vector2i], "a flight of three's last wingman keeps its side")
+	assert_eq(pair.slot_of(pair.members()[0]), 2)
+	var wedge: Wing = _wing_with(4, [1, 2, 3, 4])
+	wedge.formation.shape = Formation.Shape.WEDGE
+	_lose(wedge, [1])
+	assert_eq(wedge.close_gaps(), [Vector2i(3, 1)] as Array[Vector2i], "a wedge's left arm is slots 1 and 3")
+	assert_eq(_arms(wedge), Vector3i(1, 2, 0))
+
+
+func test_a_lost_callsign_goes_to_the_back_with_the_hole() -> void:
+	var wing: Wing = _wing_with(3, [1, 2, 3])
+	_lose(wing, [1])
+	assert_eq(wing.lost_callsign(1), "ALPHA 2")
+	wing.close_gaps()
+	assert_false(wing.is_lost(1), "ALPHA 4 flies there now")
+	assert_true(wing.is_lost(3), "the hole it left is the lost one")
+	assert_eq(wing.lost_callsign(3), "ALPHA 2", "still under the downed pilot's callsign")
+	assert_eq(wing.lost_callsign(2), "", "a flown slot has none")
+	var big: Wing = _wing_with(10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+	_lose(big, [1, 5])
+	big.close_gaps()
+	# The left arm closes up to three; the right arm's last (slot 10) crosses to even them, leaving its place as a hole.
+	assert_eq(big.empty_slots(), PackedInt32Array([9, 10]))
+	assert_eq(big.lost_callsign(9), "ALPHA 6", "each hole keeps the callsign of one of the two that went down")
+	assert_eq(big.lost_callsign(10), "ALPHA 2")
+	# The hole of a member released, not shot down, closes the same way when the wing is asked to, and marks nothing lost
+	# (the director asks only when a member is destroyed).
+	var released: Wing = _wing_with(3, [1, 2, 3])
+	released.remove_member(released.member_at(2))
+	assert_eq(released.close_gaps(), [Vector2i(3, 2)] as Array[Vector2i])
+	assert_false(released.is_lost(2) or released.is_lost(3))
+	assert_eq(released.lost_callsign(0) + released.lost_callsign(4), "", "out of range")
+
+
+func test_a_newcomer_after_a_loss_takes_the_place_at_the_back() -> void:
+	var wing: Wing = _wing_with(10, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+	_lose(wing, [4])
+	wing.close_gaps()
+	var before: Array[String] = _names(wing)
+	var fresh := _member("ALPHA 5")
+	assert_eq(wing.add_member(fresh), 9, "the open slot at the end of the left arm")
+	assert_false(wing.is_lost(9))
+	assert_eq(wing.close_gaps(), [] as Array[Vector2i], "a newcomer moves nobody")
+	before[8] = "ALPHA 5"
+	assert_eq(_names(wing), before)
+
+
+func test_any_losses_in_any_shape_leave_no_hole_and_keep_every_survivor() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 8013
+	for shape: int in Formation.NAMES.size():
+		for size: int in range(1, 13):
+			for _round: int in 12:
+				var all: Array[int] = []
+				all.assign(range(1, size + 1))
+				var wing: Wing = _wing_with(size, all)
+				wing.formation.shape = shape as Formation.Shape
+				var what: String = "%s of %d" % [Formation.NAMES[shape], size]
+				assert_eq(wing.close_gaps(), [] as Array[Vector2i], "%s: a full wing has nothing to close" % what)
+				var left: Array[Combatant] = wing.members()
+				for _wave: int in 3:  # losses in several goes, closing up after each
+					var down: Array[int] = []
+					for slot: int in range(1, size + 1):
+						if wing.member_at(slot) != null and rng.randf() < 0.3:
+							down.append(slot)
+							left.erase(wing.member_at(slot))
+					_lose(wing, down)
+					var lost_before: int = _lost_count(wing)
+					var sides: Dictionary = _sides(wing)
+					var uneven: bool = absi(_arms(wing).x - _arms(wing).y) > 1 or _arms(wing).z > 0
+					var moves: Array[Vector2i] = wing.close_gaps()
+					_assert_no_holes(wing, "%s less %s" % [what, down])
+					assert_eq(wing.members().size(), left.size(), "%s: every survivor still flies" % what)
+					for member: Combatant in left:
+						assert_gt(wing.slot_of(member), 0, "%s: %s still flies" % [what, member.display_name])
+						if not uneven:
+							assert_eq(wing.formation.side(wing.slot_of(member), size), sides[member],
+									"%s: %s keeps its side while the arms are even" % [what, member.display_name])
+					assert_eq(_lost_count(wing), lost_before, "%s: every loss still reads lost" % what)
+					assert_lte(moves.size(), size, "%s: no ship moves twice over" % what)
+					assert_eq(wing.close_gaps(), [] as Array[Vector2i], "%s: closed up, it stays" % what)
+					assert_eq(_shape_of_newcomers(wing), _sorted_arms(wing), "%s: the shape that many newcomers would build" % what)
+
+
+func test_a_change_of_shape_closes_up_again() -> void:
+	# A wedge's arms are the odd and the even slots, a finger-four's are not: what is even in one may not be in the other.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 13
+	for _round: int in 40:
+		var all: Array[int] = []
+		all.assign(range(1, 12))
+		var wing: Wing = _wing_with(11, all)
+		var down: Array[int] = []
+		for slot: int in range(1, 12):
+			if rng.randf() < 0.4:
+				down.append(slot)
+		_lose(wing, down)
+		wing.close_gaps()
+		for shape: Formation.Shape in [Formation.Shape.WEDGE, Formation.Shape.LINE_ABREAST, Formation.Shape.FINGER_FOUR]:
+			wing.formation.shape = shape
+			wing.close_gaps()
+			_assert_no_holes(wing, "%s after %s went down" % [Formation.NAMES[shape], down])
+
+
+func _lost_count(wing: Wing) -> int:
+	var n: int = 0
+	for slot: int in range(1, wing.size + 1):
+		n += 1 if wing.is_lost(slot) else 0
+	return n
+
+
+# Each member's side of the leader.
+func _sides(wing: Wing) -> Dictionary:
+	var out: Dictionary = {}
+	for member: Combatant in wing.members():
+		out[member] = wing.formation.side(wing.slot_of(member), wing.size)
+	return out
+
+
+# The arms' counts, the shorter first, and the centre's: a shape and its mirror read the same.
+func _sorted_arms(wing: Wing) -> Vector3i:
+	var arms: Vector3i = _arms(wing)
+	return Vector3i(mini(arms.x, arms.y), maxi(arms.x, arms.y), arms.z)
+
+
+# `_sorted_arms` of a wing of the same size and shape that as many ships joined one by one.
+func _shape_of_newcomers(wing: Wing) -> Vector3i:
+	var built := Wing.new(wing.name, wing.leader, wing.size)
+	built.formation.shape = wing.formation.shape
+	for n: int in wing.members().size():
+		built.add_member(_member("N %d" % n))
+	return _sorted_arms(built)
+
+
 func _ctx(order: AiContext.Order, hull: float, contacts: Array[Contact]) -> AiContext:
 	var p := Perception.new()
 	p.faction = Factions.EARTH_ALLIANCE
@@ -250,3 +497,28 @@ func test_a_downed_members_slot_stays_lost_until_someone_takes_it() -> void:
 	assert_false(wing.is_lost(0) or wing.is_lost(4), "out of range")
 	assert_eq(wing.add_member(_member("ALPHA 2")), 1)
 	assert_false(wing.is_lost(1), "a replacement clears it")
+
+
+func test_the_hold_fire_orders_are_acknowledged_in_their_own_words() -> void:
+	# M8-T19 (D85).
+	var wing := Wing.new("ALPHA", _member("ALPHA 1"))
+	wing.add_member(_member("ALPHA 2"))
+	assert_eq(wing.ack_for(AiContext.Order.FORM_HOLD_FIRE), "ALPHA 2: COPY, FORMING UP, HOLDING FIRE")
+	assert_eq(wing.ack_for(AiContext.Order.HOLD_POSITION), "ALPHA 2: COPY, HOLDING POSITION, HOLDING FIRE")
+	assert_eq(Wing.ORDER_PHRASES.size(), AiContext.Order.size(), "a phrase for every order")
+	assert_eq(AiContext.ORDER_WORDS.size(), AiContext.Order.size(), "and a word")
+	assert_eq(AiContext.order_from_word("form_hold"), AiContext.Order.FORM_HOLD_FIRE)
+	assert_eq(AiContext.order_from_word("HOLD"), AiContext.Order.HOLD_POSITION)
+
+
+func test_a_later_flights_callsigns_run_on_from_its_first_number() -> void:
+	# M8-T19: the second flight of three of ALPHA is ALPHA 4, 5 and 6.
+	var wing := Wing.new("ALPHA", null, 2)
+	assert_eq(wing.flight, 0, "a wing is no flight until it is made one")
+	wing.flight = 2
+	wing.first_number = 4
+	assert_eq(wing.callsign(0), "ALPHA 4")
+	assert_eq(wing.callsign(1), "ALPHA 5")
+	assert_eq(wing.callsign(2), "ALPHA 6")
+	wing.mark_lost(2)
+	assert_eq(wing.lost_callsign(2), "ALPHA 6")

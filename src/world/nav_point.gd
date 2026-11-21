@@ -9,6 +9,12 @@ extends Node3D
 var targetable: Targetable = null
 ## What it is, for the target menu's preview ("Docking bay"): it has no hull to name it.
 var class_text: String = ""
+## Whose dock it is, when its interaction is `dock` (M8-T06): the id fighters name as their home (`Combatant.home`), "babylon5"
+## for the station's bay. A nav point that offers `dock` is in `DOCKS_GROUP`, so the docking rules find every dock alike.
+var home_id: StringName = &""
+
+const DOCKS_GROUP: StringName = &"docks"
+const KIND_DOCK: StringName = &"dock"
 
 
 ## A nav point named `display_name` that offers `interaction`, heard `broadcast_range_m` out (its carrier's beacon).
@@ -30,6 +36,8 @@ static func make(display_name: String, interaction: TargetInteraction, broadcast
 
 func _enter_tree() -> void:
 	SimCore.set_navigation(get_instance_id(), true)
+	if targetable != null and targetable.interaction != null and targetable.interaction.kind == KIND_DOCK:
+		add_to_group(DOCKS_GROUP)
 
 
 func _exit_tree() -> void:

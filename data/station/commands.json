@@ -1,0 +1,26 @@
+{
+  "_doc": "Babylon 5's commands from the comms menu (M8-T34): how near the player covering fire reaches, how far the sitrep counts raiders, and what Control answers. {WING}, {WINGS}, {SECTIONS}, {RAIDERS}, {KM} and {GRID} are filled in.",
+  "cover_radius_m": 2000,
+  "raider_scan_km": 30,
+  "lines": {
+    "launch": "{WING} WING, CLEARED TO LAUNCH. GOOD HUNTING",
+    "launch_all": "{WINGS}: CLEARED TO LAUNCH",
+    "launch_flying": "NEGATIVE, {WING} WING IS ALREADY OUT",
+    "launch_bay": "{WING} WING IS IN THE BAY, LAUNCHING NOW",
+    "launch_none": "NEGATIVE, EVERY WING IS ALREADY OUT",
+    "launch_refused": "UNABLE TO LAUNCH {WING} WING",
+    "recall": "ALL FIGHTERS, RETURN TO BABYLON 5 AND DOCK",
+    "recall_none": "NO FIGHTERS OUT TO RECALL",
+    "grid_on": "DEFENSE GRID ONLINE",
+    "grid_off": "DEFENSE GRID OFFLINE, HOLDING ALL FIRE",
+    "support_on": "COPY, COVERING FIRE ON YOUR POSITION",
+    "support_off": "COVERING FIRE ENDED",
+    "support_grid_off": "NEGATIVE, THE DEFENSE GRID IS OFFLINE",
+    "shelter_on": "ALL CIVILIAN TRAFFIC, HOLD. TAKE SHELTER INSIDE OR BEHIND THE STATION",
+    "shelter_off": "CIVILIAN TRAFFIC, YOU ARE CLEARED TO RESUME",
+    "sitrep_sections": "SITREP. HULL: {SECTIONS}",
+    "sitrep_wings": "WINGS OUT: {WINGS}",
+    "sitrep_raiders": "{RAIDERS} RAIDERS WITHIN {KM} KM",
+    "sitrep_grid": "DEFENSE GRID {GRID}"
+  }
+}

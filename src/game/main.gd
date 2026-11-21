@@ -31,6 +31,8 @@ var waves_auto_start: bool = true
 ## Mixed into the brain seed of every ship the scenario places (M3-T10): the same seed flies the same fight (the dogfight's
 ## AC12 runs). Set before the node enters the tree.
 var scenario_seed: int = 0
+## A lost mission's checkpoint to restart from (`{step, label, notes}`, M8 D79); empty for a run from the start.
+var mission_checkpoint: Dictionary = {}
 ## Free-flight encounters from the start (M5-T17, D58): the menu's request sets it; every other run starts them off.
 var encounters: bool = false
 ## Overrides the scenario's encounter pools file (tests). Empty = `data/encounters/<scenario_id>.json`, if there is one.
@@ -90,6 +92,12 @@ var star_system: StarSystemHost = null
 var launches: LaunchDirector = null
 ## Traffic at the station (M7-T10): docking, freighters, raids at it; console `traffic`.
 var traffic: StationTraffic = null
+## Docking for repair in the main docking bay (M8-T06): the player's hold of X there, the wing's order; console `dock`.
+var docking: DockingDirector = null
+## Holding X aborts the gate jump's or docking's autopilot until its point of no return (M8-T32).
+var autopilot_abort: AutopilotAbort = null
+## Babylon 5's commands from the comms menu with the station targeted (M8-T34).
+var station_commands: StationCommands = null
 ## The station's exterior tour (M7-T12): console `tour`; the tour's shots play on the cinematic camera.
 var tours: TourDirector = null
 ## Where and when the scenario is in its star system (M6-T09): `ScenarioFrame.resolve`'s result, empty without a system.
@@ -100,9 +108,13 @@ var _overlay_in_s: float = 0.0
 var _spawn_basis: Basis = Basis.IDENTITY
 # The player's velocity at the first spawn (a mission that opens in flight); a respawn starts at rest.
 var _start_velocity: Vector3 = Vector3.ZERO
+# The dock the scenario says the player belongs to (`player.home`, M8-T06); a launch from a Cobra bay gives one too.
+var _player_home: StringName = &""
 ## What the player's speed is read against (M6-T08): the HUD's REF, and the ship's brake, assist, fade and ceiling.
 var flight_reference: FlightReference = null
 var _system_id: StringName = &"local"
+## The far capital markers' rules, on as the scenario's `hud.capital_markers` says, else as the data file (M8-T08: off).
+var _capital_rules: CapitalMarkerRules = null
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
 var _scenario_wings: Array[Dictionary] = []
@@ -154,6 +166,8 @@ func _ready() -> void:
 	_setup_input()
 	var scenario: Dictionary = ScenarioLoader.load(resolved_scenario_path())
 	ScenarioLoader.resolve_random_civilian(scenario, scenario_seed)
+	var shared_rules: CapitalMarkerRules = CapitalMarkerRules.shared()
+	_capital_rules = shared_rules.with_enabled(bool((scenario.get("hud", {}) as Dictionary).get("capital_markers", shared_rules.enabled)))
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
 	else:
@@ -161,7 +175,10 @@ func _ready() -> void:
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
 		_start_velocity = player["velocity"]
+		_player_home = player.get("home", &"")
 		_system_id = scenario["system_id"]
+		# Every position the scenario places is in its own system, the World's origin too (M8-T23).
+		world.origin = UniversePos.new(world.origin.x, world.origin.y, world.origin.z, _system_id)
 		_scenario_spawns = scenario["spawns"]
 		_scenario_routes = scenario["routes"]
 		_scenario_wings = scenario["wings"]
@@ -169,7 +186,7 @@ func _ready() -> void:
 	# The player leads wing ALPHA (architecture §16 D36). Members join later (M3-T08, M3-T10).
 	wings.setup(world, ships)
 	if not _ai_leads_player_wing():
-		wings.create_wing(Wing.DEFAULT_NAME, combatant)
+		wings.create_wing(Wing.DEFAULT_NAME, combatant).home = combatant.home  # its wingmen belong where it does (M8-T06)
 	wings.declare(_scenario_wings)
 	ships.world = world
 	ships.projectiles = projectiles
@@ -234,6 +251,16 @@ func _ready() -> void:
 	traffic = StationTraffic.new()
 	traffic.main = self
 	add_child(traffic)
+	autopilot_abort = AutopilotAbort.new()
+	autopilot_abort.name = AutopilotAbort.NODE_NAME
+	autopilot_abort.main = self
+	add_child(autopilot_abort)
+	docking = DockingDirector.new()
+	docking.main = self
+	add_child(docking)
+	station_commands = StationCommands.new()
+	station_commands.main = self
+	add_child(station_commands)
 	if bool((scenario.get("station", {}) as Dictionary).get("reserve_traffic", false)):
 		traffic.reserve_pools()  # the raids' and wings' ships are built now, not in the middle of a fight
 	_warm_flashes()
@@ -272,6 +299,8 @@ func _ready() -> void:
 	pause_menu = (preload("res://src/hud/pause_menu.tscn") as PackedScene).instantiate() as PauseMenu
 	pause_menu.audio = audio
 	pause_menu.objectives_source = objectives
+	pause_menu.skip_source = func() -> String: return mission.skip_label() if mission != null else ""
+	pause_menu.skip_taken = func() -> String: return mission.take_skip() if mission != null else "no mission"
 	# The button that closed the menu may still be down: it must not also tap a target or toggle something.
 	pause_menu.resumed.connect(func() -> void: adapter.resync_edges(input_source))
 	pause_menu.opened.connect(_start_pause_backdrop)
@@ -312,16 +341,24 @@ func _physics_process(delta: float) -> void:
 	# On a target that offers an interaction (a gate within reach, a station bay) a long hold of X runs it (M7-T27).
 	# A mission's opening is skipped the same way, with a hold of X (M7-T54).
 	var opening: bool = mission != null and mission.opening_skip_offered()
-	adapter.interaction_offered = opening or interactions.offer() != null
+	# An autopilot flying the ship is left with its own hold of X (M8-T32); a tap of X does nothing while the controls are held.
+	var abortable: StringName = autopilot_abort.offered()
+	adapter.interaction_offered = opening or abortable != &"" or interactions.offer() != null
+	adapter.hold.hold_s = AutopilotAbort.hold_s() if abortable != &"" else adapter.interact_hold_s
+	adapter.taps_blocked = controls_locked()
 	var pc: PilotCommand = adapter.sample(input_source, delta)
+	var aborted: bool = autopilot_abort.take(pc.ui, abortable)
 	if opening:
 		mission.take_opening_hold(pc.ui)
 	if control_lock.apply(pc, controls_locked(), camera_rig.is_playing_shot()):
 		camera_rig.stop_shot()
 		launches.skip()  # a launch's shot skipped jumps the player to the hand-off (M7-T08)
-	if pc.ui.interact and not opening:  # the hold that skips the opening is spent on it
+		docking.skip()  # a docking's shot skipped jumps to the bay, then to the end of the repair (M8-T06)
+	if pc.ui.interact and not opening and abortable == &"" and not aborted:  # a hold spent on the opening or an abort runs nothing else
 		interactions.run_offered()
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
+	if autopilot == null and not get_tree().paused:
+		autopilot = docking.step_player(delta)  # the docking autopilot flies the ship into the bay (M8-T06)
 	if autopilot == null and not get_tree().paused:
 		autopilot = launches.step_player(delta)  # a launched fighter's engines light as it clears the arm (M7-T08)
 	if autopilot != null:
@@ -344,13 +381,14 @@ func _physics_process(delta: float) -> void:
 
 
 # A gate's interaction is the player's jump through it (M6-T14): offered while it is targeted and no jump runs, within the gate's
-# request range (2 km, M7-T28); farther out the HUD says how close to come and the hold does nothing.
+# request range (2 km at rest, M7-T28; more closing fast, M8-T18); farther out the HUD says how close to come and the hold does nothing.
 func _offer_jump(gate: Jumpgate) -> void:
 	if gate == null:
 		return
 	gate.targetable.interaction = TargetInteraction.new(&"jump", GateJumpPrompt.LABEL,
 			func() -> String: return gates.start_jump(gate),
 			func() -> bool: return gates.targeted_gate() == gate and not gates.jump.is_active(), GateJumpRequest.range_m())
+	gate.targetable.interaction.reach = func() -> float: return gates.request_range_m(gate)  # farther out closing fast (M8-T18)
 
 
 # Auto-track needs a target: with none selected the nearest hostile is taken; with none in range it switches itself off.
@@ -424,6 +462,7 @@ func snapshot() -> Dictionary:
 	s["renderer"] = String(RenderStatus.renderer())
 	s["fps"] = Engine.get_frames_per_second()
 	s["gpu"] = RenderingServer.get_video_adapter_name()
+	s["vram"] = render_status.vram()
 	s["pads"] = input_source.pad_info()
 	return s
 
@@ -570,6 +609,9 @@ func respawn() -> void:
 		buoy.restore()
 	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
 	gates.cancel_jump("respawn")
+	docking.cancel_player("respawn")
+	if wings != null:
+		wings.regroup(wings.player_wing())  # the wing flies back to the respawned player (M8-T17)
 	_restart_lessons()
 	combatant.cannon.reset_gate()
 	combatant.cannon.reset_flashes()
@@ -606,10 +648,10 @@ func objectives() -> Array[Dictionary]:
 
 
 ## The running mission holds the player's controls (`MissionApi.lock_controls`), or a gate jump does (M6-T14), or the player is
-## on a Cobra bay's rack (M7-T08): the ship flies on without them.
+## on a Cobra bay's rack (M7-T08), or it is docking for repair (M8-T06): the ship flies on without them.
 func controls_locked() -> bool:
 	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls()) \
-			or (launches != null and launches.locks_controls())
+			or (launches != null and launches.locks_controls()) or (docking != null and docking.locks_controls())
 
 
 # A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
@@ -686,11 +728,20 @@ func _build_hud_input() -> HudInput:
 	# The radar's contacts straight from the targetables (M4-T36): the candidate list is built only when something cycles it.
 	input.radar_contacts = RadarContacts.gather(get_tree(), ship, ship.targeting.system.sensor_range_m)
 	input.selected_id = ship.targeting.selected_id()
+	input.capital_rules = _capital_rules
+	if _capital_rules != null and _capital_rules.enabled:
+		input.capitals = CapitalContacts.gather(get_tree(), ship, _capital_rules.max_range_m)
 	input.status_line = status_line
 	input.roster = wings.hud_roster()
 	input.roster_color = Factions.FRIENDLY_COLOR
 	input.ack_line = wings.ack_text()
+	if not docking.notice_text().is_empty():
+		input.ack_line = docking.notice_text()  # a docking's line (Control's offer, a wingman's call) takes the same place
 	input.prompt_line = interactions.prompt_line()
+	var hazard: String = VortexHazard.warning(ship, get_tree())
+	if not hazard.is_empty():
+		input.ack_line = hazard  # sitting where a jump point is about to form: the loudest line (M8-T17)
+	input.approach_cue = interactions.cue()
 	input.interact_progress = adapter.last.ui.interact_progress
 	if route_active():
 		input.status_line = instructor_path.status_line(instructor.display_name)
@@ -769,6 +820,9 @@ func _place_spawn(entry: Dictionary) -> void:
 	if placed.cargo_pods != null:
 		placed.cargo_pods.set_count(int(entry.get("cargo_pods", -1)))  # M5-T16: the spawn's pods, all by default
 	placed.damageable.invulnerable = bool(entry["invulnerable"])
+	if bool(entry.get("home_set", false)):
+		placed.home = entry["home"]  # the scenario's own word, even "none": no wing or launch changes it (M8-T06)
+		placed.home_assigned = true
 	scenario_ships.append(placed)
 	_scenario_brains.append(brain)
 	_scenario_entries.append(entry)
@@ -785,6 +839,11 @@ func _ai_leads_player_wing() -> bool:
 		if String(d["name"]).to_lower() == Wing.DEFAULT_NAME.to_lower() and String(d["leader"]) != "player":
 			return true
 	return false
+
+
+## The scenario's route called `route_name`, or null (M8-T26: a mission sends a ship on to another of its routes).
+func scenario_route(route_name: String) -> Route:
+	return _route_named(route_name)
 
 
 func _route_named(route_name: String) -> Route:
@@ -842,6 +901,8 @@ func _spawn_ship() -> void:
 	combatant.ship.linear_velocity = _start_velocity + world.rest_velocity()  # the scenario's velocity is against the place
 	# The player is part of the wing the allies broadcast for (M3-T10): heard like an allied Starfury, to 100 km.
 	combatant.targetable.broadcast_range_m = ShipPool.ALLY_BROADCAST_RANGE_M
+	combatant.home = _player_home
+	combatant.home_assigned = _player_home != &""
 	ship = combatant.ship
 	thrusters = combatant.thrusters
 	cannon = combatant.cannon
@@ -915,6 +976,12 @@ func _give_wing_orders(ui: UiCommand) -> void:
 		wings.give_order(AiContext.Order.ENGAGE_AT_WILL)
 	if ui.wing_cover:
 		wings.give_order(AiContext.Order.COVER_ME)
+	if ui.wing_form_hold:
+		wings.give_order(AiContext.Order.FORM_HOLD_FIRE)
+	if ui.wing_hold:
+		wings.give_order(AiContext.Order.HOLD_POSITION)
+	if ui.wing_dock and docking.order_available():  # with no home dock in range the key does nothing (maintainer, 2026-11-18)
+		docking.order_wing()
 
 
 # Captures the mouse while flying. Alt (window managers use Alt+drag to move a window), the console, the pause and a window without focus give it back, and the source

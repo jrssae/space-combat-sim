@@ -1,5 +1,8 @@
 """``core/collision.py`` (M7-T03, D73): convex shapes from parts, the merge down to a budget, the coverage measure, the
-manifest section and the hit volumes. The Saturns' own collision pieces are checked in ``test_saturn_family.py``."""
+manifest section and the hit volumes. The Saturns' own collision pieces are checked in ``test_saturn_family.py``.
+
+M8-T07 merged M12-T19's builder into this one: the carrier's makers, moves and mirrors, rings cut into sectors, round parts as
+prisms and the coverage of sampled skin are tested below the M7 tests."""
 
 from __future__ import annotations
 
@@ -13,7 +16,8 @@ import numpy as np
 
 from tools.procgen.core import collision as col
 from tools.procgen.core import manifest
-from tools.procgen.core.geometry import Material, box as box_mesh, rotation_y
+from tools.procgen.core.geometry import Material, box as box_mesh, lathe, rotation_y
+from tools.procgen.core.sampling import sample_mesh
 
 GREY = Material("grey", (0.5, 0.5, 0.5))
 
@@ -277,6 +281,155 @@ class ManifestCollisionTests(unittest.TestCase):
         m["collision"]["pieces"][0]["shapes"][0]["position"][0] = float("nan")
         with self.assertRaises(ValueError):
             manifest.validate_manifest(m)
+
+
+# --- the carrier's additions (M12-T19, merged by M8-T07) -------------------------------------------------------------------
+def skin_of(mesh, spacing: float = 0.1) -> np.ndarray:
+    return sample_mesh(mesh, spacing, np.random.default_rng(3), systematic=True).positions
+
+
+def ring_mesh(r_inner: float, r_outer: float, z0: float, z1: float):
+    """A square-section ring about z: outer wall, back face, inner wall, front face."""
+    return lathe([(z0, r_inner), (z0, r_outer), (z1, r_outer), (z1, r_inner), (z0, r_inner)], 96, GREY, creases=(1, 2, 3))
+
+
+class CarrierMakerTests(unittest.TestCase):
+    def test_a_capsule_runs_between_its_end_points(self) -> None:
+        c = col.capsule_between("c", (0.0, 0.0, 0.0), (0.0, 10.0, 0.0), 1.0)
+        self.assertAlmostEqual(c.height, 12.0)
+        d = c.distance(np.array([[0.0, 5.0, 0.0], [2.0, 5.0, 0.0], [0.0, 12.0, 0.0], [0.0, -1.0, 0.0]]))
+        np.testing.assert_allclose(d, [0.0, 1.0, 1.0, 0.0], atol=1e-12)
+        lo, hi = c.bounds()
+        np.testing.assert_allclose(lo, [-1.0, -1.0, -1.0], atol=1e-12)
+        np.testing.assert_allclose(hi, [1.0, 11.0, 1.0], atol=1e-12)
+        np.testing.assert_allclose(c.distance(c.surface_points(0.3)).max(), 0.0, atol=1e-9)
+
+    def test_a_box_around_points_holds_them_on_its_axes_even_mirrored(self) -> None:
+        pts = np.random.default_rng(4).uniform(-1.0, 1.0, (50, 3)) * [3.0, 1.0, 2.0]
+        mirrored = np.diag([-1.0, 1.0, 1.0])
+        for basis in (None, rotation_y(0.4), rotation_y(0.4) @ mirrored):
+            b = col.box_around("b", pts, basis)
+            self.assertLessEqual(float(b.distance(pts).max()), 1e-9)
+            self.assertGreater(np.linalg.det(b.basis), 0.0)
+
+    def test_volumes_and_surfaces(self) -> None:
+        cube = col.hull("h", np.concatenate([cube_points(), np.random.default_rng(0).uniform(-0.9, 0.9, (40, 3))]))
+        self.assertAlmostEqual(cube.volume(), 8.0)
+        self.assertAlmostEqual(col.box("b", (0, 0, 0), (2.0, 4.0, 6.0)).volume(), 48.0)
+        self.assertAlmostEqual(col.capsule("c", (0, 0, 0), 1.0, 4.0).volume(), math.pi * 2.0 + 4.0 / 3.0 * math.pi)
+        for shape in (cube, col.box("b", (1, 0, 0), (2.0, 4.0, 6.0), rotation_y(0.3))):
+            np.testing.assert_allclose(shape.distance(shape.surface_points(0.25)).max(), 0.0, atol=1e-9)
+
+    def test_moves_and_mirrors_keep_the_shape(self) -> None:
+        probe = np.array([[0.3, 0.2, 0.1], [4.0, 1.0, -2.0], [-1.0, 3.0, 0.5]])
+        mirror = np.diag([-1.0, 1.0, 1.0])
+        for shape in (
+            col.box("b", (2.0, 1.0, 0.0), (1.0, 2.0, 3.0), rotation_y(0.3)),
+            col.capsule_between("c", (1.0, 0.0, 0.0), (4.0, 2.0, 1.0), 0.5),
+            col.hull("h", np.array([[0.0, 0.0, 0.0], [3.0, 0.0, 0.0], [0.0, 2.0, 0.0], [0.0, 0.0, 1.0], [3.0, 2.0, 1.0]])),
+        ):
+            twin = shape.mirrored("x")
+            np.testing.assert_allclose(twin.distance(probe @ mirror), shape.distance(probe), atol=1e-9, err_msg=shape.kind)
+            moved = shape.translated((0.0, 5.0, 0.0))
+            np.testing.assert_allclose(moved.distance(probe + [0.0, 5.0, 0.0]), shape.distance(probe), atol=1e-9, err_msg=shape.kind)
+            self.assertAlmostEqual(twin.volume(), shape.volume(), places=9)
+            self.assertEqual(twin.renamed("twin").name, "twin")
+
+
+class RingTests(unittest.TestCase):
+    def test_a_ring_is_covered_and_its_hole_stays_open(self) -> None:
+        sectors = col.ring_sectors("ring", (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 9.0, 10.0, 0.0, 2.0, 12)
+        self.assertEqual(len(sectors), 12)
+        self.assertTrue(all(len(s.points) == 10 for s in sectors))
+        skin = skin_of(ring_mesh(9.0, 10.0, 0.0, 2.0))
+        self.assertLessEqual(col.gaps(sectors, skin).max(), 1e-9, "the whole ring is inside its sectors")
+        # A fighter's worth of room through the middle: nothing within 8.5 m of the axis.
+        axis = np.array([[x, y, 1.0] for x in np.linspace(-6.0, 6.0, 13) for y in np.linspace(-6.0, 6.0, 13)])
+        self.assertGreater(col.gaps(sectors, axis).min(), 9.0 * math.cos(math.pi / 12.0) - 8.5 - 1e-9)
+        cover = col.skin_coverage(sectors, skin, tolerance_m=0.05, reach_m=0.4, spacing_m=0.1)
+        self.assertTrue(cover.ok, cover)
+        self.assertLess(cover.worst_excess_m, 9.0 * (1.0 - math.cos(math.pi / 12.0)) + 0.05)
+
+    def test_a_sectors_hit_volume_holds_it_snugly(self) -> None:
+        for sector in col.ring_sectors("ring", (0.0, 0.0, 0.0), (0.0, 0.0, 1.0), 4.0, 5.0, -0.5, 0.5, 12, phase=0.2):
+            box = sector.hit_volume()
+            self.assertEqual(box.kind, col.BOX)
+            self.assertLessEqual(float(box.distance(sector.points).max()), 1e-9, sector.name)
+            self.assertLess(box.volume(), 1.9 * sector.volume(), "tighter than a box along the frame's axes")
+
+    def test_one_hull_round_a_ring_fails_the_reach_check(self) -> None:
+        skin = skin_of(ring_mesh(9.0, 10.0, 0.0, 2.0))
+        plug = [col.hull("plug", col.prism_points((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), [(0.0, 10.0), (2.0, 10.0)], 16))]
+        cover = col.skin_coverage(plug, skin, tolerance_m=0.05, reach_m=0.5, spacing_m=0.25)
+        self.assertEqual(cover.covered, 1.0)
+        self.assertFalse(cover.ok, "the hull fills the hole")
+        self.assertGreater(cover.worst_excess_m, 8.0)
+
+    def test_prism_points_hold_the_round_part(self) -> None:
+        drum = lathe([(0.0, 0.0), (0.0, 3.0), (5.0, 3.0), (5.0, 0.0)], 64, GREY, creases=(1, 2))
+        hull = col.hull("drum", col.prism_points((0.0, 0.0, 0.0), (0.0, 0.0, 1.0), [(0.0, 3.0), (5.0, 3.0)], 16))
+        self.assertEqual(len(hull.points), 32)
+        cover = col.skin_coverage([hull], skin_of(drum), tolerance_m=0.02, reach_m=0.2, spacing_m=0.1)
+        self.assertTrue(cover.ok, cover)
+
+
+class SkinCoverageTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.skin = skin_of(box_mesh((2.0, 2.0, 6.0), GREY))
+
+    def test_an_exact_fit_is_covered_with_no_excess(self) -> None:
+        cover = col.skin_coverage([col.box("b", (0.0, 0.0, 0.0), (2.0, 2.0, 6.0))], self.skin, 0.05, 0.3, 0.1)
+        self.assertTrue(cover.ok)
+        self.assertLessEqual(cover.worst_gap_m, 1e-9)
+        self.assertLessEqual(cover.worst_excess_m, 0.05)
+
+    def test_a_short_shape_leaves_a_gap(self) -> None:
+        cover = col.skin_coverage([col.box("b", (0.0, 0.0, -1.0), (2.0, 2.0, 4.0))], self.skin, 0.05, 0.3, 0.1)
+        self.assertFalse(cover.ok)
+        self.assertLess(cover.covered, 0.8)
+        self.assertAlmostEqual(cover.worst_gap_m, 2.0, delta=0.02)
+
+    def test_an_oversized_shape_is_out_of_reach(self) -> None:
+        cover = col.skin_coverage([col.box("b", (0.0, 0.0, 0.0), (2.0, 6.0, 6.0))], self.skin, 0.05, 0.3, 0.1)
+        self.assertEqual(cover.covered, 1.0)
+        self.assertFalse(cover.ok)
+        self.assertAlmostEqual(cover.worst_excess_m, 2.0, delta=0.15)
+
+    def test_nearest_distance_agrees_with_a_direct_search(self) -> None:
+        rng = np.random.default_rng(5)
+        points, queries = rng.uniform(0.0, 10.0, (3000, 3)), rng.uniform(-3.0, 13.0, (400, 3))
+        direct = np.array([np.linalg.norm(points - q, axis=1).min() for q in queries])
+        found = col.nearest_distance(queries, points, 0.5)
+        near = direct <= 0.5
+        np.testing.assert_allclose(found[near], direct[near], atol=1e-9, err_msg="exact within a cell")
+        self.assertTrue(np.all(found[~near] >= direct[~near] - 1e-9), "never short")
+        self.assertLess(np.max(found[~near] / direct[~near]), 1.5, "a far one is good to about half")
+
+
+class CarrierSectionTests(unittest.TestCase):
+    def parts(self) -> dict[str, list[col.Shape]]:
+        ring = col.ring_sectors("ring", (0.0, 0.0, 4.0), (0.0, 0.0, 1.0), 4.0, 5.0, -0.5, 0.5, 8)
+        arm = col.capsule_between("arm", (5.0, 0.0, 4.0), (9.0, 0.0, 4.0), 0.4)
+        return {"body": [col.box("body", (0.0, 0.0, 0.0), (2.0, 2.0, 6.0))], "ring": [*ring, arm, arm.mirrored("x").renamed("arm_l")]}
+
+    def test_rings_and_mirrored_arms_pass_the_manifest_contract_and_read_back(self) -> None:
+        offset = np.array([0.0, 0.5, 1.0])
+        parts = self.parts()
+        section = col.section({name: [s.translated(-offset) for s in shapes] for name, shapes in parts.items()})
+        manifest.validate_collision_section(section)
+        self.assertEqual([p["name"] for p in section["pieces"]], ["body", "ring"])
+        self.assertEqual([len(p["shapes"]) for p in section["pieces"]], [1, 10])
+        arm = section["pieces"][1]["shapes"][8]
+        self.assertEqual((arm["type"], arm["axis"], arm["radius"], arm["height"]), ("capsule", "z", 0.4, 4.8))
+        np.testing.assert_allclose(arm["basis"]["z"], [1.0, 0.0, 0.0], atol=1e-9)
+        sector = section["pieces"][1]["shapes"][0]
+        self.assertEqual((sector["type"], len(sector["points"])), ("hull", 10))
+        back = col.shapes_of(section)
+        was = [s for shapes in parts.values() for s in shapes]
+        probe = np.random.default_rng(3).uniform(-10.0, 10.0, (400, 3))
+        self.assertEqual([s.name for s in back], [s.name for s in was])
+        for a, b in zip(was, back, strict=True):
+            np.testing.assert_allclose(b.distance(probe - offset), a.distance(probe), atol=1e-4, err_msg=a.name)
 
 
 if __name__ == "__main__":

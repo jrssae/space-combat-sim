@@ -1,12 +1,17 @@
 extends GutTest
-## Who may open a jump point (M6-T23, `JumpCapability`): no designed hull can, every capital stand-in can; a point holds within
-## twice its opener's length by default (or its type's own range), and collapses when its opener is gone, destroyed, disabled or
-## out of range, or a short hold after the opener went through its own ring. A collapse goes straight to the closing flash.
+## Who may open a jump point (M6-T23, `JumpCapability`): no designed fighter or civilian hull can (M12-T19's strike carrier can),
+## every capital stand-in can; a point holds within twice its opener's length by default (or its type's own range, or past its
+## hull's own anchor), and collapses when its opener is gone, destroyed, disabled or out of range, or a short hold after the
+## opener went through its own ring. A collapse goes straight to the closing flash.
 
 const SHIPS_DIR: String = "res://assets/ships/"
 
 
-func test_no_designed_hull_can_open_a_jump_point() -> void:
+## Designed capital hulls that may open points (M12-T19: the raiders' strike carrier, the maintainer's Q25).
+const JUMP_CAPABLE: PackedStringArray = ["raider_strike_carrier.tres"]
+
+
+func test_no_designed_fighter_or_civilian_hull_can_open_a_jump_point() -> void:
 	var specs: int = 0
 	for file: String in DirAccess.get_files_at(SHIPS_DIR):
 		if not file.ends_with(".tres"):
@@ -14,17 +19,22 @@ func test_no_designed_hull_can_open_a_jump_point() -> void:
 		var spec := load(SHIPS_DIR + file) as ShipSpec
 		if spec == null:
 			continue
+		if file in JUMP_CAPABLE:
+			assert_true(spec.can_open_jump_point, "%s opens its own points" % file)
+			continue
 		specs += 1
 		assert_false(spec.can_open_jump_point, "%s cannot open a jump point" % file)
 		assert_eq(spec.jump_hold_range_m, 0.0, "%s gives no hold range of its own" % file)
 	assert_gte(specs, 12, "the Starfuries, the raider and the nine civilian hulls")
 
 
-func test_every_capital_stand_in_can_and_holds_within_twice_its_length() -> void:
+func test_every_capital_stand_in_can_and_holds_within_twice_its_length_or_past_its_anchor() -> void:
 	for cls: StringName in CapitalStandin.CLASSES:
 		var cap: CapitalStandin = CapitalStandin.create(cls, Factions.RAIDERS, "TEST", Vector3.ZERO)
 		assert_true(JumpCapability.can_open(cap), "a %s stand-in opens points" % cls)
-		assert_almost_eq(JumpCapability.hold_range_of(cap), 2.0 * cap.length_m(), 1e-3, "%s: 2 x its length" % cls)
+		var anchor_m: float = (cap.jump_anchor["position"] as Vector3).length() if not cap.jump_anchor.is_empty() else 0.0
+		var wanted_m: float = maxf(2.0 * cap.length_m(), anchor_m + cap.length_m())
+		assert_almost_eq(JumpCapability.hold_range_of(cap), wanted_m, 1e-3, "%s: 2 x its length, or a length past its anchor" % cls)
 		assert_almost_eq(JumpCapability.length_of(cap), cap.length_m(), 1e-3)
 		cap.free()
 	assert_false(JumpCapability.can_open(null))
@@ -36,6 +46,8 @@ func test_the_hold_range_is_twice_the_length_unless_the_type_gives_one() -> void
 	assert_eq(JumpCapability.hold_range_m(1200.0), 2400.0)
 	assert_eq(JumpCapability.hold_range_m(300.0, 450.0), 450.0, "the type's own value wins")
 	assert_eq(JumpCapability.hold_range_m(-5.0), 0.0)
+	assert_eq(JumpCapability.hold_range_m(112.0, 0.0, 308.0), 420.0, "a hull's own anchor and a length beyond it (M12-T19)")
+	assert_eq(JumpCapability.hold_range_m(112.0, 0.0, 50.0), 224.0, "an anchor close in keeps the usual range")
 
 
 func test_a_point_holds_until_its_opener_is_lost() -> void:
@@ -56,6 +68,39 @@ func test_an_opener_gone_through_its_own_point_holds_it_a_moment_more() -> void:
 	assert_eq(JumpCapability.verdict(false, false, false, 0.0, 600.0, hold), JumpCapability.OPENER_THROUGH)
 	assert_eq(JumpCapability.verdict(true, false, false, 5000.0, 600.0, 1.0), JumpCapability.HOLDS,
 			"its range no longer counts once it is through")
+
+
+func test_a_drive_needs_its_recharge_after_a_jump() -> void:
+	# M8-T08, D83: opening a point empties the drive; it opens no other until its class's recharge has passed.
+	var drive := JumpDrive.new(240.0)
+	assert_true(drive.is_ready(0.0), "charged until it jumps")
+	assert_eq(drive.level(0.0), 1.0)
+	drive.fire(100.0)
+	assert_false(drive.is_ready(100.0))
+	assert_almost_eq(drive.left_s(160.0), 180.0, 1e-6)
+	assert_almost_eq(drive.level(160.0), 0.25, 1e-6)
+	assert_false(drive.is_ready(339.9))
+	assert_true(drive.is_ready(340.0), "ready once the recharge has passed")
+	drive.fire(400.0)
+	drive.charge()
+	assert_true(drive.is_ready(400.0), "charged at once (a ship fresh from its pool, the console)")
+	assert_true(JumpDrive.new().is_ready(0.0) and JumpDrive.new(-5.0).recharge_s == 0.0, "no recharge: always ready")
+
+
+func test_every_capital_stand_in_has_its_classes_drive() -> void:
+	for cls: StringName in CapitalStandin.CLASSES:
+		var cap: CapitalStandin = CapitalStandin.create(cls, Factions.RAIDERS, "TEST", Vector3.ZERO)
+		assert_eq(JumpCapability.drive_of(cap), cap.jump_drive)
+		assert_almost_eq(cap.jump_drive.recharge_s, CapitalData.jump_recharge_s(cls), 1e-6, "%s: its class's recharge" % cls)
+		assert_true(JumpCapability.drive_ready(cap, 0.0), "%s: charged as built" % cls)
+		cap.jump_drive.fire(10.0)
+		assert_false(JumpCapability.drive_ready(cap, 11.0))
+		assert_almost_eq(JumpCapability.recharge_left_s(cap, 11.0), cap.jump_drive.recharge_s - 1.0, 1e-6)
+		cap.free()
+	var plain := autofree(Node3D.new()) as Node3D
+	assert_null(JumpCapability.drive_of(plain), "a ship with no drive")
+	assert_true(JumpCapability.drive_ready(plain, 0.0), "has nothing to wait on")
+	assert_eq(JumpCapability.recharge_left_s(null, 0.0), 0.0)
 
 
 func test_a_collapse_goes_straight_to_the_closing_flash() -> void:

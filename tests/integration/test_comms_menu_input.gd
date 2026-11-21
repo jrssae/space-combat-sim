@@ -1,13 +1,11 @@
 extends TestSteps
 ## AC28 on the real main scene (architecture §18.22, M5-T46): D-pad Right opens the comms menu on the radial framework and
 ## pauses the game; the left stick points (M7-T37), A sends the order through `WingDirector` once the game runs again, B backs out,
-## D-pad Right closes it; while it is open the D-pad's flight actions and the target button do nothing, and nothing that was
-## held fires on the tick it closes.
+## Ctrl closes it; while it is open the D-pad and the target button do nothing, and nothing that was held fires on the tick it
+## closes. M8-T24 (D90): one slice per order, and keys 1-N pick by the entry's place in the page.
 
-const UP := 0.0
-const RIGHT := 90.0
-const DOWN := 180.0
-const LEFT := 270.0
+## The wing orders page in free flight (no home dock in range, so no DOCK), in page order.
+const ORDERS: Array[String] = ["ATTACK", "FORM ON ME", "ENGAGE", "COVER ME", "FORM UP", "HOLD POSITION"]
 
 var main: Main
 var source: FakeInputSource
@@ -36,14 +34,16 @@ func test_dpad_right_opens_the_menu_with_the_wing_orders_and_pauses_the_game() -
 	assert_true(get_tree().paused, "the game is paused while it is open")
 	assert_eq(main.comms.menu.page_title(), "WING ORDERS")
 	assert_true(_read("comms_menu.open"))
-	assert_eq(_read("comms_menu.entries"), PackedStringArray(["attack", "form on me", "engage", "cover me"]))
+	assert_eq(_read("comms_menu.entries"),
+			PackedStringArray(["attack", "form on me", "engage", "cover me", "form up", "hold position"]),
+			"the orders in the order of their keys, one slice each; DOCK (M8-T06) is left out with no home dock in range: test_docking")
+	assert_eq(main.comms.menu.radial.slice_count(), ORDERS.size(), "no blank slice")
 	assert_true(main.comms.view.visible)
 
 
 func test_the_stick_points_and_a_sends_each_of_the_four_orders_through_the_wing_director() -> void:
 	var expected: Array[int] = [AiContext.Order.ATTACK_MY_TARGET, AiContext.Order.FORM_ON_ME, AiContext.Order.ENGAGE_AT_WILL,
 			AiContext.Order.COVER_ME]
-	var slices: Array[float] = [UP, RIGHT, DOWN, LEFT]
 	var wing: Wing = main.wings.player_wing()
 	main.wings.give_order(AiContext.Order.COVER_ME)
 	for i: int in 4:
@@ -53,8 +53,8 @@ func test_the_stick_points_and_a_sends_each_of_the_four_orders_through_the_wing_
 		var lines: Array[String] = []
 		var record := func(line: String) -> void: lines.append(line)
 		main.wings.acknowledged.connect(record)
-		await _point(slices[i])
-		assert_eq(main.comms.menu.radial.highlight(), i, "the stick lit slice %d" % i)
+		await _point_at(ORDERS[i])
+		assert_eq(main.comms.menu.radial.highlight(), i, "the stick lit %s" % ORDERS[i])
 		assert_true(get_tree().paused, "nothing is sent while it is only pointed at")
 		await _press(InputAdapter.RADIAL_SELECT)
 		main.wings.acknowledged.disconnect(record)
@@ -66,6 +66,53 @@ func test_the_stick_points_and_a_sends_each_of_the_four_orders_through_the_wing_
 		else:
 			assert_eq(wing.order, AiContext.Order.COVER_ME, "slot 0: refused, the order is unchanged")
 		assert_eq(main.comms.menu.closed_by(), &"pick")
+
+
+func test_the_stick_and_a_send_the_two_hold_fire_orders_and_another_order_lifts_them() -> void:
+	# M8-T19 (D85). The stick points where the ring put each entry: the test names no angle of its own.
+	var wing: Wing = main.wings.player_wing()
+	var expected: Dictionary = {"FORM UP": AiContext.Order.FORM_HOLD_FIRE, "HOLD POSITION": AiContext.Order.HOLD_POSITION}
+	for label: String in expected:
+		main.wings.give_order(AiContext.Order.COVER_ME)
+		await _press(InputAdapter.COMMS_MENU)
+		assert_true(main.comms.is_open(), label)
+		var at: int = await _point_at(label)
+		assert_gt(at, -1, "%s is on the ring" % label)
+		assert_eq(main.comms.menu.radial.highlight(), at, "the stick lit %s" % label)
+		assert_eq(wing.order, AiContext.Order.COVER_ME, "nothing is sent while it is only pointed at")
+		await _press(InputAdapter.RADIAL_SELECT)
+		assert_false(main.comms.is_open(), "a pick closes it")
+		assert_eq(wing.order, expected[label], label)
+		assert_eq(_read("comms_menu.last_pick"), label)
+	# Any other order lifts the hold: FORM ON ME from the ring.
+	await _press(InputAdapter.COMMS_MENU)
+	await _point_at("FORM ON ME")
+	await _press(InputAdapter.RADIAL_SELECT)
+	assert_eq(wing.order, AiContext.Order.FORM_ON_ME)
+
+
+func test_the_numbered_keys_pick_by_the_entrys_place() -> void:
+	# M8-T24 (D90): keys 1-N are the ring's N entries in page order and send at once.
+	var wing: Wing = main.wings.player_wing()
+	for i: int in range(1, ORDERS.size()):  # ATTACK MY TARGET needs a hostile selected: the console test and key 1 cover it
+		await _press(InputAdapter.COMMS_MENU)
+		assert_true(main.comms.is_open(), ORDERS[i])
+		var expected: int = main.comms.menu.radial.slots()[i]["payload"]
+		wing.order = AiContext.Order.COVER_ME if expected != AiContext.Order.COVER_ME else AiContext.Order.FORM_ON_ME
+		await _press(InputAdapter.RADIAL_ENTRIES[i])
+		assert_false(main.comms.is_open(), "%s: the press sends it and closes the menu" % ORDERS[i])
+		assert_false(get_tree().paused)
+		assert_eq(_read("comms_menu.last_pick"), ORDERS[i], "entry %d" % (i + 1))
+		assert_eq(wing.order, expected, ORDERS[i])
+
+
+func test_a_place_past_the_last_entry_picks_nothing() -> void:
+	await _press(InputAdapter.COMMS_MENU)
+	var picks: int = main.comms.menu.picks()
+	await _press(InputAdapter.RADIAL_ENTRIES[7])  # key 8: this page has six entries
+	assert_true(main.comms.is_open(), "nothing there: still open")
+	assert_eq(main.comms.menu.picks(), picks)
+	await _press(InputAdapter.RADIAL_BACK)
 
 
 func test_b_closes_it_without_giving_an_order_or_targeting() -> void:
@@ -91,15 +138,20 @@ func test_the_pad_b_that_closes_it_taps_no_target() -> void:
 	assert_false(main.ship.targeting.system.has_selection(), "the closing press did not select a target")
 
 
-func test_dpad_right_again_closes_it_and_the_opening_press_does_not() -> void:
-	source.hold(InputAdapter.COMMS_MENU)
+func test_ctrl_again_closes_it_and_the_opening_press_does_not() -> void:
+	source.hold(InputAdapter.COMMS_MENU, 1.0, true)
 	await _ticks(10)
 	assert_true(main.comms.is_open(), "held through the open: still open")
 	source.release(InputAdapter.COMMS_MENU)
 	await _ticks(2)
 	assert_true(main.comms.is_open())
 	await _press(InputAdapter.COMMS_MENU)
-	assert_false(main.comms.is_open(), "a second press closes it")
+	assert_true(main.comms.is_open(), "D-pad Right does nothing in the ring (M8-T24, maintainer 2026-11-19)")
+	source.hold(InputAdapter.COMMS_MENU, 1.0, true)
+	await _ticks(2)
+	source.release(InputAdapter.COMMS_MENU)
+	await _ticks(2)
+	assert_false(main.comms.is_open(), "a second Ctrl press closes it")
 	assert_eq(main.comms.menu.closed_by(), &"close")
 	assert_false(get_tree().paused)
 
@@ -114,8 +166,9 @@ func test_the_dpad_and_flight_buttons_do_nothing_while_it_is_open() -> void:
 	var assist: bool = main.ship.assist_on
 	var lit: bool = main.ship.running_lights
 	await _press(InputAdapter.COMMS_MENU)
+	# The whole D-pad (assist, next weapon, lights, and D-pad Right, the pad's comms button) and the target buttons.
 	for action: StringName in [InputAdapter.TOGGLE_ASSIST, InputAdapter.WEAPON_NEXT, InputAdapter.TOGGLE_RUNNING_LIGHTS,
-			InputAdapter.TARGET_CYCLE, InputAdapter.TARGET_NEXT]:
+			InputAdapter.COMMS_MENU, InputAdapter.TARGET_CYCLE, InputAdapter.TARGET_NEXT]:
 		await _press(action)
 	assert_true(main.comms.is_open(), "none of them picks or closes")
 	assert_eq(main.comms.menu.picks(), 0)
@@ -161,7 +214,7 @@ func test_the_console_drives_it() -> void:
 	assert_true(_run("commsmenu highlight \"cover me\"").ok)
 	assert_eq(_read("comms_menu.highlight"), "COVER ME")
 	var wing: Wing = main.wings.player_wing()
-	assert_true(_run("commsmenu pick 1").ok)
+	assert_true(_run("commsmenu pick 1").ok)  # the second entry in page order
 	await _ticks(2)
 	assert_eq(wing.order, AiContext.Order.FORM_ON_ME)
 	assert_eq(_read("comms_menu.last_pick"), "FORM ON ME")
@@ -177,22 +230,22 @@ func test_the_pause_command_refuses_while_it_is_open() -> void:
 
 func test_the_ring_is_the_target_menus_size_and_side_and_the_highlight_follows_the_stick() -> void:
 	await _press(InputAdapter.COMMS_MENU)
-	await _point(RIGHT)
+	await _point_at("FORM ON ME")
 	await wait_process_frames(3)
 	var view: RadialMenuView = main.comms.view
 	var target_view: RadialMenuView = main.target_menu.view
 	var size: Vector2 = get_viewport().get_visible_rect().size
 	assert_gt(view.draws, 0)
 	assert_eq(view.layer, target_view.layer, "the same layer as the target menu")
-	assert_eq(view.drawn_labels, ["ATTACK", "FORM ON ME", "ENGAGE", "COVER ME"] as Array[String], "the entries sit on the ring")
+	assert_eq(view.drawn_labels, ORDERS, "one slice per entry, in page order")
 	assert_eq(view.drawn_heading, "WING ORDERS")
 	assert_almost_eq(view.drawn_radius, RadialLayout.outer_radius(size), 0.5, "as big as the target menu")
 	assert_almost_eq(view.drawn_centre.y, size.y * 0.5, 1.0, "vertically centred")
 	assert_eq(view.drawn_centre, RadialLayout.centre(size, false), "at the target menu's side")
 	assert_eq(main.comms.menu.radial.highlight(), 1, "the stick lit FORM ON ME")
 	assert_gt(view.focus_amount(), 0.0, "the focus pull is on")
-	await _point(LEFT)
-	assert_eq(main.comms.menu.radial.highlight(), 3)
+	await _point(270.0)
+	assert_eq(main.comms.menu.radial.highlight(), 5, "straight left on six slices: the boundary takes the upper one, HOLD POSITION")
 
 
 func _press(action: StringName) -> void:
@@ -213,6 +266,16 @@ func _point(deg: float) -> void:
 	for action: StringName in [InputAdapter.RADIAL_RIGHT, InputAdapter.RADIAL_LEFT, InputAdapter.RADIAL_UP, InputAdapter.RADIAL_DOWN]:
 		source.release(action)
 	await _ticks(1)
+
+
+# Points the stick at the slice the ring gave `label`; returns that slice, or -1 when the label is not on the ring.
+func _point_at(label: String) -> int:
+	var slots: Array[Dictionary] = main.comms.menu.radial.slots()
+	for i: int in slots.size():
+		if str(slots[i].get("label", "")) == label:
+			await _point(rad_to_deg(RadialMenu.slice_angle(i, slots.size())))
+			return i
+	return -1
 
 
 func _read(path: String) -> Variant:

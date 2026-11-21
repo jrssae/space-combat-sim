@@ -1,0 +1,13 @@
+{
+  "_comment": "The player's gate jump's beats (M8-T29, maintainer 2026-11-19), seconds: the ship is swallowed from the mouth's plane to the ring in swallow_s; the ring's white flash shows ring_flash_s, then a hard cut to black_s of black (no fades; M28's hyperspace will go there); the arrival side opens on the gate's pylon glow, and the ship bursts out of the ring to the mouth in burst_out_s. During the gate's shots the player's ship carries the cinematic key light (CinematicKeyLight, data/camera/key_light.json). Coming back out, the ship's main engines glow at least engine_glow_floor and its running lights are on from the moment it is placed.",
+  "swallow_s": 1.2,
+  "ring_flash_s": 0.3,
+  "black_s": 0.75,
+  "burst_out_s": 1.0,
+  "engine_glow_floor": 0.35,
+  "_follow": "Wingmen under FORM ON ME or FORM UP, HOLD FIRE follow the player through (M8-T17, maintainer 2026-11-20): those within follow_range_m of the mouth's centre as the run-in starts count; the gate paces them to cross the mouth follow_trail_s after the player, follow_spacing_s apart; the departure vortex is held open for them with the camera outside on the gate (cut to at the ring flash's peak, no black) until the last is through and it starts to fold; never longer than follow_hold_max_s. Wingmen farther off veer off and rejoin after.",
+  "follow_range_m": 3000.0,
+  "follow_hold_max_s": 20.0,
+  "follow_trail_s": 3.0,
+  "follow_spacing_s": 1.5
+}

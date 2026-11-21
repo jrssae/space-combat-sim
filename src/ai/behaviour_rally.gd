@@ -27,7 +27,8 @@ func _init(profile: AiProfile = null) -> void:
 
 func score(ctx: AiContext) -> float:
 	_to = null
-	if ctx.wing_ids.is_empty() or ctx.has_attackable():
+	# A ship told to hold its position does not leave it for a wingmate's fight (M8-T19).
+	if ctx.wing_ids.is_empty() or ctx.order == AiContext.Order.HOLD_POSITION or ctx.has_attackable():
 		return 0.0
 	var p: Perception = ctx.perception
 	# Nearest engaged wingmate beyond ARRIVE_M.

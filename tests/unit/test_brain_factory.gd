@@ -101,10 +101,10 @@ func test_ai_with_the_same_seed_makes_the_same_aim() -> void:
 
 func test_ai_errors_name_the_offending_key() -> void:
 	var cases: Array[Array] = [
-		[{"type": "ai"}, "behaviour.profile must be one of ally_starfury, raider, instructor, civilian, got null"],
+		[{"type": "ai"}, "behaviour.profile must be one of ally_starfury, raider, instructor, civilian, training_drone, got null"],
 		[{"type": "ai", "profile": "pirate"}, "behaviour.profile must be one of"],
 		[{"type": "ai", "profile": 3}, "behaviour.profile must be one of"],
-		[{"type": "ai", "profile": "raider", "orders": "dance"}, "behaviour.orders must be one of engage, attack, form, cover, got \"dance\""],
+		[{"type": "ai", "profile": "raider", "orders": "dance"}, "behaviour.orders must be one of engage, attack, form, cover, form_hold, hold, got \"dance\""],
 		[{"type": "ai", "profile": "raider", "orders": 1}, "behaviour.orders must be one of"],
 	]
 	for case: Array in cases:

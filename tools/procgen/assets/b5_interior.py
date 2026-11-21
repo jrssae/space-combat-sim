@@ -38,7 +38,7 @@ from ..styles.cobra_bay import COBRA_BAY as STYLE
 from ..styles.cobra_bay import SCHEME, WORK_GLOW
 
 ASSET_ID = "b5_interior"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2
 # Each piece's atlas and the texel its packer starts from (it grows the texel until every chart fits).
 BAY_ATLAS_PX = 2048
 ENDS_ATLAS_PX = 2048

@@ -132,7 +132,7 @@ func test_free_flight_reaches_the_real_main_through_the_loading_screen() -> void
 	(front.frame().current_page() as ChoiceListScreen).button_of(&"free_flight").pressed.emit()
 	var page: FreeFlightSelect = front.frame().current_page() as FreeFlightSelect
 	assert_not_null(page, "Free flight opens its page")
-	page.start_requested.emit(page.encounters)
+	page.start_requested.emit(page.any_on())
 	assert_eq(game.flow.state, GameFlow.State.LOADING)
 	await wait_until(func() -> bool: return _in_space_with(GameScript.MAIN_SCENE), 60.0)
 	assert_true(_in_space_with(GameScript.MAIN_SCENE), "Main replaced the loading screen")

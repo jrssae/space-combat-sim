@@ -63,9 +63,9 @@ func test_the_interval_scales_the_gaps() -> void:
 
 
 func test_other_kinds_stand_in_gentlest_first() -> void:
-	assert_eq(EncounterPlan.substitutes(&"raid"), [&"traffic", &"patrol"] as Array[StringName])
-	assert_eq(EncounterPlan.substitutes(&"patrol"), [&"traffic", &"raid"] as Array[StringName])
-	assert_eq(EncounterPlan.substitutes(&"traffic"), [&"patrol", &"raid"] as Array[StringName])
+	assert_eq(EncounterPlan.new().substitutes(&"raid"), [&"traffic", &"patrol"] as Array[StringName])
+	assert_eq(EncounterPlan.new().substitutes(&"patrol"), [&"traffic", &"raid"] as Array[StringName])
+	assert_eq(EncounterPlan.new().substitutes(&"traffic"), [&"patrol", &"raid"] as Array[StringName])
 
 
 func test_a_share_of_raids_is_drawn_for_the_station() -> void:
@@ -184,10 +184,13 @@ func test_a_patrol_or_traffic_route_is_straight_and_ends_as_far_out_as_it_starts
 func test_the_cap_admits_an_event_only_when_it_fits() -> void:
 	assert_eq(EncounterPlan.admit(0, 6, 24), 6, "room")
 	assert_eq(EncounterPlan.admit(18, 6, 24), 6, "exactly fits")
-	assert_eq(EncounterPlan.admit(19, 6, 24), 0, "waits")
+	assert_eq(EncounterPlan.admit(19, 6, 24), 5, "held: starts with the five that fit (maintainer, 2026-11-21)")
+	assert_eq(EncounterPlan.admit(21, 6, 24), EncounterPlan.MIN_PARTIAL, "three fit: the smallest it starts with")
+	assert_eq(EncounterPlan.admit(22, 6, 24), 0, "two would fit: it waits, never a raid of two cut from six")
 	assert_eq(EncounterPlan.admit(24, 1, 24), 0, "full")
 	assert_eq(EncounterPlan.admit(0, 6, 4), 4, "bigger than the whole cap: trimmed to it once nothing else is in play")
-	assert_eq(EncounterPlan.admit(1, 6, 4), 0, "and waits while anything is")
+	assert_eq(EncounterPlan.admit(1, 6, 4), 3, "three fit beside one: it starts with three")
+	assert_eq(EncounterPlan.admit(2, 6, 4), 0, "and waits while fewer than three fit")
 
 
 func test_an_event_can_be_trimmed() -> void:
@@ -218,3 +221,37 @@ func _closest_to_origin(start: Vector3, end: Vector3) -> float:
 	var d: Vector3 = end - start
 	var t: float = clampf(-start.dot(d) / d.length_squared(), 0.0, 1.0)
 	return (start + d * t).length()
+
+
+# --- M8-T28: the three switches ------------------------------------------------------------------------------------
+
+
+func _with(raid: bool, patrol: bool, traffic: bool) -> EncounterPlan:
+	var plan: EncounterPlan = _plan(21)
+	plan.enabled = {&"raid": raid, &"patrol": patrol, &"traffic": traffic}
+	return plan
+
+
+func test_a_switched_off_kind_is_never_drawn_alone_or_in_combination() -> void:
+	for combo: Array in [[true, false, false], [false, true, false], [false, false, true],
+			[true, true, false], [true, false, true], [false, true, true], [true, true, true]]:
+		var plan: EncounterPlan = _with(combo[0], combo[1], combo[2])
+		assert_true(plan.any_on())
+		for i: int in 400:
+			var kind: StringName = plan.event(i).kind
+			assert_true(plan.kind_on(kind), "event %d is %s with %s" % [i, kind, combo])
+
+
+func test_a_lone_kind_is_drawn_even_when_the_file_weights_it_zero() -> void:
+	var plan: EncounterPlan = _plan(5, 120.0, {&"raid": 1.0, &"patrol": 0.0, &"traffic": 0.0})
+	plan.enabled = {&"raid": false, &"patrol": true, &"traffic": false}
+	assert_eq(plan.event(3).kind, &"patrol")
+
+
+func test_all_switches_off_is_an_empty_sky() -> void:
+	assert_false(_with(false, false, false).any_on())
+
+
+func test_substitutes_skip_switched_off_kinds() -> void:
+	assert_eq(_with(true, false, false).substitutes(&"traffic"), [&"raid"] as Array[StringName])
+	assert_eq(_with(false, true, true).substitutes(&"raid"), [&"traffic", &"patrol"] as Array[StringName])

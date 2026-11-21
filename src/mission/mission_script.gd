@@ -41,6 +41,12 @@ func opening_until() -> StringName:
 	return &""
 
 
+## Steps the pause menu may skip as one block (M8 D79: the tutorial's training), `{from, to, label}`: offered while a step
+## from `from` up to the one before `to` runs, and taking it goes to `to`. Empty for none.
+func skip_block() -> Dictionary:
+	return {}
+
+
 ## "" when every step has its method (and the opening ends on a listed step), else what is wrong.
 func check_steps() -> String:
 	var seen: Dictionary = {}
@@ -52,4 +58,7 @@ func check_steps() -> String:
 			return "no method %s%s for step %s" % [STEP_PREFIX, step, step]
 	if opening_until() != &"" and not seen.has(opening_until()):
 		return "the opening ends at %s, which is not a step" % opening_until()
+	var block: Dictionary = skip_block()
+	if not block.is_empty() and not (seen.has(block.get("from")) and seen.has(block.get("to"))):
+		return "the skip block's from and to must be steps"
 	return ""

@@ -188,6 +188,32 @@ func test_no_target_no_box_no_lead() -> void:
 # --- route waypoint (M3-T09) -------------------------------------------------------------------------------------------
 
 
+## M8-T33's play-test: a mission's waypoint on the selected target showed two labels with two ranges on one spot.
+func test_a_waypoint_on_the_selected_target_shows_the_targets_label_alone() -> void:
+	var input: HudInput = _hud_input()
+	input.has_waypoint = true
+	input.waypoint_position = Vector3(0.0, 0.0, -3000.0)
+	input.waypoint_label = "JUMPGATE"
+	input.waypoint_id = 4242
+	input.target = _target(Vector3(0.0, 0.0, -3000.0))
+	input.selected_id = 4242
+	var merged: HudFrame = HudLayout.compute(input)
+	assert_true(merged.target_present, "the target's mark and label stay")
+	assert_false(merged.waypoint_present, "the waypoint's own marker and label are left out")
+	assert_false(merged.waypoint_on_screen or merged.waypoint_edge_visible)
+	input.selected_id = 7
+	var apart: HudFrame = HudLayout.compute(input)
+	assert_true(apart.waypoint_present, "another target selected: the objective keeps its label")
+	assert_eq(apart.waypoint_label, "JUMPGATE")
+	input.target = null
+	input.selected_id = 0
+	assert_true(HudLayout.compute(input).waypoint_present, "nothing selected: the objective's label shows")
+	input.waypoint_id = 0
+	input.selected_id = 0
+	input.target = _target(Vector3(0.0, 0.0, -3000.0))
+	assert_true(HudLayout.compute(input).waypoint_present, "a bare place is no target: it keeps its marker")
+
+
 func test_the_waypoint_marker_sits_on_the_projected_route_point() -> void:
 	var input: HudInput = _hud_input()
 	assert_false(HudLayout.compute(input).waypoint_present, "no route, no marker")
@@ -557,6 +583,9 @@ func test_the_roster_tags_say_what_each_wingman_is_doing() -> void:
 	assert_eq(HudLayout.roster_tag("follow_path"), "NAV")
 	assert_eq(HudLayout.roster_tag("guard"), "GUARD", "an unknown behaviour reads as its id")
 	assert_eq(HudLayout.roster_tag("formation", "", true), "DOWN")
+	assert_eq(HudLayout.roster_tag("docking"), "DOCKING", "on its way to the docking bay (M8-T06)")
+	assert_eq(HudLayout.roster_tag("docked", "RAIDER 3"), "DOCKED", "inside, being repaired")
+	assert_eq(HudLayout.roster_tag("standing_by"), "STAND BY", "broken off while the leader docks, with nothing to fight")
 
 
 func test_the_roster_stacks_one_row_per_wingman_top_left() -> void:
@@ -758,3 +787,28 @@ func test_the_speed_and_its_direction_are_read_against_the_reference() -> void:
 	assert_eq(HudPainter.altitude_text(HudLayout.compute(input)), "")
 	input.has_reference = false
 	assert_almost_eq(HudLayout.compute(input).speed_mps, input.own_velocity.length(), 1e-2, "no reference: the frame's speed")
+
+
+# --- Approach cue (M8-T18) -------------------------------------------------------------------------------------------
+
+
+func test_a_navigation_target_with_a_cue_carries_its_readout_bar_and_colour() -> void:
+	var input := _hud_input()
+	var gate: TargetReadout = _target(Vector3(0.0, 0.0, -19000.0))
+	gate.role = Targetable.Role.BEACON
+	gate.hull_fraction = -1.0
+	input.target = gate
+	input.approach_cue = ApproachCue.read(Vector3(0.0, 0.0, -19000.0), Vector3(0.0, 0.0, -1000.0), 2000.0, 30.0)
+	var f: HudFrame = HudLayout.compute(input)
+	assert_true(f.cue_present)
+	assert_eq(f.cue_text, "+1000 m/s  BRAKE")
+	assert_eq(f.cue_color, HudLayout.AMBER, "brake reads amber")
+	assert_between(f.cue_mark, 0.0, 1.0)
+	assert_gt(f.cue_fill, 0.0)
+	input.approach_cue = ApproachCue.read(Vector3(0.0, 0.0, -5000.0), Vector3(0.0, 0.0, -1000.0), 2000.0, 30.0)
+	assert_eq(HudLayout.compute(input).cue_color, HudLayout.RED, "overshoot reads red")
+	input.approach_cue = ApproachCue.read(Vector3(0.0, 0.0, -40000.0), Vector3(0.0, 0.0, -100.0), 2000.0, 30.0)
+	assert_eq(HudLayout.compute(input).cue_color, TargetCategories.COLORS[TargetCategories.Category.NAVIGATION], "on course: the target's own")
+	var raider: TargetReadout = _target(Vector3(0.0, 0.0, -500.0))
+	input.target = raider
+	assert_false(HudLayout.compute(input).cue_present, "a ship never shows the cue")

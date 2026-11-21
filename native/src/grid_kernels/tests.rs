@@ -504,12 +504,224 @@ fn a_battery_shows_its_barrels_along_the_pulse_it_fires() {
     };
     let at = muzzle_point(&f, 0.0, 0.0, trunnion, Vector3::ZERO);
     let from_trunnion = lead(at).expect("the trunnion leads it");
-    let s = battery_shot(&f, min_el, trunnion, corner, from_trunnion, lead);
-    let angle = |a: Vector3, b: Vector3| f64::from(dot(a, b)).clamp(-1.0, 1.0).acos().to_degrees();
+    let barrel = Barrel {
+        min_elevation: min_el,
+        azimuth: 0.0,
+        trunnion,
+        muzzle: corner,
+    };
+    let s = battery_shot(&f, &barrel, speed, from_trunnion, lead);
+    let angle = |a: Vector3, b: Vector3| f64::from(length(sub(a, b))).to_degrees();
     let shown = tk::direction_of(&f, s.azimuth, s.elevation);
     assert!(angle(shown, s.aim) < 0.01, "the barrels point down the pulse's line: {:.3} degrees off", angle(shown, s.aim));
     let laid = tk::angles_of(&f, from_trunnion.0);
     let old = tk::direction_of(&f, laid.0, laid.1);
     assert!(angle(old, s.aim) > 1.0, "laid on the trunnion's lead they were {:.2} degrees off", angle(old, s.aim));
-    assert!(f64::from(dist_sq(s.muzzle, muzzle_point(&f, laid.0, laid.1, trunnion, corner))) < 1e-9, "the pulse leaves as before");
+    // M8-T10: the pulse starts at the tip of the barrel as shown, not where the trunnion's lead would have put the muzzle.
+    let drawn = muzzle_point(&f, s.azimuth, s.elevation, trunnion, corner);
+    assert!(f64::from(dist_sq(s.muzzle, drawn)) < 1e-9, "the pulse leaves the drawn barrel's tip");
+    let old_muzzle = muzzle_point(&f, laid.0, laid.1, trunnion, corner);
+    assert!(f64::from(dist_sq(s.muzzle, old_muzzle)).sqrt() > 0.1, "laid on the trunnion's lead the tip was elsewhere");
+}
+
+// The interceptor battery model's trunnion and four muzzles (`grid_interceptor_battery`'s pitch frame), m.
+const MODEL_TRUNNION: Vector3 = Vector3::new(0.0, 12.5, 0.0);
+const MODEL_MUZZLES: [Vector3; 4] = [
+    Vector3::new(3.9, 1.4, -8.4),
+    Vector3::new(-3.9, -1.4, -8.4),
+    Vector3::new(-3.9, 1.4, -8.4),
+    Vector3::new(3.9, -1.4, -8.4),
+];
+const MODEL_MIN_ELEVATION: f64 = -0.174_532_925;
+
+fn model_frame() -> tk::Frame {
+    tk::frame(&Basis::IDENTITY, Vector3::new(40.0, -7.0, 15.0), Vector3::ZERO, Vector3::UP, Vector3::FORWARD)
+}
+
+fn model_barrel(k: usize, azimuth: f64) -> Barrel {
+    Barrel {
+        min_elevation: MODEL_MIN_ELEVATION,
+        azimuth,
+        trunnion: MODEL_TRUNNION,
+        muzzle: MODEL_MUZZLES[k],
+    }
+}
+
+// How far `point` lies from the line a barrel laid at the angles fires down.
+fn off_the_barrels_line(b: &Barrel, (az, el): (f64, f64), point: Vector3) -> f64 {
+    let f = model_frame();
+    let to = sub(point, muzzle_point(&f, az, el, b.trunnion, b.muzzle));
+    let down = tk::direction_of(&f, az, el);
+    f64::from(length(sub(to, scale(down, dot(to, down)))))
+}
+
+// What a shot of the model's battery at a projectile shows: the shot, how far its line passes from where the lead says they
+// meet, how far the pulse starts from the drawn barrel's tip, how far the muzzle laid on the trunnion's lead (before M8-T10)
+// was from that tip, and the angle between the drawn barrel and the pulse, degrees.
+fn model_shot(b: &Barrel, target: Vector3, velocity: Vector3) -> (BatteryShot, f64, f64, f64, f64) {
+    let f = model_frame();
+    let lead = |from: Vector3| {
+        let l = crate::brain_maths::solve(from, Vector3::ZERO, target, velocity, 2000.0, 1.0);
+        l.ok.then_some((l.aim_dir, l.t))
+    };
+    let from_trunnion = lead(muzzle_point(&f, 0.0, 0.0, b.trunnion, Vector3::ZERO)).expect("the trunnion leads it");
+    let s = battery_shot(&f, b, 2000.0, from_trunnion, lead);
+    let to_meet = sub(add(target, scale(velocity, s.flight_s as f32)), s.muzzle);
+    let off_line = f64::from(length(sub(to_meet, scale(s.aim, dot(to_meet, s.aim)))));
+    let drawn = muzzle_point(&f, s.azimuth, s.elevation, b.trunnion, b.muzzle);
+    let laid = tk::angles_of(&f, from_trunnion.0);
+    let before = muzzle_point(&f, laid.0, laid.1.clamp(b.min_elevation, FRAC_PI_2), b.trunnion, b.muzzle);
+    let from_tip = f64::from(dist_sq(s.muzzle, drawn)).sqrt();
+    let askew = f64::from(length(sub(tk::direction_of(&f, s.azimuth, s.elevation), s.aim))).to_degrees();
+    (s, off_line, from_tip, f64::from(dist_sq(before, drawn)).sqrt(), askew)
+}
+
+#[test]
+fn a_barrel_is_laid_so_its_line_passes_through_the_point() {
+    let f = model_frame();
+    let trunnion = add(f.pivot, MODEL_TRUNNION);
+    for (k, _) in MODEL_MUZZLES.iter().enumerate() {
+        let b = model_barrel(k, 0.3);
+        for way in [Vector3::new(0.55, 0.45, -0.7), Vector3::new(-0.8, 0.1, 0.6), Vector3::new(0.2, 0.9, 0.3)] {
+            for range in [12.0_f32, 30.0, 400.0, 1500.0] {
+                let point = add(trunnion, scale(normalized(way), range));
+                let off = off_the_barrels_line(&b, lay_on(&f, &b, point), point);
+                assert!(off < 2e-3, "barrel {k}, {range} m toward {way:?}: its line passes {off:.4} m from the point");
+            }
+        }
+    }
+    // A barrel on the mount's axis is laid as the trunnion's own line.
+    let plain = Barrel {
+        min_elevation: MODEL_MIN_ELEVATION,
+        azimuth: 0.0,
+        trunnion: Vector3::ZERO,
+        muzzle: Vector3::new(0.0, 0.0, -5.4),
+    };
+    let way = normalized(Vector3::new(-0.3, 0.5, -0.6));
+    let (az, el) = lay_on(&f, &plain, add(f.pivot, scale(way, 80.0)));
+    let (want_az, want_el) = tk::angles_of(&f, way);
+    assert!((az - want_az).abs() < 1e-6 && (el - want_el).abs() < 1e-6, "one barrel down the axis: the line's own angles");
+}
+
+#[test]
+fn a_mount_keeps_its_azimuth_for_a_point_no_turn_brings_its_barrel_onto() {
+    let f = model_frame();
+    let b = model_barrel(0, 0.7);
+    // Right over the mount, and 2 m off its axis: nearer the axis than the barrel's 3.9 m beside it.
+    for aside in [0.0_f32, 2.0] {
+        let point = add(f.pivot, Vector3::new(aside, 900.0, 0.0));
+        let (az, el) = lay_on(&f, &b, point);
+        assert_eq!(az, 0.7, "{aside} m off the axis: the azimuth as it was");
+        assert!(el > 1.5 && el <= FRAC_PI_2, "{aside} m off the axis: lifted to the point, {el:.3} rad");
+    }
+    // Just outside that reach the barrel turns onto it again.
+    let point = add(f.pivot, Vector3::new(4.5, 900.0, 0.0));
+    assert!(off_the_barrels_line(&b, lay_on(&f, &b, point), point) < 2e-3, "4.5 m off the axis: on the barrel's line");
+    // Under the arc the barrels stop at its floor.
+    let low = add(add(f.pivot, MODEL_TRUNNION), Vector3::new(0.0, -20.0, -40.0));
+    assert_eq!(lay_on(&f, &b, low).1, MODEL_MIN_ELEVATION, "the elevation stays inside the arc");
+}
+
+#[test]
+fn a_pulse_leaves_the_drawn_barrel_tip_at_30_m_and_at_long_range() {
+    let trunnion = add(model_frame().pivot, MODEL_TRUNNION);
+    let velocity = Vector3::new(120.0, -40.0, 300.0);
+    let mut worst_before: f64 = 0.0;
+    // A crossing bolt 30 m and 1.4 km from the trunnion, up and to a side of the rest line, for each barrel in turn.
+    for range in [30.0_f32, 1400.0] {
+        for k in 0..MODEL_MUZZLES.len() {
+            let target = add(trunnion, scale(normalized(Vector3::new(0.55, 0.45, -0.7)), range));
+            let (_, off_line, from_tip, before, askew) = model_shot(&model_barrel(k, 0.0), target, velocity);
+            assert!(from_tip < 1e-3, "barrel {k} at {range} m: the pulse starts {from_tip:.4} m from the drawn tip");
+            assert!(off_line < 0.02, "barrel {k} at {range} m: its line passes {off_line:.4} m from the meeting");
+            assert!(askew < 0.01, "barrel {k} at {range} m: the barrel lies {askew:.4} degrees off the pulse");
+            if range < 100.0 {
+                worst_before = worst_before.max(before);
+            }
+        }
+    }
+    assert!(worst_before > 1.0, "laid on the trunnion's lead, a 30 m shot started {worst_before:.2} m off the drawn tip");
+}
+
+#[test]
+fn a_pulse_at_a_target_right_overhead_still_leaves_the_drawn_tip_on_its_own_lead() {
+    // A bolt falling down the mount's axis: no turn brings a barrel 3.9 m beside the axis onto it, so the mount holds its
+    // azimuth; the pulse still starts at the drawn tip and flies its lead, a fraction of a degree off the barrel at 900 m.
+    let f = model_frame();
+    for k in 0..MODEL_MUZZLES.len() {
+        let target = add(f.pivot, Vector3::new(0.0, 900.0, 0.0));
+        let (s, off_line, from_tip, _, askew) = model_shot(&model_barrel(k, 0.4), target, Vector3::new(0.0, -350.0, 0.0));
+        assert_eq!(s.azimuth, 0.4, "barrel {k}: the mount does not spin under a target overhead");
+        assert!(from_tip < 1e-3, "barrel {k}: the pulse starts {from_tip:.4} m from the drawn tip");
+        assert!(off_line < 0.02, "barrel {k}: its line passes {off_line:.4} m from the meeting");
+        assert!(askew < 0.5, "barrel {k}: the barrel lies {askew:.3} degrees off the pulse");
+    }
+}
+
+#[test]
+fn a_pulse_below_the_arc_still_leaves_the_drawn_barrel_tip() {
+    // A bolt 25 m off and 20 degrees under the base: the barrels stop at the arc's edge and the pulse starts at their tip.
+    let trunnion = add(model_frame().pivot, MODEL_TRUNNION);
+    let low = (-20_f32).to_radians();
+    let target = add(trunnion, scale(Vector3::new(0.0, low.sin(), -low.cos()), 25.0));
+    let (s, off_line, from_tip, _, _) = model_shot(&model_barrel(0, 0.0), target, Vector3::new(30.0, 0.0, 0.0));
+    assert_eq!(s.elevation, MODEL_MIN_ELEVATION, "the barrels stay inside the arc");
+    assert!(from_tip < 1e-3, "the pulse starts {from_tip:.4} m from the drawn tip");
+    assert!(off_line < 0.02, "its line passes {off_line:.4} m from the meeting");
+}
+
+#[test]
+fn a_battery_with_no_lead_from_its_muzzle_keeps_the_trunnions_lead() {
+    let f = model_frame();
+    let b = model_barrel(2, 0.0);
+    let aim = normalized(Vector3::new(0.3, 0.4, -0.8));
+    let s = battery_shot(&f, &b, 2000.0, (aim, 0.5), |_| None);
+    assert_eq!((s.aim, s.flight_s), (aim, 0.5), "the trunnion's lead as given");
+    let drawn = muzzle_point(&f, s.azimuth, s.elevation, b.trunnion, b.muzzle);
+    assert!(f64::from(dist_sq(s.muzzle, drawn)) < 1e-12, "from the drawn barrel's tip all the same");
+}
+
+#[test]
+fn a_grid_switched_off_picks_nothing_and_on_again_picks_as_before() {
+    // M8-T34: the station's "defense grid off".
+    let rows = rows_with(&[(1, 1, Vector3::new(0.0, 900.0, 0.0), false)], 0.0);
+    let mut latch = free_against(&[1]);
+    assert!(latch.set_off(0, true));
+    assert!(!latch.set_off(0, true), "already off");
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 0, "off: the light gun holds");
+    assert_eq!(pick_with(&rows, &gun(MOUNT_HEAVY, 3000.0), &latch), 0, "and the heavy cannon");
+    latch.set_cover(0, 1, 2000.0);
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 0, "covering fire does not override off");
+    assert!(latch.set_off(0, false));
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 1, "on again");
+}
+
+#[test]
+fn covering_fire_takes_hostiles_near_the_covered_ship_first_latched_or_not() {
+    // M8-T34 (maintainer): body 10 is the player's ship, an ally of the grid; covering fire round it within 2 km.
+    let rows = rows_with(
+        &[
+            (10, 0, Vector3::new(0.0, 2500.0, 0.0), false),
+            (1, 1, Vector3::new(0.0, 600.0, 0.0), false),   // nearest the gun, far from the player
+            (2, 1, Vector3::new(500.0, 2500.0, 0.0), false), // 500 m from the player
+            (3, 1, Vector3::new(0.0, 3500.0, 0.0), false),   // 1 km from the player, farther still from the gun
+        ],
+        0.0,
+    );
+    let mut latch = Latch::default();
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 0, "never first, without covering fire");
+    latch.set_cover(0, 10, 2000.0);
+    assert_eq!(latch.cover_of(0).map(|c| c.body), Some(10));
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 2, "the hostile nearest the player, not the gun");
+    assert_eq!(pick_with(&rows, &gun(MOUNT_HEAVY, 3000.0), &latch), 2, "every gun that reaches, whatever its class");
+    latch.set(0, 1);
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 2, "latched too: the player's neighbourhood still first");
+    latch.set_cover(0, 10, 300.0);
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &latch), 1, "none inside the radius: the usual pick");
+    latch.set_cover(0, 0, 2000.0);
+    assert_eq!(latch.cover_of(0), None, "body 0 ends it");
+    let unlatched = Latch { cover: vec![Cover { grid: 0, body: 10, radius_m: 300.0 }], ..Latch::default() };
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &unlatched), 0, "outside the radius an unlatched side is held");
+    let gone = Latch { cover: vec![Cover { grid: 0, body: 99, radius_m: 2000.0 }], ..Latch::default() };
+    assert_eq!(pick_with(&rows, &gun(MOUNT_LIGHT, 3000.0), &gone), 0, "a covered ship no longer in play covers nothing");
 }

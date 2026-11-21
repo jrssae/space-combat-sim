@@ -169,11 +169,11 @@ class HardpointTests(unittest.TestCase):
             v = np.asarray(bay["surface_velocity"])  # released with the drum's surface velocity there (Q3)
             np.testing.assert_allclose(v, self.hp["spin_rad_s"] * np.cross([0, 0, 1], [release[0], release[1], 0]), atol=1e-3)
             self.assertEqual([h["leaf"] for h in bay["leaves"]], ["r", "l"])
-            for hinge in bay["leaves"]:  # each leaf hinges on its outer edge, on the doors' plane, along the arm
-                p = np.asarray(hinge["point"]) + self.shift["drum"]
-                self.assertAlmostEqual(float(p @ n), floor, delta=0.01)
-                self.assertAlmostEqual(abs(float((p - door) @ np.asarray(bay["across"]))), 9.6, delta=0.01)
-                self.assertEqual(hinge["axis"], [0.0, 0.0, 1.0])
+            for leaf, side in zip(bay["leaves"], (1.0, -1.0), strict=True):  # each leaf slides across the arm, away from the middle
+                np.testing.assert_allclose(leaf["slide"], side * np.asarray(bay["across"]), atol=1e-4)
+                self.assertAlmostEqual(leaf["travel_m"], sp.LEAF_TRAVEL, places=4)
+                self.assertAlmostEqual(leaf["reach_m"], 0.5 * sp.TOOTH_DEPTH, places=4)
+                self.assertGreater(leaf["travel_m"] - leaf["reach_m"], bay["door_half_m"][0], "open, its teeth are out of the well")
         self.assertEqual(len({(b["arm"], b["door_number"]) for b in self.hp["cobra_bays"]}), 24)
         layout = self.hp["cobra_arm"]
         self.assertEqual((layout["doors"], layout["door_half_m"], len(layout["centres"])), (6, [10.0, 7.0], 6))

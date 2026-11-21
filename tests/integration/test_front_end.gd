@@ -9,20 +9,24 @@ var game: RecordingGame
 var quits: int = 0
 
 
-var _encounters_backup: Variant = true
+const SWITCH_KEYS: Array[StringName] = [&"encounters_civilian", &"encounters_allied", &"encounters_enemy"]
+
+var _encounters_backup: Dictionary = {}
 
 
 func before_each() -> void:
 	get_tree().paused = false
-	_encounters_backup = Settings.get_value(&"encounters")
-	Settings.set_value(&"encounters", true)
+	for key: StringName in SWITCH_KEYS:
+		_encounters_backup[key] = Settings.get_value(key)
+		Settings.set_value(key, true)
 	game = RecordingGame.new()
 	autofree(game)
 	quits = 0
 
 
 func after_each() -> void:
-	Settings.set_value(&"encounters", _encounters_backup)
+	for key: StringName in SWITCH_KEYS:
+		Settings.set_value(key, _encounters_backup[key])
 
 
 func _missions() -> Array[Dictionary]:
@@ -156,29 +160,50 @@ func _open_free_flight(front: FrontEnd) -> void:
 	await _pad(&"ui_accept")
 
 
-func test_free_flight_starts_with_encounters_on_by_default() -> void:
+func test_free_flight_starts_with_all_three_switches_on_by_default() -> void:
 	var front: FrontEnd = await _front_end()
 	await _open_free_flight(front)
-	assert_eq(_focused_text(front), "Encounters: on")
+	assert_eq(_focused_text(front), "Civilian traffic: on")
 	assert_string_contains(front.frame().detail_text(), "nav buoys", "the text sits under the list")
+	await _pad(&"ui_down")
+	assert_eq(_focused_text(front), "Allied patrols: on")
+	await _pad(&"ui_down")
+	assert_eq(_focused_text(front), "Enemy encounters: on")
 	await _pad(&"ui_down")
 	assert_eq(_focused_text(front), "Start")
 	await _pad(&"ui_accept")
 	_assert_free_flight(true)
 
 
-func test_free_flight_starts_with_encounters_off_when_toggled() -> void:
+func test_free_flight_switches_toggle_alone_by_pad_and_are_kept() -> void:
 	var front: FrontEnd = await _front_end()
 	await _open_free_flight(front)
-	await _pad(&"ui_accept")  # the toggle
-	assert_eq(_focused_text(front), "Encounters: off")
+	await _pad(&"ui_accept")  # civilian traffic
+	assert_eq(_focused_text(front), "Civilian traffic: off")
+	await _pad(&"ui_down")
+	await _pad(&"ui_down")
+	await _pad(&"ui_accept")  # enemy encounters
+	assert_eq(_focused_text(front), "Enemy encounters: off")
+	assert_false(bool(Settings.get_value(&"encounters_civilian")))
+	assert_true(bool(Settings.get_value(&"encounters_allied")), "the middle one is untouched")
+	assert_false(bool(Settings.get_value(&"encounters_enemy")))
 	await _pad(&"ui_down")
 	await _pad(&"ui_accept")
-	_assert_free_flight(false)
-	assert_false(bool(Settings.get_value(&"encounters")), "the page keeps the choice in Settings.encounters (M5-T17)")
+	_assert_free_flight(true)  # allied patrols still on
 	var again: FrontEnd = await _front_end()
 	await _open_free_flight(again)
-	assert_eq(_focused_text(again), "Encounters: off", "and opens with it next time")
+	assert_eq(_focused_text(again), "Civilian traffic: off", "and opens with them next time")
+
+
+func test_free_flight_with_all_switches_off_asks_for_no_encounters() -> void:
+	for key: StringName in SWITCH_KEYS:
+		Settings.set_value(key, false)
+	var front: FrontEnd = await _front_end()
+	await _open_free_flight(front)
+	for i: int in 3:
+		await _pad(&"ui_down")
+	await _pad(&"ui_accept")
+	_assert_free_flight(false)
 
 
 # One free-flight request with `encounters`, on a fresh session seed (M5-T17).
@@ -195,7 +220,8 @@ func test_a_refused_start_is_shown_not_swallowed() -> void:
 	game.refusal = "no scenario 'free_flight'"
 	var front: FrontEnd = await _front_end()
 	await _open_free_flight(front)
-	await _pad(&"ui_down")
+	for i: int in 3:
+		await _pad(&"ui_down")
 	await _pad(&"ui_accept")
 	assert_eq(front.frame().message(), "no scenario 'free_flight'")
 

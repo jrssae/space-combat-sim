@@ -120,9 +120,10 @@ func _apply_ambient() -> void:
 	environment.ambient_light_energy = float(Settings.get_value(&"ambient_level"))
 
 
-## Shows the star of `system_id`, from `data/star_systems.json`.
+## Shows the star and the sky of `system_id`, from `data/star_systems.json`.
 func use_star_of(system_id: StringName) -> void:
 	set_star(StarCatalog.temperature_k(system_id))
+	show_sky_part(&"nebula", StarCatalog.shows_nebula(system_id))
 
 
 ## Gives the key star's light and the lens flare one colour: the star's, from its temperature (Q30).

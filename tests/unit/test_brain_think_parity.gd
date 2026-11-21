@@ -339,7 +339,7 @@ func _relations(own: int) -> PackedByteArray:
 ## Runs `twins` beside their slots for `ticks`, with a seeded walk of the rows and the scripted events `hit_at` (tick ->
 ## twin index hit by a bolt), and lists the first differences.
 func _run(brains: Object, rows: Rows, twins: Array[Twin], rng: RandomNumberGenerator, ticks: int, hit_at: Dictionary,
-		label: String, events: Dictionary = {}) -> PackedStringArray:
+		label: String, events: Dictionary = {}, seen: Dictionary = {}) -> PackedStringArray:
 	var differences := PackedStringArray()
 	var scan: ContactScan = rows.scan()
 	var broadcasts: ContactScan = rows.broadcast_scan()
@@ -362,6 +362,7 @@ func _run(brains: Object, rows: Rows, twins: Array[Twin], rng: RandomNumberGener
 			var p: Perception = _perceive(t, rows, scan, broadcasts)
 			var a: PackedStringArray = _think_gdscript(t, p)
 			var b: PackedStringArray = _think_native(brains, t, rows, _relations(rows.factions[t.row]))
+			_note(seen, t, i)
 			if a != b:
 				var lists: Array = brains.last_lists()
 				var wish: Vector3 = t.pilot.desired_velocity if t.pilot.has_desired_velocity else p.velocity
@@ -381,6 +382,28 @@ func _run(brains: Object, rows: Rows, twins: Array[Twin], rng: RandomNumberGener
 		broadcasts = rows.broadcast_scan()
 		rows.load_into(brains)
 	return differences
+
+
+## Notes in `seen` what twin `i`'s GDScript think just did of M8-T19's rules ("fired 0", "aimed 0", "held 2", "strayed 4"),
+## so a test can tell that the branch it means to compare was flown.
+static func _note(seen: Dictionary, t: Twin, i: int) -> void:
+	var formation := t.pilot.current as BehaviourFormation
+	if formation != null:
+		if formation.firing:
+			seen["fired %d" % i] = true
+		if formation.target_id() != PilotBrain.TARGET_NONE:
+			seen["aimed %d" % i] = true
+		if formation.holding:
+			seen["held %d" % i] = true
+	if t.pilot.context.strayed:
+		seen["strayed %d" % i] = true
+	if t.pilot.current != null and t.pilot.current.id == &"attack":
+		seen["attacked %d" % i] = true
+	var evade := t.pilot.current as BehaviourEvade
+	if evade != null:
+		seen["evaded %d" % i] = true
+		if evade.leashed:
+			seen["leashed %d" % i] = true
 
 
 ## The fields of `a` that differ from `b`, for the message.
@@ -457,6 +480,164 @@ func test_wings_under_each_order_and_a_leaderless_wing_think_the_same() -> void:
 		twins.append(t)
 	var differences: PackedStringArray = _run(brains, rows, twins, rng, TICKS, {60: 1, 120: 3}, "wings")
 	assert_eq(differences.size(), 0, "wing pilots think the same bits natively: %s" % differences.slice(0, 4))
+
+
+func test_the_hold_fire_orders_shots_from_the_slot_and_the_flights_rules_think_the_same() -> void:
+	# M8-T19 (D85): the two hold-fire orders, a ship in its slot shooting at a hostile in reach, a flight's cover and its
+	# cohesion distance, each flown by the native brain and its GDScript twin.
+	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1719
+	var rows := Rows.new(rng, 40, 6, 10, 1800.0)
+	var formation := Formation.new()
+	var form: AiContext.Order = AiContext.Order.FORM_ON_ME
+	var at_will: AiContext.Order = AiContext.Order.ENGAGE_AT_WILL
+	# Per twin: its order, whether it sits on its slot with a hostile dead ahead, cover, the cohesion and rejoin distances.
+	var plan: Array[Array] = [
+		[form, true, false, 0.0, 0.0],
+		[AiContext.Order.FORM_HOLD_FIRE, true, false, 0.0, 0.0],
+		[AiContext.Order.HOLD_POSITION, true, false, 0.0, 0.0],
+		[at_will, true, true, 2500.0, 1000.0],
+		[at_will, false, true, 400.0, 150.0],
+		[at_will, false, true, 0.0, 0.0],
+		[form, false, false, 0.0, 0.0],
+		[AiContext.Order.FORM_HOLD_FIRE, false, false, 0.0, 0.0],
+		[AiContext.Order.HOLD_POSITION, false, false, 0.0, 0.0],
+		[AiContext.Order.COVER_ME, true, true, 0.0, 0.0],
+		[AiContext.Order.ATTACK_MY_TARGET, false, true, 3000.0, 1000.0],
+		[form, true, false, 0.0, 0.0],
+	]
+	var twins: Array[Twin] = []
+	for i: int in plan.size():
+		var leader_row: int = 12 + i
+		var hostile_row: int = 24 + i
+		var on_slot: bool = plan[i][1]
+		var offset: Vector3 = formation.offset(1 + i % 3)
+		for r: int in [i, leader_row, hostile_row]:  # ships, whatever the crowd's rolls made of these rows
+			rows.kinds[r] = BodyKind.SHIP
+			rows.is_ship[r] = 1
+			rows.radii[r] = 8.0
+		rows.factions[leader_row] = rows.factions[i]
+		rows.factions[hostile_row] = (rows.factions[i] + 1) % 4
+		if on_slot:
+			var nose: Vector3 = -rows.bases[leader_row].z
+			rows.positions[i] = Formation.slot_point(rows.positions[leader_row], nose, rows.bases[leader_row].y, offset)
+			rows.velocities[i] = rows.velocities[leader_row]
+			rows.bases[i] = rows.bases[leader_row]
+			rows._spin[i] = Vector3.ZERO
+			rows._spin[leader_row] = Vector3.ZERO
+			rows.positions[hostile_row] = rows.positions[i] + nose * 600.0
+			rows.velocities[hostile_row] = rows.velocities[leader_row]
+		# The last pilot never starts a fight: on its slot it does not shoot either.
+		var t: Twin = _twin(rows, i, &"ally_starfury", 300 + i, rng, 0.5 if i == plan.size() - 1 else -1.0, 0.0)
+		_make_slot(brains, t, rows)
+		var ctx: AiContext = t.pilot.context
+		ctx.order = plan[i][0]
+		ctx.leader_id = rows.ids[leader_row] if i != 8 else 0
+		ctx.leader_target_id = rows.ids[hostile_row]
+		ctx.has_slot = i != 8
+		ctx.slot_offset = offset
+		ctx.wing_ids = PackedInt64Array([rows.ids[leader_row], rows.ids[(i + 1) % plan.size()]])
+		ctx.cover = plan[i][2]
+		ctx.cohesion_m = plan[i][3]
+		ctx.rejoined_m = plan[i][4]
+		if i == 7:
+			ctx.leader_id = 999  # out of sight: flown on the link
+			ctx.leader_link_position = t.origin.plus_local(rows.positions[leader_row] + Vector3(9000.0, 0.0, 0.0))
+			ctx.leader_link_velocity = Vector3(30.0, 0.0, -20.0)
+		t.pilot.add_behaviour(BehaviourFormation.new(t.pilot.profile))
+		t.pilot.add_behaviour(BehaviourRally.new(t.pilot.profile))
+		brains.add_behaviour(t.slot, AiPilot.TIE_ORDER.find(&"formation"))
+		brains.add_behaviour(t.slot, AiPilot.TIE_ORDER.find(&"rally"))
+		t.pilot.reset()
+		brains.reset(t.slot)
+		_push_context(brains, t)
+		twins.append(t)
+	# Half way an order changes under each hold: any other order lifts it.
+	var lift := func() -> void:
+		for i: int in [1, 2, 8]:
+			twins[i].pilot.context.order = at_will
+			_push_context(brains, twins[i])
+	var seen: Dictionary = {}
+	var differences: PackedStringArray = _run(brains, rows, twins, rng, TICKS, {50: 3, 100: 0}, "flights", {120: lift}, seen)
+	assert_eq(differences.size(), 0, "the new orders and the flights' rules think the same bits natively: %s" % differences.slice(0, 4))
+	assert_true(seen.has("fired 0"), "the ship on its slot under FORM ON ME fired (%s)" % str(seen.keys()))
+	assert_false(seen.has("aimed 1"), "form up, hold fire: no shot from the slot")
+	assert_true(seen.has("held 2") and seen.has("held 8"), "hold position held, with a leader and without")
+	assert_true(seen.has("attacked 2") or seen.has("attacked 8") or seen.has("attacked 1"), "an order lifted a hold")
+	assert_true(seen.has("strayed 4"), "the wingman far from its lead strayed")
+	assert_false(seen.has("attacked 4"), "and did not attack")
+	assert_false(seen.has("aimed 11"), "a pilot that never starts a fight does not shoot from its slot")
+
+
+func test_an_evasion_on_a_leash_thinks_the_same() -> void:
+	# M8-T06 (maintainer, 2026-11-18): wingmen hit 3 km from their leads with a hostile on the tail, with a leash and
+	# without, the lead in sight and on the wing's link, each flown by the native brain and its GDScript twin.
+	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1806
+	var rows := Rows.new(rng, 40, 6, 10, 1800.0)
+	var formation := Formation.new()
+	var form: AiContext.Order = AiContext.Order.FORM_ON_ME
+	# Per twin: its order, its leash, whether its lead is out of sight (flown on the link).
+	var plan: Array[Array] = [
+		[form, 2500.0, false],
+		[form, 0.0, false],
+		[AiContext.Order.ENGAGE_AT_WILL, 2500.0, false],
+		[form, 2500.0, true],
+		[AiContext.Order.FORM_HOLD_FIRE, 600.0, false],
+		[AiContext.Order.ENGAGE_AT_WILL, 0.0, false],
+	]
+	var twins: Array[Twin] = []
+	for i: int in plan.size():
+		var leader_row: int = 12 + i
+		var hostile_row: int = 24 + i
+		for r: int in [i, leader_row, hostile_row]:
+			rows.kinds[r] = BodyKind.SHIP
+			rows.is_ship[r] = 1
+			rows.radii[r] = 8.0
+		rows.factions[leader_row] = rows.factions[i]
+		rows.factions[hostile_row] = (rows.factions[i] + 1) % 4
+		# 3 km out from its lead, flying with it, the hostile 400 m astern with its nose on it.
+		rows.positions[i] = rows.positions[leader_row] + rows.bases[leader_row].x * 3000.0
+		rows.velocities[i] = rows.velocities[leader_row]
+		rows.bases[i] = rows.bases[leader_row]
+		rows.positions[hostile_row] = rows.positions[i] + rows.bases[i].z * 400.0
+		rows.velocities[hostile_row] = rows.velocities[i]
+		rows.bases[hostile_row] = rows.bases[i]
+		for r: int in [i, leader_row, hostile_row]:
+			rows._spin[r] = Vector3.ZERO
+		var t: Twin = _twin(rows, i, &"ally_starfury", 500 + i, rng)
+		_make_slot(brains, t, rows)
+		var ctx: AiContext = t.pilot.context
+		ctx.order = plan[i][0]
+		ctx.leader_id = rows.ids[leader_row]
+		ctx.has_slot = true
+		ctx.slot_offset = formation.offset(1 + i % 3)
+		ctx.wing_ids = PackedInt64Array([rows.ids[leader_row]])
+		ctx.leash_m = plan[i][1]
+		if bool(plan[i][2]):
+			ctx.leader_id = 999  # out of sight: the leash runs to the link
+			ctx.leader_link_position = t.origin.plus_local(rows.positions[leader_row] + Vector3(4000.0, 0.0, 0.0))
+			ctx.leader_link_velocity = Vector3(30.0, 0.0, -20.0)
+		t.pilot.add_behaviour(BehaviourFormation.new(t.pilot.profile))
+		t.pilot.add_behaviour(BehaviourRally.new(t.pilot.profile))
+		brains.add_behaviour(t.slot, AiPilot.TIE_ORDER.find(&"formation"))
+		brains.add_behaviour(t.slot, AiPilot.TIE_ORDER.find(&"rally"))
+		t.pilot.reset()
+		brains.reset(t.slot)
+		_push_context(brains, t)
+		twins.append(t)
+	var seen: Dictionary = {}
+	var differences: PackedStringArray = _run(brains, rows, twins, rng, TICKS, {5: 0, 6: 1, 7: 2, 8: 3, 9: 4, 10: 5}, "leash", {}, seen)
+	assert_eq(differences.size(), 0, "an evasion on a leash thinks the same bits natively: %s" % differences.slice(0, 4))
+	for i: int in plan.size():
+		assert_true(seen.has("evaded %d" % i), "twin %d evaded (%s)" % [i, str(seen.keys())])
+	assert_true(seen.has("leashed 0"), "3 km out on a 2.5 km leash under FORM ON ME")
+	assert_true(seen.has("leashed 2"), "and in a flight engaging at will")
+	assert_true(seen.has("leashed 3"), "the lead out of sight: on the link")
+	assert_true(seen.has("leashed 4"), "a short leash")
+	assert_false(seen.has("leashed 1") or seen.has("leashed 5"), "without a leash the evasion is as it was")
 
 
 func test_objectives_guards_temperaments_and_live_retunes_think_the_same() -> void:

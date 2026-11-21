@@ -2,7 +2,7 @@ class_name AiProfile
 extends Resource
 ## A pilot's character for `AiPilot` (architecture §16 D34): how much each behaviour's score counts, how readily it
 ## changes its mind, when it runs, how fast it cruises, how well it aims, and the attack's tactics. One resource per kind
-## of pilot in `assets/ai/` (`ally_starfury`, `raider`, `instructor`; `PATHS`); the defaults below are the plan's selection
+## of pilot in `assets/ai/` (`ally_starfury`, `raider`, `instructor`, the tutorial's unarmed `training_drone`; `PATHS`); the defaults below are the plan's selection
 ## numbers. Tune in (H).
 ##
 ## How the numbers are used is in `AiPilot`.
@@ -12,6 +12,7 @@ const PATHS: Dictionary[StringName, String] = {
 	&"raider": "res://assets/ai/raider.tres",
 	&"instructor": "res://assets/ai/instructor.tres",
 	&"civilian": "res://assets/ai/civilian.tres",
+	&"training_drone": "res://assets/ai/training_drone.tres",
 }
 const STARFURY_TACTICS_PATH: String = "res://assets/ai/starfury_tactics.tres"
 

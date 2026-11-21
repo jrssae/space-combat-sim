@@ -18,6 +18,24 @@
           "orbit": {"a_m": 2.75e7, "e": 0.0, "i_deg": 0.0, "node_deg": 0.0, "peri_deg": 0.0, "m0_deg": 0.0, "epoch_s": 0.0}},
         {"id": "jumpgate", "name": "Jumpgate", "same_orbit_as": "babylon5", "phase_rad": 0.0018181818}
       ]
+    },
+    "gamma_leporis": {
+      "name": "Gamma Leporis",
+      "class": "F6V yellow-white dwarf",
+      "temperature_k": 6350.0,
+      "mass_solar": 1.23,
+      "a_min": 0.5,
+      "sky": {"nebula": false},
+      "bodies": [
+        {"id": "gamma_leporis", "name": "Gamma Leporis", "kind": "star", "gm": 1.632e20, "radius_m": 8.7e8},
+        {"id": "gamma_leporis_ii", "name": "Gamma Leporis II", "kind": "planet", "parent": "gamma_leporis", "gm": 1.47e14,
+          "radius_m": 5.6e6, "atmosphere_top_m": 6.0e4,
+          "orbit": {"a_m": 5.2e11, "e": 0.0, "i_deg": 0.0, "node_deg": 0.0, "peri_deg": 0.0, "m0_deg": 0.0, "epoch_s": 0.0}}
+      ],
+      "places": [
+        {"id": "leporis_relay", "name": "Leporis Relay", "parent": "gamma_leporis_ii",
+          "orbit": {"a_m": 2.6e7, "e": 0.0, "i_deg": 0.0, "node_deg": 0.0, "peri_deg": 0.0, "m0_deg": 309.7, "epoch_s": 0.0}}
+      ]
     }
   }
 }

@@ -31,6 +31,7 @@ var _sun_uv: Vector2 = Vector2(0.5, 0.5)
 var _sun_facing: float = 1.0
 var _star_color: Color = Color.WHITE
 var _flare_strength: float = 1.0
+var _edge_weight: float = 1.0  # the flare's share for where the star sits against the picture's edge (M8-T29)
 
 
 func _init() -> void:
@@ -104,7 +105,7 @@ func flare_strength() -> float:
 
 func _apply_flare_color() -> void:
 	if _flare != null:
-		var level: float = FLARE_LEVEL * _flare_strength
+		var level: float = FLARE_LEVEL * _flare_strength * _edge_weight
 		_flare.sun_color = Color(_star_color.r * level, _star_color.g * level, _star_color.b * level)
 
 
@@ -158,6 +159,11 @@ func _update_flare() -> void:
 	_sun_facing = LensFlareAim.facing(-camera.global_basis.z, to_sun)
 	_flare.sun_position = _sun_uv
 	_flare.sun_dir_sign = _sun_facing
+	# Off the picture the flare fades out instead of drawing its ghosts with no star (M8-T29).
+	var weight: float = LensFlareAim.screen_weight(_sun_uv) if _sun_facing > 0.0 else 0.0
+	if not is_equal_approx(weight, _edge_weight):
+		_edge_weight = weight
+		_apply_flare_color()
 
 
 ## Gives the brightest jump flash in view its lens flare, and switches the pass off when there is none.

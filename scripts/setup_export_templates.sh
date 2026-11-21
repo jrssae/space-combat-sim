@@ -6,12 +6,15 @@
 # Repeat a release run (M4-T03r). A template cannot open a project folder (it rejects --path), so measure an export:
 #   1. Snapshot the commit so working-tree edits never reach the numbers: git archive <commit> | tar -x -C <snap>, copy
 #      assets/generated/ into it, then .tools/godot/godot --headless --path <snap> --import.
+#   (scripts/build_release.sh, M8-T15, does the export itself from the committed export_presets.cfg; steps 2-3 below are the
+#   hand recipe for a snapshot.)
 #   2. In <snap>, an export_presets.cfg with one preset, name="Linux release", platform="Linux", export_filter="all_resources",
 #      include_filter="*.json,*.f32,*.txt,*.cfg,*.obj,*.mtl",
 #      exclude_filter="tests/*, docs/*, tools/*, scripts/*, addons/gut/*, reports/*", binary_format/embed_pck=true, and
 #      custom_template/release set to this script's linux_release.x86_64 as an absolute path.
 #   3. .tools/godot/godot --headless --path <snap> --export-release "Linux release" <build>/scs_release.x86_64
-#   4. A bench run writes to <build>/reports/perf/ (res:// is the pack), so link <build>/reports to <snap>/reports.
+#   4. An export's bench writes to user://reports/perf/ (res:// is the pack; BenchPaths, M8-T14), so link
+#      ~/.local/share/godot/app_userdata/space-combat-sim/reports to <snap>/reports for the scripts to find the runs.
 #   5. For scripts/bench_quick.sh, set GODOT_BIN to a wrapper that drops "--path <dir>" and execs the export with the rest:
 #        args=(); while (( $# )); do [[ $1 == --path ]] && { shift 2; continue; }; args+=("$1"); shift; done
 #        exec <build>/scs_release.x86_64 "${args[@]}"

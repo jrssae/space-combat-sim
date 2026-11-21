@@ -28,9 +28,11 @@ class Entry extends RefCounted:
 	var state: StringName = ObjectiveBook.HIDDEN
 	var success: Trigger = null
 	var fail: Trigger = null
+	## An actor the objective is about first of all (a place to reach), ahead of its triggers' own; "" for none.
+	var subject: String = ""
 
 
-## Adds the scenario's `mission.objectives[]`: `{id, text?, primary? (true), active? (false), success?, fail?}`, the triggers in
+## Adds the scenario's `mission.objectives[]`: `{id, text?, primary? (true), active? (false), subject?, success?, fail?}`, the triggers in
 ## `TriggerSpec` JSON. Returns "" or what is wrong (nothing is added then).
 func declare(entries: Variant, system: StringName = &"local") -> String:
 	if not (entries is Array):
@@ -59,9 +61,13 @@ func declare(entries: Variant, system: StringName = &"local") -> String:
 		var active: Variant = d.get("active", false)
 		if typeof(active) != TYPE_BOOL:
 			return "%s.active must be true or false" % where
+		var about: Variant = d.get("subject", "")
+		if not (about is String):
+			return "%s.subject must be an actor's name" % where
 		var entry := Entry.new()
 		entry.id = key
 		entry.text = text as String
+		entry.subject = (about as String).strip_edges()
 		entry.primary = primary as bool
 		entry.state = ACTIVE if active else HIDDEN
 		for slot: String in ["success", "fail"]:
@@ -183,13 +189,16 @@ func active() -> Array[Dictionary]:
 
 
 ## What the active objective `id` is about (M5-T25, the target menu's objectives): `{actors: PackedStringArray, point:
-## UniversePos or null}`, from its success trigger and then its fail trigger. The actors are in the triggers' order, the
-## player left out; `point` is the first fixed place a trigger names. Both empty for an objective that names neither.
+## UniversePos or null}`, from its own `subject` (M8-T08: the escort's NAV BETA), its success trigger and then its fail
+## trigger. The actors are in that order, the player left out; `point` is the first fixed place a trigger names. Both empty
+## for an objective that names neither.
 func subject(id: StringName) -> Dictionary:
 	var actors := PackedStringArray()
 	var point: UniversePos = null
 	var entry: Entry = _by_id.get(id)
 	if entry != null:
+		if not entry.subject.is_empty():
+			actors.append(entry.subject)
 		for trigger: Trigger in [entry.success, entry.fail]:
 			if trigger == null:
 				continue

@@ -95,7 +95,8 @@ def surface_velocity(p: Sequence[float]) -> list[float]:
 def cobra_bays(f: Frames) -> list[dict]:
     """The 24 launch doors, four arms of six, named by the arm's wing and the door from the bow: ``cobra_bay_alpha_1`` to ``_6`` on
     the top arm, then Beta (starboard), Delta (bottom) and Zeta (port). Each: the door (its middle on the doors' plane, outward
-    normal, half size: 20 m across the arm, 14 m along it, one Starfury), its two leaves' hinges (outer edges, along the arm), the
+    normal, half size: 20 m across the arm, 14 m along it, one Starfury), its two leaves (which way each slides to open, how far, and
+    how far its teeth reach past the door's middle when shut), the
     fighter racked over it in the launch hall (the rail from where it hangs to the door, the release point past the door, the
     drop's direction, radially out, the drum's surface velocity there, Q3: released with it, and its pose: nose to the bow, its back
     to the drum's axis, span across the arm), and the second row's staging point in the lower hall with the path onto the rack (the
@@ -113,8 +114,8 @@ def cobra_bays(f: Frames) -> list[dict]:
             # Across the lower hall under the rack, then straight out onto it between the rack's clamp arms.
             staging_path = [stage, np.array([cx, st.STAGING_R, z]), np.array([cx, floor - sp.HANG_DEPTH_M, z])]
             release = turn @ np.array([cx, floor + sp.RELEASE_M, z])
-            hinges = [{"leaf": side, "point": f.to(DRUM, turn @ np.array([cx + sx * sp.LEAF[1], floor, z])), "axis": [0.0, 0.0, 1.0]}
-                      for side, sx in (("r", 1.0), ("l", -1.0))]
+            leaves = [{"leaf": side, "slide": _r(turn @ np.array([sx, 0.0, 0.0])), "travel_m": round(sp.LEAF_TRAVEL, 4),
+                       "reach_m": round(0.5 * sp.TOOTH_DEPTH, 4)} for side, sx in (("r", 1.0), ("l", -1.0))]
             out.append({
                 "name": f"cobra_bay_{wing}_{door + 1}",
                 "wing": wing,
@@ -125,7 +126,7 @@ def cobra_bays(f: Frames) -> list[dict]:
                 "door_half_m": [st.LAUNCH_DOOR_HALF[0], st.LAUNCH_DOOR_HALF[1]],
                 "normal": _r(radial),
                 "across": _r(turn @ np.array([1.0, 0.0, 0.0])),
-                "leaves": hinges,
+                "leaves": leaves,
                 "rail_start": f.to(DRUM, hang),
                 "rail_end": f.to(DRUM, turn @ np.array([cx, floor, z])),
                 "release": f.to(DRUM, release),

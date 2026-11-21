@@ -39,6 +39,8 @@ const CIVILIAN_BROADCAST_RANGE_M: float = 15000.0
 ## Where parked ships wait: far below the play area (universe metres).
 const PARK_Y_M: float = -1.0e6
 
+const GROUP: StringName = &"ship_pool"
+
 var world: WorldFrame = null
 var projectiles: Node3D = null
 ## The player's ship: the console's `spawn` places ships relative to it and `despawn target` uses its selection.
@@ -51,6 +53,7 @@ var _in_use: Array[Combatant] = []
 
 
 func _ready() -> void:
+	add_to_group(GROUP)
 	_register_provider(&"raiders", DEFAULT_TYPE, "Raiders")
 	_register_provider(&"allies", ALLY_TYPE, "Allied ships")
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"spawn",
@@ -134,6 +137,8 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 		combatant.cargo_pods.set_count(-1)  # every pod mounted (M5-T16); the spawn says otherwise after
 	combatant.display_name = display_name
 	combatant.targetable.display_name = display_name
+	combatant.home = &""  # a home dock is per flight (M8-T06): the spawn, the wing or the launch gives it
+	combatant.home_assigned = false
 	combatant.targetable.broadcast_range_m = default_broadcast_range_m(type)  # a last user may have silenced it
 	# A Starfury of a wing wears its wing's livery and its number from its callsign (M4-T30b); every other ship that takes liveries
 	# the plain one; a hull without a livery table (a raider) is left alone.
@@ -178,6 +183,19 @@ func return_from_tier(combatant: Combatant, state: Dictionary) -> void:
 		return
 	ship.unpark_from_tier(Transform3D(state["basis"], state["position"]), state["velocity"], state["angular"],
 			float(state["pod_yaw"]))
+
+
+## The pool of `tree` (M12-T19: a carrier hands its docked fighters back when it leaves), or null.
+static func for_tree(tree: SceneTree) -> ShipPool:
+	return tree.get_first_node_in_group(GROUP) as ShipPool if tree != null else null
+
+
+## The combatant in use whose ship is `ship`, or null.
+func combatant_of(ship: Node) -> Combatant:
+	for combatant: Combatant in _in_use:
+		if combatant.ship == ship:
+			return combatant
+	return null
 
 
 ## Ships currently in the world: every type, or only those of `type`.
@@ -245,7 +263,7 @@ func next_name(prefix: String = NAME_PREFIX, first: int = 1) -> String:
 
 
 func _park_position() -> UniversePos:
-	return UniversePos.new(0.0, PARK_Y_M, 0.0)
+	return UniversePos.new(0.0, PARK_Y_M, 0.0, world.origin.system_id)
 
 
 func _park(combatant: Combatant) -> void:
@@ -256,6 +274,10 @@ func _park(combatant: Combatant) -> void:
 	ship.visible = false
 	ship.process_mode = Node.PROCESS_MODE_DISABLED
 	ShiftableRegistry.set_out(ship, WorldFrame.PARKED_META, true)  # rebases leave it: `acquire` places it (M6-T06, M6-T21)
+	if ship.has_meta(CarrierDock.DOCKED_META):
+		ship.remove_meta(CarrierDock.DOCKED_META)  # no longer a carrier's docked fighter (M12-T19)
+	if ship.has_meta(CarrierJumps.RIDING_META):
+		ship.remove_meta(CarrierJumps.RIDING_META)
 	ship.tier_exempt = false
 	ship.inside_station = false
 	ship.linear_velocity = Vector3.ZERO
@@ -305,7 +327,8 @@ func _console_list(type: StringName) -> PackedStringArray:
 	for combatant: Combatant in alive(type):
 		var range_text: String = ""
 		if player != null and is_instance_valid(player):
-			range_text = " %.0f m" % player.global_position.distance_to(combatant.ship.global_position)
+			# Where it flies, its tier row's place when it is a tier row (its parked node stays where it was demoted).
+			range_text = " %.0f m" % player.global_position.distance_to(TierDirector.flying_position(combatant.ship))
 		var dark_text: String = "" if combatant.ship.running_lights else " dark"
 		out.append("%s hull %.0f%%%s%s" % [combatant.display_name, 100.0 * combatant.damageable.hull.fraction(), range_text, dark_text])
 	return out

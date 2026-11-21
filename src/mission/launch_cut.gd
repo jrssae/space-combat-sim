@@ -6,9 +6,11 @@ extends RefCounted
 ## then, so cuts differ in length too. A wave of `row_wave_min` or more fighters films its drop with a row shot (held over several
 ## ejections, maintainer) and leaves the exit out: longer, wider shots of the row rather than a cut per fighter.
 ##
+## No cut repeats the one before it (M8-T30): every phase draws a variant other than its last, and every phase has two or more.
+##
 ## Seeded, never a shared generator: every draw is a hash of the launch's seed, the phase and the draw, so a pinned seed gives the
 ## same cut. The bags are this object's own: keep one per scenario run (`LaunchDirector` does), so the variety runs across launches.
-## M8's squadron launch draws from the same pools.
+## M8's squadron launch and the exterior launch draw from their own profiles' pools the same way.
 
 var profile: LaunchProfile = null
 ## Per phase name: the variant indices still in the bag, and the one played last (-1 none).
@@ -16,6 +18,8 @@ var _bags: Dictionary = {}
 var _last: Dictionary = {}
 ## Every cut so far, oldest first: each an Array of `{phase, variant}` ids (for the console and tests).
 var history: Array[Array] = []
+## A variant the next cut must play in its phase, whatever the bags say (the review sheets, M8-T30); cleared by the cut.
+var force: StringName = &""
 
 
 func _init(p_profile: LaunchProfile) -> void:
@@ -23,7 +27,7 @@ func _init(p_profile: LaunchProfile) -> void:
 
 
 ## One launch's cut with `seed_value` for a first wave of `wave_size` fighters: the chosen shots in phase order, each
-## `{phase, variant, shot, step, at_s, fill, row, subject}`; a phase left out is missing.
+## `{phase, variant, shot, step, at_s, fill, row, subject, follows}`; a phase left out is missing.
 func pick(seed_value: int, wave_size: int = 1) -> Array[Dictionary]:
 	var wave: bool = wave_size >= profile.row_wave_min
 	var out: Array[Dictionary] = []
@@ -34,15 +38,19 @@ func pick(seed_value: int, wave_size: int = 1) -> Array[Dictionary]:
 		var variants: Array = phase["variants"]
 		if variants.is_empty():
 			continue
-		if float(phase["optional"]) > 0.0 and (wave or unit(seed_value, name, -1) < float(phase["optional"])):
+		var forced: int = variants.find_custom(func(v: Dictionary) -> bool: return v["id"] == force) if force != &"" else -1
+		if forced < 0 and float(phase["optional"]) > 0.0 and (wave or unit(seed_value, name, -1) < float(phase["optional"])):
 			continue
 		var rows_only: bool = wave and variants.any(func(v: Dictionary) -> bool: return bool(v["row"]))
-		var i: int = _draw(seed_value, name, variants, rows_only)
+		var i: int = forced if forced >= 0 else _draw(seed_value, name, variants, rows_only)
 		var v: Dictionary = variants[i]
-		out.append({"phase": name, "variant": v["id"], "shot": v["shot"], "step": phase["step"], "at_s": float(phase["at_s"]),
-				"fill": v["fill"], "row": bool(v["row"]), "subject": v["subject"]})
+		out.append({"phase": name, "variant": v["id"], "shot": v["shot"], "step": phase["step"],
+				"at_s": float(phase["at_s"]) + float(v.get("delay_s", 0.0)),
+				"fill": v["fill"], "row": bool(v["row"]), "subject": v["subject"], "follows": phase.get("follows", "lead"),
+				"until": v.get("until", &"")})
 		record.append({"phase": name, "variant": String(v["id"])})
 	history.append(record)
+	force = &""
 	return out
 
 

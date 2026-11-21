@@ -12,10 +12,15 @@ var wing_attack: bool = false
 var wing_form: bool = false
 var wing_engage: bool = false
 var wing_cover: bool = false
+## Key 6 (M8-T06): the damaged wingmen dock in the main docking bay for repair (`DockingDirector.order_wing`).
+var wing_dock: bool = false
+## Keys 7 and 8 (M8-T19): the hold-fire orders, form up and hold fire, and hold position and hold fire.
+var wing_form_hold: bool = false
+var wing_hold: bool = false
 ## D-pad Left, key 5 (M3-T27): the player's running lights on or off.
 var toggle_running_lights: bool = false
-## The comms menu (D54, M5-T46): D-pad Right (an edge) opens it, and closes it again while it is open; its stick, A and B are the
-## radial ones below.
+## The comms menu (D54, M5-T46): D-pad Right or Ctrl (an edge) opens it; while it is open Ctrl closes it again (the D-pad does
+## nothing in a radial menu, M8-T24; B closes it on the pad); its stick, A and B are the radial ones below.
 var comms_open: bool = false
 ## The target menu (M5-T25): a hold of the target button asks for it (`target_menu_open`, an edge). While a radial menu is open
 ## `InputAdapter.sample_radial` gives the direction pointed (`radial_point`: x right, y up, 0..1; zero when nothing points)
@@ -24,6 +29,9 @@ var target_menu_open: bool = false
 var radial_point: Vector2 = Vector2.ZERO
 var radial_select: bool = false
 var radial_back: bool = false
+## A numbered key (1-9: 0-8) pressed while a radial menu is open: the entry in that place of the ring's page order to pick
+## (M8-T24); -1 when none was pressed.
+var radial_entry: int = -1
 ## X (the auto-track action) held `InputAdapter.interact_hold_s` while the selected target offers an interaction (M7-T27): run it
 ## (a gate's jump; a bay's placeholder answers "not available"). An edge. `interact_progress` is how far the hold has run, 0..1
 ## (0 = no hold): the HUD's bar across the top.
@@ -42,9 +50,10 @@ func to_dict() -> Dictionary:
 		"toggle_camera": toggle_camera, "reset": reset, "pause": pause,
 		"toggle_overlay": toggle_overlay, "screenshot": screenshot,
 		"wing_attack": wing_attack, "wing_form": wing_form, "wing_engage": wing_engage, "wing_cover": wing_cover,
+		"wing_dock": wing_dock, "wing_form_hold": wing_form_hold, "wing_hold": wing_hold,
 		"toggle_running_lights": toggle_running_lights,
 		"comms_open": comms_open,
 		"target_menu_open": target_menu_open, "radial_point": radial_point, "radial_select": radial_select,
-		"radial_back": radial_back, "interact": interact, "interact_progress": interact_progress,
+		"radial_back": radial_back, "radial_entry": radial_entry, "interact": interact, "interact_progress": interact_progress,
 		"look_active": look_active, "look_stick": look_stick, "look_mouse_px": look_mouse_px,
 	}

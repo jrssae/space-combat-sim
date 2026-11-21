@@ -5,6 +5,8 @@ extends RefCounted
 
 ## How close to square-on to the view the star may sit before it is nudged in front (M6-T09), as a unit direction's depth.
 const EDGE_ON: float = 1.0e-4
+## Toward the picture's edge the flare fades out over this share of the screen, gone at the edge.
+const EDGE_FADE: float = 0.15
 
 
 ## 1 looking straight at the star, -1 looking away.
@@ -24,3 +26,12 @@ static func sun_uv(camera: Camera3D, to_sun: Vector3) -> Vector2:
 	var clip: Vector4 = camera.get_camera_projection() * Vector4(local.x, local.y, local.z, 1.0)
 	var ndc := Vector2(clip.x / clip.w, clip.y / clip.w)
 	return Vector2(0.5 + 0.5 * ndc.x, 0.5 - 0.5 * ndc.y)
+
+
+## How much of the flare shows for a star at `uv` on screen (M8-T29, M8-T31): all of it once the star is `margin` inside the
+## picture, fading to none at the edge and nothing beyond. The add-on reads the star's pixel for its occlusion test, and off screen
+## that read finds nothing in the way, so without this its ghosts kept drawing for a star out of the picture: soft grey blobs with no
+## star (every scene's flare goes through `PostEffects`, so this holds everywhere).
+static func screen_weight(uv: Vector2, margin: float = EDGE_FADE) -> float:
+	var inside: float = minf(minf(uv.x, 1.0 - uv.x), minf(uv.y, 1.0 - uv.y))  # to the nearest edge; negative off screen
+	return clampf(inside / maxf(margin, 1e-6), 0.0, 1.0)

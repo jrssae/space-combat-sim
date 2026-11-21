@@ -1,0 +1,13 @@
+{"scenario_id": "station_flight", "description": "Test fixture (M8-T19): off Babylon 5's bow, the player commands a flight of three; the rest of Alpha launches into flights of its own.", "system_id": "local",
+ "anchor": {"place": "babylon5", "at": [-200, 150, 4700]}, "epoch": 7482650,
+ "player": {"home": "babylon5", "position": [0, 0, 0], "forward": [0, 0, 1]},
+ "station": {"reserve_traffic": true},
+ "pools": {"starfury_ally": 2},
+ "wings": [
+   {"name": "ALPHA", "faction": "earth_alliance", "leader": "player", "home": "babylon5", "order": "cover", "formation": "finger_four",
+    "flight": true,
+    "members": [
+      {"type": "starfury_ally", "name": "ALPHA 2", "anchor": "player", "offset": [-60, 0, 40],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}},
+      {"type": "starfury_ally", "name": "ALPHA 3", "anchor": "player", "offset": [60, 0, 40],
+       "behaviour": {"type": "ai", "profile": "ally_starfury"}}]}]}

@@ -9,7 +9,7 @@ func _section() -> Dictionary:
 				"door_half_m": [10.0, 7.0], "normal": [0.0, 1.0, 0.0], "rail_start": [18.0, 230.0, -1960.0],
 				"rail_end": [0.0, 239.0, -1960.0], "release": [0.0, 247.0, -1960.0], "release_direction": [0.0, 1.0, 0.0],
 				"surface_velocity": [-36.556, 0.0, 0.0], "forward": [0.0, 0.0, -1.0], "up": [0.0, -1.0, 0.0],
-				"leaves": [{"leaf": "r", "point": [27.6, 239.0, -1960.0], "axis": [0.0, 0.0, 1.0]}],
+				"leaves": [{"leaf": "r", "slide": [1.0, 0.0, 0.0], "travel_m": 11.3, "reach_m": 1.1}],
 				"staging": [-4.0, 230.0, -1960.0], "staging_path": [[-4.0, 230.0, -1960.0], [-4.0, 227.0, -1960.0], [18.0, 227.0, -1960.0],
 						[18.0, 230.0, -1960.0]]}],
 		"main_docking_bay": {"name": "main_docking_bay", "body": "drum", "main_docking_bay_mouth": [0.0, 0.0, -2550.0],
@@ -41,7 +41,8 @@ func test_reads_every_kind_in_its_bodys_frame() -> void:
 	assert_eq(bay["body"], StationHardpoints.DRUM)
 	assert_eq(bay["release"], Vector3(0.0, 247.0, -1960.0))
 	assert_eq(bay["door_half_m"], Vector2(10.0, 7.0))
-	assert_eq((bay["leaves"] as Array)[0]["point"], Vector3(27.6, 239.0, -1960.0))
+	assert_eq((bay["leaves"] as Array)[0]["slide"], Vector3(1.0, 0.0, 0.0))
+	assert_eq(float((bay["leaves"] as Array)[0]["travel_m"]), 11.3)
 	assert_eq(bay["wing"], "alpha")
 	assert_eq(hp.bays_of("alpha").size(), 1)
 	assert_true(hp.bays_of("zeta").is_empty())

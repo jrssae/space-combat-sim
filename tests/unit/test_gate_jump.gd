@@ -81,7 +81,7 @@ func test_the_jump_goes_out_and_comes_back() -> void:
 	assert_true(jump.ship_hidden())
 	assert_false(jump.autopilot_on())
 	var away: PackedStringArray = _run(jump, GateJump.RING_HOLD_S + GateJump.FADE_OUT_S + GateJump.AWAY_S + 3.0 * DT, Vector3.ZERO)
-	assert_eq(away, PackedStringArray([GateJump.EV_ASK_ARRIVAL]), "after the ring's flash, the fade and the time away")
+	assert_eq(away, PackedStringArray([GateJump.EV_ASK_ARRIVAL]), "straight after the ring's flash")
 	assert_eq(jump.state, GateJump.State.ARRIVING)
 	assert_eq(_run(jump, DT, Vector3(0.0, 0.0, 1200.0), false, true), PackedStringArray([GateJump.EV_ARRIVED]),
 			"brought out at the funnel's ring (M6-T22)")
@@ -91,6 +91,33 @@ func test_the_jump_goes_out_and_comes_back() -> void:
 	assert_false(jump.is_active())
 	assert_eq(jump.completed, 1)
 	assert_eq(jump.start(), PackedStringArray([GateJump.EV_START]), "another jump may follow")
+
+
+# Following wingmen still on their way through (M8-T17): at the ring flash's peak the jump cuts outside on the gate and holds
+# there with no black for as long as the host wants it, never past `HOLD_MAX_S`, then the black and the arrival as usual.
+func test_the_jump_holds_for_following_wingmen_without_black_then_goes_on() -> void:
+	var jump := GateJump.new()
+	jump.start()
+	_run(jump, DT, DEPARTURE)
+	jump.hold_wanted = true
+	assert_eq(_run(jump, DT, Vector3(0.0, 0.0, 5.0), true), PackedStringArray([GateJump.EV_THROUGH, GateJump.EV_HOLD]),
+			"straight outside at the ring's flash, never held on its white")
+	assert_eq(jump.state, GateJump.State.HOLD)
+	assert_eq(_run(jump, 3.0, Vector3.ZERO), PackedStringArray(), "held while wingmen are on their way")
+	assert_eq(jump.black_level, 0.0, "no black while held")
+	assert_true(jump.ship_hidden())
+	jump.hold_wanted = false
+	assert_eq(_run(jump, DT, Vector3.ZERO), PackedStringArray([GateJump.EV_HOLD_END]))
+	assert_eq(jump.state, GateJump.State.AWAY, "then the black, as long as ever")
+	assert_eq(_run(jump, GateJump.AWAY_S + 2.0 * DT, Vector3.ZERO), PackedStringArray([GateJump.EV_ASK_ARRIVAL]))
+	var capped := GateJump.new()
+	capped.start()
+	_run(capped, DT, DEPARTURE)
+	capped.hold_wanted = true
+	_run(capped, DT, Vector3(0.0, 0.0, 5.0), true)
+	var events: PackedStringArray = _run(capped, GateJump.HOLD_MAX_S + 3.0 * DT, Vector3.ZERO)
+	assert_eq(events, PackedStringArray([GateJump.EV_HOLD_END]), "never held past its cap")
+	assert_almost_eq(GateJump.FOLLOW_RANGE_M, 3000.0, 1e-3, "data/jump/player_jump.json")
 
 
 # A ship just out of the gate crosses the departure point flying away: the run-in (and with it the vortex and the shot) waits
@@ -136,17 +163,19 @@ func test_the_jump_ends_early_when_it_must() -> void:
 	assert_eq(jump.start().size(), 0, "one jump at a time")
 
 
-func test_the_ring_flash_then_black_then_the_fade_lifts() -> void:
+func test_the_ring_flash_cuts_to_a_moment_of_black_then_straight_to_the_arrival() -> void:
+	# Hard cuts (maintainer, 2026-11-19): the ring's own flash, then black for a beat, then the arrival; no fades. Data-driven.
+	assert_almost_eq(GateJump.RING_HOLD_S, 0.3, 1e-6, "data/jump/player_jump.json")
+	assert_between(GateJump.AWAY_S, 0.5, 1.0, "the black between the entry and the return")
+	assert_between(GateJump.SWALLOW_S, 1.0, 1.5, "swallowed within a second or so of the mouth")
+	assert_almost_eq(GateJump.BURST_OUT_S, 1.0, 1e-6)
+	for t: float in [0.0, 0.2, 0.29]:
+		assert_eq(GateJump.screen_at(GateJump.State.FLASH, t), Vector2.ZERO, "the ring's flash is in the shot, not on the screen")
+	for t: float in [0.0, 0.4, 0.74]:
+		assert_eq(GateJump.screen_at(GateJump.State.AWAY, t), Vector2(0.0, 1.0), "black, cut in, not faded")
+	for t: float in [0.0, 0.1, 2.0]:
+		assert_eq(GateJump.screen_at(GateJump.State.ARRIVING, t), Vector2.ZERO, "the arrival opens at once, no fade-in")
 	assert_eq(GateJump.screen_at(GateJump.State.RUN_IN, 3.0), Vector2.ZERO)
-	var held: Vector2 = GateJump.screen_at(GateJump.State.FLASH, GateJump.RING_HOLD_S)
-	assert_almost_eq(held.x, 0.0, 1e-4, "no flash on the screen: the ring's own flash is in the shot (M6-T22)")
-	assert_almost_eq(held.y, 0.0, 1e-4, "the shot holds on it before the black comes in")
-	var black: Vector2 = GateJump.screen_at(GateJump.State.FLASH, GateJump.RING_HOLD_S + GateJump.FADE_OUT_S)
-	assert_almost_eq(black.y, 1.0, 1e-4)
-	assert_almost_eq(black.x, 0.0, 1e-4)
-	assert_eq(GateJump.screen_at(GateJump.State.AWAY, 1.0), Vector2(0.0, 1.0))
-	assert_almost_eq(GateJump.screen_at(GateJump.State.ARRIVING, GateJump.FADE_IN_S * 0.5).y, 0.5, 1e-4)
-	assert_eq(GateJump.screen_at(GateJump.State.ARRIVING, GateJump.FADE_IN_S + 1.0), Vector2.ZERO)
 
 
 # --- the autopilot --------------------------------------------------------------------------------------------------

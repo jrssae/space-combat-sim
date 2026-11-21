@@ -162,6 +162,7 @@ impl Bench {
             nearest_k: k,
             static_k: 8,
             lean: false,
+            keep_outs: &[],
         };
         brain.think(
             &self.rows,
@@ -445,6 +446,7 @@ fn civilian_think(bench: &mut Bench, brain: &mut Brain, now_s: f64) -> Output {
         nearest_k: 12,
         static_k: 8,
         lean: false,
+        keep_outs: &[],
     };
     brain.think(
         &bench.rows,
@@ -1020,4 +1022,353 @@ fn keeping_off_friends_walls_off_the_closing_and_with_none_the_answer_is_avoids(
     let kept = pilot::avoid_keeping_off(&rows, &ship, &[2], &[], 0, &[2], wish);
     assert!(kept.v_des.z >= -1e-3, "no closing: {:?}", kept.v_des);
     assert!((kept.v_des.x - plain.v_des.x).abs() < 1e-3, "across it is left alone: {:?} {:?}", kept.v_des, plain.v_des);
+}
+
+// --- flights of three and the hold-fire orders (M8-T19) -----------------------------------------------------------------
+
+const BANDIT: i64 = 500;
+const BANDIT_2: i64 = 600;
+// Far from the station of `rows_with`, so it is nobody's contact.
+const OUT: f32 = 20_000.0;
+
+// `LEADER` with the brain's ship (`RAIDER`) in the slot 40 m right of and behind it, `MATE` beyond, all of faction 1 flying
+// -z at 100 m/s, and a hostile per `(id, at)` (from the brain's ship) flying with them.
+fn flight_bench(bandits: &[(i64, Vector3)]) -> Bench {
+    let own = Vector3::new(40.0, 0.0, OUT + 40.0);
+    let mut ships = vec![
+        (LEADER, 1, Vector3::new(0.0, 0.0, OUT)),
+        (RAIDER, 1, own),
+        (MATE, 1, Vector3::new(-40.0, 0.0, OUT + 40.0)),
+    ];
+    ships.extend(bandits.iter().map(|&(id, at)| (id, 0, own + at)));
+    let mut rows = rows_with(&ships, 1000.0, 0.0);
+    for v in rows.velocities.iter_mut().skip(1) {
+        *v = Vector3::new(0.0, 0.0, -100.0);
+    }
+    Bench::new(rows)
+}
+
+fn flight_member(order: u8) -> Brain {
+    let mut brain = raider_brain(&[KIND_ATTACK, KIND_FORMATION, KIND_IDLE]);
+    brain.ctx.order = order;
+    brain.ctx.leader_id = LEADER;
+    brain.ctx.has_slot = true;
+    brain.ctx.slot_offset = Vector3::new(40.0, 0.0, 40.0);
+    brain.ctx.wing_ids = vec![LEADER, MATE];
+    brain
+}
+
+fn row_of(bench: &Bench, id: i64) -> usize {
+    bench.rows.ids.iter().position(|&x| x == id).unwrap()
+}
+
+#[test]
+fn a_ship_in_its_slot_fires_on_a_hostile_in_reach_and_keeps_the_slot() {
+    // Form on me, a hostile 600 m ahead: the wingman stays in formation, holds the trigger and shows the target.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(0.0, 0.0, -600.0))]);
+    let mut brain = flight_member(ORDER_FORM_ON_ME);
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.current_kind(), i32::from(KIND_FORMATION));
+    assert!(out.fire, "in reach and in the cone: it fires");
+    assert_eq!(brain.wanted_target_id, BANDIT);
+    assert!(brain.desired_all_axes, "the thrusters keep the slot");
+    // A hostile off to the side inside the arc turns the nose toward it before any shot.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(200.0, 0.0, -600.0))]);
+    let mut brain = flight_member(ORDER_FORM_ON_ME);
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert!(!out.fire, "the nose is not on it yet");
+    assert!(out.flight.rot.y.abs() > 0.1, "it turns its guns on it: {:?}", out.flight.rot);
+    assert_eq!(brain.wanted_target_id, BANDIT);
+}
+
+#[test]
+fn a_ship_in_its_slot_leaves_alone_what_is_out_of_reach_or_out_of_its_arc_or_behind_a_friend() {
+    for (at, why) in [
+        (Vector3::new(0.0, 0.0, -1500.0), "beyond the guns' range"),
+        (Vector3::new(0.0, 0.0, 600.0), "astern"),
+        (Vector3::new(600.0, 0.0, -300.0), "outside the arc"),
+    ] {
+        let mut bench = flight_bench(&[(BANDIT, at)]);
+        let mut brain = flight_member(ORDER_FORM_ON_ME);
+        let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+        assert!(!out.fire, "{why}");
+        assert_eq!(brain.wanted_target_id, TARGET_NONE, "{why}");
+        assert_eq!(out.flight.rot.y, 0.0, "{why}: the nose stays the leader's");
+    }
+    // The leader straight ahead in the lane: the nose follows the hostile but the trigger stays up.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(0.0, 0.0, -600.0))]);
+    let leader = row_of(&bench, LEADER);
+    let own = bench.rows.positions[row_of(&bench, RAIDER)];
+    move_row(&mut bench, leader, own + Vector3::new(0.0, 0.0, -150.0));
+    let mut brain = flight_member(ORDER_FORM_ON_ME);
+    brain.ctx.slot_offset = Vector3::new(0.0, 0.0, 150.0);
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, BANDIT);
+    assert!(!out.fire, "a friend is in the lane");
+}
+
+// Weapons free in formation (M8-T13): FORM ON ME with the data's radius shoots at a hostile near its leader from any bearing,
+// lets the slot slip only within the leash and the time limit, and never chases one beyond the radius.
+fn weapons_free_member() -> Brain {
+    let mut brain = flight_member(ORDER_FORM_ON_ME);
+    brain.ctx.form_engage_m = 1500.0;
+    brain.ctx.form_leash_m = 400.0;
+    brain.ctx.form_off_slot_s = 6.0;
+    brain
+}
+
+#[test]
+fn under_form_on_me_a_wingman_turns_its_guns_on_a_hostile_near_its_leader_from_any_bearing() {
+    for (at, why) in [(Vector3::new(600.0, 0.0, -300.0), "off the arc"), (Vector3::new(0.0, 0.0, 600.0), "astern")] {
+        let mut bench = flight_bench(&[(BANDIT, at)]);
+        let mut brain = weapons_free_member();
+        let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+        assert_eq!(brain.current_kind(), i32::from(KIND_FORMATION), "{why}: it keeps formation");
+        assert_eq!(brain.wanted_target_id, BANDIT, "{why}: its guns follow the hostile");
+        assert!(out.flight.rot.length() > 0.1, "{why}: the nose turns to it: {:?}", out.flight.rot);
+        assert!(brain.desired_all_axes, "{why}: the thrusters keep the slot");
+    }
+    // Hold fire with the same radius: nothing is shot at.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(600.0, 0.0, -300.0))]);
+    let mut brain = weapons_free_member();
+    brain.ctx.order = ORDER_FORM_HOLD_FIRE;
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert!(!out.fire);
+    assert_eq!(brain.wanted_target_id, TARGET_NONE, "hold fire: silent");
+}
+
+#[test]
+fn under_form_on_me_a_wingman_never_chases_past_the_radius_the_leash_or_the_time() {
+    // A hostile farther than the radius from the leader (and beyond the guns): left alone.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(1800.0, 0.0, -600.0))]);
+    let mut brain = weapons_free_member();
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, TARGET_NONE, "beyond the radius: not chased");
+    // Off its slot past the leash: it flies back first, guns off the hostile.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(600.0, 0.0, -300.0))]);
+    let own = row_of(&bench, RAIDER);
+    let at = bench.rows.positions[own];
+    move_row(&mut bench, own, at + Vector3::new(500.0, 0.0, 0.0));
+    let mut brain = weapons_free_member();
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, TARGET_NONE, "past the leash: back to the slot first");
+    assert!(!out.fire);
+    // Within the leash but off the slot longer than the limit: back to the slot too.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(600.0, 0.0, -300.0))]);
+    move_row(&mut bench, own, at + Vector3::new(200.0, 0.0, 0.0));
+    let mut brain = weapons_free_member();
+    let mut kept_on = 0;
+    for k in 0..40 {
+        bench.think(&mut brain, 0.25 * f64::from(k), 0, NEVER, 12);
+        kept_on += i32::from(brain.wanted_target_id == BANDIT);
+    }
+    assert!(kept_on > 0 && kept_on <= 25, "at most the limit off the slot (6 s of thinks at 0.25 s): {kept_on}");
+    assert_eq!(brain.wanted_target_id, TARGET_NONE, "then back to the slot");
+}
+
+#[test]
+fn the_hold_fire_orders_keep_the_guns_silent_and_hold_position_stops_the_ship() {
+    // Form up, hold fire: the slot is flown, nothing is shot at or shown.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(0.0, 0.0, -600.0))]);
+    let mut brain = flight_member(ORDER_FORM_HOLD_FIRE);
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.current_kind(), i32::from(KIND_FORMATION));
+    assert!(!out.fire);
+    assert_eq!(brain.wanted_target_id, TARGET_NONE);
+    assert!(brain.has_desired_velocity && !out.flight.brake, "it flies its slot");
+    // Hold position: the brake, no shot, and no leader needed.
+    let mut brain = flight_member(ORDER_HOLD_POSITION);
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.current_kind(), i32::from(KIND_FORMATION));
+    assert!(out.flight.brake && !out.fire);
+    assert_eq!(brain.describe().state, "holding");
+    brain.ctx.leader_id = 0;
+    brain.ctx.has_slot = false;
+    let out = bench.think(&mut brain, 1.0, 0, NEVER, 12);
+    assert!(out.flight.brake, "it holds without a leader");
+    // Any other order lifts the hold: engaging at will it attacks the hostile.
+    brain.ctx.order = ORDER_ENGAGE_AT_WILL;
+    for k in 0..120 {
+        bench.think(&mut brain, 2.0 + f64::from(k) / 60.0, 0, NEVER, 12);
+    }
+    assert_eq!(brain.current_kind(), i32::from(KIND_ATTACK));
+    assert_eq!(brain.wanted_target_id, BANDIT);
+}
+
+#[test]
+fn a_flight_covers_the_mate_under_attack_and_a_wingman_takes_its_leads_target() {
+    // One hostile near that has the pilot itself selected, one far that has its flight-mate selected.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(0.0, 0.0, -400.0)), (BANDIT_2, Vector3::new(900.0, 0.0, -2500.0))]);
+    let (near, far) = (row_of(&bench, BANDIT), row_of(&bench, BANDIT_2));
+    bench.rows.target_ids[near] = RAIDER;
+    bench.rows.target_ids[far] = MATE;
+    let mut brain = flight_member(ORDER_ENGAGE_AT_WILL);
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, BANDIT, "no flight rules: the near one");
+    let mut brain = flight_member(ORDER_ENGAGE_AT_WILL);
+    brain.ctx.cover = true;
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, BANDIT_2, "the flight-mate's attacker comes first");
+    // Nobody attacked: a wingman goes for what its lead attacks, a lead (no cohesion distance) picks for itself.
+    bench.rows.target_ids[near] = -1;
+    bench.rows.target_ids[far] = -1;
+    let lead = row_of(&bench, LEADER);
+    bench.rows.target_ids[lead] = BANDIT_2;
+    let mut brain = flight_member(ORDER_ENGAGE_AT_WILL);
+    brain.ctx.cover = true;
+    brain.ctx.cohesion_m = 3000.0;
+    brain.ctx.rejoined_m = 1000.0;
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, BANDIT_2, "the lead's target");
+    brain.ctx.cohesion_m = 0.0;
+    brain.reset();
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, BANDIT);
+}
+
+#[test]
+fn a_wingman_that_strays_past_the_cohesion_distance_rejoins_before_it_fights_again() {
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(0.0, 0.0, -400.0))]);
+    let own = row_of(&bench, RAIDER);
+    let lead_at = bench.rows.positions[row_of(&bench, LEADER)];
+    let mut brain = flight_member(ORDER_ENGAGE_AT_WILL);
+    brain.ctx.cover = true;
+    brain.ctx.cohesion_m = 1500.0;
+    brain.ctx.rejoined_m = 600.0;
+    let mut think_at = |bench: &mut Bench, brain: &mut Brain, away_m: f32, now_s: f64| {
+        move_row(bench, own, lead_at + Vector3::new(away_m, 0.0, 0.0));
+        let bandit = row_of(bench, BANDIT);
+        move_row(bench, bandit, lead_at + Vector3::new(away_m, 0.0, -400.0));
+        bench.think(brain, now_s, 0, NEVER, 12);
+    };
+    think_at(&mut bench, &mut brain, 1400.0, 0.0);
+    assert!(!brain.ctx.strayed);
+    assert_eq!(brain.current_kind(), i32::from(KIND_ATTACK), "inside the distance it fights");
+    think_at(&mut bench, &mut brain, 1600.0, 1.0);
+    assert!(brain.ctx.strayed, "past it: strayed");
+    assert_eq!(brain.current_kind(), i32::from(KIND_FORMATION), "it breaks off and flies for its slot");
+    assert_eq!(brain.wanted_target_id, TARGET_NONE);
+    think_at(&mut bench, &mut brain, 1000.0, 2.0);
+    assert!(brain.ctx.strayed, "still strayed until it is back near its lead");
+    assert_eq!(brain.current_kind(), i32::from(KIND_FORMATION));
+    think_at(&mut bench, &mut brain, 500.0, 3.0);
+    assert!(!brain.ctx.strayed);
+    for k in 0..90 {
+        think_at(&mut bench, &mut brain, 500.0, 3.0 + f64::from(k + 1) / 60.0);
+    }
+    assert_eq!(brain.current_kind(), i32::from(KIND_ATTACK), "rejoined: it fights again");
+    // The lead out of sight is followed on the wing's link, by the same distances.
+    let mut far = flight_member(ORDER_ENGAGE_AT_WILL);
+    far.ctx.cohesion_m = 1500.0;
+    far.ctx.rejoined_m = 600.0;
+    far.ctx.leader_id = 999;
+    far.ctx.link = Some([0.0, 0.0, f64::from(OUT) + 9000.0]);
+    think_at(&mut bench, &mut far, 0.0, 0.0);
+    assert!(far.ctx.strayed, "9 km from where the link puts its lead");
+    // No cohesion distance, no straying (every wing before M8-T19).
+    let mut free = flight_member(ORDER_ENGAGE_AT_WILL);
+    think_at(&mut bench, &mut free, 4000.0, 0.0);
+    assert!(!free.ctx.strayed);
+}
+
+// `LEADER` flying -z at 100 m/s and the brain's ship `off` m to its right with a hostile 600 m astern of it, nose on it.
+fn leashed_bench(off: f32) -> Bench {
+    let own = Vector3::new(off, 0.0, OUT);
+    let ships = vec![(LEADER, 1, Vector3::new(0.0, 0.0, OUT)), (RAIDER, 1, own), (BANDIT, 0, own + Vector3::new(0.0, 0.0, 600.0))];
+    let mut rows = rows_with(&ships, 1000.0, 0.0);
+    for v in rows.velocities.iter_mut().skip(1) {
+        *v = Vector3::new(0.0, 0.0, -100.0);
+    }
+    Bench::new(rows)
+}
+
+fn evading_wingman(leash_m: f64) -> Brain {
+    let mut brain = raider_brain(&[KIND_EVADE, KIND_FORMATION, KIND_IDLE]);
+    brain.ctx.order = ORDER_FORM_ON_ME;
+    brain.ctx.leader_id = LEADER;
+    brain.ctx.has_slot = true;
+    brain.ctx.slot_offset = Vector3::new(40.0, 0.0, 40.0);
+    brain.ctx.wing_ids = vec![LEADER];
+    brain.ctx.leash_m = leash_m;
+    brain
+}
+
+// Thinks for a second with the bandit on the tail, so the evasion has outlasted the pilot's reaction time.
+fn chased(bench: &mut Bench, brain: &mut Brain, from_s: f64) {
+    for k in 0..60 {
+        bench.think(brain, from_s + f64::from(k) / 60.0, 0, NEVER, 12);
+    }
+}
+
+#[test]
+fn an_evading_wingman_past_its_leash_breaks_toward_its_lead() {
+    // M8-T06 (maintainer, 2026-11-18): chased 3 km out from its lead with a 2.5 km leash, the evasion turns for the lead.
+    let mut bench = leashed_bench(3000.0);
+    let mut brain = evading_wingman(2500.0);
+    chased(&mut bench, &mut brain, 0.0);
+    assert_eq!(brain.current_kind(), i32::from(KIND_EVADE), "a hostile on its tail: it evades");
+    assert!(brain.evade.leashed, "3 km from its lead on a 2.5 km leash");
+    // The lead's own motion (-z 100), 150 m/s toward it (-x), and a 100 m/s jink across the line of fire.
+    assert!(brain.desired_velocity.x < -45.0, "toward its lead: {:?}", brain.desired_velocity);
+    assert!((brain.desired_velocity.z + 100.0).abs() < 1.0, "riding on the lead's motion: {:?}", brain.desired_velocity);
+    // Without a leash the same evasion keeps the course it had: only the jink across it.
+    let mut free = evading_wingman(0.0);
+    chased(&mut bench, &mut free, 0.0);
+    assert_eq!(free.current_kind(), i32::from(KIND_EVADE));
+    assert!(!free.evade.leashed);
+    assert!(free.desired_velocity.x.abs() <= 100.5, "no pull toward the lead: {:?}", free.desired_velocity);
+    // Inside the leash nothing changes either.
+    let mut near_bench = leashed_bench(2000.0);
+    let mut near = evading_wingman(2500.0);
+    chased(&mut near_bench, &mut near, 0.0);
+    assert!(!near.evade.leashed, "2 km out on a 2.5 km leash");
+}
+
+#[test]
+fn the_leash_lets_go_only_well_inside_and_follows_the_wings_link_out_of_sight() {
+    let mut bench = leashed_bench(3000.0);
+    let mut brain = evading_wingman(2500.0);
+    chased(&mut bench, &mut brain, 0.0);
+    assert!(brain.evade.leashed);
+    // Back to 2 km it is still on its way in; at 1 km (under half the leash) it is let off and stays with the lead.
+    let mut closer = leashed_bench(2000.0);
+    chased(&mut closer, &mut brain, 1.0);
+    assert!(brain.evade.leashed, "not let off at the leash's edge");
+    let mut back = leashed_bench(1000.0);
+    chased(&mut back, &mut brain, 2.0);
+    assert!(!brain.evade.leashed, "well inside: let off");
+    assert!(brain.desired_velocity.x.abs() <= 100.5, "only the jink again: {:?}", brain.desired_velocity);
+    // The lead out of sight: the leash runs to where the wing's link puts it.
+    let mut far = evading_wingman(2500.0);
+    far.ctx.leader_id = 999;
+    far.ctx.link = Some([-6000.0, 0.0, f64::from(OUT)]);
+    far.ctx.link_velocity = Vector3::new(0.0, 0.0, -100.0);
+    let mut near_bench = leashed_bench(1000.0);
+    chased(&mut near_bench, &mut far, 0.0);
+    assert!(far.evade.leashed, "7 km from the link's lead");
+    assert!(far.desired_velocity.x < -45.0, "toward the link: {:?}", far.desired_velocity);
+}
+
+
+// A long rejoin (M8-T17): far off it closes at the band's speed, it brakes on its curve back to formation's own closing, it
+// never starts inside the band, and it ends once back to formation's closing.
+#[test]
+fn a_long_rejoin_closes_fast_and_brakes_in_time() {
+    let (beyond, fast, base, settle, brake) = (5000.0, 1000.0, 200.0, 1500.0, 20.0);
+    let (cap, on) = catch_up_cap(54000.0, 0.0, false, beyond, fast, base, settle, brake);
+    assert!(on && (cap - fast).abs() < 1e-9, "54 km out: the band's speed ({cap})");
+    let (cap, on) = catch_up_cap(3000.0, 0.0, false, beyond, fast, base, settle, brake);
+    assert!(!on && cap == 0.0, "3 km out, not rejoining: formation's own");
+    // Braking: at every distance the cap is a speed it can still shed before the settle point.
+    let mut d = 20000.0;
+    while d > settle {
+        let (cap, on) = catch_up_cap(d, 900.0, true, beyond, fast, base, settle, brake);
+        assert!(on);
+        assert!(cap * cap - base * base <= 2.0 * brake * (d - settle) + 1e-6, "{d} m: {cap} m/s can stop in time");
+        d -= 250.0;
+    }
+    let (_, on) = catch_up_cap(2000.0, base - 1.0, true, beyond, fast, base, settle, brake);
+    assert!(!on, "back to formation's own closing: the rejoin ends");
+    let (_, on) = catch_up_cap(1400.0, 600.0, true, beyond, fast, base, settle, brake);
+    assert!(!on, "inside the settle point: the rejoin ends");
 }

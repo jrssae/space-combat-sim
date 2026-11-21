@@ -10,12 +10,13 @@ func test_flight_lines() -> void:
 		"speed_mps": 42.123, "body_velocity": Vector3(1, -2, -42), "angular_rate_dps": Vector3(0, 30, 0),
 		"assist_on": true, "pod_yaw_dps": -30.0, "pod_trim": 0.59,
 	})
-	assert_string_contains(text, "SPD       42.1 m/s")
+	assert_string_contains(text, "SPD   42.1  m/s")
+	assert_string_contains(text, "VEL   +1.0  -2.0  -42.0  (body x/y/z)", "columns are two spaces apart, never padded")
 	assert_string_contains(text, "-42.0")
 	assert_string_contains(text, "+30.0")
 	assert_string_contains(text, "ASSIST ON")
 	assert_string_contains(text, "POD YAW -30.0 °/s")
-	assert_string_contains(text, "POD TRIM  59 %")
+	assert_string_contains(text, "POD TRIM 59 %")
 
 
 func test_pod_yaw_only_with_assist_on() -> void:
@@ -46,4 +47,15 @@ func test_render_and_pads() -> void:
 	assert_string_contains(text, "100000000000.000")
 	assert_string_contains(text, "RENDER FORWARD_PLUS   FPS 60")
 	assert_string_contains(text, "GPU   Test GPU")
+	assert_false(text.contains("VRAM"), "no VRAM line without a reading")
 	assert_string_contains(text, "PAD   Generic Pad  abc  rest -1  axes +0.00 +0.50")
+
+
+func test_the_vram_line_follows_the_gpu() -> void:
+	var reading := VramReading.new()
+	reading.used_bytes = 4 * 1073741824
+	reading.total_bytes = 16 * 1073741824
+	reading.game_bytes = 1073741824
+	var text: String = OverlayText.format({"gpu": "Test GPU", "vram": reading})
+	assert_string_contains(text, "GPU   Test GPU\nVRAM  4.00 / 16.00 GB (25 %)   GAME 1.00 GB")
+	assert_string_contains(OverlayText.format({"vram": VramReading.new()}), "VRAM  GAME 0.00 GB   total unknown")

@@ -2,7 +2,7 @@ extends GutTest
 ## Cobra-bay launches on the real main scene (M7-T08, D76, AC7): the `station_launch` scenario starts the player on Alpha 3's rack
 ## with the controls held and the wingmen on the arm's other racks; the fighters ride the turning drum; the launch camera plays its
 ## shots; the player is handed over at the release point with the drum's surface velocity; a skip (Start) lands in the same state;
-## the wingmen follow from the next doors in the wave order; a rebase mid-launch moves nothing on screen; a launch due under the
+## the wingmen follow from the next doors in the wave order; the doors' toothed leaves slide apart and shut again (M8-T02); a rebase mid-launch moves nothing on screen; a launch due under the
 ## spine holds; `launch wing` launches twelve AI Starfuries, `launch wing all` every wing, and a launched Alpha wing flies as the
 ## player's wingmen, takes the wing orders (M7-T58) and forms up with its arms even (M7-T74).
 ## Every place comes from the station's hardpoints.
@@ -152,7 +152,7 @@ func test_the_player_is_handed_over_with_the_bays_velocity() -> void:
 	var played := PackedStringArray()
 	var log: Array[Dictionary] = main.launches.sequencer.log
 	for k: int in log.size():
-		played.append(String(main.launches._launch_shot["cut"][log[k]["index"]]["variant"]))
+		played.append(String(log[k]["variant"]))
 		if k > 0:
 			assert_gte(float(log[k]["start"]) - float(log[k - 1]["start"]), main.launches.profile.min_shot_s - 1e-6,
 					"each shot held at least a second")
@@ -178,8 +178,8 @@ func test_a_starfury_fits_the_real_arm_nose_first() -> void:
 	var seq: LaunchSequence = main.launches.launches[0]["seq"]
 	for bay: Dictionary in seq.bays:
 		assert_almost_eq(seq.stored_pose_offset_deg(bay), 0.0, 0.5, "%s: the station's rack pose is the stored pose" % bay["name"])
-		var leaf: float = LaunchSequence.leaf_clearance(box, bay, main.launches.profile.door_open_deg, main.launches.profile)
-		assert_gt(leaf, 1.0, "%s: its open leaves stand %.2f m clear of the wings" % [bay["name"], leaf])
+		var leaf: float = LaunchSequence.leaf_clearance(box, bay, 1.0, main.launches.profile)
+		assert_gt(leaf, 2.0, "%s: its leaves slid back leave %.2f m beside the wings" % [bay["name"], leaf])
 
 
 func test_skipping_lands_in_the_same_state() -> void:
@@ -225,6 +225,85 @@ func test_the_wingmen_launch_from_the_next_doors_in_the_wave_order() -> void:
 	assert_ne(wingman.collision_layer, 0, "the last wingman flies free")
 	assert_gt(wingman.global_position.distance_to(_on_drum(station.hardpoints.bay("cobra_bay_alpha_6")["rail_start"])), 15.0,
 			"and has left its rack")
+
+
+func test_the_doors_toothed_leaves_slide_apart_for_the_launch_and_shut_after() -> void:
+	# M8-T02: the player's door (Alpha 3) through its launch: shut, sliding, open for the ejection, sliding, shut; and the ripple.
+	await _start()
+	var seq: LaunchSequence = main.launches.launches[0]["seq"]
+	var bay_name: String = "cobra_bay_alpha_3"
+	var bay: Dictionary = station.hardpoints.bay(bay_name)
+	var index: int = -1
+	for k: int in seq.bays.size():
+		if seq.bays[k]["name"] == bay_name:
+			index = k
+	assert_gt(index, -1)
+	var leaves: StationDoorLeaves = main.launches.door_leaves()
+	assert_not_null(leaves, "the director found the drum's leaves")
+	assert_eq(leaves.count(), 24, "two leaves on each of the 24 doors")
+	assert_eq(leaves.leaf_count(bay_name), 2)
+	var normal: Vector3 = (bay["normal"] as Vector3).normalized()
+	var across: Vector3 = (bay["across"] as Vector3).normalized()
+	var travel: float = float((bay["leaves"] as Array)[0]["travel_m"])
+	var shut: Array[Transform3D] = []
+	for which: int in 2:
+		var now: Transform3D = leaves.leaf_transform(bay_name, which)
+		shut.append(Transform3D(now.basis, now.origin - leaves.slide_direction(bay_name, which) * leaves.slide_m(bay_name, which)))
+	assert_almost_eq(shut[0].origin, shut[1].origin, Vector3.ONE * 1e-4, "shut, the two leaves lie on one door (their teeth mesh)")
+	var states: Array[int] = [int(seq.doors[index]["state"])]
+	var first_tick: Dictionary = {}  # state -> the tick it was first seen
+	var last_share: float = leaves.open_share(bay_name)
+	var opened_at: Dictionary = {}  # bay index -> tick its door began to open
+	var dropped_ajar: bool = false
+	for tick: int in 900:
+		var state: int = int(seq.doors[index]["state"])
+		if state != states[-1]:
+			states.append(state)
+			first_tick[state] = tick
+		for k: int in seq.doors.size():
+			if int(seq.doors[k]["state"]) != LaunchSequence.DoorState.CLOSED and not opened_at.has(k):
+				opened_at[k] = tick
+		var share: float = leaves.open_share(bay_name)
+		assert_almost_eq(share, seq.door_share(index), 1e-6, "the drawn leaves follow the sequence")
+		if state == LaunchSequence.DoorState.OPENING:
+			assert_gte(share, last_share, "sliding back")
+		elif state == LaunchSequence.DoorState.CLOSING:
+			assert_lte(share, last_share, "sliding shut")
+		last_share = share
+		for which: int in 2:
+			var moved: Vector3 = leaves.leaf_transform(bay_name, which).origin - shut[which].origin
+			var side: float = 1.0 if which == 0 else -1.0
+			assert_almost_eq(moved, across * side * share * travel, Vector3.ONE * 1e-3, "each leaf slides across the arm, away from the other")
+			assert_almost_eq(moved.dot(normal), 0.0, 1e-3, "in the doors' plane: it never swings out")
+			assert_true(leaves.leaf_transform(bay_name, which).basis.is_equal_approx(shut[which].basis), "and never turns")
+		var player: Dictionary = seq.fighter(main.combatant.display_name)
+		if player["phase"] == LaunchSequence.Phase.DROPPING and share < 1.0:
+			dropped_ajar = true
+		if states.size() > 1 and state == LaunchSequence.DoorState.CLOSED:
+			break
+		await _ticks(1)
+	var names: Array[String] = []
+	for state: int in states:
+		names.append(LaunchSequence.DOOR_NAMES[state])
+	if names[0] == "closed":
+		names.remove_at(0)
+	assert_eq(names, ["opening", "open", "closing", "closed"] as Array[String], "shut, sliding, open, sliding, shut")
+	assert_false(dropped_ajar, "the fighter is ejected only through a fully open door")
+	assert_eq(leaves.open_share(bay_name), 0.0, "shut again")
+	for which: int in 2:
+		assert_almost_eq(leaves.leaf_transform(bay_name, which).origin, shut[which].origin, Vector3.ONE * 1e-5, "back on its door")
+	var profile: LaunchProfile = main.launches.profile
+	assert_almost_eq(float(int(first_tick[LaunchSequence.DoorState.CLOSED]) - int(first_tick[LaunchSequence.DoorState.CLOSING])) * DT, profile.door_close_s,
+			2.0 * DT, "the closing time kept")
+	assert_gt(travel - float((bay["leaves"] as Array)[0]["reach_m"]), (bay["door_half_m"] as Vector2).x, "open, the teeth are out of the well")
+	# The ripple kept: the wave's four doors (the player's, then the wingmen's aft of it) start a quarter to half a second apart.
+	var starts: Array[int] = []
+	for k: int in opened_at:
+		starts.append(int(opened_at[k]))
+	starts.sort()
+	assert_eq(starts.size(), 4, "a door for the player and each of the three wingmen")
+	for k: int in range(1, starts.size()):
+		assert_between(float(starts[k] - starts[k - 1]) * DT, profile.stagger_min_s - DT, profile.stagger_max_s + DT, "the doors ripple open")
 
 
 func test_a_rebase_mid_launch_moves_nothing_on_screen() -> void:
@@ -353,10 +432,13 @@ func test_launch_wing_all_launches_every_wing() -> void:
 		var expected: int = 8 if launch["wing"] == "alpha" else LaunchDirector.WING_SIZE
 		assert_eq((launch["ships"] as Dictionary).size(), expected, "%s: Alpha fills the player's eight free slots" % launch["wing"])
 	for wing_name: String in ["BETA", "DELTA", "ZETA"]:
-		var wing: Wing = main.wings.wing_named(wing_name)
-		assert_not_null(wing)
-		assert_true(wing != null and wing.leader != null and not wing.leader.is_player, "%s keeps its own AI leader" % wing_name)
-		assert_eq(wing.members().size(), LaunchDirector.WING_SIZE - 1 if wing != null else -1)
+		# A station's own wing flies as four flights of three (M8-T19), each under its own AI lead.
+		var flights: Array[Wing] = main.wings.flights_of(wing_name)
+		assert_eq(flights.size(), 4, "%s: four flights" % wing_name)
+		for flight: Wing in flights:
+			assert_true(flight.leader != null and not flight.leader.is_player, "%s keeps its own AI leads" % wing_name)
+			assert_eq(flight.members().size(), 2)
+		assert_eq(main.wings.flight_strength(wing_name), LaunchDirector.WING_SIZE)
 	var again: ConsoleResult = DebugConsole.registry.execute("launch wing all")[0]
 	assert_false(again.ok, "nothing more to launch while every wing is on its way")
 
@@ -388,7 +470,7 @@ func test_a_launched_alpha_wing_flies_as_the_players_wingmen() -> void:
 	var leader_id: int = main.combatant.targetable.get_instance_id()
 	# The comms menu, as the radial menu sends it.
 	assert_true(DebugConsole.registry.execute("commsmenu open")[0].ok, "the menu opens")
-	assert_true(DebugConsole.registry.execute("commsmenu pick 1")[0].ok, "FORM ON ME")
+	assert_true(DebugConsole.registry.execute("commsmenu pick \"form on me\"")[0].ok, "FORM ON ME")
 	await _ticks(1)
 	assert_eq(own.order, AiContext.Order.FORM_ON_ME)
 	assert_string_contains(main.wings.last_ack, "FORMING UP")
@@ -552,3 +634,67 @@ func test_thrusters_stay_cold_in_the_clamp_and_fire_at_the_ejection() -> void:
 	assert_true(await _until(func() -> bool: return seq.fighter("ALPHA 2")["phase"] == LaunchSequence.Phase.RELEASED, 120))
 	await _ticks(2)
 	assert_false(_ship("ALPHA 2").ship.clamped, "a wingman leaves the clamp at its ejection too")
+
+
+func test_control_returns_as_the_launch_thrusters_cut() -> void:
+	# M8-T30 (maintainer): the chase shot no longer runs on past the burn; the pilot has the ship the tick its thrusters cut.
+	await _start()
+	assert_true(await _until(func() -> bool: return not main.launches.last_handoff.is_empty(), 900), "the player is let go")
+	var burn_ticks: int = roundi(main.launches.profile.burn_s / DT)
+	await _ticks(burn_ticks - 20)
+	assert_true(main.camera_rig.is_playing_shot(), "the launch's shots play while the engines burn")
+	var back: int = -1
+	for i: int in 40:
+		await _ticks(1)
+		if not main.camera_rig.is_playing_shot() and back < 0:
+			back = i
+	assert_between(back, 15, 25, "the shot ends as the thrusters cut")
+	assert_false(main.controls_locked(), "the pilot has the ship")
+	await _ticks(400)
+	assert_false(main.camera_rig.is_playing_shot(), "no launch shot comes back")
+
+
+func test_a_skip_still_lands_in_the_same_state_with_the_quicker_hand_off() -> void:
+	await _start()
+	await _ticks(30)
+	main.launches.cut_shots()  # one call stops the launch's camera; the launch goes on (M8-T32's abort)
+	await _ticks(1)
+	assert_false(main.camera_rig.is_playing_shot(), "the camera is the pilot's")
+	assert_true(main.launches.locks_controls(), "the launch itself goes on, controls held on the rack")
+	await _ticks(60)
+	assert_false(main.camera_rig.is_playing_shot(), "and no further launch shot plays")
+
+
+func test_the_launch_cuts_quick_shots_without_a_repeat_or_a_gap() -> void:
+	# M8-T30 (maintainer): no camera angle lasts 3 s or more; the launch keeps its length by cutting between pool shots, none twice,
+	# and the cockpit never shows between them until the thrusters cut.
+	await _start()
+	var on_screen: Array[Dictionary] = []  # each shot as it went on: {shot, ticks}
+	var gaps: int = 0
+	var released: bool = false
+	for i: int in 1500:
+		await _ticks(1)
+		var shot: CinematicShot = main.camera_rig.playing_shot()
+		if not main.launches.last_handoff.is_empty():
+			released = true
+		if shot == null:
+			if not on_screen.is_empty() and main.controls_locked():
+				gaps += 1
+			if released and not on_screen.is_empty():
+				break
+			continue
+		if on_screen.is_empty() or on_screen[-1]["shot"] != shot:
+			on_screen.append({"shot": shot, "ticks": 0})
+		on_screen[-1]["ticks"] = int(on_screen[-1]["ticks"]) + 1
+	assert_gt(on_screen.size(), 3, "several shots")
+	var ids := PackedStringArray()
+	for k: int in on_screen.size():
+		var entry: Dictionary = on_screen[k]
+		var shot: CinematicShot = entry["shot"]
+		if k < on_screen.size() - 1:  # the last one ends where the thrusters cut
+			assert_gte(float(entry["ticks"]) * DT, CinematicShot.MIN_TAKE_S - DT, "%s on screen at least a second" % shot.id)
+		var limit: float = shot.max_take_s() + (DT if shot.feature else 0.0)
+		assert_lt(float(entry["ticks"]) * DT, limit, "%s held within its limit" % shot.id)
+		assert_false(ids.has(String(shot.id)), "%s plays once in the launch (%s)" % [shot.id, ids])
+		ids.append(String(shot.id))
+	assert_eq(gaps, 0, "no cockpit between the shots while the controls are held")

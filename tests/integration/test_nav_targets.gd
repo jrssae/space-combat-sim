@@ -1,6 +1,7 @@
 extends GutTest
 ## Navigation targets and the hold-X interaction in play (M7-T27), on the real main scene in free flight: Babylon 5's main docking
-## bay and cargo bay and the jumpgate are navigation targets (not civilian), the bays answer a 2 s hold of X with "not available",
+## bay and cargo bay and the jumpgate are navigation targets (not civilian), the cargo bay answers a 2 s hold of X with "not
+## available" (the docking bay's hold docks the ship since M8-T06: `test_docking`),
 ## a tap still toggles auto-track, and the HUD shows the navigation look, the prompt and the bar. The selection moves from a
 ## bay to the other bay and to the gate by every path a pilot has (the target menu, the console, the wheel, the nose; the
 ## target button's tap takes an enemy); the gate's hold beyond 2 km answers "out of range". The jump itself is flown in
@@ -69,15 +70,15 @@ func test_the_bays_and_the_gate_are_navigation_targets() -> void:
 			"main_docking_bay_mouth"] as Vector3 + station.drum_origin)), 1.0, "at the docking bay's mouth")
 
 
-func test_holding_x_on_a_bay_answers_not_available_and_a_tap_still_tracks() -> void:
+func test_holding_x_on_the_cargo_bay_answers_not_available_and_a_tap_still_tracks() -> void:
 	await _start()
-	await _target(station.docking_bay.targetable)
+	await _target(station.cargo_bay.targetable)
 	var offer: TargetInteraction = main.interactions.offer()
 	assert_not_null(offer, "the bay offers its interaction")
-	assert_eq(main.interactions.prompt_line(), "HOLD X / SHIFT / MOUSE 4: DOCK", "pad and keyboard both named")
+	assert_eq(main.interactions.prompt_line(), "HOLD X / SHIFT / MOUSE 4: CARGO", "pad and keyboard both named")
 	var hud: HudFrame = HudLayout.compute(main._build_hud_input())
 	assert_true(hud.target_nav, "the HUD draws it as a navigation target")
-	assert_eq(hud.ack_line, "HOLD X / SHIFT / MOUSE 4: DOCK", "the prompt on the acknowledgement line")
+	assert_eq(hud.ack_line, "HOLD X / SHIFT / MOUSE 4: CARGO", "the prompt on the acknowledgement line")
 	source.hold(InputAdapter.AUTOTRACK)
 	await _ticks(60)
 	hud = HudLayout.compute(main._build_hud_input())
@@ -88,7 +89,7 @@ func test_holding_x_on_a_bay_answers_not_available_and_a_tap_still_tracks() -> v
 	await _ticks(1)
 	assert_eq(main.interactions.runs, 1, "the hold ran the bay's interaction once")
 	assert_eq(main.interactions.last_result, TargetInteraction.NOT_AVAILABLE)
-	assert_eq(main.interactions.prompt_line(), "BABYLON 5 DOCKING BAY: NOT AVAILABLE", "the answer shows")
+	assert_eq(main.interactions.prompt_line(), "BABYLON 5 CARGO BAY: NOT AVAILABLE", "the answer shows")
 	assert_false(main.adapter.autotrack_on, "the hold left auto-track alone")
 	source.hold(InputAdapter.AUTOTRACK)
 	await _ticks(5)
@@ -275,3 +276,29 @@ func test_a_bay_prompts_and_holds_only_within_its_reach() -> void:
 	var near: Dictionary = await _hold_x(125)
 	assert_gt(near["peak"], 0.9, "the bar fills within reach")
 	assert_eq(near["runs"], 1)
+
+
+# M8-T18 (D84, AC14): the approach cue shows on the gate and both bays: on the status line (closing speed and state) and on the
+# target's box and panel (one HUD frame feeds both views).
+func test_the_gate_and_both_bays_show_the_approach_cue() -> void:
+	await _start()
+	var gate: Jumpgate = main.gates.gate()
+	for point: Targetable in [gate.targetable, station.docking_bay.targetable, station.cargo_bay.targetable]:
+		var basis: Basis = gate.global_basis if point == gate.targetable else station.global_basis
+		var at: Vector3 = point.global_position + basis * Vector3(0.0, 0.0, -6000.0)
+		main.ship.reset_to(Transform3D(Basis.looking_at(point.global_position - at, basis.y), at))
+		await _ticks(2)
+		assert_true(main.ship.targeting.select_id(point.get_instance_id()))
+		var inbound: Vector3 = (point.global_position - main.ship.global_position).normalized()  # the frame has moved to the ship
+		main.ship.linear_velocity = main.world.anchored_velocity() + inbound * 300.0
+		await _ticks(1)
+		var cue: ApproachCue = main.interactions.cue()
+		assert_not_null(cue, "%s: the cue" % point.display_name)
+		if cue == null:
+			continue
+		assert_almost_eq(cue.closing_mps, 300.0, 15.0, "%s: closing at 300 m/s against its rest" % point.display_name)
+		assert_string_contains(main.interactions.prompt_line(), "m/s  %s" % cue.state_name(), "%s: on the status line" % point.display_name)
+		var frame: HudFrame = HudLayout.compute(main._build_hud_input())
+		assert_true(frame.cue_present, "%s: on the target's box and panel" % point.display_name)
+		assert_eq(DebugConsole.registry.read("interact.cue")["value"], cue.state_name(), "%s: the interact provider" % point.display_name)
+		assert_gt(float(DebugConsole.registry.read("interact.reach_m")["value"]), 0.0)

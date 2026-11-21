@@ -1,0 +1,532 @@
+{
+ "_comment": "The player's docking shots (M8-T31, maintainer 2026-11-19), a pool per stage, cut by `ShotSequencer`: 'approach' while the autopilot brings the ship to the lane, 'lane' down the lane, 'roll' while it holds short of the mouth and matches the drum's turn, 'entry' from then through the mouth and the inner doors, 'wait' on the bay while it is inside until the launch. Picked at random per visit, never the same take twice in a row, never the last visit's opening, only takes clear of the station. Each take 1 s or more and under 3 s (keys 0 to 2.9 s), a take marked 'feature': true under 5 s (keys 0 to 4.9 s). A take with 'near_m' plays only once the Fury is that close to the bay's mouth. Actors: 'player' (its frame: +z behind, +y above), 'bay' (the main docking bay's mouth in the station's frame: +z into the bay, -z out in front of it) and 'drum' (the same mouth turning with the drum). The ship holds 300 m out on the axis for the roll match (bay or drum offset z -300).",
+ "approach": [
+  {
+   "id": "trail_close",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       15,
+       8,
+       58
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 58
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       13,
+       7,
+       50
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -100
+      ]
+     },
+     "fov": 56
+    }
+   ]
+  },
+  {
+   "id": "beside_drum",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       150,
+       40,
+       -650
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 45
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       150,
+       40,
+       -650
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 42
+    }
+   ],
+   "near_m": 700
+  },
+  {
+   "id": "wide_station",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       1200,
+       500,
+       -2600
+      ]
+     },
+     "look_at": {
+      "actor": "bay",
+      "offset": [
+       0,
+       0,
+       800
+      ]
+     },
+     "fov": 55
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       1190,
+       500,
+       -2580
+      ]
+     },
+     "look_at": {
+      "actor": "bay",
+      "offset": [
+       0,
+       0,
+       800
+      ]
+     },
+     "fov": 53
+    }
+   ]
+  }
+ ],
+ "lane": [
+  {
+   "id": "mouth_out",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       0,
+       30,
+       -10
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 20
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       0,
+       30,
+       -10
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 20
+    }
+   ]
+  },
+  {
+   "id": "beside_lane",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       90,
+       10,
+       75
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       -8,
+       0
+      ]
+     },
+     "fov": 32
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       92,
+       10,
+       78
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       -8,
+       0
+      ]
+     },
+     "fov": 32
+    }
+   ]
+  },
+  {
+   "id": "trail_low",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       18,
+       -8,
+       45
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 55
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       18,
+       -8,
+       45
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 55
+    }
+   ]
+  }
+ ],
+ "roll": [
+  {
+   "id": "roll_drum",
+   "feature": true,
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       6,
+       6,
+       35
+      ]
+     },
+     "look_at": {
+      "actor": "drum",
+      "offset": [
+       30,
+       -15,
+       0
+      ]
+     },
+     "fov": 53,
+     "up": {
+      "actor": "drum",
+      "direction": [
+       0,
+       1,
+       0
+      ]
+     }
+    },
+    {
+     "t": 4.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       6,
+       6,
+       35
+      ]
+     },
+     "look_at": {
+      "actor": "drum",
+      "offset": [
+       30,
+       -15,
+       0
+      ]
+     },
+     "fov": 53,
+     "up": {
+      "actor": "drum",
+      "direction": [
+       0,
+       1,
+       0
+      ]
+     }
+    }
+   ]
+  },
+  {
+   "id": "roll_front",
+   "feature": true,
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       40,
+       30,
+       -340
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 40
+    },
+    {
+     "t": 4.9,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       40,
+       30,
+       -338
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 40
+    }
+   ]
+  }
+ ],
+ "entry": [
+  {
+   "id": "trail_doors",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "player",
+      "offset": [
+       0,
+       5,
+       32
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 60
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "player",
+      "offset": [
+       0,
+       5,
+       32
+      ]
+     },
+     "look_at": {
+      "actor": "player",
+      "offset": [
+       0,
+       0,
+       -120
+      ]
+     },
+     "fov": 60
+    }
+   ]
+  },
+  {
+   "id": "mouth_side",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       60,
+       30,
+       -180
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 45
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       60,
+       30,
+       -170
+      ]
+     },
+     "look_at": {
+      "actor": "player"
+     },
+     "fov": 45
+    }
+   ]
+  }
+ ],
+ "wait": [
+  {
+   "id": "wait_bay",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       70,
+       34,
+       -210
+      ]
+     },
+     "look_at": {
+      "actor": "bay",
+      "offset": [
+       0,
+       0,
+       40
+      ]
+     },
+     "fov": 50
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       90,
+       40,
+       -260
+      ]
+     },
+     "look_at": {
+      "actor": "bay",
+      "offset": [
+       0,
+       0,
+       80
+      ]
+     },
+     "fov": 50
+    }
+   ]
+  },
+  {
+   "id": "wait_wide",
+   "keys": [
+    {
+     "t": 0,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       240,
+       120,
+       -560
+      ]
+     },
+     "look_at": {
+      "actor": "bay",
+      "offset": [
+       0,
+       0,
+       300
+      ]
+     },
+     "fov": 55
+    },
+    {
+     "t": 2.9,
+     "position": {
+      "actor": "bay",
+      "offset": [
+       250,
+       125,
+       -580
+      ]
+     },
+     "look_at": {
+      "actor": "bay",
+      "offset": [
+       0,
+       0,
+       300
+      ]
+     },
+     "fov": 55
+    }
+   ]
+  }
+ ]
+}

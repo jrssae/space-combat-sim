@@ -42,6 +42,7 @@ var audio: AudioDirector = null
 
 var _pages: Array[MenuScreen] = []
 var _lit_actions: Array[StringName] = []
+var _presses: PadPresses = PadPresses.new()
 
 @onready var _title: Label = %Title
 @onready var _host: VBoxContainer = %Host
@@ -61,8 +62,20 @@ func _ready() -> void:
 	var profiles: Node = get_node_or_null(^"/root/ControlProfiles")
 	if profiles != null:
 		profiles.applied.connect(_on_profile_applied)
+	var joypads: Node = get_node_or_null(^"/root/Joypads")
+	if joypads != null:
+		joypads.connect(&"changed", _forget_presses)  # a pad that goes away never sends its releases
 	resized.connect(_apply_layout)
 	refresh()
+
+
+# The diagram lights what the player presses on the real pad, in any menu that shows it (M8-T22). These are the events the
+# menus themselves get, so nothing here reads the pad's state.
+func _input(event: InputEvent) -> void:
+	if _pages.is_empty() or not is_visible_in_tree():
+		return
+	if _presses.feed(event) and _pad != null:
+		_pad.set_pressed(_presses.widgets())
 
 
 ## Replaces every page with `page`, the first of the stack.
@@ -79,6 +92,7 @@ func clear() -> void:
 	_title.text = ""
 	_message.text = ""
 	_lit_actions.clear()
+	_forget_presses()
 
 
 ## Puts `page` on top of the current one.
@@ -310,6 +324,12 @@ func _drop(page: MenuScreen) -> void:
 	if is_instance_valid(page):
 		_host.remove_child(page)
 		page.queue_free()
+
+
+func _forget_presses() -> void:
+	_presses.clear()
+	if _pad != null:
+		_pad.set_pressed([])
 
 
 func _play(sound: StringName) -> void:

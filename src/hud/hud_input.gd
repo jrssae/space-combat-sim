@@ -66,6 +66,9 @@ var contacts: Array[TargetInfo] = []
 ## the layout takes `contacts` instead.
 var radar_contacts: RadarContacts = null
 var selected_id: int = 0
+## Capitals the HUD may mark far out (M8-T08, `CapitalContacts.gather`), and the rules for it (null: no markers).
+var capitals: Array[Dictionary] = []
+var capital_rules: CapitalMarkerRules = null
 ## One line at the top centre (wave, raiders left, kills; on a route the instructor's `FOLLOW INSTRUCTOR — NAV 2/6 — NEXT: ROLL`);
 ## empty until something feeds it.
 var status_line: String = ""
@@ -77,6 +80,8 @@ var ack_line: String = ""
 ## A prompt for the player (M6-T14: `X: REQUEST JUMP` beside a targeted gate), "" for none. It shows on the acknowledgement's line
 ## while no acknowledgement does.
 var prompt_line: String = ""
+## The approach cue on the selected target while it offers an interaction (M8-T18, `InteractionHost.cue`), else null.
+var approach_cue: ApproachCue = null
 ## How far the auto-track button's hold has run toward the targeted object's interaction (M7-T27), 0..1; 0 = no hold, no bar.
 var interact_progress: float = 0.0
 ## The route waypoint to mark (M3-T09: the instructor's next waypoint), World frame, and its label (`NAV 2`).

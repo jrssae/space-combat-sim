@@ -15,7 +15,7 @@ from tools.procgen.core.context import BuildContext
 from tools.procgen.core.geometry import Material, Mesh, box
 from tools.procgen.core.glb import read_glb
 from tools.procgen.core.image import read_png
-from tools.procgen.core.sections import SectionCorners, cut_corners, cuts_from_planes, skirts
+from tools.procgen.core.sections import SKIRT_INSET_M, SectionCorners, cut_corners, cuts_from_planes, skirts
 from tools.procgen.parts import station as st
 from tools.procgen.parts import station_layouts as sl
 from tools.procgen.parts import station_props as sp
@@ -74,7 +74,7 @@ class CutTests(unittest.TestCase):
         a, b, _ = cut_corners(p, n, u, g, self.cuts)
         wall = skirts(a, [(-2.0, 1.0)], depth=0.5)
         self.assertGreater(len(wall.positions), 0)
-        np.testing.assert_allclose(wall.positions[:, :, 2], -2.0, atol=1e-9)
+        np.testing.assert_allclose(wall.positions[:, :, 2], -2.0 - SKIRT_INSET_M, atol=1e-9)  # a hair inside the fore section
         normals = np.cross(wall.positions[:, 1] - wall.positions[:, 0], wall.positions[:, 2] - wall.positions[:, 0])
         self.assertTrue(np.all(normals[:, 2] > 0.0), "the fore section's wall at its aft cut faces aft")
         inside = np.all((np.abs(wall.positions[:, :, 0]) <= 2.0 + 1e-9) & (np.abs(wall.positions[:, :, 1]) <= 1.5 + 1e-9))

@@ -127,6 +127,14 @@ var _last_torque: Vector3 = Vector3.ZERO
 var _last_had_output: bool = false
 
 
+## The main nozzles glow at least this much whatever the thrust (M8-T29: the player's ship lit as it comes back out of a gate,
+## coasting); 0 = off.
+var main_glow_floor: float = 0.0:
+	set(value):
+		main_glow_floor = value
+		_settled = false
+
+
 func _init() -> void:
 	cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
@@ -259,6 +267,10 @@ func advance(delta: float) -> void:
 	if _settled and _same_output(output):
 		return  # every plume holds its target: nothing moves
 	var targets: PackedFloat64Array = ThrusterGlowLevels.targets(_layout, output)
+	if main_glow_floor > 0.0:
+		for i: int in _layout.nozzle_count():
+			if ThrusterLayout.is_main_group(_layout.nozzle_groups[i]):
+				targets[i] = maxf(targets[i], main_glow_floor)
 	var settled: bool = true
 	for i: int in _levels.size():
 		_levels[i] = ThrusterGlowLevels.smooth(_levels[i], targets[i], delta, smoothing_s)

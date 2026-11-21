@@ -51,9 +51,15 @@ const ENTRIES: Dictionary = {
 	&"fuel_unlimited": {"type": TYPE_BOOL, "default": true,
 		"category": &"flight", "label": "Unlimited fuel",
 		"doc": "Reaction mass is never drawn down (the fuel gauge stays full); off = a finite tank that can run dry"},
-	&"encounters": {"type": TYPE_BOOL, "default": true,
-		"category": &"game", "label": "Free-flight encounters",
-		"doc": "Free flight from the menu starts with encounters (raiders, allied patrols, civilian traffic); the Free flight page remembers its last choice here. Runs that go straight to the scene keep them off unless the console says encounters on (M5-T17)"},
+	&"encounters_civilian": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "Civilian traffic",
+		"doc": "Free flight from the menu has neutral ships passing through, and the station's docking queues and gate runs; the Free flight page remembers its choice here (M8-T28)"},
+	&"encounters_allied": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "Allied patrols",
+		"doc": "Free flight from the menu has allied Starfury patrols passing through; the Free flight page remembers its choice here (M8-T28)"},
+	&"encounters_enemy": {"type": TYPE_BOOL, "default": true,
+		"category": &"game", "label": "Enemy encounters",
+		"doc": "Free flight from the menu has raids, with their carriers; the Free flight page remembers its choice here. All three switches off is an empty sky (M8-T28)"},
 	&"encounter_interval_s": {"type": TYPE_FLOAT, "default": 120.0, "min": 20.0, "max": 600.0,
 		"category": &"game", "label": "Time between encounters", "step": 10.0,
 		"doc": "Sim seconds between free-flight encounters on average (each comes half an interval early to half late); read when encounters start (M5-T17)"},
@@ -254,6 +260,9 @@ const ENTRIES: Dictionary = {
 ## only schema keys, so a saved file's old line is ignored and dropped on the next `save`.)
 const RENAMED: Dictionary = {}
 
+## Settings that became several: a saved value of the old key loads into each new one (M8-T28).
+const SPLIT: Dictionary = {&"encounters": [&"encounters_civilian", &"encounters_allied", &"encounters_enemy"]}
+
 ## Settings removed with the old paths (M4-T37, Q67): `Settings.revert` reads only schema keys, so a saved file that still
 ## holds one of these loads without it, and the next `save` drops it.
 const RETIRED: Array[StringName] = [&"perf_native_weapons", &"perf_native_brains", &"perf_native_commands",
@@ -295,6 +304,9 @@ func old_names(key: StringName) -> Array[StringName]:
 	var out: Array[StringName] = []
 	for old: StringName in RENAMED.keys():
 		if RENAMED[old] == key:
+			out.append(old)
+	for old: StringName in SPLIT.keys():
+		if (SPLIT[old] as Array).has(key):
 			out.append(old)
 	return out
 

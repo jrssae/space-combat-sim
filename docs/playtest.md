@@ -32,6 +32,34 @@ For the old free-flight scene with only the nav buoys use `scenario free_flight`
 Plug the pad in before launching if you can. Hot-plug also works; trigger calibration then takes about half a
 second.
 
+## Gamepad not detected
+
+The game says which pads it sees: a line at the top of the screen when one connects or disconnects, a notice at the bottom
+left of the front end while none is connected, `joypads` in the console (each pad's name, GUID and whether its button mapping
+is known, then the last connect and disconnect events) and `Joypads:` lines in the terminal at launch and on every hotplug.
+The keyboard and mouse always work.
+
+**A wireless pad with a USB receiver** (found on the maintainer's GameSir Nova Lite, M8-T22, D88): the receiver alone is not a
+pad. While the pad is switched off the receiver is a bare `3537:2106 Zikway HID zk` device with no joystick, so no program can
+see a pad, Steam included.
+
+1. Press Home on the pad and wait for its light to go solid. The receiver then drops off USB and comes back as a pad. On this
+   machine that took 6 to 40 s (it first tries an Xbox 360 identity the kernel cannot read, then settles as
+   `3537:1040 2.4G XBOX 360 For Windows`).
+2. Check: `lsusb | grep 3537` shows `3537:1040`, and `ls /dev/input/by-id/ | grep joystick` lists it. The game shows
+   `Gamepad connected: Generic X-Box pad`; no restart is needed.
+3. Still `3537:2106` after a minute, or `journalctl -k | tail` keeps repeating `can't read configurations, error -110`: pull
+   the receiver, plug it back in and press Home again.
+4. The pad switches itself off after 10 minutes without input (flying on the keyboard, reading, waiting for a run), and the
+   game says `Gamepad disconnected`. Press Home and wait again.
+
+**Any pad.** `joypads` shows `mapping unknown`: Godot has no button layout for it, so buttons may be swapped; put the pad in
+its XInput (Xbox) mode. Nothing listed at all: check `ls /dev/input/js*`; with no `js` node the kernel has no pad, and the
+fault is the pad, its mode, its cable or its receiver, not the game.
+
+**Not needed here:** a udev rule (the idle receiver carries no pad data, so access to it gives nothing), and launching through
+Steam (Steam sees the pad only when the kernel does).
+
 ## Controls
 
 ```
@@ -83,9 +111,11 @@ maintainer (the fallback is Ctrl). Your own saved control profiles keep the keys
 loads layout B.
 
 Wing orders (keys 1-4, or `wing order <attack|form|engage|cover>`): **1** attack my target (your selected hostile only),
-**2** form on me (formation only, no attacks), **3** engage at will (anything they see, no leash), **4** cover me, the default:
+**2** form on me (they keep their slots and shoot from them at a hostile in reach ahead: M8-T19), **3** engage at will (anything
+they see, no leash), **4** cover me, the default:
 they hold formation and engage only hostiles within 2 km of you, and a wingman more than 3 km from you breaks off and rejoins.
-The acknowledgement line stays on screen 3.5 s.
+**7** form up, hold fire (`wing order form_hold`) and **8** hold position, hold fire (`wing order hold`: they stop where they are
+and you go on alone) are M8-T19's; any other order lifts them. The acknowledgement line stays on screen 3.5 s.
 
 The ` key opens the debug console; it frees the mouse while open. Hunting a hull "jump" under thrust: `throttle 1` holds both main
 pods, then try `set settings.physics_jitter_fix 0` (no frame-time smoothing) while it happens and note whether it stops. `window max` / `window normal` / `window 1800 900` resize the window from the console. Mouse feel: `set settings.mouse_full_rate_px_s 1200`
@@ -93,6 +123,11 @@ pods, then try `set settings.physics_jitter_fix 0` (no frame-time smoothing) whi
 (free look). Sizes: `set settings.debug_text_size 22` (overlay text) and `set settings.chase_bolt_scale 3` (how much larger bolts
 are drawn in the chase view) and `set settings.hud_chase_opacity 0.7` (how solid the HUD is in the chase view; in the cockpit view the
 radar, speed and bars are on the console's screens) and `set settings.cockpit_light_energy 1.0` (the cabin lamp that lights the grey cockpit a dark red, 1.0 by default since M4-T30b; takes effect on the next spawn). Hull lighting: `set settings.ambient_level 0.3` (how much light the dark side of a hull gets) changes it live. Add `save` to keep a setting.
+
+GPU memory (M8-T20): the debug overlay (F3, or `overlay on`) has a line like `VRAM  4.08 / 15.98 GB (26 %)   GAME 0.81 GB`: what the
+whole card holds (every program, the desktop too) out of its size, as the driver reports it, then the game's own share. It
+updates about twice a second. Where the driver gives no total (not an AMD card on Linux) it reads `VRAM  GAME 0.81 GB   total
+unknown`. The same numbers: `state render` (`vram_used_gb`, `vram_total_gb`, `vram_pct`; -1 when unknown).
 
 Changed after the first play test: yaw and roll swapped (the right stick used to yaw and the D-pad to roll), and
 target-ahead moved to a D-pad Up hold because the pad had no stick clicks. Changed after the M2 play test: X is auto-track and
@@ -342,12 +377,16 @@ free look. D-pad Right opens the comms menu (see Wing orders).
 ## Wing orders
 
 Keys 1 to 4, or `wing order <attack|form|engage|cover>` in the console. The HUD names the order for 3.5 s, for example
-`ALPHA 2: COPY, FORMING UP`.
+`ALPHA 2: COPY, FORMING UP`. Key 6 (M8-T06) sends the damaged wingmen to the main docking bay for repair (`dock wing`); on the
+comms menu it is DOCK, the fifth entry, after the four orders (left out while no home dock is in range). Keys 7 and 8 (M8-T19) are
+form up and hold fire (`wing order form_hold`) and hold position and hold fire (`wing order hold`), on the ring as FORM UP and HOLD
+POSITION after DOCK. The ring has one slice per entry (M8-T24).
 
 The comms menu (D-pad Right, or Ctrl) is a radial menu like the target menu: the same ring at the left, the game paused and the view
-blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, up to down going clockwise: ATTACK
-(my target), FORM ON ME, ENGAGE (at will), COVER ME. A sends the order and the game resumes; B closes the menu (from a sub-page it
-goes back a page); D-pad Right again also closes it; Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
+blurred behind it. Point the left stick (M7-T37; or the arrow keys, or the mouse) at WING ORDERS' slices, from the top going clockwise: ATTACK
+(my target), FORM ON ME, ENGAGE (at will), COVER ME, then DOCK, FORM UP, HOLD POSITION. A sends the order and the game resumes. The
+number keys send the entry in that place at once: 1 to however many the ring has, a key past the last does nothing (M8-T24). The
+D-pad does nothing while the menu is open. B closes the menu (from a sub-page it goes back a page); Ctrl again also closes it; Start hands over to the pause menu. There is no timeout. Nothing held (fire, the
 left stick, a D-pad press) acts when it closes; the left stick strafes again only once it has been back near centre. The right
 stick is not read by the menu and flies as soon as it closes. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
 
@@ -652,20 +691,33 @@ Start the game windowed (`.tools/godot/godot --path .`), choose **New game**, th
 the list while it is focused. Each start from the menu draws a new seed, and with it a different civilian ship (any of the nine hulls;
 **Retry** on the debrief keeps the ship). From the console, `play civilian_escort <seed>` picks the seed (seed 5 is the Skylark).
 
-- **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you and ALPHA 2
-  coasting past the camera. The civilian's master hails over the fly-past; Control briefs once the camera is back, with your
+- **The intro.** The mission opens on the civilian beside NAV ALPHA with the belt somewhere ahead, then cuts to you, ALPHA 2 and ALPHA 3
+  coasting past the camera. The civilian's master hails over the fly-past; Control briefs once the camera is back (the cargo is sensitive and
+  must get through, the escort is a show of force, then the tasking; M8-T26), with your
   controls held until "the flight is yours". **A** or **Start** skips one shot; holding **X** (keyboard Shift or Mouse 4) for 2 s
   skips the whole opening, intro and briefing, to the hand-over (M7-T54; `HOLD X / SHIFT / MOUSE 4: SKIP` and its bar show while
   it can).
-- **The crossing.** The civilian flies to NAV BETA, 30 km out, at up to 120 m/s, threading the asteroid belt (24 km across, 8 km
-  deep) in the middle of the route. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
-  25 % (3 raiders, before the belt), 50 % (4, inside it) and 75 % (6, past it); a later wave also waits until the one before is
-  down and 30 s have passed (M7-T54), so a fought run takes 6 to 8 minutes. The first wave comes out of a raider carrier: its
-  arrival jump point opens, the fighters come through, then the carrier opens a departure point and leaves (M6-T23; the carrier
-  is still a box stand-in, kept by the maintainer). Attacked, it runs (an Earth Alliance ship towards
-  you or ALPHA 2, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
-- **Objectives.** Escort the civilian to NAV BETA (done when it is within 1.5 km of the buoy and every raider is down; failed if
-  it is destroyed) and, optional, bring ALPHA 2 home. Losing yourself also ends it. A last line, then the debrief. From the
+- **The crossing (H, changed 2026-11-21).** The civilian flies to NAV BETA, 60 km out (45 and 30 before), at up to 120 m/s,
+  through four fields of rock: a pocket after the 25 % mark, the belt across the middle (24 km across, 12 km deep), a pocket
+  at the 75 % mark and one on the last leg, each with a clear lane along the route. Its route ends 2 km past the 75 % mark,
+  in the third field: it waits there if need be and flies the last 12 km only once the third wave has jumped in, so it
+  cannot be at NAV BETA before that wave is fought. In a scripted fought run it arrives about 100 s after the third wave is
+  beaten and the run takes about 17.5 minutes. Say if the wait in the rocks (when you are slow with the second wave) and
+  the last leg feel right; the distances are data (`data/scenarios/civilian_escort.json`, the marks in the mission script).
+  The second wave waits 60 s after the first is down, the third 30 s. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
+  25 % (6 raiders, before the belt), 50 % (8, inside it) and 75 % (10, past it; M8-T08); a later wave also waits until the one
+  before is down and 30 s have passed (M7-T54). A fought run now takes about 12 minutes (it was 6 to 8 with waves of 3, 4
+  and 6), and the civilian is often at NAV BETA before the last wave comes. Each wave rides in docked on a raider strike
+  carrier (`RAIDER CARRIER 1` to `3`, M8-T08): its jump point opens, it comes out with its raiders on its cradles, launches
+  them once clear and hangs back; raiders that go home to it (3 left of a wave, or one under 20 % hull) count as down, and
+  it then flees (its drive needs 240 s after the jump in, and there is no gate here, so it runs until then: it can be
+  caught). Attacked, the civilian runs (an Earth Alliance ship towards
+  you or a wingman, others straight away) and turns back onto its route a few seconds after the raiders are gone or dead.
+- **Objectives.** The objectives list of the target menu shows NAV BETA for the escort (pick it for a waypoint), and a
+  civilian chased off after it has arrived flies back to its route's end (M8-T08, from the play-test of 2026-11-19).
+  Escort the civilian to NAV BETA (done when it has flown its route to the end, 1 km short of the buoy, and
+  every raider is down or gone home; failed if it is destroyed) and, optional, bring ALPHA 2 and ALPHA 3 home (two wingmen
+  since M8-T08) and destroy a raider carrier. Losing yourself also ends it. A last line, then the debrief. From the
   hand-over the civilian's name and hull show top right under the objectives, as a bar that turns amber then red as it drops and
   reads `LOST` when it is destroyed (M7-T54; `get mission.hull_bars`).
 - **Console shortcuts.** `mission goto wave_one` (or `wave_two`, `wave_three`) skips ahead: the civilian is placed at the step's
@@ -688,7 +740,10 @@ Wheel                cycles through every target, as before
 ```
 
 The categories, clockwise from the top: **Enemies**, **Allies**, **Civilian**, **Unknown**, **Navigation**, **Objectives**. Each
-opens a ring of its nearest five with **NONE** straight down. A ship you pick becomes the target and the game resumes. A beacon
+opens a ring of its nearest eight with **NONE** straight down (keys 1-9 pick by place). A ship you pick becomes the target and the game resumes.
+- [ ] **(H) Launch base in Allies (2026-11-20):** in free flight with encounters on (you launch from Babylon 5) spawn a crowd of
+      allies (`spawn ally` a dozen times; the pool is the encounters'): ALLIES still lists BABYLON 5, first at the top, and holds eight ships and NONE; the labels of a full ring
+      still read. In the civilian escort (no launch base) nothing is pinned. A beacon
 or an objective becomes the waypoint (the diamond in the view, and a diamond round its dot on the radar); your target stays as it
 was. NONE clears the target or the waypoint. A mission that sets its waypoint after your pick takes it back.
 
@@ -702,15 +757,23 @@ speed (`+` closing). A Bokmai adds its cargo pods, a buoy and an objective have 
 and nothing about what it is, and a ship attacking you is flagged `ATTACKING YOU`. `play civilian_showcase` has every civilian
 hull; `targetmenu highlight "saturn 8 tanker"` points at an entry without picking it and `state target_preview` shows the panel.
 
-From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick 1` (a slice, 0 at the top, clockwise) or
+From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick 1` (an entry in page order, 0 at the top, clockwise) or
 `targetmenu pick "raider 2"`, `targetmenu back`, `targetmenu close`; `state target_menu` shows it.
 
 ## Comms menu (M5-T46)
 
-D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS has ATTACK
-(my target) up, FORM ON ME right, ENGAGE (at will) down and COVER ME left. The left stick (arrow keys, mouse) points, A sends
-the order and the game resumes, B or D-pad Right closes it, Start hands over to the pause menu. There is no timeout. Keys 1 to
-4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`, `state comms_menu`.
+D-pad Right (or Ctrl) opens a ring like the target menu's: the game pauses and the view blurs behind it. WING ORDERS lists ATTACK
+(my target), FORM ON ME, ENGAGE (at will), COVER ME, DOCK (M8-T06, only while a home dock is in range), FORM UP and HOLD POSITION
+(M8-T19), one equal slice each, clockwise from the top (M8-T24). The left stick (arrow keys, mouse) points and A sends; keys 1 to N
+send the entry in that place at once; the D-pad does nothing; B or Ctrl closes it, Start hands over to the pause menu. There
+is no timeout. Closed, keys 1 to 4 still give the orders directly. Console: `commsmenu open`, `commsmenu pick "form on me"`,
+`state comms_menu`.
+
+**Babylon 5's commands (M8-T34).** `play station_dock`, select BABYLON 5 (the wheel, or the target menu's ALLIES ring) and open the comms
+menu: its first ring is BABYLON 5 with LAUNCH WING (a second ring: Alpha, Beta, Delta, Zeta, All), RECALL, DEFENSE GRID, FIRE
+SUPPORT, SHELTER and SITREP; keys 1-6 pick. Control answers each on the comms panel.
+See the M8 acceptance checklist ("Radial menus and Babylon 5's commands") for what to judge.
+Console: `stationcmd <launch|recall|grid|support|shelter|sitrep>`, `state station_cmd`.
 
 ## Free-flight encounters (M5-T17)
 
@@ -1133,3 +1196,412 @@ Everything automated is recorded in the acceptance table of `docs/milestones/m7-
 - [x] **The turnaround:** `play station_launch`, `launch wing alpha`, FORM ON ME (key 1), fly past 200 m/s, turn sharply and burn
       back: the wing comes round over and under you and re-forms without ramming you or each other.
 - [x] **The station:** `god on`, fly into Babylon 5's drum with the wing following: no wingman rams the station or another wingman.
+
+# Play-testing M8 (Tutorial vertical slice)
+
+How to reach each new thing comes first; everything for you to judge is in the list after it, "M8 acceptance checklist". The
+design is `docs/architecture.md` §21 (its introduction points to every part). Screenshots and review strips the agents took are
+under `references/screenshots/` in folders named for each task (`M8-T02 sawtooth doors/`, `M8-T24 radial fit/`,
+`M8-T29 gate shots/review/`, `M8-T30 launch shots/review/`, `M8-T31 docking shots/review/`, ...).
+
+## Start
+
+```
+.tools/godot/godot --path .                                   # New game, then "Tutorial: qualification flight" (first in the list)
+.tools/godot/godot --path . -- --scenario=station_dock        # 1.2 km off the main docking bay with two wingmen
+.tools/godot/godot --path . -- --scenario=station_launch      # a Cobra-bay launch, then free flight at the station
+.tools/godot/godot --path . -- --scenario=civilian_escort     # the escort, now in Gamma Leporis
+```
+
+Free flight's encounters are three switches now (M8-T28): civilian traffic, allied patrols and enemy encounters, on the Free
+flight page or `set settings.encounters_civilian|_allied|_enemy false`.
+
+## Console for M8 (all in `info.md`)
+
+```
+play tutorial              the tutorial; mission goto <step> (launch, flight_checks, camera_lights, x_button, course,
+                           combat, wing_orders, tour, jumpgate, raid, defense, debrief); retry checkpoint from a lost debrief
+checks status|list|pass    the control checks; checks start roll shows a hint in any mission
+career                     the saved rank and best course rating; career set <rank>
+launch squadron [wing]     the squadron launch; launch force <variant> / launch cut for the launch shots
+dock                       dock status; dock wing; dock cancel; state dock (homes, shots)
+gate approach 10           10 km off the gate; gate shots <approach>,<mouth> | arrive:<id> | auto; state gate.shots
+wing order form_hold|hold  the two hold-fire orders (keys 7 and 8)
+stationcmd <launch|recall|grid|support|shelter|sitrep>   Babylon 5's commands; state station_cmd
+commsmenu open / pick <n>  the comms ring; targetmenu pick <n>
+carrier status|hurt|charge|recall|kill   the strike carrier; transit docked follow
+joypads                    the pads the game sees, their mapping and the last connect events
+overlay on                 the debug overlay with the VRAM line; state render
+```
+
+## M8 acceptance checklist (AC13, the (H) criteria)
+
+Everything automated is recorded in the acceptance table of `docs/milestones/m8-tutorial-vertical-slice.md`. GPU numbers are the
+agents' (RX 6950 XT, AC11). Already approved on 2026-11-19 (ticked at the end of this list): the fonts and the HUD, the audio rework,
+the cargo-bay flicker fix and the raider strike carrier.
+
+### The tutorial (M8-T05, T33)
+
+New game, then **Tutorial: qualification flight** (first in the list). Console: `play tutorial`, `mission goto <step>` (steps:
+launch, flight_checks, camera_lights, x_button, course, combat, wing_orders, tour, jumpgate, raid, defense, debrief),
+`checks pass`, `career`, `retry checkpoint` from a lost debrief. Nothing below can be judged headless.
+
+- [ ] **(H) The launch:** two ships (M8-T33): the instructor launches, then you, filmed from outside; holding X skips it.
+      Nobody else flies until the alarm.
+- [ ] **(H) The start in space (play-test of 2026-11-21):** the launch cuts to you at rest 8 km off the station, the
+      instructor (callsign SEXTANT, ship `INSTRUCTOR`) ahead of your nose. Say if the cut jars, and if the spot is clear.
+- [ ] **(H) The lesson order:** pitch, yaw, roll, then main pods, retros, the four strafes, assist off and on, the brake,
+      all before anything is flown behind the instructor. Each hint reads right; a missed check repeats after 20 s, then
+      the instructor flies the roll, the strafe box or the stop where it is.
+- [ ] **(H) Auto-track before the turns:** target the instructor and tap X before the pitch lesson: the instructor has you
+      switch auto-track off, the hint naming the button and key, and waits. With it off, nothing is said.
+- [ ] **(H) The views:** start the view lesson in chase: it asks for the cockpit, then chase. Start in the cockpit: the
+      other way round.
+- [ ] **(H) The buoy course:** five buoys (8.8 km of legs), a pass inside 200 m each, the clock from NAV 1. Fly it and
+      report your time: `instructor_time_s` in `data/missions/tutorial_rules.json` is 93.75 s since the play-test (25 %
+      slower), so exemplary is up to 103 s and par up to 131 s.
+      The four remarks: fast, on par, slow, and one with a buoy shot or rammed.
+- [ ] **(H) The drones:** three unarmed raider hulls on a slow track 1.7 km beyond the last buoy. Nobody but you shoots them.
+- [ ] **(H) Wing orders on the instructor:** the instructor says it is your wingman for the drill; FORM ON ME brings it to
+      your wing, ATTACK MY TARGET sends it at the drone you selected (two more drones come for this). The beat goes on
+      when that drone is down; the instructor says the other is yours to practise on, and it is gone when the tour's
+      first shot starts. COVER ME ends the drill and it says it instructs again.
+- [ ] **(H) Skip training:** the pause menu's second entry during the training steps goes straight to the tour. A skipped
+      course counts as a par time: the instructor gives the par remark as the tour step begins, and the debrief assigns
+      you to the squadron (never squadron leader at once).
+- [ ] **(H) The tour:** all stop first (the brake check), then five stops with a line each: Cobra bays, docking bay, command
+      section, grid, heavy cannons. A or Start cuts a stop. No caption in the lower bar: only the spoken line reads.
+- [ ] **(H) The gate:** the instructor tells you to target the jumpgate and waits until you have; then 50 km out behind
+      it, the approach cue calling the brake. "Hold X" is said only when the gate's own prompt is on the status line.
+- [ ] **(H) One label:** with the jumpgate (or a course buoy) both the objective and your target, one mark with one name
+      and one range shows, the target's. Select something else and the objective's marker is back.
+- [ ] **(H) Controls named as bound:** rebind auto-track or the target button in the controls menu, then fly the X-button
+      lesson: the instructor's line shows your binding. On the pad it shows the pad's button, on the keyboard the key and
+      the mouse button, and it changes on a line that is still up when you move from one to the other.
+- [ ] **(H) The closing lines:** the instructor's remarks at the end of each block and the debrief read naturally, none
+      saying a thing twice.
+- [ ] **(H) The wing at the alarm:** ALPHA 2 and ALPHA 3 call their launch and nine more follow (all eleven together), with
+      no camera cut: you keep flying. Nothing more launches when the raiders start shooting. They launch at the station, 50 km away; say how long you fight with only the
+      instructor (who shoots now) before they reach you, and whether that is too long.
+- [ ] **(H) The raid:** the alarm as you come out; six raiders out of the vortex; the
+      carrier jumps in 12 km off the station 45 s later and launches eight. Say if the 50 km back to the station is too far,
+      and whether the traffic's lines for the two bays show.
+- [ ] **(H) Docking:** below half hull Control offers the bay as a comms line; after the repair Control says so.
+- [ ] **(H) The debrief:** the instructor talks the raid through, then the screen shows the course, the losses, the carrier
+      and the assignment. `career` reads the rank after a restart of the game.
+- [ ] **(H) Lost after the alarm:** the debrief offers **Restart from the raid's start** and **Restart whole mission**;
+      the first puts you and your flight back at the gate with the alarm sounding and the course result kept.
+
+### Launches: the doors, the squadron launch and the launch shots (M8-T02, T03, T30)
+
+`play station_launch` (or `launch alpha 3` in any scenario with the station), then `launch wing all` for every arm. The look sheets
+the choice was made from: `references/screenshots/M8-T02 sawtooth doors/`.
+
+- [ ] **(H) The doors:** shut, each launch door shows a seam of three big flat-tipped teeth down its middle; for a launch its two
+      leaves slide apart sideways under the deck (nothing swings outward) and the fighter drops through; open, no leaf shows in the
+      well; they slide shut again with the teeth meshing. Along an arm the doors still open in a quick ripple.
+- [ ] **(H) The hangar behind the menu:** the doors in the hall's floor have the same toothed seam, with rails across each leaf.
+- [ ] **(H) The squadron launch (M8-T03):** `launch squadron` at the station: the doors ripple open, the squadron drops out,
+      flips, lights its engines and forms up 650 m off the drum, filmed from outside; then you launch alone and get the controls.
+      A or Start skips to the same end state.
+- [ ] **(H) Launch shots (M8-T30):** launch five times (`launch alpha 3`, or the tutorial's opening): the shots change every time,
+      no launch repeats the last one's set, no angle lasts more than about 3 s (5 s for a feature shot), and the controls come
+      back as soon as the launch thrusters cut. Say if any shot clips, loses the ship or is too dark (`launch cut` names them).
+
+### Docking, repair and relaunch (M8-T06, T31)
+
+`play station_dock` puts you 1.2 km off the main docking bay with two wingmen (or fly there in free flight). Only fighters whose
+home is Babylon 5 dock here (the scenario's `home`, or a launch from its Cobra bays; `state dock` lists each ship's home), and only
+within 60 km of the bay. Hurt yourself first
+with `damage 50` (hull points; `state ship` shows the hull) so the repair has something to do.
+
+`play station_dock`, target `BABYLON 5 DOCKING BAY`, hold X. The docking is now cut into short shots, and 300 m short of the mouth
+the Fury stops, rolls to the bay's turn and goes in rolling with it. `state dock.shots` lists the shots; the review strips are in
+`references/screenshots/M8-T31 docking shots/review/`.
+
+- [ ] **(H) Docking:** target `BABYLON 5 DOCKING BAY` (target menu, NAVIGATION), hold X (Shift, Mouse 4) for 2 s inside 2 km. The
+      controls lock, the ship turns for the bay and flies in down the middle of the mouth; the inner doors open ahead of it and shut
+      behind it. Say if the approach looks sensible from beside the drum and from above the spine (it should go round, never
+      through), and if the speeds feel right (140 m/s out, 40 m/s to the mouth, 20 m/s inside).
+- [ ] **(H) From speed:** start the hold at several hundred m/s across the bow: the ship brakes first, then comes back and docks.
+- [ ] **(H) The cinematic:** the two docking shots (behind the ship, beside the mouth) run straight into the launch's own shots:
+      you do not wait for the repair. A or Start skips a stage each press: through the bay onto the launch, then to the hand-off.
+      Say if the cut from the doors shutting to the Cobra bay reads well.
+- [ ] **(H) Relaunch:** you come out of Cobra bay Alpha 1 with a whole hull and the controls back.
+- [ ] **(H) Wingmen:** select ALPHA 2 and `damage 30 target`, then key 6 (or the comms menu's DOCK): `ALPHA 2: COPY, DOCKING FOR
+      REPAIRS`, it flies off to the bay (its roster row reads DOCKING), is gone a while (DOCKED), comes out of a Cobra bay and forms up
+      again (its usual readout). Hurt one below 25 % and it goes by itself (`HULL CRITICAL, DOCKING FOR REPAIRS`). Two at once go in one after the other.
+- [ ] **(H) The wing breaks off while you dock:** dock with wingmen in formation. As the autopilot takes your ship they leave the
+      formation and do not follow you toward the bay. Under FORM UP, HOLD FIRE or HOLD POSITION they go to a stand-off 1.5 km
+      to the side of the lane and below it, hold there and do not fire (roster `HOLD`); under any other order they fight what
+      comes on their own and stand by there otherwise (roster `ATK ...` or `STAND BY`). A wingman docking itself keeps doing
+      that (`DOCKING`, `DOCKED`). When you come out of the Cobra bay they rejoin you under the order they had; abort the dock
+      (hold X) and they rejoin at once. Say if the stand-off is too far or too near, and if they rejoin quickly enough.
+- [ ] **(H) Fighters first at the bay:** with civilians about (`traffic dock`, `traffic auto on`), dock, launch and dock again. A
+      transport on its way down the lane moves a few hundred metres aside and waits; you fly in past it. You wait only for a
+      ship already on the lane's last 700 m, in the tunnel, or coming out, and then beside the lane (150 m below it), not on
+      it, standing still (the ship used to circle its waiting point as if jockeying). The transport goes round to the start of the lane and
+      docks after you (`state traffic.yielded` counts the ones that stood aside). Try it in free flight after two raids, as
+      in the play-test of 2026-11-19 where the second dock never finished.
+- [ ] **(H) The comms ring:** eight slices now, the four orders still up, right, down and left; say if the blank diagonals and
+      DOCK between ENGAGE and COVER ME read well.
+- [ ] **(H) AI wingmen wait 30 s:** a docked wingman's roster row reads DOCKED for about 30 s before it comes out of a Cobra bay.
+      Babylon 5's own flights (`launch wing beta`) dock the same way when one of them falls below 25 %; a flight's lead hands
+      the flight to its wingman first.
+- [ ] **(H) The leash:** under FORM ON ME, a wingman chased more than 2.5 km from you jinks back toward you instead of running
+      on away, bringing its chaser with it.
+- [ ] **(H) No dock, no order:** in a scenario far from the station, or with wingmen that have no home (`combat_sandbox`), the comms
+      ring has a blank slice where DOCK was and key 6 does nothing; a wingman below 25 % keeps fighting.
+- [ ] **(H) Control's offer:** below half hull the HUD's line offers the bay once (`BABYLON CONTROL: YOU ARE CLEARED TO DOCK ...`).
+- [ ] **(H) The roll match reads:** you see the Fury roll into step with the drum before the mouth, in a shot with the bay's face
+      behind it. Say if it is too slow, too quick, or hard to see.
+- [ ] **(H) Variety:** dock three times. Say if the shots feel varied enough, and if any is too dark, too far or clipping.
+
+### Approach cues and the gate jump (M8-T18, T29)
+
+A navigation target that offers an action (the jumpgate, the docking and cargo bays) now carries an approach cue: under its
+diamond (and on the cockpit's right screen) the closing speed and one of `ON COURSE`, `BRAKE` (amber), `OVERSHOOT` (red) or
+`ADJUST COURSE` (amber), with a bar whose fill is your stopping distance and whose tick is the room left to the target's reach;
+braking is due when the fill meets the tick. The HUD's line under the status says the same (`— +450 m/s  BRAKE: HOLD` and the brake's
+live keys). `state interact` shows the numbers (`cue`, `cue_stop_m`, `cue_room_m`, `cue_closest_m`). The gate offers the jump
+farther out the faster you close (`state gate.reach_m`: 2 km at rest, about 9 km at 500 m/s, at most 10 km).
+
+The jump is now cut into short shots from pools, so no two jumps look alike. It is quicker, too: the ship is swallowed about a
+second after it crosses the mouth, a white flash, a moment of black, then straight back to the gate as its pylons glow, and the ship
+bursts out of the blue vortex in about a second. `state gate.shots` lists the last jump's shots. `gate shots <approach>,<mouth>`
+or `gate shots arrive:<id>` repeats one opening (`auto` picks again). The review strips are in
+`references/screenshots/M8-T29 gate shots/review/`.
+
+- [ ] **(H) The cue reads in time to brake:** `goto jumpgate`, target it, fly at it at 300 to 500 m/s and brake when the cue says
+      BRAKE: you should stop inside the reach without guessing. Do the same at both bays (`goto` a bay, back off 8 km, come in).
+      Say if BRAKE comes too early or too late, and if the bar and its tick read at a glance in both views (chase and cockpit).
+- [ ] **(H) Overshoot and adjust:** come in too fast (1 km/s and more): the cue reads OVERSHOOT. Fly past the target's side: it reads
+      ADJUST COURSE. A bay approached from round the station's side reads ADJUST COURSE until you are in front of its lane.
+- [ ] **(H) A fast jump looks right:** ask for the jump at 200 m/s, 1 km/s and 3 km/s (`gate approach 10`, then full mains on
+      the gate). Slow: the ship carries its speed straight down the axis into the run-in. Fast: it flies past the gate, turns, comes
+      back round the arms and lines up. Every time the departure shot closes in behind the ship just before the mouth; say if any
+      run-in looks odd or the shot misses the moment.
+- [ ] **(H) Variety:** jump five times (`gate approach 1.9`, target the gate, hold X). Say if the sequences feel different
+      enough, and if any shot looks wrong (clipping, the ship out of frame, too dark).
+- [ ] **(H) Pace:** say if the swallow, the black (0.75 s) and the burst out read clearly and are not too quick or too slow
+      (`data/jump/player_jump.json`).
+- [ ] **(H) Readable ship:** coming back out, the ship should read against the vortex: the core glows behind it, its lights are
+      on and a soft key light follows it during the shots. Say if it is too bright or still lost.
+
+### Hold X to abort an autopilot (M8-T32)
+
+During the gate jump's line-up and run-in, and docking's approach and lane, hold X (Shift, Mouse 4) for 1 s: the bar fills under
+`HOLD X / SHIFT / MOUSE 4: ABORT`, the cinematic cuts, and you fly on from where you were. Once the ship is in the gate's funnel, or
+through the docking bay's inner doors, the prompt goes away and X does nothing.
+
+- [ ] **(H) Abort:** abort a jump while it lines up and a docking on its approach. Say if 1 s feels right
+      (`data/controls/autopilot_abort.json`) and if the cut back to flying is clean.
+- [ ] **(H) Point of no return:** the prompt should vanish as the ship enters the vortex and as it passes the inner doors.
+
+### Flights of three, the hold-fire orders and closing up (M8-T19, T13)
+
+The tutorial gives you a flight of two wingmen; any scenario shows the rest. `play station_showcase`, or
+free flight near the station, then `launch wing zeta` and `state wing`.
+
+`play station_launch`, `launch wing alpha`, FORM ON ME, then shoot wingmen down by selecting one and `kill target` (or let raiders
+do it: `spawn raider ai 1500`).
+
+- [ ] **(H) A wing in flights:** `launch wing zeta` sends twelve Starfuries that fly as four vics of three (ZETA 1, 4, 7 and 10
+      lead), the three later leads spread behind ZETA 1 while there is nothing to fight. Say if the spacing between the flights
+      (160 m steps) looks right. `traffic raid 6` then: each flight goes in together and its ships stay near their lead.
+- [ ] **(H) Shooting from the slot:** key 2 (form on me) with your wingmen on their slots and a raider near you (`spawn raider idle
+      700`), on any side: they turn their guns on it and fire while staying in formation (M8-T13, maintainer 2026-11-21: weapons
+      free within 1.5 km of you; a slot may slip up to 400 m for up to 6 s, then they fly back to it; data/wings/flights.json).
+      A raider farther than that is not chased. Not during a long catch-up or while following you through a gate. Say if that
+      reads as a formation fighting, and if the noses turning toward the target while the ships hold their places looks right.
+- [ ] **(H) Form up, hold fire:** key 7 (or FORM UP on the comms ring, `wing order form_hold`): `ALPHA 2: COPY, FORMING UP,
+      HOLDING FIRE`; they keep their slots and do not fire at the same raider, on any side, not one shot.
+- [ ] **(H) Hold position, hold fire:** key 8 (HOLD POSITION, `wing order hold`): `COPY, HOLDING POSITION, HOLDING FIRE`; they
+      brake to a stop where they are and stay while you fly off; their roster rows read HOLD. Any other order (key 2) brings
+      them back.
+- [ ] **(H) The comms ring:** FORM UP sits between ATTACK and FORM ON ME, HOLD POSITION between FORM ON ME and ENGAGE. Say if
+      the two labels with `hold fire` under them are clear enough to tell apart at a glance.
+- [ ] **(H) Closing up:** when a wingman goes down, the ones behind it on its arm each move up one place, and the V has no hole;
+      nobody rams anybody on the way. With one arm two ships longer than the other, the long arm's last ship crosses behind you
+      to the short one. Say if the centre ship (ALPHA 12) moving out to an arm that has room looks right, or if it should stay.
+- [ ] **(H) The roster:** the wingmen keep their callsigns when they move up; the roster follows the formation's places, so
+      their rows move up too and the DOWN row, under the downed wingman's callsign, is the place at the back; `wing replenish`
+      brings a replacement under that callsign, at the back of the formation.
+
+### Radial menus and Babylon 5's commands (M8-T24, T34)
+
+Every radial ring has one equal slice per entry (M8-T24): three are 120 degrees, five are 72; entries that are not available
+(DOCK with no home dock in range) leave the ring. The stick points and A picks; keys 1 to N pick by place; the D-pad does nothing
+while a ring is open; B (Ctrl or Escape on the keyboard) closes it.
+
+**Babylon 5's commands (M8-T34).** `play station_dock`, select BABYLON 5 (the wheel, or the target menu's ALLIES ring) and open the comms
+menu: its first ring is BABYLON 5 with LAUNCH WING (a second ring: Alpha, Beta, Delta, Zeta, All), RECALL, DEFENSE GRID, FIRE
+SUPPORT, SHELTER and SITREP; keys 1-6 pick. Control answers each on the comms panel.
+Console: `stationcmd <launch|recall|grid|support|shelter|sitrep>`, `state station_cmd`.
+
+- [ ] **(H) The rings fit:** open the comms menu with and without DOCK (`play station_dock`, then `play combat_sandbox`) and the
+      target menu's rings with one, three and five entries: no empty slices, the first entry at the top, the labels readable.
+- [ ] **(H) Launch and recall:** key 1 then 2 launches Beta from its arm; RECALL sends every fighter home, your wingmen too, and
+      they stay inside.
+- [ ] **(H) Grid and covering fire:** with raiders about (`traffic raid 4`), DEFENSE GRID off silences every gun and
+      interceptor; on again, FIRE SUPPORT has the guns that reach take the raiders within 2 km of you first.
+- [ ] **(H) Shelter:** with traffic running (`traffic auto on`), SHELTER holds it: docking ships go in, freighters and leaving
+      ships wait 3 km behind the station; again, they leave. SITREP reads the sections, wings, raiders and grid.
+
+### The civilian escort in Gamma Leporis (M8-T08, T23, T26)
+
+New game, then **Civilian escort** (or `play civilian_escort`). The escort moved to its own star system, Gamma Leporis (M8-T23):
+a yellow-white F6 star, the ice world Gamma Leporis II, no Babylon 5 and no nebula, so the wingmen have no home dock and fight on.
+The route is 45 km with a bigger belt, the second wave waits 60 s, and Control briefs at the start (M8-T26). Every wave rides a
+raider strike carrier (M8-T08; the Battle Wagon is gone, M8-T27). Shortcuts are in "Civilian escort" in M5's chapter.
+
+- [ ] **(H) The new system:** the sky has no nebula, the sun is whiter than Epsilon's and the ice world sits behind the
+      civilian in the opening shot. Say if it reads as a different place.
+- [ ] **(H) The re-flight (M8-T26):** fly it through: Control's opening brief, the longer crossing and the belt, the 60 s before
+      wave two. Say if the pacing and length (about 12 to 15 minutes) feel right.
+- [ ] **The escort with the carriers (H, M8-T08, AC7):** fly the civilian escort: each wave's carrier arrives, launches and
+      hangs back; Control offers the optional objective; destroy one carrier (`Destroy a raider carrier` goes done, Control
+      says so at the end) and let another get away. The waves are 6, 8 and 10 raiders: each fights until 3 are left, and
+      those fly home, which can take a minute and a half when the fight has moved 15 km from their carrier. Say if it can
+      be won with ALPHA 2 and ALPHA 3 and how long it should take (the AI-flown check is in the M8 plan, T08).
+
+### The grid's interceptors (M8-T10)
+
+- [ ] **(H) Pulses from the barrel tips (M8-T10):** `play station_showcase`, `grid free all`, `traffic raid 6`, and watch an
+      interceptor battery up close (`station goto` a grid stop): each pulse leaves a drawn barrel's tip. A battery firing at shots
+      from nearly overhead turns far between its left and right barrels (it did before too); say if that looks wrong.
+
+### Gamepad notices and the pad diagram (M8-T22)
+
+"Gamepad not detected" near the top of this page has the cause and what to try.
+
+- [ ] **(H) Seen:** with the pad on, `joypads` lists it (`Generic X-Box pad`, `mapping known`).
+- [ ] **(H) Toasts:** switching the pad off, then on, shows `Gamepad disconnected` and `Gamepad connected` at the top of the
+      screen, in flight, in the pause menu and on the front end.
+- [ ] **(H) The notice:** with the pad off, the front end says no gamepad is detected (bottom left); it goes when the pad is back.
+- [ ] **(H) The diagram:** in the pause menu and on Settings > Controls, each button lights white while held, each stick while
+      off centre and each trigger while pulled; the action in focus on the Controls page stays amber.
+
+### The release build (M8-T15)
+
+`scripts/build_release.sh` builds `build/release/space-combat-sim.x86_64` (about 15 minutes, nearly all of it the assets);
+`scripts/release_smoke.sh` runs it headless for 600 ticks (the tutorial's opening; `SMOKE_SCENARIO` plays another scenario).
+
+- [ ] **(H) The release build:** run `build/release/space-combat-sim.x86_64` from a file manager or a shell outside the
+      repository: the start screen over the hangar, the tutorial's opening plays, the settings save, and Quit closes it cleanly.
+
+### Approved 2026-11-19
+
+- [x] **(H) The fonts and the HUD (M8-T21):** Babylon5 for titles, Babylon5Credits for the rest and the HUD, readable in both views.
+- [x] **(H) The audio rework (M8-T12):** the listening checklist below.
+- [x] **(H) The cargo bay's walls (M8-T11):** no flicker beside the cargo bay.
+- [x] **(H) The raider strike carrier (M10-T19, merged by M8-T07):** the checklist below, except the escort, which is above.
+
+## Play-testing the raider strike carrier (M12-T19, now M10-T19: the early delivery, merged into M8 by M8-T07)
+
+Flown in M8's play-test; M10-T19 stays open until the maintainer has flown it.
+
+The first real capital ship: 112 m, no weapons, eighteen cradles for Delta-Vs, its own jump points. Built ahead of the rest of
+M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet is
+`references/screenshots/M12-T19 raider strike carrier/look_sheet.png`. Console: `carrier`, `transit docked`, `state carriers`
+(all in `info.md`). Free flight's raids now come behind it with their fighters docked (`data/encounters/free_flight.json`).
+
+- [x] **The hull (H):** `sheet raider_strike_carrier 50 lit - three_quarter` (also `top`, `side`, `front`; 500 and 5000 m): the
+      show green surface, the lit slats pale but not blown out, the decks readable under a square-on sun, a Delta-V docked on
+      the top outer cradle reaching out to the clamp pins. Try `set settings.texture_detail low`.
+- [x] **Docked arrival and launch (H):** `transit docked follow`: the carrier comes out of its own point with six Delta-Vs on
+      its cradles, and once clear of the mouth pushes them off one after another. Say if the launch reads well (2 s, 30 m).
+- [x] **Beside arrival:** `transit carrier point follow`: two fighters come out of its point beside it, as before.
+- [x] **Fly up to it (H):** fly round and through the rings and up to a cradle: the rings' openings are open, the arms and pads
+      stop you, nothing invisible does. Shoot it: bolts land on the hull (a ring is hit as its sectors' boxes).
+- [x] **Recall and jump out (H):** with a carrier standing off (`state carriers.state` says `standoff`), `carrier recall`: its
+      fighters fly back, are drawn in onto free cradles, and it opens a point ahead of its bow and leaves with them. Say if the
+      last 60 m (the cradle drawing the fighter in over 4 s) looks right or too much like a tractor beam.
+- [x] **Hurt, it runs (M8-T08):** `carrier hurt`: at half its hull it calls its fighters home and flees. `carrier status`
+      shows its drive (`recharging N s` for 240 s after its jump in) and what it does: with the drive ready it waits for its
+      fighters and jumps; while it recharges it runs for the jumpgate at 60 m/s (in free flight the gate is 50 km off, so
+      the drive is ready first), or with no gate away from you. `carrier charge` readies the drive at once. A fighter not
+      aboard 90 s after it began to flee is left behind and fights on.
+- [x] **Its fighters go home (H, M8-T08):** shoot a raid down to three: the rest fly back and dock, and the carrier flees
+      once they are aboard. Shoot one raider to under a fifth of its hull: it goes home alone. Say if 3 left, 20 % hull, 50 %
+      carrier damage, the 90 s limit, the 240 s recharge and the 60 m/s run feel right (`data/capitals/capitals.json`).
+- The escort with the carriers moved to the M8 acceptance checklist ("The civilian escort in Gamma Leporis").
+- [ ] **Far from you it still launches them all (H, 2026-11-20):** `encounters force raid` with the raid 10 km or more away
+      (or fly off first): every docked raider is launched and stays out; before, the low-attention tier parked the launched
+      ones and the carrier took them for lost. `state carriers.launched` matches `carriers.fighters`.
+- [ ] **Cornered, it scrambles (H, 2026-11-20):** shoot a carrier in the four minutes after its jump in (`carrier status`
+      says `drive recharging`): every docked raider leaves its cradle at once, and none is called home while you keep
+      hitting it (15 s without a hit ends that). With `carrier charge` first it launches them in turn as before.
+- [ ] **It keeps clear and never sits still (H, 2026-11-20):** a carrier standing off weaves slowly (12 m/s, a turn in about
+      90 s), stays 2 km outside the reach of Babylon 5's guns (about 10 km from the station's centre) and 4 km from any group
+      of two or more Starfuries, and runs from whoever hits it at 60 m/s with its stern to them. Say if the weave reads as
+      evasive or as drifting, and if the distances are right (`data/capitals/capitals.json`).
+- [ ] **Its run for the gate goes round the guns (H, 2026-11-20):** with the station between a fleeing carrier and the
+      gate, it flies round the grid's reach instead of through it; with no safe way it goes all the same.
+- [x] **It hangs back:** fly at a carrier that is standing off: inside 2.5 km it turns its stern to you and backs away at up to
+      30 m/s. Say if the stand-off, the speed and the turn rate (4 degrees a second) feel right.
+- [x] **Its death (H):** `carrier kill` with fighters docked: the capital explosion, and each docked fighter blows up on its
+      cradle. Its hull points (10 000) are a first figure: say how long it should take a Starfury to kill it.
+- [x] **A raid in free flight (H):** `encounters force raid`: the carrier arrives 6 to 12 km out, launches, stands off while its
+      fighters attack, and leaves when they are all gone or after five minutes.
+- [ ] **No capital marker in shipped scenarios (H, 2026-11-21):** `encounters force raid`: the carrier and its raiders render
+      as they are, with no red hexagon, label or edge arrow on the carrier (the maintainer: unneeded here). `get
+      hud.capital_marks` says `off`. The marker stays in the code for a later fleet mission: a scenario turns it on with
+      `"hud": {"capital_markers": true}` (rules in `data/hud/capital_markers.json`, `enabled` false by default).
+
+## Listening checklist: the sound mix and the engines' steady level (M8-T12)
+
+Every sound is now written at one loudness (-20 LUFS, `tools/procgen/core/loudness.py`) and the mix lives in one table,
+`src/audio/sound_mix.gd`: change a row there to make an effect louder or quieter. Master ends in a limiter (-0.5 dBFS);
+`state audio` shows the bus peaks now (`master_peak_db`, `sfx_peak_db`: above 0 on SFX means the limiter is catching a pile-up).
+Use headphones and the default volumes; `sfx <name>` plays any combat sound at your ship. Say for each line what is too loud,
+too quiet or right, against the engines (the bed the rest sits on).
+
+- [x] **(H) Engines, steady thrust:** free flight, hold full mains for 5 s, then turn hard left and right and pitch while
+      holding them. The roar should stay at one level while you manoeuvre (it moves about the ship as pods trade load); before
+      this change it jumped. Half throttle sits clearly lower; letting go dies away in about a quarter second.
+- [x] **(H) Engines, RCS:** strafe (sway) and yaw at once, on and off: the jets' hiss stays at one level when more jets join in,
+      and sits under the mains. Short taps fade fast, a long burn fades slower.
+- [x] **(H) Engines, other ships:** `launch wing zeta`, fly beside them: their pods are heard, nobody's engine level pumps.
+- [x] **(H) Your guns:** hold fire for 3 s: `pulse_fire` clearly over the engines, not harsh.
+- [x] **(H) Enemy guns and hits:** `spawn raider attack 600` with `god on`: their `raider_fire` a touch under yours; `hit_hull`
+      when they hit you, as loud as their guns.
+- [x] **(H) Explosions:** `kill target` on a raider 200 to 500 m away, `kill all` with several around: the loudest thing in a
+      fight, without the rest dropping out (the limiter) or crackling.
+- [x] **(H) Mines:** `bench battle 50`, then `mines view 400` and `mines set_off`: a chain of blasts, a little deeper (pitched
+      down), as loud as a ship's.
+- [x] **(H) Station and grid:** `play station_showcase`, `grid free all`, `traffic raid 6`: light guns like a turret, the
+      heavy guns deeper and louder, the interceptors quieter. `turret_fire` from the Saturns the same family.
+- [x] **(H) Jump vortex:** `gate open arrival` and `transit arrive point fighter follow`: the opening swell is heard from far off,
+      louder than a shot, under an explosion.
+- [x] **(H) Cockpit sounds:** select a target (`target_blip`); `damage 80` with `god off` until the hull warning beeps: the beep
+      cuts through a fight without startling.
+- [x] **(H) Menus and radio:** move, accept and back in the menus: the move tick quieter than accept and back; the radio squelches
+      around a wingman's line (key 2, form on me, with a wing out) under the menu sounds. Comms and UI have their own volume sliders.
+- [x] **(H) Busy fight, no clipping:** `traffic raid 6` near the station with your wing out, fight for a minute, then
+      `state audio`: `master_peak_db` never above -0.5. Listen for crackle or the whole mix ducking when several explosions hit at
+      once.
+
+# Play-testing jump points that kill and brisk civilian jumps (M8-T17, maintainer 2026-11-19)
+
+- [ ] **(H) Jump points kill:** `gate approach 3`, `gate trap raider`, `gate open arrival`: the raider sitting in the funnel is
+      destroyed as the blue vortex forms. Fly into the gate's funnel yourself and `gate open arrival`: the HUD warns
+      `JUMP POINT OPENING — CLEAR THE MOUTH` during the arms' lead-in, and you die if you stay. Raiders that came out of the gate
+      and are still in its funnel when you jump out die as the orange vortex forms.
+- [ ] **(H) Civilians jump briskly:** watch a civilian leave through the gate: in front of it the gate lines it up on the axis and
+      runs it in at the run-in's speed (as fast as its own engines allow), and it is swallowed quickly past the mouth.
+- [ ] **(H) Wingmen follow you through the gate:** with your wing beside you, `wing order form` (or `form_hold`), `gate approach 1.9`,
+      hold X on the gate. After your ring's flash the camera stays outside on the gate (no black) while your wingmen fly in
+      after you, cutting between a few angles where you can see them go in; the orange vortex folds behind the last of them,
+      then the usual moment of black and you all come back out of the blue one side by side. Under `wing order engage` they
+      break off, stay clear of the vortex and rejoin you after. A wingman more than 3 km from the mouth is not waited for.
+- [ ] **(H) Back-to-back jumps and a clear mouth:** `launch wing alpha`, `wing order form`, fly to the gate and jump three or four
+      times in a row: every jump takes the wing through and back out with you, nobody dies. Park a wingman in the mouth
+      (`wing order hold` with the gate behind you) and `gate open arrival`: the arms keep glowing until it has flown out, then
+      the vortex forms.
+- [ ] **(H) A jump at speed and a busy gate:** fly at the gate fast from the side and hold X just inside 10 km: the autopilot
+      takes you round and through, never into an arm. Die in a run-in (`god off`, `damage 200`) and respawn: your wing flies
+      back to you from the gate (about 1 minute 40 s from 50 km: fast while far off, braking into its slots) and re-forms;
+      nobody is placed and nobody overshoots. Jump while civilians come and go: none flies in as you come out; they wait clear of the
+      mouth and go after.
+

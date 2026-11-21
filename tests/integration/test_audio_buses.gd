@@ -105,3 +105,14 @@ func test_three_d_voices_stay_on_sfx() -> void:
 	var voice: AudioStreamPlayer3D = audio.play(&"pulse_fire", Vector3.ZERO)
 	assert_not_null(voice)
 	assert_eq(voice.bus, &"SFX")
+
+
+func test_master_ends_in_a_limiter_so_the_mix_never_clips() -> void:
+	var master: int = AudioServer.get_bus_index(&"Master")
+	var limiter: AudioEffectHardLimiter = null
+	for i: int in AudioServer.get_bus_effect_count(master):
+		if AudioServer.get_bus_effect(master, i) is AudioEffectHardLimiter and AudioServer.is_bus_effect_enabled(master, i):
+			limiter = AudioServer.get_bus_effect(master, i) as AudioEffectHardLimiter
+	assert_not_null(limiter, "Master has an enabled hard limiter (M8-T12)")
+	if limiter != null:
+		assert_almost_eq(limiter.ceiling_db, SoundMix.LIMITER_CEILING_DB, 1e-3)

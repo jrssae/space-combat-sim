@@ -38,6 +38,7 @@ func start_loading(next_request: Dictionary) -> bool:
 	if not problem.is_empty():
 		return _refuse(problem)
 	request = next_request.duplicate()
+	request.erase("checkpoint")  # only a debrief's restart carries one
 	return _move_to(State.LOADING)
 
 
@@ -72,11 +73,24 @@ func keep_result(result: Dictionary) -> void:
 	last_result = result.duplicate()
 
 
-## From the debrief, the same scenario and seed again.
-func retry() -> bool:
+## From the debrief, the same scenario and seed again: from its start, or with `from_checkpoint` from the checkpoint the lost
+## mission left in its result (M8 D79), which the request then carries for the mission runner.
+func retry(from_checkpoint: bool = false) -> bool:
 	if state != State.DEBRIEF:
 		return _refuse("retry is only offered in the debrief")
+	if from_checkpoint and not has_checkpoint(last_result):
+		return _refuse("the mission left no checkpoint to restart from")
+	request.erase("checkpoint")
+	if from_checkpoint:
+		request["checkpoint"] = (last_result["checkpoint"] as Dictionary).duplicate(true)
 	return _move_to(State.LOADING)
+
+
+## Whether a lost mission's `result` offers a restart from a checkpoint.
+static func has_checkpoint(result: Dictionary) -> bool:
+	var checkpoint: Variant = result.get("checkpoint")
+	return not bool(result.get("success", false)) and checkpoint is Dictionary \
+			and not String((checkpoint as Dictionary).get("step", "")).is_empty()
 
 
 ## Why there is no debrief to show now ("" when there is one, M5-T09): the run must be over, be a mission and have said how it

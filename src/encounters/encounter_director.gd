@@ -34,6 +34,8 @@ const POOLS_DIR: String = "res://data/encounters/"
 const NODE_NAME: StringName = &"EncounterDirector"
 ## A ship this far from the player goes back to its pool.
 const RELEASE_M: float = 40000.0
+## A raider farther than this from the player has flown off (raids arrive 6 to 12 km out): it holds no slot under the cap.
+const FLOWN_OFF_M: float = 20000.0
 const CHECK_S: float = 1.0
 ## A raid goes for a civilian at most this far from the player.
 const CIVILIAN_REACH_M: float = 20000.0
@@ -77,6 +79,8 @@ var main: Main = null
 var pools: Dictionary[StringName, int] = {}
 var weights: Dictionary = EncounterPlan.DEFAULT_WEIGHTS
 var pools_path: String = ""
+const SWITCHES: Dictionary = {&"traffic": &"encounters_civilian", &"patrol": &"encounters_allied", &"raid": &"encounters_enemy"}
+
 var on: bool = false
 var pools_built: bool = false
 ## The session seed (the request's), so the same seed brings the same encounters.
@@ -194,6 +198,7 @@ func enable() -> String:
 		for pooled: Combatant in main.ships.all_ships():
 			main.director.watch(pooled)
 		CarrierJumps.attach(main.world).prepare(CARRIERS)  # raids behind a carrier (M6-T23; a gate raid with the gate out of reach too)
+		CarrierJumps.attach(main.world).prepare(CARRIERS, CapitalStandin.STRIKE_CARRIER)  # the raiders' own (M12-T19)
 		build_ms = Time.get_ticks_msec() - t0
 		pools_built = true
 	if plan == null:
@@ -201,6 +206,7 @@ func enable() -> String:
 		plan.gate_shares = gate_shares
 		plan.station_raid_share = station_raid_share
 		next_due_s = elapsed_s + plan.gap_of(next_index)
+	sync_switches()
 	on = true
 	return "encounters on (seed %d, every %.0f s, at most %d ships)%s" % [seed_value, plan.interval_s, cap(),
 			" - built %d pooled ships in %d ms" % [built, build_ms] if built > 0 else ""]
@@ -255,6 +261,11 @@ func _physics_process(delta: float) -> void:
 
 # At most one event a tick: the one waiting, else the next once its time has come.
 func _start_due() -> void:
+	sync_switches()
+	if waiting != null and not plan.kind_on(waiting.kind):
+		waiting = null  # its kind was switched off while the cap held it: the next draw picks from the kinds still on
+	if not plan.any_on():
+		return
 	if waiting == null and elapsed_s >= next_due_s:
 		waiting = take_next()
 	if waiting != null and start_scheduled(waiting):
@@ -264,8 +275,9 @@ func _start_due() -> void:
 ## Starts scheduled event `e`, or another kind in its place when it cannot start now, and times the next one from now.
 ## False (nothing placed, the clock untouched) when no kind fits.
 func start_scheduled(e: EncounterEvent) -> bool:
+	sync_switches()
 	var started: bool = start(e)
-	for kind: StringName in EncounterPlan.substitutes(e.kind):
+	for kind: StringName in plan.substitutes(e.kind):
 		if started:
 			break
 		started = start(plan.event(e.index, kind))
@@ -274,8 +286,23 @@ func start_scheduled(e: EncounterEvent) -> bool:
 	return started
 
 
+## Whether free flight's switch for `kind` is on (civilian traffic = traffic, allied patrols = patrol, enemy encounters = raid).
+func kind_on(kind: StringName) -> bool:
+	var key: StringName = SWITCHES.get(kind, &"")
+	return key != &"" and bool(Settings.get_value(key))
+
+
+## Brings the plan's kinds up to the settings, so a switch flipped mid-flight applies to the next event.
+func sync_switches() -> void:
+	if plan == null:
+		return
+	for kind: StringName in EncounterPlan.KINDS:
+		plan.enabled[kind] = kind_on(kind)
+
+
 ## The plan's next event, and moves past it.
 func take_next() -> EncounterEvent:
+	sync_switches()
 	var e: EncounterEvent = plan.event(next_index)
 	next_index += 1
 	return e
@@ -422,9 +449,24 @@ func _free_civilian(wanted: StringName, taken: Dictionary) -> StringName:
 
 # The station's traffic, when the scene has the station and its lanes: traffic events fly its run (M7-T56).
 # The encounters' ships against the cap: their own, those asked of a gate, and the convoys they sent onto the station's run.
+# What counts against the cap (its budget is ships in Jolt near the player): the encounters' own ships in the fight and those
+# waiting for the gate. A ship in the low-attention tier (a cheap native row far out), a raider docked aboard its carrier, or one
+# that has flown off beyond `FLOWN_OFF_M` (going home before its release at 40 km) holds no slot; nor do civilians that joined
+# the station's run (bounded by their pools). Maintainer, 2026-11-21: the schedule stalled behind them.
 func _in_play() -> int:
-	var traffic: StationTraffic = main.traffic if main != null else null
-	return _own.size() + in_transit + (traffic.encounter_count() if traffic != null else 0)
+	var n: int = in_transit
+	var player_at: Vector3 = main.ship.global_position if main != null and main.ship != null else Vector3.ZERO
+	for entry: Dictionary in _own:
+		var c: Combatant = entry["combatant"]
+		if not is_instance_valid(c.ship):
+			n += 1
+		elif c.ship.has_meta(CarrierDock.DOCKED_META) or c.ship.has_meta(TierDirector.TIER_META):
+			continue
+		elif entry["kind"] == &"raid" and _local_position(c).distance_to(player_at) > FLOWN_OFF_M:
+			continue
+		else:
+			n += 1
+	return n
 
 
 func _lane() -> StationTraffic:

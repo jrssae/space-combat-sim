@@ -457,6 +457,9 @@ func rows_event(events: int, out: PackedFloat64Array, base: int) -> void:
 		# promoted; any other parked ship takes nothing (the batch drops stale results first; M4-T24).
 		if combatant.ship.is_tier_parked() and events & BrainBatch.EVENT_SELECT != 0:
 			_follow_target(AiPilot.native_target_id(out, base))
+		# A route flown in the tier (M8-T17): its mirror follows, so a route's end is seen while the ship is a tier row.
+		if combatant.ship.is_tier_parked() and events & BrainBatch.EVENT_SETTLE != 0 and brain is AiPilot:
+			(brain as AiPilot).settle_native()
 		return
 	if _hosted and is_instance_valid(_hosted_host):
 		var dt: float = float(_hosted_host.driver_dt(_hosted_slot))  # the think's dt, for the retarget's clock

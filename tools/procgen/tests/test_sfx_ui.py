@@ -1,4 +1,4 @@
-"""``sfx_ui`` (AC2 and AC6 of M5): the menu sounds and the comms squelches, 48 kHz mono 16-bit, peaks at most -1 dBFS, seeded
+"""``sfx_ui`` (AC2 and AC6 of M5): the menu sounds and the comms squelches, 48 kHz mono 16-bit, peaks at most -1 dBFS, one loudness reference (M8-T12), seeded
 and byte-identical per seed. Move is a tick, accept rises and back falls, so the three tell apart without looking; the radio
 open and close are bursts of band-limited static that end or begin on a tone going up or down."""
 
@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.procgen.assets import ASSETS, sfx_ui
-from tools.procgen.core import audio
+from tools.procgen.core import audio, loudness
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 
@@ -82,8 +82,13 @@ class SfxUiTests(unittest.TestCase):
         for name, entry in self.manifest["sounds"].items():
             peak = audio.peak_dbfs(self.wav(name))
             self.assertLessEqual(peak, -1.0, name)
-            self.assertGreater(peak, -3.0, f"{name}: not needlessly quiet")
             self.assertAlmostEqual(peak, entry["peak_dbfs"], places=2, msg=name)
+
+    def test_every_sound_is_at_the_loudness_reference(self) -> None:
+        for name, entry in self.manifest["sounds"].items():
+            level = loudness.loudness_lufs(self.wav(name))
+            self.assertAlmostEqual(level, loudness.TARGET_LUFS, delta=loudness.TOLERANCE_LU, msg=name)
+            self.assertAlmostEqual(level, entry["loudness_lufs"], places=2, msg=name)
 
     def test_menu_sounds_are_short_and_move_is_the_shortest(self) -> None:
         lengths = {name: len(self.wav(name)) / SR for name in EXPECTED}

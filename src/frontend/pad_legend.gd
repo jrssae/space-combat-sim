@@ -33,6 +33,8 @@ const ACTION_LABELS: Dictionary = {
 	&"pause": "Pause", &"debug_toggle_overlay": "Debug overlay", &"debug_toggle_fallback_mesh": "Debug mesh",
 	&"autotrack": "Auto-track", &"camera_look": "Free look", &"screenshot": "Screenshot",
 	&"wing_attack": "Wing: attack", &"wing_form": "Wing: form on me", &"wing_engage": "Wing: engage", &"wing_cover": "Wing: cover me",
+	&"wing_dock": "Wing: dock for repair",
+	&"wing_form_hold": "Wing: form up, hold fire", &"wing_hold": "Wing: hold position, hold fire",
 	&"toggle_running_lights": "Running lights", &"comms_menu": "Comms menu",
 }
 
@@ -63,6 +65,16 @@ static func widget_of(descriptor: String) -> StringName:
 		var index: String = parts[2].substr(0, 1)
 		return _AXES.get(index.to_int(), &"") if index.is_valid_int() else &""
 	return &""
+
+
+## The pad part an SDL button index is, or `&""` for one the diagram does not draw (Guide, paddles).
+static func widget_of_button(index: int) -> StringName:
+	return _BUTTONS.get(index, &"")
+
+
+## The pad part an SDL axis moves (a stick or a trigger), or `&""`.
+static func widget_of_axis(axis: int) -> StringName:
+	return _AXES.get(axis, &"")
 
 
 ## The menu's name for an action; an action it has no wording for is shown readable rather than as its identifier.

@@ -1,0 +1,9 @@
+{
+ "_doc": "Far capital ships' HUD markers (M8-T08), off unless enabled here or by a scenario's hud.capital_markers. A capital of a listed relation within max_range_m is marked while its bounding radius is under hide_above_px on screen (px at 1080p); the nearest max_markers are shown, off-screen ones as edge arrows when edge_arrows is true.",
+ "enabled": false,
+ "relations": ["hostile"],
+ "max_range_m": 30000.0,
+ "hide_above_px": 14.0,
+ "max_markers": 4,
+ "edge_arrows": true
+}

@@ -485,7 +485,7 @@ The front end's backdrop (D77, Q7): the inside of Alpha wing's Cobra-bay arm (th
 T09's look was approved 2026-11-13 (a darker grey deck, Alpha's livery, overhead clamps, no cradle); T20 keeps it.
 
 **Read from the station, not hard-coded (T20).** Everything comes from the station's `hardpoints.cobra_arm`
-(`station_hardpoints.cobra_arm_layout`): the six doors (20 by 14 m, the leaves from `station_props.LEAF`) and their 23 m pitch, the
+(`station_hardpoints.cobra_arm_layout`): the six doors (20 by 14 m, the leaves from `station_props.LEAF_OUTER`, `LEAF_HALF` and `seam_line`) and their 23 m pitch, the
 upper hall over them (x ±20, r 219 to the doors' plane at 236.5) and the lower hall above it (x ±40, r 206.5 to 219), where a fighter
 hangs (r 227.5) and is released (r 244.5), and where the second row is staged (x -28, r 214). Hall frame: +y up toward the drum's
 axis, z along the arm with the head (bow) at -z, origin on the floor in the middle of the upper hall; `to_arm` turns it half a turn
@@ -498,7 +498,7 @@ T04's seven-door names (`COBRA_DOORS`, `DOOR_HALF`, `DOOR_ROW`, `door_centres`) 
 |---|---|
 | Dark, grimy, low-key hall; red and white lamps among the gantries; a dark grey floor, the red kept on the lamps and machinery | 1, the show's Cobra-bay capture (most weight); the maintainer |
 | Every fighter held from above by its own clamp: the racked six by clamp arms off the upper hall's walls gripping their upper pods from outboard (the rack's middle open, T21); the second row each on a crane trolley under a bridge across the lower hall, which carries it across and down onto its rack | 1 (overhead machinery and clamp arms holding the fighters); 2 (red and white clamp cranes); T05/T21's hardpoints (the second row's path) |
-| Hazard striping on the door coamings, the bays' sills, the ledges' edges; a hazard band down each door's seam | 1; 2; T05's door faces |
+| Hazard striping on the door coamings, the bays' sills, the ledges' edges; a hazard band along each door's sawtooth seam | 1; 2; T05's door faces |
 | Orange canisters with yellow and dark bands on the ledges | 1 |
 | A red portal with cut corners round both halls at each launch position; big red bay numbers 1 to 6 on the lower hall's walls | 2 (a suggestion) |
 | Yellow railings on the catwalks and along the ledges, ladders, yellow lattice on the columns under the ledges | 2 (a suggestion) |
@@ -530,7 +530,7 @@ inside can see are dropped before packing. Atlases: bay 2 048 px, ends 2 048 px,
 | hatch | #CAA75F | 0.45 | 0.50 | coamings, sills, ledge edges, railings, ladders, lattice |
 | door | #7A4A3A | 0.55 | 0.44 | the leaves' slats, the end doors |
 | canister | #C2662E | 0.45 | 0.48 | the canisters |
-| machinery (bare steel #8E8B87) | #5A5856 | 0.90 | 0.30 | pipes, rails, hinges, rams, lamp stalks |
+| machinery (bare steel #8E8B87) | #5A5856 | 0.90 | 0.30 | pipes, rails, the doors' slide rails and drives, lamp stalks |
 | rubber | #1E1E1E | 0.00 | 0.85 | the clamps' pads |
 
 Glows: bay light (#FFA860, 3.0), red lamp (#FF3A2A, 3.0), work light (#FFE2B8, 6.0), pink panel (#FF8C9A, 1.4), the booths' windows
@@ -606,11 +606,23 @@ The maintainer's untextured arm model: six doors in a framed strip on the root s
   in from the doors, work lamps, and a staging clamp over the **second row**: twelve Starfuries an arm, six on the racks and six
   staged 22 m to port of them under the deck (no open door shows them), each crossing onto its rack once the first wave has dropped.
 - **The doors are props:** two leaves a door (`door_leaf_<n>_<r|l>`, one kind each so each carries its half of the number), each
-  its own instance so a launch swings it about its hinge on the outer edge; drawn as far as the hull (30 km), since the hull has no
+  its own instance so a launch slides it back under the deck (M8-T02, below; M7 swung it on a hinge); drawn as far as the hull (30 km), since the hull has no
   painted door under them now. Their faces on the prop atlas at 3.1 cm a texel (slats, the bay's light between them, rivets, the
-  hazard band, the number). The sheet's `open_door` view swings door 3's leaves open (`scripts/station_sheet_node.gd`).
+  hazard band, the number). The sheet's `open_door` view slides door 3's leaves open (`scripts/station_sheet_node.gd`).
 - **M7-T09's hangar** read T04's seven 64 x 28 m doors until **T20** refitted it to these doors from `hardpoints.cobra_arm`
   and dropped the old names (`COBRA_DOORS`, `DOOR_HALF`, `DOOR_ROW`, `door_centres`).
+- **Sawtooth doors (M8-T02, roadmap M7-4).** The maintainer chose option B from the look sheet
+  (`references/screenshots/M8-T02 sawtooth doors/M8-T02_sawtooth_doors_sheet.png` and `..._ripple_sheet.png`; `SHEET_VIEWS=t02`):
+  the two leaves meet on a seam of trapezoid teeth along the arm, as the main docking bay's inner doors do (`station_props.seam_line`:
+  `TOOTH_PERIOD` 4.4 m, `TOOTH_DEPTH` 2.2 m, flat tips 1.2 m; three teeth on the starboard leaf, two and two halves on the other),
+  and slide apart across the arm, `LEAF_TRAVEL` 11.3 m each, under the deck beside the well (the upper hall is 20 m to each side),
+  so an open door shows no leaf: the teeth end 0.2 m inside the well's wall. Each leaf is a toothed plate 0.5 m thick from the seam
+  to x 9.6; its face (the prop atlas's cell) has the six grated slats, the lit edge and the hazard band following the teeth, the
+  number across both. The leaves have no collision (they never had): the well's walls and the hall are the hull's. Inside
+  (`b5_interior`, `parts/cobra_bay.py`): the same seam with a lit gap, the hazard band along it, and in place of M7's hinge pipes
+  and rams two slide rails across each leaf with a drive where each runs into the well's side. Tests: `test_station_sealed` (the
+  leaves cover the door once, no line of sight out of a hall when shut, out of the well when open), `test_station_hardpoints`,
+  `test_b5_interior`.
 - **Wings** (the maintainer, 2026-11-13), seen from the bow: Alpha top (0 degrees), Beta starboard (90), Delta bottom (180), Zeta
   port (270); each arm is one wing and launches in two waves of six.
 
@@ -637,7 +649,7 @@ its `body`'s frame: `drum` (the drum node, on its axis at the pivot, turning wit
 
 | Section | Count | Fields |
 |---|---|---|
-| `cobra_bays` | 24: `cobra_bay_alpha_1` to `_6` (top arm, door 1 at the bow), then `beta` (starboard), `delta` (bottom), `zeta` (port) | `wing`, `arm`, `door_number`, `door` (r 239), `door_half_m` [10, 7], `normal` (radially out), `across`, `leaves` (hinge `point` and `axis`), `rail_start` (where the fighter hangs, r 230), `rail_end` (the door), `release` (r 247), `release_direction`, `surface_velocity` (w x r, 36.6 m/s), `forward` (bow), `up` (toward the axis), `staging` (the second row's fighter), `staging_path` (up 3 m, across, down onto the rack) |
+| `cobra_bays` | 24: `cobra_bay_alpha_1` to `_6` (top arm, door 1 at the bow), then `beta` (starboard), `delta` (bottom), `zeta` (port) | `wing`, `arm`, `door_number`, `door` (r 239), `door_half_m` [10, 7], `normal` (radially out), `across`, `leaves` (each leaf's `slide` direction, `travel_m` 11.3 and `reach_m` 1.1: M8-T02), `rail_start` (where the fighter hangs, r 230), `rail_end` (the door), `release` (r 247), `release_direction`, `surface_velocity` (w x r, 36.6 m/s), `forward` (bow), `up` (toward the axis), `staging` (the second row's fighter), `staging_path` (up 3 m, across, down onto the rack) |
 | `cobra_arm` | 1 | the doors' layout on an arm standing on top (for T20): `door_floor_r`, `door_depth_m`, `door_half_m`, `pitch_m` 19, `row_z`, `strip_x`, `centres`, `hall`, `hang_r`, `release_r`, `staging_x`, `arms` (each `name`, `wing`, `angle_deg`, `bow_view_deg`, `bays`) |
 | `main_docking_bay` | 1 (drum) | `main_docking_bay_approach` (1 500 and 300 m ahead), `_path` (to the mouth and the void's back wall), `_mouth` (z 480.4), `_doors` (z 552.4), `_doors_open_m` 21, `_airlock` (the black void's back wall, z 740), `_clear_half_m` [36.6, 15.0], `_opening` (the mouth's clear outline), `_void_half_m` [42, 22]; `spin_axis`, `spin_rad_s` 0.148, `pivot` (a ship flying in matches the drum's roll; the same as `pieces.drum`). M7-T25 |
 | `cargo_bay` | 1 (frame) | `cargo_bay_approach` (to the hold), `_hold` (z -700, y 346: on the slot's line, 346 m off the main bay's axis), `_hold_forward`, `_release` (z -640), `_path` (down the slot into the bay), `_entry` (45 m in), `_clear_min`, `_clear_max` |

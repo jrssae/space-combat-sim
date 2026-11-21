@@ -1,0 +1,514 @@
+{
+ "lines": [
+  {
+   "id": "control_launch_clear",
+   "speaker": "control",
+   "voice": "tu_control_launch_clear",
+   "text": "Alpha One, Babylon Control. Bay doors are open. Your check pilot launches first, then you."
+  },
+  {
+   "id": "instructor_welcome",
+   "speaker": "instructor",
+   "voice": "tu_instructor_welcome",
+   "text": "Alpha One, {instructor}. I am your check pilot today. Two ships, you and me. See you outside."
+  },
+  {
+   "id": "instructor_box",
+   "speaker": "instructor",
+   "voice": "tu_instructor_box",
+   "text": "We hold here, eight kilometres off the station, clear of traffic. You are at rest. Handling first."
+  },
+  {
+   "id": "instructor_flight_intro",
+   "speaker": "instructor",
+   "voice": "tu_instructor_flight_intro",
+   "text": "Do each check as I call it. There is no fail. If you miss one I call it again, then I show you."
+  },
+  {
+   "id": "check_autotrack_off",
+   "speaker": "instructor",
+   "voice": "tu_check_autotrack_off",
+   "text": "Auto-track is on. It holds your nose on your target, so you cannot turn. Tap {action:autotrack} to switch it off."
+  },
+  {
+   "id": "check_pitch",
+   "speaker": "instructor",
+   "voice": "tu_check_pitch",
+   "text": "Pitch. Bring the nose up or down, forty-five degrees."
+  },
+  {
+   "id": "check_yaw",
+   "speaker": "instructor",
+   "voice": "tu_check_yaw",
+   "text": "Yaw. Swing the nose left or right, forty-five degrees."
+  },
+  {
+   "id": "check_roll",
+   "speaker": "instructor",
+   "voice": "tu_check_roll",
+   "text": "Roll. Half a turn, either way."
+  },
+  {
+   "id": "check_main_pods",
+   "speaker": "instructor",
+   "voice": "tu_check_main_pods",
+   "text": "Now thrust. Main pods: fire both and build forward speed."
+  },
+  {
+   "id": "check_retros",
+   "speaker": "instructor",
+   "voice": "tu_check_retros",
+   "text": "Retros. Fire both and take that speed off."
+  },
+  {
+   "id": "check_strafe_left",
+   "speaker": "instructor",
+   "voice": "tu_check_strafe_left",
+   "text": "Strafe left. Slide the ship, nose held."
+  },
+  {
+   "id": "check_strafe_right",
+   "speaker": "instructor",
+   "voice": "tu_check_strafe_right",
+   "text": "Strafe right."
+  },
+  {
+   "id": "check_strafe_up",
+   "speaker": "instructor",
+   "voice": "tu_check_strafe_up",
+   "text": "Strafe up."
+  },
+  {
+   "id": "check_strafe_down",
+   "speaker": "instructor",
+   "voice": "tu_check_strafe_down",
+   "text": "Strafe down."
+  },
+  {
+   "id": "check_assist_off",
+   "speaker": "instructor",
+   "voice": "tu_check_assist_off",
+   "text": "Flight assist off. The ship now keeps whatever motion you give it."
+  },
+  {
+   "id": "instructor_assist_drift",
+   "speaker": "instructor",
+   "voice": "tu_instructor_assist_drift",
+   "text": "Feel that drift. Assist off, you can turn and keep your heading of travel. Guns on a target while you slide past it."
+  },
+  {
+   "id": "check_assist_on",
+   "speaker": "instructor",
+   "voice": "tu_check_assist_on",
+   "text": "Flight assist on. The computer holds your nose and your speed again."
+  },
+  {
+   "id": "check_brake",
+   "speaker": "instructor",
+   "voice": "tu_check_brake",
+   "text": "Brake. Hold it until you are at rest."
+  },
+  {
+   "id": "instructor_flight_done",
+   "speaker": "instructor",
+   "voice": "tu_instructor_flight_done",
+   "text": "That is handling. You fly her clean."
+  },
+  {
+   "id": "instructor_camera_intro",
+   "speaker": "instructor",
+   "voice": "tu_instructor_camera_intro",
+   "text": "Now your views and your lights. You have two views, cockpit and chase."
+  },
+  {
+   "id": "check_camera_to_chase",
+   "speaker": "instructor",
+   "voice": "tu_check_camera_to_chase",
+   "text": "Switch to the chase view. You see your ship from outside."
+  },
+  {
+   "id": "check_camera_to_cockpit",
+   "speaker": "instructor",
+   "voice": "tu_check_camera_to_cockpit",
+   "text": "Switch to the cockpit view. You fight from in here."
+  },
+  {
+   "id": "check_free_look",
+   "speaker": "instructor",
+   "voice": "tu_check_free_look",
+   "text": "Free look. Hold it and look around you."
+  },
+  {
+   "id": "check_running_lights",
+   "speaker": "instructor",
+   "voice": "tu_check_running_lights",
+   "text": "Running lights. Switch them. Traffic sees you by them."
+  },
+  {
+   "id": "instructor_x_intro",
+   "speaker": "instructor",
+   "voice": "tu_instructor_x_intro",
+   "text": "Your {action:autotrack} control. A tap tracks your target: the ship turns to follow it. A hold runs what the target offers, when you are in reach."
+  },
+  {
+   "id": "instructor_x_more",
+   "speaker": "instructor",
+   "voice": "tu_instructor_x_more",
+   "text": "A jumpgate offers a jump. A docking bay offers docking. {action:autotrack} will do more as you meet new places."
+  },
+  {
+   "id": "check_target_menu",
+   "speaker": "instructor",
+   "voice": "tu_check_target_menu",
+   "text": "Open the target menu: hold {action:target_cycle,target_next} and pick NAV ONE."
+  },
+  {
+   "id": "check_autotrack",
+   "speaker": "instructor",
+   "voice": "tu_check_autotrack",
+   "text": "Tap {action:autotrack}. Auto-track the buoy."
+  },
+  {
+   "id": "instructor_course_intro",
+   "speaker": "instructor",
+   "voice": "tu_instructor_course_intro",
+   "text": "Buoy course. Five buoys, in order, each inside two hundred metres. The clock starts as you pass NAV ONE."
+  },
+  {
+   "id": "instructor_course_cue",
+   "speaker": "instructor",
+   "voice": "tu_instructor_course_cue",
+   "text": "Watch the approach cue under your target. When it says brake, brake. Overshoot costs you time."
+  },
+  {
+   "id": "instructor_course_go",
+   "speaker": "instructor",
+   "voice": "tu_instructor_course_go",
+   "text": "NAV ONE is your start. In your own time."
+  },
+  {
+   "id": "instructor_course_clock",
+   "speaker": "instructor",
+   "voice": "tu_instructor_course_clock",
+   "text": "Clock is running. NAV TWO."
+  },
+  {
+   "id": "course_exemplary",
+   "speaker": "instructor",
+   "voice": "tu_course_exemplary",
+   "text": "That time is as good as mine. Keep this up and one day you might be flying a White Star."
+  },
+  {
+   "id": "course_par",
+   "speaker": "instructor",
+   "voice": "tu_course_par",
+   "text": "Solid time. On the standard. Keep working your braking points."
+  },
+  {
+   "id": "course_below_par",
+   "speaker": "instructor",
+   "voice": "tu_course_below_par",
+   "text": "You got round. Slowly. My grandmother brakes later than that, and she flies a desk."
+  },
+  {
+   "id": "course_buoy_destroyed",
+   "speaker": "instructor",
+   "voice": "tu_course_buoy_destroyed",
+   "text": "You destroyed a navigation buoy. Fly like that and you are lucky to end up piloting a rusty cargo ship."
+  },
+  {
+   "id": "instructor_combat_intro",
+   "speaker": "instructor",
+   "voice": "tu_instructor_combat_intro",
+   "text": "Gunnery. Control is releasing unarmed target drones into the box. They do not shoot back."
+  },
+  {
+   "id": "check_target_next",
+   "speaker": "instructor",
+   "voice": "tu_check_target_next",
+   "text": "Tap {action:target_cycle,target_next}. Take the nearest drone, then the next."
+  },
+  {
+   "id": "instructor_lead",
+   "speaker": "instructor",
+   "voice": "tu_instructor_lead",
+   "text": "Put your guns on the lead reticle, not on the drone. The reticle is where your bolts will meet it."
+  },
+  {
+   "id": "check_fire_linked",
+   "speaker": "instructor",
+   "voice": "tu_check_fire_linked",
+   "text": "Fire mode. Switch your guns to linked: all four together."
+  },
+  {
+   "id": "check_fire_alternating",
+   "speaker": "instructor",
+   "voice": "tu_check_fire_alternating",
+   "text": "Now alternating: one pair, then the other. A steadier stream."
+  },
+  {
+   "id": "instructor_drones_free",
+   "speaker": "instructor",
+   "voice": "tu_instructor_drones_free",
+   "text": "Weapons free. Destroy the drones."
+  },
+  {
+   "id": "instructor_drones_down",
+   "speaker": "instructor",
+   "voice": "tu_instructor_drones_down",
+   "text": "All three down. Nice gunnery."
+  },
+  {
+   "id": "instructor_wing_intro",
+   "speaker": "instructor",
+   "voice": "tu_instructor_wing_intro",
+   "text": "Wing orders. A squadron leader commands a flight of two wingmen. For this drill I am your wingman. Orders are on the comms menu."
+  },
+  {
+   "id": "check_wing_form",
+   "speaker": "instructor",
+   "voice": "tu_check_wing_form",
+   "text": "Order me to form on you."
+  },
+  {
+   "id": "check_wing_attack",
+   "speaker": "instructor",
+   "voice": "tu_check_wing_attack",
+   "text": "Two more drones. Target one, then order me to attack your target. I take that one only."
+  },
+  {
+   "id": "instructor_wing_kill",
+   "speaker": "instructor",
+   "voice": "tu_instructor_wing_kill",
+   "text": "Your target is down. The other drone is yours if you want the practice. Control recalls it when we move on."
+  },
+  {
+   "id": "check_wing_cover",
+   "speaker": "instructor",
+   "voice": "tu_check_wing_cover",
+   "text": "Order me to cover you. I take whoever attacks you."
+  },
+  {
+   "id": "instructor_wing_done",
+   "speaker": "instructor",
+   "voice": "tu_instructor_wing_done",
+   "text": "Drill over. I am your instructor again. Next, the station: know what you defend."
+  },
+  {
+   "id": "instructor_tour_intro",
+   "speaker": "instructor",
+   "voice": "tu_instructor_tour_intro",
+   "text": "Come to rest for the tour. Brake and hold."
+  },
+  {
+   "id": "tour_cobra",
+   "speaker": "instructor",
+   "voice": "tu_tour_cobra",
+   "text": "The Cobra bays. Each arm holds a wing of Starfuries. You launched from Alpha's."
+  },
+  {
+   "id": "tour_docking",
+   "speaker": "control",
+   "voice": "tu_tour_docking",
+   "text": "The main docking bay, on the axis. Ships enter one at a time, on Control's word. You dock here for repair."
+  },
+  {
+   "id": "tour_command",
+   "speaker": "instructor",
+   "voice": "tu_tour_command",
+   "text": "The command section, above the bay. Babylon Control works from there."
+  },
+  {
+   "id": "tour_grid",
+   "speaker": "control",
+   "voice": "tu_tour_grid",
+   "text": "The defense grid. Light turrets and interceptor batteries along the hull. Interceptors stop incoming fire."
+  },
+  {
+   "id": "tour_cannons",
+   "speaker": "control",
+   "voice": "tu_tour_cannons",
+   "text": "Heavy cannons, for capital ships. The grid defends the station. It does not chase."
+  },
+  {
+   "id": "instructor_gate_intro",
+   "speaker": "instructor",
+   "voice": "tu_instructor_gate_intro",
+   "text": "Last stop, the jumpgate, fifty kilometres out. I will lead."
+  },
+  {
+   "id": "instructor_gate_target",
+   "speaker": "instructor",
+   "voice": "tu_instructor_gate_target",
+   "text": "Target the jumpgate first. Open the target menu and pick it."
+  },
+  {
+   "id": "instructor_gate_cue",
+   "speaker": "instructor",
+   "voice": "tu_instructor_gate_cue",
+   "text": "Good, you have it. Fly the approach cue: build speed, then brake when it calls. The gate takes you from inside its reach."
+  },
+  {
+   "id": "check_interact",
+   "speaker": "instructor",
+   "voice": "tu_check_interact",
+   "text": "Hold {action:autotrack} to run what your target offers."
+  },
+  {
+   "id": "instructor_gate_hold",
+   "speaker": "instructor",
+   "voice": "tu_instructor_gate_hold",
+   "text": "The gate is offering the jump. Hold {action:autotrack} now. The autopilot flies you in."
+  },
+  {
+   "id": "instructor_gate_back",
+   "speaker": "instructor",
+   "voice": "tu_instructor_gate_back",
+   "text": "And out through the blue vortex. That was your first jump here. Nothing left on my list, Alpha One. Home."
+  },
+  {
+   "id": "control_alarm",
+   "speaker": "control",
+   "voice": "tu_control_alarm",
+   "text": "All ships, Babylon Control. Unscheduled jumpgate activation. Raiders, six fighters, out of the gate. This is not a drill."
+  },
+  {
+   "id": "instructor_raid",
+   "speaker": "instructor",
+   "voice": "tu_instructor_raid",
+   "text": "Check is suspended, Alpha One. This is real. I am on your wing. Weapons free."
+  },
+  {
+   "id": "control_raid_orders",
+   "speaker": "control",
+   "voice": "tu_control_raid_orders",
+   "text": "Alpha One, Control. Alpha wing is launching, all flights. Alpha Two and Alpha Three are your wingmen. Hold the raiders off the gate run until they reach you."
+  },
+  {
+   "id": "alpha_2_launch",
+   "speaker": "alpha_2",
+   "voice": "tu_alpha_2_launch",
+   "text": "Alpha Two, launching. On our way to you, Lead."
+  },
+  {
+   "id": "alpha_3_launch",
+   "speaker": "alpha_3",
+   "voice": "tu_alpha_3_launch",
+   "text": "Alpha Three, clear of the bay. Forming on Alpha Two."
+  },
+  {
+   "id": "control_carrier",
+   "speaker": "control",
+   "voice": "tu_control_carrier",
+   "text": "Jump point forming off the station. Raider strike carrier. It is launching fighters, eight more."
+  },
+  {
+   "id": "instructor_carrier_window",
+   "speaker": "instructor",
+   "voice": "tu_instructor_carrier_window",
+   "text": "A pirate drive takes four minutes to recharge after a jump. Until then that carrier cannot jump out. That is your window."
+  },
+  {
+   "id": "control_carrier_run",
+   "speaker": "control",
+   "voice": "tu_control_carrier_run",
+   "text": "Alpha One, the carrier may run for the jumpgate instead. Stay on it and it cannot."
+  },
+  {
+   "id": "control_dock_offer",
+   "speaker": "control",
+   "voice": "tu_control_dock_offer",
+   "text": "Alpha One, Control. You are damaged. The main docking bay is clear for you. Dock for repair, then relaunch."
+  },
+  {
+   "id": "control_repaired",
+   "speaker": "control",
+   "voice": "tu_control_repaired",
+   "text": "Alpha One, repairs complete. You are launched. Rejoin your flight."
+  },
+  {
+   "id": "control_carrier_down",
+   "speaker": "control",
+   "voice": "tu_control_carrier_down",
+   "text": "The raider carrier is destroyed. Good kill, Alpha."
+  },
+  {
+   "id": "control_stand_down",
+   "speaker": "control",
+   "voice": "tu_control_stand_down",
+   "text": "All ships, Babylon Control. The raid is over. Stand down from alert. Traffic may resume."
+  },
+  {
+   "id": "instructor_debrief_open",
+   "speaker": "instructor",
+   "voice": "tu_instructor_debrief_open",
+   "text": "Alpha One, {instructor}. That was no part of today's check. Here is my read on it."
+  },
+  {
+   "id": "instructor_debrief_perfect",
+   "speaker": "instructor",
+   "voice": "tu_instructor_debrief_perfect",
+   "text": "Every Starfury came home. A perfect score, in my book."
+  },
+  {
+   "id": "instructor_debrief_one_lost",
+   "speaker": "instructor",
+   "voice": "tu_instructor_debrief_one_lost",
+   "text": "One Starfury did not come back. You kept the rest together under fire."
+  },
+  {
+   "id": "instructor_debrief_losses",
+   "speaker": "instructor",
+   "voice": "tu_instructor_debrief_losses",
+   "text": "We lost pilots out there. Give your orders sooner and hold your flight close."
+  },
+  {
+   "id": "instructor_debrief_civilians",
+   "speaker": "instructor",
+   "voice": "tu_instructor_debrief_civilians",
+   "text": "Transports died on the gate run. Guarding them was our job."
+  },
+  {
+   "id": "instructor_debrief_carrier_down",
+   "speaker": "instructor",
+   "voice": "tu_instructor_debrief_carrier_down",
+   "text": "The carrier is scrap, caught before its drive came back. That goes on your record."
+  },
+  {
+   "id": "instructor_debrief_carrier_away",
+   "speaker": "instructor",
+   "voice": "tu_instructor_debrief_carrier_away",
+   "text": "The carrier slipped out. No mark against you: the squadron matters more."
+  },
+  {
+   "id": "instructor_verdict_leader",
+   "speaker": "instructor",
+   "voice": "tu_instructor_verdict_leader",
+   "text": "An exemplary course, then a real fight handled like that. You are squadron leader, as of now."
+  },
+  {
+   "id": "instructor_verdict_squadron",
+   "speaker": "instructor",
+   "voice": "tu_instructor_verdict_squadron",
+   "text": "You are on the squadron roster. Keep this up and you will lead it before long."
+  },
+  {
+   "id": "control_welcome",
+   "speaker": "control",
+   "voice": "tu_control_welcome",
+   "text": "Alpha One, Control. Welcome to Babylon 5."
+  },
+  {
+   "id": "control_leader_down",
+   "speaker": "control",
+   "voice": "tu_control_leader_down",
+   "text": "Alpha One is down. All flights, Control has the squadron."
+  },
+  {
+   "id": "instructor_demo",
+   "speaker": "instructor",
+   "voice": "tu_instructor_demo",
+   "text": "Watch me. I will fly it."
+  }
+ ]
+}

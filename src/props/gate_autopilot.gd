@@ -1,11 +1,13 @@
 class_name GateAutopilot
 extends RefCounted
 ## The autopilot of the player's jump (M6-T14): lines the ship up with the gate's departure point, then accelerates it along the
-## gate's axis into the vortex. Pure: World-frame poses in, one `FlightCommand` out, through `PilotSteering` as the AI flies, so
+## gate's axis into the vortex. It takes the ship as it comes (M8-T18, D84): from any speed it brakes on the way to the departure
+## point, and a ship already lined up with the mouth carries its speed down to the run-in's without stopping there. Pure: World-frame poses in, one `FlightCommand` out, through `PilotSteering` as the AI flies, so
 ## it obeys the same flight model and assist. It never runs the ship into the plane before the vortex can take it.
 
-## Fast enough to cross 10 km in about half a minute.
-const APPROACH_MPS: float = 300.0
+## The fastest the line-up flies: a ship that asked at speed and overshot comes back from 100 km or more in a couple of minutes;
+## near the point the braking speed rules (from 2 km about 240 m/s).
+const APPROACH_MPS: float = 1500.0
 ## The speed it arrives at the departure point with, and the floor of the approach near it.
 const LINE_UP_MPS: float = 80.0
 ## The run-in's speed through the vortex.
@@ -24,18 +26,100 @@ const DETOUR_RADIUS_M: float = 1600.0
 const INSIDE_ARMS_M: float = 650.0
 ## The nose turns onto the velocity error while it is larger than this (a flip and burn); else onto the course.
 const FACE_DV_MPS: float = 30.0
+## Lined up with the mouth (M8-T18): out in front of the departure point, within this of the axis, heading in within this angle.
+const LINED_UP_RADIUS_M: float = 150.0
+const LINED_UP_DEG: float = 15.0
+## The arrival's prediction steps the run-in this finely, s, and gives up past this (the run-in's own timeout).
+const PREDICT_STEP_S: float = 1.0 / 30.0
+const PREDICT_LIMIT_S: float = 45.0
 ## A ship no wider than this share of the mouth's smaller half axis fits through any way up, and keeps its roll (M7-T28).
 const FITS_ANY_WAY_UP: float = 0.5
 
 
-## The line-up's command: to `target` (World) at a speed that it can shed on the way, nose on the velocity error.
-static func line_up(position: Vector3, velocity: Vector3, basis: Basis, target: Vector3, capability: ShipCapability) -> FlightCommand:
+## The line-up's command: to `target` (World) at a speed that it can shed on the way down to `arrive_mps` (the run-in's for a
+## ship lined up with the mouth, `line_up_arrival`), nose on the velocity error.
+static func line_up(position: Vector3, velocity: Vector3, basis: Basis, target: Vector3, capability: ShipCapability,
+		arrive_mps: float = LINE_UP_MPS) -> FlightCommand:
 	var to: Vector3 = target - position
 	var dist: float = to.length()
-	var brake_mps: float = sqrt(2.0 * maxf(capability.a_main, 0.1) * dist) * 0.7
-	var speed: float = minf(APPROACH_MPS, maxf(LINE_UP_MPS, brake_mps))
+	var brake_mps: float = StoppingDistance.speed_for_mps(dist, capability.a_main)
+	var speed: float = minf(APPROACH_MPS, maxf(arrive_mps, brake_mps))
 	var v_des: Vector3 = to / dist * speed if dist > 1e-3 else Vector3.ZERO
 	return _fly(velocity, v_des, basis, capability, v_des)
+
+
+## Whether a ship at `local` moving at `local_velocity` (both gate-local, against the gate's rest) is lined up with the mouth: out
+## in front of the departure point, near the axis through it along `forward` (the way departures fly), heading in along it.
+static func lined_up(local: Vector3, local_velocity: Vector3, departure: Vector3, forward: Vector3) -> bool:
+	var rel: Vector3 = local - departure
+	var along: float = rel.dot(forward)
+	if along > 0.0 or (rel - forward * along).length() > LINED_UP_RADIUS_M:
+		return false
+	var speed: float = local_velocity.length()
+	return speed > LINE_UP_MPS and local_velocity.dot(forward) >= speed * cos(deg_to_rad(LINED_UP_DEG))
+
+
+## The speed the line-up arrives at the departure point with: the run-in's for a lined-up ship (no stop on the way), else the
+## slow line-up speed it turns onto the axis at.
+static func line_up_arrival(local: Vector3, local_velocity: Vector3, departure: Vector3, forward: Vector3) -> float:
+	return RUN_IN_MPS if lined_up(local, local_velocity, departure, forward) else LINE_UP_MPS
+
+
+## Seconds from the run-in's start until the ship is at the mouth `to_plane_m` ahead, the vortex open in `open_in_s`: the run-in
+## flies at its own speed and no sooner than the vortex can take it. Given the ship's `speed_mps` along the axis and its
+## `capability`, the run-in's own pacing is followed from that speed (a ship that came back slowly first gathers speed).
+static func predicted_arrival_s(to_plane_m: float, open_in_s: float, speed_mps: float = RUN_IN_MPS,
+		capability: ShipCapability = null) -> float:
+	if capability == null:
+		var flying: float = maxf(to_plane_m, 0.0) / RUN_IN_MPS
+		return maxf(flying, open_in_s) if is_finite(open_in_s) else flying
+	var travel: Dictionary = _fly_run_in(to_plane_m, open_in_s, speed_mps, capability, PackedFloat32Array(), true)
+	return float(travel["arrival_s"])
+
+
+## How far along the axis the run-in has carried the ship at each of `times` (s after its start, increasing), from the same start
+## as `predicted_arrival_s`; past the mouth it flies on at the speed it reached (M8-T29: where a shot's camera will find the ship).
+static func run_in_travel_m(times: PackedFloat32Array, to_plane_m: float, open_in_s: float, speed_mps: float,
+		capability: ShipCapability) -> PackedFloat32Array:
+	return _fly_run_in(to_plane_m, open_in_s, speed_mps, capability, times, false)["travel"]
+
+
+# The run-in's command along the axis, flown in one dimension as `PilotSteering.seek` paces it: the arrival at the plane, and the
+# distance flown at each of `times`.
+static func _fly_run_in(to_plane_m: float, open_in_s: float, speed_mps: float, capability: ShipCapability,
+		times: PackedFloat32Array, stop_at_plane: bool) -> Dictionary:
+	var left: float = to_plane_m
+	var speed: float = speed_mps
+	var t: float = 0.0
+	var arrival: float = -1.0
+	var travel := PackedFloat32Array()
+	var next: int = 0
+	var limit: float = PREDICT_LIMIT_S if times.is_empty() else maxf(times[times.size() - 1], 0.0) + PREDICT_STEP_S
+	while t < limit and (next < times.size() or (stop_at_plane and arrival < 0.0)):
+		while next < times.size() and times[next] <= t:
+			travel.append(to_plane_m - left)
+			next += 1
+		if left <= 0.0 and arrival < 0.0:
+			arrival = t
+			if stop_at_plane:
+				break
+		var accel: float = 0.0
+		if left > 0.0:
+			var wanted: float = RUN_IN_MPS
+			var opens: float = open_in_s - t if is_finite(open_in_s) else INF
+			if opens == INF:
+				wanted = minf(wanted, maxf(left - WAIT_SHORT_M, 0.0) * 0.25)
+			elif opens > 0.0:
+				wanted = minf(wanted, left / opens)
+			var dv: float = wanted - speed
+			if absf(dv) >= PilotSteering.COAST_BELOW_MPS:
+				accel = clampf(dv / PilotSteering.HORIZON_S, -capability.a_retro, capability.a_main)
+		speed += accel * PREDICT_STEP_S
+		left -= speed * PREDICT_STEP_S
+		t += PREDICT_STEP_S
+	while travel.size() < times.size():
+		travel.append(to_plane_m - left)
+	return {"arrival_s": arrival if arrival >= 0.0 else t, "travel": travel}
 
 
 ## The way up a ship of `ship_radius_m` must be turned to pass a mouth whose smaller half axis is `mouth_radius_m`: `up` for one

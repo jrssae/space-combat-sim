@@ -82,7 +82,7 @@ func open() -> String:
 	# The list is read before the pause: a paused ship's marker does not count as in play.
 	var started: int = Time.get_ticks_usec()
 	var candidates: Array[TargetInfo] = main.ship.targeting.candidates()
-	menu.open(candidates, main.ship.global_position, main.combatant.faction, _objectives())
+	menu.open(candidates, main.ship.global_position, main.combatant.faction, _objectives(), launch_base_id())
 	last_open_usec = Time.get_ticks_usec() - started
 	last_candidates = candidates.size()
 	opens += 1
@@ -93,6 +93,19 @@ func open() -> String:
 	_show_page()
 	view.set_showing(true)
 	return ""
+
+
+## The target id of the base the player launched from (the scenario's `player.home`, or the station whose bay launched it), or
+## 0: a mission with no launch base pins nothing.
+func launch_base_id() -> int:
+	var home: StringName = main.combatant.home if main != null and main.combatant != null else &""
+	if home == &"" or not is_inside_tree():
+		return 0
+	for node: Node in get_tree().get_nodes_in_group(TargetCategories.LAUNCH_BASES):
+		var marker: Variant = node.get("targetable")
+		if StringName(str(node.get("home_id"))) == home and marker is Targetable and is_instance_valid(marker):
+			return (marker as Targetable).get_instance_id()
+	return 0
 
 
 ## One tick of the open menu, from `InputAdapter.sample_radial`.
@@ -109,6 +122,10 @@ func step(ui: UiCommand) -> void:
 	if ui.radial_back:
 		back()
 	elif ui.radial_select:
+		select()
+	elif menu.radial.has_entry(ui.radial_entry):
+		# The D-pad or a numbered key: that entry, as if pointed at and selected.
+		menu.radial.set_highlight(ui.radial_entry)
 		select()
 	if menu.is_open():
 		view.refresh()
@@ -336,7 +353,7 @@ func _register_console() -> void:
 				"doc": "The ring showing: categories, a category's name, or none"},
 		&"highlight": {"get": func() -> String: return str(menu.radial.highlighted().get("label", "none")),
 				"doc": "The entry the stick points at"},
-		&"entries": {"get": _console_entries, "doc": "The ring's slices clockwise from the top (- for a blank one)"},
+		&"entries": {"get": _console_entries, "doc": "The ring's entries clockwise from the top, in page order"},
 		&"selection": {"get": func() -> String: return _console_selection(), "doc": "The ship's target (as the HUD names it), or none"},
 		&"waypoint": {"get": func() -> String: return waypoint.describe(),
 				"doc": "The HUD waypoint: the pilot's pick by name, script (a mission's or the route's), or none"},
@@ -350,7 +367,7 @@ func _register_console() -> void:
 		&"last_candidates": {"get": func() -> int: return last_candidates, "doc": "Candidates the last opening read"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"targetmenu",
-			"The target menu: open (pauses the game), pick <entry> (a slice 0-5 clockwise from the top, or its label: enemies, none, "
+			"The target menu: open (pauses the game), pick <entry> (its index in page order, 0 at the top and clockwise, or its label: enemies, none, "
 			+ "\"raider 2\"), highlight <entry> (points at it without picking; the preview panel shows it), back, close",
 			[ConsoleArg.enum_required(&"action", ACTIONS), ConsoleArg.string_optional(&"entry", "").with_suggestions(_console_entries)]),
 			_cmd_targetmenu, self)
@@ -400,7 +417,7 @@ func _cmd_targetmenu(args: Dictionary) -> ConsoleResult:
 	return _describe()
 
 
-# A slice by its number or by its label (the first match, case-insensitive); -1 for none or a blank slice.
+# An entry by its index in page order or by its label (the first match, case-insensitive); -1 for none.
 func _entry_index(entry: String) -> int:
 	var slots: Array[Dictionary] = menu.radial.slots()
 	var index: int = entry.to_int() if entry.is_valid_int() else -1
@@ -409,7 +426,7 @@ func _entry_index(entry: String) -> int:
 			if str(slots[i].get("label", "")).to_lower() == entry.to_lower():
 				index = i
 				break
-	return index if index >= 0 and index < slots.size() and not slots[index].is_empty() else -1
+	return index if menu.radial.has_entry(index) else -1
 
 
 func _describe() -> ConsoleResult:

@@ -7,16 +7,23 @@ volumes the native core sweeps (boxes and capsules only), so bolts, rams and tur
 
 The budget is chosen for Jolt, not forced by it: Jolt refuses a hull above 256 points, and its cost per contact grows with
 the points and with the shapes a body's compound tree holds.
+
+One builder serves every compound hull (M8-T07): the station (M7) and the raiders' strike carrier (M12-T19). A concave part
+(a ring, a rim) is cut into convex sectors (:func:`ring_sectors`) so its opening stays open, and a hull built from sampled
+skin rather than triangles is checked with :func:`skin_coverage`.
 """
 
 from __future__ import annotations
 
 import itertools
+import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
+
+from .geometry import mirror_matrix
 
 MAX_SHAPES_PER_PIECE = 128
 MAX_HULL_POINTS = 32
@@ -213,6 +220,60 @@ class Shape:
             best[over] = np.minimum(best[over], np.abs(p[over] @ n - d))
         return best
 
+    def transformed(self, rotation: np.ndarray, translation: Sequence[float] = (0.0, 0.0, 0.0)) -> Shape:
+        """The shape turned (or mirrored) by ``rotation`` and then moved by ``translation``."""
+        r, t = np.asarray(rotation, dtype=float).reshape(3, 3), _vec(translation)
+        if self.kind == HULL:
+            pts = self.points @ r.T + t
+            return Shape(self.name, HULL, pts.mean(axis=0), np.eye(3), points=pts, faces=hull_faces(pts))
+        basis = r @ self.basis
+        if np.linalg.det(basis) < 0.0:
+            basis = basis @ np.diag([-1.0, 1.0, 1.0])  # a mirrored box or capsule is the same shape with one local axis turned
+        return Shape(self.name, self.kind, r @ self.center + t, basis, self.size, self.radius, self.height)
+
+    def translated(self, offset: Sequence[float]) -> Shape:
+        return self.transformed(np.eye(3), offset)
+
+    def mirrored(self, axis: str = "x") -> Shape:
+        """The shape's twin across the plane square to ``axis`` (a starboard part's port twin)."""
+        return self.transformed(mirror_matrix(axis))
+
+    def renamed(self, name: str) -> Shape:
+        return Shape(name, self.kind, self.center, self.basis, self.size, self.radius, self.height, self.points, self.faces)
+
+    def volume(self) -> float:
+        if self.kind == BOX:
+            return float(np.prod(self.size))
+        if self.kind == CAPSULE:
+            return math.pi * self.radius**2 * (self.height - 2.0 * self.radius) + 4.0 / 3.0 * math.pi * self.radius**3
+        inside = self.points.mean(axis=0)
+        total = 0.0
+        for ring in self.faces.polygons:
+            v = self.points[ring] - inside
+            for k in range(1, len(ring) - 1):
+                total += abs(float(np.dot(v[0], np.cross(v[k], v[k + 1])))) / 6.0
+        return total
+
+    def surface_points(self, spacing: float) -> np.ndarray:
+        """Points over the shape's surface about ``spacing`` apart, its corners and edges among them."""
+        if self.kind == CAPSULE:
+            return self._capsule_surface(spacing)
+        if self.kind == BOX:
+            c = self.corners()
+            quads = [(0, 1, 3, 2), (4, 5, 7, 6), (0, 1, 5, 4), (2, 3, 7, 6), (0, 2, 6, 4), (1, 3, 7, 5)]
+            return np.concatenate([_polygon_points(c[list(q)], spacing) for q in quads])
+        return np.concatenate([_polygon_points(self.points[ring], spacing) for ring in self.faces.polygons])
+
+    def _capsule_surface(self, spacing: float) -> np.ndarray:
+        half = self.half_segment
+        around = max(8, math.ceil(2.0 * math.pi * self.radius / spacing))
+        turn = np.arange(around) * (2.0 * math.pi / around)
+        rows = [(z, 1.0) for z in np.linspace(-half, half, max(2, math.ceil(2.0 * half / spacing) + 1))]
+        for lat in np.linspace(0.0, 0.5 * math.pi, max(2, math.ceil(0.5 * math.pi * self.radius / spacing) + 1))[1:]:
+            rows += [(half + self.radius * math.sin(lat), math.cos(lat)), (-half - self.radius * math.sin(lat), math.cos(lat))]
+        local = np.array([[self.radius * k * math.cos(t), self.radius * k * math.sin(t), z] for z, k in rows for t in turn])
+        return self.center + local @ self.basis.T
+
     def to_json(self, digits: int = JSON_DIGITS) -> dict[str, Any]:
         """The shape as a manifest entry; a box and a capsule read as a ``hardpoints.json`` collision entry does."""
         if self.kind == HULL:
@@ -273,6 +334,28 @@ def capsule(name: str, center: Sequence[float], radius: float, height: float,
     return Shape(name, CAPSULE, _vec(center), _rotation(basis), radius=float(radius), height=max(float(height), 2.0 * radius))
 
 
+def box_around(name: str, points: np.ndarray, basis: Sequence[Sequence[float]] | None = None) -> Shape:
+    """The tightest box round ``points`` with its sides along ``basis`` (the frame's axes by default; a mirrored frame is
+    taken with one axis turned, the same box)."""
+    b = np.eye(3) if basis is None else np.asarray(basis, dtype=float).reshape(3, 3)
+    b = _rotation(b @ np.diag([-1.0, 1.0, 1.0]) if np.linalg.det(b) < 0.0 else b)
+    local = np.asarray(points, dtype=float).reshape(-1, 3) @ b
+    lo, hi = local.min(axis=0), local.max(axis=0)
+    return box(name, b @ (0.5 * (lo + hi)), np.maximum(hi - lo, 1e-6), b)
+
+
+def capsule_between(name: str, a: Sequence[float], b: Sequence[float], radius: float) -> Shape:
+    """A round bar between two points, its half-sphere ends centred on them."""
+    a_v, b_v = _vec(a), _vec(b)
+    length = float(np.linalg.norm(b_v - a_v))
+    if length == 0.0:
+        raise ValueError(f"capsule {name!r} needs two different end points")
+    z = (b_v - a_v) / length
+    x = np.cross([0.0, 1.0, 0.0] if abs(z[1]) < 0.9 else [1.0, 0.0, 0.0], z)
+    x /= np.linalg.norm(x)
+    return capsule(name, 0.5 * (a_v + b_v), radius, length + 2.0 * float(radius), np.stack([x, np.cross(z, x), z], axis=1))
+
+
 def hull(name: str, points: np.ndarray, max_points: int = MAX_HULL_POINTS) -> Shape:
     """The convex hull of ``points``, kept to ``max_points`` corners."""
     corners, _ = convex_points(points, max_points)
@@ -297,6 +380,43 @@ def shape_for_part(part: Any, offset: Sequence[float] = (0.0, 0.0, 0.0), fit_m: 
             if float(fitted.distance(points).max()) <= fit_m:
                 return fitted
     return hull(part.name, points)
+
+
+def _axis_frame(axis: Sequence[float]) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    z = _vec(axis) / np.linalg.norm(axis)
+    x = np.cross([0.0, 1.0, 0.0] if abs(z[1]) < 0.9 else [1.0, 0.0, 0.0], z)
+    x /= np.linalg.norm(x)
+    return x, np.cross(z, x), z
+
+
+def ring_sectors(name: str, centre: Sequence[float], axis: Sequence[float], r_inner: float, r_outer: float, z0: float, z1: float,
+                 count: int, phase: float = 0.0) -> list[Shape]:
+    """A ring (or any hollow round part) as ``count`` convex sectors, so its hole stays open. ``axis`` runs through ``centre``
+    and the ring spans ``z0`` to ``z1`` along it. Each sector's outer flats touch the outer radius and its inner face is the
+    inner radius' chord, so the whole ring lies inside the sectors."""
+    if count < 3 or not 0.0 <= r_inner < r_outer or z1 <= z0:
+        raise ValueError("a ring needs three sectors or more, an outer radius past the inner one and a length")
+    x, y, z = _axis_frame(axis)
+    step = 2.0 * math.pi / count
+    reach = r_outer / math.cos(0.25 * step)  # three outer corners a sector: the flats between them touch the outer radius
+    c = _vec(centre)
+    shapes = []
+    for k in range(count):
+        a0 = phase + k * step
+        rim = [(r_inner, a0), (r_inner, a0 + step), (reach, a0), (reach, a0 + 0.5 * step), (reach, a0 + step)]
+        pts = [c + r * (math.cos(a) * x + math.sin(a) * y) + h * z for h in (z0, z1) for r, a in rim]
+        shapes.append(hull(f"{name}_{k:02d}", np.array(pts)))
+    return shapes
+
+
+def prism_points(centre: Sequence[float], axis: Sequence[float], rings: Sequence[tuple[float, float]], sides: int = 12,
+                 phase: float = 0.0) -> np.ndarray:
+    """Corner points for a round part's hull: at each ``(z, radius)`` along ``axis`` a ``sides``-gon whose flats touch the radius."""
+    x, y, z = _axis_frame(axis)
+    turn = phase + np.arange(sides) * (2.0 * math.pi / sides)
+    grow = 1.0 / math.cos(math.pi / sides)
+    c = _vec(centre)
+    return np.array([c + h * z + r * grow * (math.cos(t) * x + math.sin(t) * y) for h, r in rings for t in turn])
 
 
 def merge_to_budget(shapes: Sequence[Shape], budget: Budget = Budget()) -> list[Shape]:
@@ -372,6 +492,37 @@ def shapes_from_entry(entry: Mapping[str, Any], key: str = "shapes") -> list[Sha
         else:
             out.append(capsule(item["name"], item["position"], item["radius"], item["height"], basis))
     return out
+
+
+def shapes_of(section_entry: Mapping[str, Any]) -> list[Shape]:
+    """Every shape of a manifest's ``collision`` section, piece by piece."""
+    return [s for piece in section_entry["pieces"] for s in shapes_from_entry(piece)]
+
+
+def _polygon_points(corners: np.ndarray, spacing: float) -> np.ndarray:
+    """Points over a flat convex polygon about ``spacing`` apart: its corners, along its edges and a grid inside."""
+    c = np.asarray(corners, dtype=float)
+    out = [c]
+    for a, b in zip(c, np.roll(c, -1, axis=0), strict=True):
+        n = max(1, math.ceil(float(np.linalg.norm(b - a)) / spacing))
+        out.append(a + (np.arange(1, n) / n)[:, None] * (b - a))
+    normal = np.zeros(3)
+    for a, b in zip(c, np.roll(c, -1, axis=0), strict=True):
+        normal += np.cross(a - c[0], b - c[0])
+    if np.linalg.norm(normal) == 0.0:
+        return np.concatenate(out)
+    normal /= np.linalg.norm(normal)
+    u = (c[1] - c[0]) / np.linalg.norm(c[1] - c[0])
+    v = np.cross(normal, u)
+    flat = np.stack([(c - c[0]) @ u, (c - c[0]) @ v], axis=1)
+    lo, hi = flat.min(axis=0), flat.max(axis=0)
+    gu, gv = np.meshgrid(np.arange(lo[0] + 0.5 * spacing, hi[0], spacing), np.arange(lo[1] + 0.5 * spacing, hi[1], spacing), indexing="ij")
+    grid = np.stack([gu.ravel(), gv.ravel()], axis=1)
+    edge = np.roll(flat, -1, axis=0) - flat
+    side = edge[:, 0][None, :] * (grid[:, 1][:, None] - flat[:, 1][None, :]) - edge[:, 1][None, :] * (grid[:, 0][:, None] - flat[:, 0][None, :])
+    inside = np.all(side >= 0.0, axis=1) | np.all(side <= 0.0, axis=1)
+    out.append(c[0] + grid[inside, 0:1] * u + grid[inside, 1:2] * v)
+    return np.concatenate(out)
 
 
 # --- coverage ---------------------------------------------------------------------------------------------------------------
@@ -466,3 +617,109 @@ def coverage(triangles: np.ndarray, shapes: Sequence[Shape], step: float) -> Cov
     owner = int(np.searchsorted(np.cumsum([len(o) for o in own]), farthest, "right"))
     gap_at = tuple(round(float(x), 3) for x in probes[worst])
     return Coverage(step, float(gap[worst]), gap_at, float(off[farthest]), shapes[owner].name)
+
+
+# --- coverage of sampled skin (the carrier, M12-T19) ---------------------------------------------------------------------
+@dataclass(frozen=True)
+class SkinCoverage:
+    """How shapes sit on a hull known by its sampled skin. ``covered``: the share of skin points within ``tolerance_m`` of a
+    shape, ``worst_gap_m`` the farthest one's distance. ``within_reach``: the share of the shapes' joint outer surface within
+    ``reach_m`` of the skin, ``worst_excess_m`` the farthest."""
+
+    tolerance_m: float
+    covered: float
+    worst_gap_m: float
+    reach_m: float
+    within_reach: float
+    worst_excess_m: float
+
+    @property
+    def ok(self) -> bool:
+        return self.covered >= 1.0 and self.within_reach >= 1.0
+
+    def to_json(self) -> dict[str, float]:
+        return {"tolerance_m": round(self.tolerance_m, 4), "covered": round(self.covered, 6), "worst_gap_m": round(self.worst_gap_m, 4),
+                "reach_m": round(self.reach_m, 4), "within_reach": round(self.within_reach, 6),
+                "worst_excess_m": round(self.worst_excess_m, 4)}  # fmt: skip
+
+
+def gaps(shapes: Sequence[Shape], points: np.ndarray) -> np.ndarray:
+    """Each point's distance to the nearest shape (0 inside one)."""
+    p = np.asarray(points, dtype=float).reshape(-1, 3)
+    best = np.full(len(p), np.inf)
+    for s in shapes:
+        lo, hi = s.bounds()
+        # Only points near the shape can improve on what they have.
+        margin = np.where(np.isfinite(best), best, np.inf)
+        near = np.all((p >= lo - margin[:, None]) & (p <= hi + margin[:, None]), axis=1)
+        if near.any():
+            best[near] = np.minimum(best[near], s.distance(p[near]))
+    return best
+
+
+def _grid_pass(q: np.ndarray, p: np.ndarray, cell: float) -> np.ndarray:
+    """Each query's distance to the nearest point in its own grid cell or the 26 round it (infinite when they are empty)."""
+    origin = np.minimum(q.min(axis=0), p.min(axis=0)) - cell
+    dims = np.floor((np.maximum(q.max(axis=0), p.max(axis=0)) - origin) / cell).astype(np.int64) + 3
+
+    def key(ijk: np.ndarray) -> np.ndarray:
+        return (ijk[:, 0] * dims[1] + ijk[:, 1]) * dims[2] + ijk[:, 2]
+
+    p_cell = np.floor((p - origin) / cell).astype(np.int64)
+    order = np.argsort(key(p_cell), kind="stable")
+    sorted_keys, sorted_points = key(p_cell)[order], p[order]
+    q_cell = np.floor((q - origin) / cell).astype(np.int64)
+    best = np.full(len(q), np.inf)
+    for shift in itertools.product((-1, 0, 1), repeat=3):
+        keys = key(q_cell + np.array(shift))
+        start, stop = np.searchsorted(sorted_keys, keys, "left"), np.searchsorted(sorted_keys, keys, "right")
+        for depth in range(int((stop - start).max(initial=0))):
+            has = np.flatnonzero(start + depth < stop)
+            d = np.linalg.norm(q[has] - sorted_points[start[has] + depth], axis=1)
+            best[has] = np.minimum(best[has], d)
+    return best
+
+
+def _thinned(points: np.ndarray, voxel: float) -> np.ndarray:
+    """One point per voxel: enough to measure a distance to within about two voxels."""
+    _, first = np.unique(np.floor(points / voxel).astype(np.int64), axis=0, return_index=True)
+    return points[np.sort(first)]
+
+
+def nearest_distance(queries: np.ndarray, points: np.ndarray, cell: float) -> np.ndarray:
+    """Each query's distance to the nearest of ``points``: exact within a cell's size, and for a farther query never short and
+    at most half as much again (coarser grids over thinned points)."""
+    q = np.asarray(queries, dtype=float).reshape(-1, 3)
+    p = np.asarray(points, dtype=float).reshape(-1, 3)
+    best = np.full(len(q), np.inf)
+    todo = np.arange(len(q))
+    reach = float(np.linalg.norm(np.maximum(q.max(axis=0), p.max(axis=0)) - np.minimum(q.min(axis=0), p.min(axis=0))))
+    size, thinned = float(cell), p
+    while len(todo):
+        best[todo] = _grid_pass(q[todo], thinned, size)
+        todo = todo[best[todo] > size]  # a nearer point can hide outside the 27 cells only beyond one cell's size
+        if size > reach:
+            break
+        size *= 2.0
+        thinned = _thinned(p, size / 8.0)
+    return best
+
+
+def outer_surface(shapes: Sequence[Shape], spacing_m: float, touch_m: float = 1e-3) -> np.ndarray:
+    """Points on the shapes' joint outer surface: each shape's surface points that no other shape holds or touches (the faces
+    two sectors of a ring share are inside the ring, not on it)."""
+    out = []
+    for k, shape in enumerate(shapes):
+        own = shape.surface_points(spacing_m)
+        others = [s for j, s in enumerate(shapes) if j != k]
+        out.append(own[gaps(others, own) > touch_m] if others else own)
+    return np.concatenate(out)
+
+
+def skin_coverage(shapes: Sequence[Shape], skin: np.ndarray, tolerance_m: float, reach_m: float, spacing_m: float) -> SkinCoverage:
+    """Measure ``shapes`` against a hull's skin samples (about ``spacing_m`` apart, which the reach allows for)."""
+    gap = gaps(shapes, skin)
+    own = outer_surface(shapes, spacing_m)
+    excess = np.maximum(nearest_distance(own, skin, max(reach_m, 2.0 * spacing_m)) - spacing_m, 0.0)
+    return SkinCoverage(float(tolerance_m), float(np.mean(gap <= tolerance_m)), float(gap.max()), float(reach_m),
+                        float(np.mean(excess <= reach_m)), float(excess.max()))

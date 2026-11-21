@@ -9,6 +9,12 @@ extends RefCounted
 ## turning or tilted stays upright against it (M7-T08: a Cobra arm on the turning drum); without it the world's up. The shot lasts
 ## until its last key.
 ##
+## Takes (M8-T30, maintainer: no single camera shot lasts 3 s or more): `{takes: [{keys: [...]}, ...]}` is one shot made of several
+## camera angles cut one after another, each take's `t` counted from its own start; the camera jumps at each cut and never curves
+## across one. `loop: true` starts the takes again after the last, for a shot held until something happens. `MAX_TAKE_S` is the
+## rule every take keeps (`test_cinematic_shot_lengths`); a shot flagged `feature: true` (an interesting one: the drop, the flip and
+## ignition, a pan along the arm) may run to `MAX_FEATURE_S` (maintainer, 2026-11-19).
+##
 ## Pure: `pose_at` is handed the actors' poses and the origin's local position by the caller, every frame, and keeps nothing
 ## between calls, so a shot is rebase-proof by construction: shift every pose and the pose moves by the same shift. The camera
 ## position runs on a Catmull-Rom curve through the keys (with their times, so uneven spacing does not kink it); the look-at
@@ -17,6 +23,12 @@ extends RefCounted
 const DEFAULT_FOV_DEG: float = 70.0
 const MIN_FOV_DEG: float = 1.0
 const MAX_FOV_DEG: float = 179.0
+## No take may last this long or longer, seconds (maintainer, 2026-11-19).
+const MAX_TAKE_S: float = 3.0
+## No angle may be shorter than this, seconds (maintainer, 2026-11-19).
+const MIN_TAKE_S: float = 1.0
+## A featured shot's angle may last up to this, seconds.
+const MAX_FEATURE_S: float = 5.0
 
 
 ## Where a key puts the camera or its aim: an actor and an offset in its frame, or a universe offset from the scenario origin.
@@ -51,8 +63,14 @@ class Pose:
 
 var id: StringName = &""
 var keys: Array[Frame] = []
+## The index in `keys` of each take's first key (one take: [0]); key times run on across the takes.
+var take_starts: PackedInt32Array = PackedInt32Array([0])
 ## Seconds from the start to the last key.
 var duration_s: float = 0.0
+## The takes start again after the last (a shot held until an event); its length is then open-ended.
+var loop: bool = false
+## An interesting shot allowed to run to `MAX_FEATURE_S` (data: `feature: true`).
+var feature: bool = false
 
 
 ## Reads a shot from its scenario dictionary: `{ok: true, shot}` or `{ok: false, error}`.
@@ -60,38 +78,98 @@ static func from_dict(shot_id: StringName, data: Variant) -> Dictionary:
 	var where: String = "cinematics.%s" % shot_id
 	if not (data is Dictionary):
 		return _failure("%s must be an object with keys" % where)
-	var raw_keys: Variant = (data as Dictionary).get("keys")
-	if not (raw_keys is Array):
-		return _failure("%s.keys must be an array" % where)
-	if (raw_keys as Array).is_empty():
-		return _failure("%s needs at least one key" % where)
 	var shot := CinematicShot.new()
 	shot.id = shot_id
+	shot.loop = bool((data as Dictionary).get("loop", false))
+	shot.feature = bool((data as Dictionary).get("feature", false))
+	var raw_takes: Variant = (data as Dictionary).get("takes")
+	if raw_takes == null:
+		var one: Variant = _parse_keys(shot, (data as Dictionary).get("keys"), where, 0.0)
+		if one is String:
+			return _failure(one as String)
+	else:
+		if not (raw_takes is Array) or (raw_takes as Array).is_empty():
+			return _failure("%s.takes must be a non-empty array of {keys}" % where)
+		shot.take_starts = PackedInt32Array()
+		var start: float = 0.0
+		for k: int in (raw_takes as Array).size():
+			var take: Variant = (raw_takes as Array)[k]
+			var take_where: String = "%s.takes[%d]" % [where, k]
+			shot.take_starts.append(shot.keys.size())
+			var made: Variant = _parse_keys(shot, (take as Dictionary).get("keys") if take is Dictionary else null, take_where, start)
+			if made is String:
+				return _failure(made as String)
+			if shot.keys[-1].t <= start:
+				return _failure("%s must last longer than 0 s" % take_where)
+			start = shot.keys[-1].t
+	shot.duration_s = shot.keys[-1].t
+	return {"ok": true, "shot": shot}
+
+
+## How many takes the shot cuts between.
+func take_count() -> int:
+	return take_starts.size()
+
+
+## Seconds the take `k` lasts.
+func take_length_s(k: int) -> float:
+	var first: float = keys[take_starts[k]].t
+	var last: float = keys[_take_end(k) - 1].t
+	return last - first
+
+
+## How long one of this shot's angles may last: under `MAX_TAKE_S`, or up to `MAX_FEATURE_S` for a featured shot.
+func max_take_s() -> float:
+	return MAX_FEATURE_S if feature else MAX_TAKE_S
+
+
+## Whether every angle keeps the rule: at least `MIN_TAKE_S`, and under `max_take_s` (up to it for a feature shot).
+func keeps_length_rule() -> bool:
+	for k: int in take_count():
+		if take_length_s(k) < MIN_TAKE_S - 1e-6:
+			return false
+	return longest_take_s() <= MAX_FEATURE_S if feature else longest_take_s() < MAX_TAKE_S
+
+
+## The longest take, seconds.
+func longest_take_s() -> float:
+	var out: float = 0.0
+	for k: int in take_count():
+		out = maxf(out, take_length_s(k))
+	return out
+
+
+# One take's keys, appended to `shot` with their times moved on by `offset`; null or why not.
+static func _parse_keys(shot: CinematicShot, raw_keys: Variant, where: String, offset: float) -> Variant:
+	if not (raw_keys is Array):
+		return "%s.keys must be an array" % where
+	if (raw_keys as Array).is_empty():
+		return "%s needs at least one key" % where
 	var last_t: float = -INF
 	for i: int in (raw_keys as Array).size():
 		var key_where: String = "%s.keys[%d]" % [where, i]
 		var raw: Variant = (raw_keys as Array)[i]
 		if not (raw is Dictionary):
-			return _failure("%s must be an object" % key_where)
+			return "%s must be an object" % key_where
 		var entry: Dictionary = raw
 		var t: Variant = entry.get("t")
 		if not _is_number(t) or float(t) < 0.0 or float(t) <= last_t:
-			return _failure("%s.t must be a number of seconds, 0 or more and after the key before" % key_where)
+			return "%s.t must be a number of seconds, 0 or more and after the key before" % key_where
 		var key := Frame.new()
-		key.t = float(t)
-		last_t = key.t
+		key.t = float(t) + offset
+		last_t = float(t)
 		for field: String in ["position", "look_at"]:
 			var parsed: Variant = _parse_point(entry.get(field), "%s.%s" % [key_where, field])
 			if parsed is String:
-				return _failure(parsed as String)
+				return parsed
 			key.set(field, parsed)
 		var fov: Variant = entry.get("fov", DEFAULT_FOV_DEG)
 		if not _is_number(fov) or float(fov) < MIN_FOV_DEG or float(fov) > MAX_FOV_DEG:
-			return _failure("%s.fov must be degrees between %.0f and %.0f" % [key_where, MIN_FOV_DEG, MAX_FOV_DEG])
+			return "%s.fov must be degrees between %.0f and %.0f" % [key_where, MIN_FOV_DEG, MAX_FOV_DEG]
 		key.fov = float(fov)
 		var roll: Variant = entry.get("roll", 0.0)
 		if not _is_number(roll) or absf(float(roll)) > 180.0:
-			return _failure("%s.roll must be degrees between -180 and 180" % key_where)
+			return "%s.roll must be degrees between -180 and 180" % key_where
 		key.roll = float(roll)
 		if entry.has("up"):
 			var up: Variant = entry["up"]
@@ -99,12 +177,11 @@ static func from_dict(shot_id: StringName, data: Variant) -> Dictionary:
 			if not (up is Dictionary) or not ((up as Dictionary).get("actor") is String) \
 					or ((up as Dictionary)["actor"] as String).strip_edges().is_empty() or direction == null \
 					or Vector3(direction[0], direction[1], direction[2]).is_zero_approx():
-				return _failure("%s.up must be {actor: <name>, direction: [x, y, z]} (not zero)" % key_where)
+				return "%s.up must be {actor: <name>, direction: [x, y, z]} (not zero)" % key_where
 			key.up_actor = ((up as Dictionary)["actor"] as String).strip_edges()
 			key.up_direction = Vector3(direction[0], direction[1], direction[2]).normalized()
 		shot.keys.append(key)
-	shot.duration_s = shot.keys[-1].t
-	return {"ok": true, "shot": shot}
+	return null
 
 
 ## Every actor the shot frames or aims at, once each, in order of first use.
@@ -123,9 +200,12 @@ func actors() -> PackedStringArray:
 ## when it is not in play); `origin_to_local(offset: PackedFloat64Array) -> Vector3` gives the World-local position of a point
 ## that far from the scenario origin. Null when the keys either side of `t` cannot be placed (an actor is gone).
 func pose_at(t: float, actor_pose: Callable, origin_to_local: Callable) -> Pose:
-	var i: int = _segment(t)
+	if loop and duration_s > 0.0:
+		t = fposmod(t, duration_s)
+	var take: int = _take_at(t)
+	var i: int = _segment(t, take)
 	var a: Frame = keys[i]
-	var b: Frame = keys[mini(i + 1, keys.size() - 1)]
+	var b: Frame = keys[mini(i + 1, _take_end(take) - 1)]
 	var p1: Variant = _place(a.position, actor_pose, origin_to_local)
 	var p2: Variant = _place(b.position, actor_pose, origin_to_local)
 	var l1: Variant = _place(a.look_at, actor_pose, origin_to_local)
@@ -134,7 +214,7 @@ func pose_at(t: float, actor_pose: Callable, origin_to_local: Callable) -> Pose:
 		return null
 	var span: float = b.t - a.t
 	var u: float = clampf((t - a.t) / span, 0.0, 1.0) if span > 0.0 else 0.0
-	var position: Vector3 = _curve(i, u, p1 as Vector3, p2 as Vector3, actor_pose, origin_to_local)
+	var position: Vector3 = _curve(i, u, p1 as Vector3, p2 as Vector3, actor_pose, origin_to_local, take)
 	var eased: float = smoothstep(0.0, 1.0, u)
 	var pose := Pose.new()
 	var up: Vector3 = _up_of(a, actor_pose).lerp(_up_of(b, actor_pose), eased)
@@ -147,26 +227,44 @@ func pose_at(t: float, actor_pose: Callable, origin_to_local: Callable) -> Pose:
 	return pose
 
 
-# The key that starts the segment holding `t` (the last key once past the end).
-func _segment(t: float) -> int:
-	for i: int in range(keys.size() - 1):
+# The take holding `t`: the last whose first key is at or before it.
+func _take_at(t: float) -> int:
+	var take: int = 0
+	for k: int in range(1, take_starts.size()):
+		if t >= keys[take_starts[k]].t:
+			take = k
+	return take
+
+
+# One past the last key of take `k`.
+func _take_end(k: int) -> int:
+	return take_starts[k + 1] if k + 1 < take_starts.size() else keys.size()
+
+
+# The key that starts the segment of take `take` holding `t` (its last key once past its end).
+func _segment(t: float, take: int = 0) -> int:
+	var first: int = take_starts[take]
+	var end: int = _take_end(take)
+	for i: int in range(first, end - 1):
 		if t < keys[i + 1].t:
 			return i
-	return maxi(keys.size() - 2, 0)
+	return maxi(end - 2, first)
 
 
 # Catmull-Rom through the segment's two keys, shaped by the keys either side. At the ends, or where a neighbour cannot be placed,
 # the missing neighbour mirrors the segment so the curve still runs smoothly.
-func _curve(i: int, u: float, p1: Vector3, p2: Vector3, actor_pose: Callable, origin_to_local: Callable) -> Vector3:
-	if keys.size() == 1:
+func _curve(i: int, u: float, p1: Vector3, p2: Vector3, actor_pose: Callable, origin_to_local: Callable, take: int = 0) -> Vector3:
+	var first: int = take_starts[take]
+	var end: int = _take_end(take)
+	if end - first == 1:
 		return p1
 	var t1: float = keys[i].t
 	var t2: float = keys[i + 1].t
-	var p0: Variant = _place(keys[i - 1].position, actor_pose, origin_to_local) if i > 0 else null
+	var p0: Variant = _place(keys[i - 1].position, actor_pose, origin_to_local) if i > first else null
 	var t0: float = keys[i - 1].t if p0 != null else t1 - (t2 - t1)
 	if p0 == null:
 		p0 = p1 * 2.0 - p2
-	var p3: Variant = _place(keys[i + 2].position, actor_pose, origin_to_local) if i + 2 < keys.size() else null
+	var p3: Variant = _place(keys[i + 2].position, actor_pose, origin_to_local) if i + 2 < end else null
 	var t3: float = keys[i + 2].t if p3 != null else t2 + (t2 - t1)
 	if p3 == null:
 		p3 = p2 * 2.0 - p1

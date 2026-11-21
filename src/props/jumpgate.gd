@@ -42,12 +42,27 @@ const FALLBACK_REACH_M: float = 2200.0
 ## A departing ship this close to the mouth, in front, opens the vortex: from the departure point (1 500 m) a ship at the
 ## run-in speed reaches the mouth after the 3.5 s the vortex takes to open.
 const DEPARTURE_OPEN_M: float = 1600.0
+## A run-in paced to a time (`send_departure`'s `at_mouth_s`) flies no slower and no faster than this.
+const PACED_MIN_MPS: float = 40.0
+const PACED_MAX_MPS: float = 400.0
 ## While a departing ship is on its way in, the vortex is kept open at least this much longer each tick.
 const DEPARTURE_KEEP_S: float = 1.5
 ## Crossing the plane this far out (a share of the mouth's ellipse) still counts as going through.
 const THROUGH_RADIUS: float = 1.1
 ## Ships come out of an arrival at this speed along -Z: clear of the plane in well under the 4 s it stays open.
 const ARRIVAL_SPEED_MPS: float = 200.0
+## A departing AI ship within this of the gate, in front of it, is flown in by the gate: lined up on the axis and run in at the
+## run-in's speed as far as its hull can reach (maintainer, 2026-11-19: civilians jumped too slowly).
+const LINE_UP_ZONE_M: float = 3500.0
+const AI_RUN_IN_MPS: float = 250.0
+## The line-up aims at the axis this far ahead of the ship, m.
+const AI_JOIN_AHEAD_M: float = 1200.0
+## ... and no nearer the mouth than this, so it is on the axis before it.
+const AI_JOIN_LAST_M: float = 300.0
+## Past the mouth a departing AI ship is swallowed in this long, the hyperspace surge (the hull's limits stop at the threshold).
+const AI_SWALLOW_S: float = 2.5
+## Every gate in the tree, for a ship that looks for one to leave by (M8-T08: a carrier whose drive is still recharging).
+const GROUP: StringName = &"jumpgates"
 
 ## Shown in the target readout; the console and missions find it by it.
 @export var display_name: String = "JUMPGATE":
@@ -61,6 +76,8 @@ var fit: VortexFit = null
 ## The lamps' glows (one per fin-station lamp: steady, flashing in turn during the activation) and the back ends', one multimesh.
 var activation_glows: MultiMeshInstance3D = null
 var collision_body: StaticBody3D = null
+## Ticks a departure waited for an arrival (a readout, M8-T17).
+var held_back: int = 0
 ## Keeps the gate drawn its true size out past the far plane, then as a far dot (M6-T15); its `look` holds the body, the
 ## vortex and the lamps. Null when the asset has no far section.
 var far_prop: FarProp = null
@@ -95,6 +112,9 @@ static var _shared_data: Dictionary = {}
 static var _shared_manifest: Dictionary = {}
 
 @onready var body: MeshInstance3D = $Body
+## The stencil value a gate's hull writes; the vortex's funnel reads it (jump_vortex.gdshader, jump_vortex_over_gate.gdshader).
+const HULL_STENCIL: int = 64
+static var _marked: Dictionary = {}  # hull material -> its stencil-marked copy, shared by every gate
 @onready var targetable: Targetable = $Targetable
 
 
@@ -109,11 +129,13 @@ static func create(p_display_name: String) -> Jumpgate:
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	add_to_group(WorldFrame.ANCHORED_GROUP)
+	add_to_group(GROUP)
 
 
 func _ready() -> void:
 	_load_shared()
 	body.mesh = _shared_mesh
+	_mark_hull(body)
 	far_prop = FarProp.attach(self, [body] as Array[Node3D], _shared_manifest.get("far", {}),
 			FarProp.albedo_of(_shared_manifest), BROADCAST_RANGE_M, display_name)
 	var visuals: Node3D = far_prop.look if far_prop != null else self
@@ -130,6 +152,25 @@ func _ready() -> void:
 	if far_prop != null:
 		far_prop.keep_drawn = [vortex] as Array[Node3D]  # a far open vortex stays itself; its own detail by distance is T20's
 	_sync_targetable()
+
+
+# The hull marks its pixels in the stencil (`HULL_STENCIL`), so the vortex's walls draw solid in front of it and no arm shows
+# through them (M8-T17). On copies of the hull's materials: they may be shared with other models.
+func _mark_hull(mesh_instance: MeshInstance3D) -> void:
+	if mesh_instance.mesh == null:
+		return
+	for i: int in mesh_instance.mesh.get_surface_count():
+		var source := mesh_instance.mesh.surface_get_material(i) as BaseMaterial3D
+		if source == null:
+			continue
+		if not _marked.has(source):
+			var marked := source.duplicate() as BaseMaterial3D
+			marked.stencil_mode = BaseMaterial3D.STENCIL_MODE_CUSTOM
+			marked.stencil_flags = BaseMaterial3D.STENCIL_FLAG_WRITE
+			marked.stencil_compare = BaseMaterial3D.STENCIL_COMPARE_ALWAYS
+			marked.stencil_reference = HULL_STENCIL
+			_marked[source] = marked
+		mesh_instance.set_surface_override_material(i, _marked[source])
 
 
 func _physics_process(_delta: float) -> void:
@@ -183,9 +224,14 @@ func request_arrival(place: Callable) -> void:
 
 
 ## Watches `ship` flying in: the departure vortex opens as it nears and `on_through(ship)` runs once it crosses the vortex.
-func send_departure(ship: Node3D, on_through: Callable) -> void:
+## `swallow_s` > 0: from the mouth to the ring in that many seconds, whatever its speed (the player's jump, M8-T29).
+## `at_mouth_s` >= 0 (SimClock time): the gate paces its run-in to cross the mouth then (a wingman trailing the player, M8-T17),
+## on its own `lane` (x, y in the gate's frame, parallel to the axis), so ships sent together never meet on the axis.
+func send_departure(ship: Node3D, on_through: Callable, swallow_s: float = 0.0, at_mouth_s: float = -1.0,
+		lane: Vector2 = Vector2.ZERO) -> void:
 	cancel_departure(ship)
-	_departures.append({"body": ship, "on_through": on_through, "z": to_local(ship.global_position).z})
+	_departures.append({"body": ship, "on_through": on_through, "z": to_local(ship.global_position).z, "swallow_s": swallow_s,
+			"at_mouth_s": at_mouth_s, "lane": lane})
 
 
 ## Stops watching `ship` (it was destroyed, or its mission changed its mind); one already in the funnel is let go there, whole.
@@ -195,6 +241,7 @@ func cancel_departure(ship: Node3D) -> void:
 		transits.cancel_departure(ship)
 	for i: int in range(_departures.size() - 1, -1, -1):
 		if _departures[i]["body"] == ship:
+			_release_flown(_departures[i])
 			_departures.remove_at(i)
 
 
@@ -208,11 +255,11 @@ func departing() -> int:
 
 ## Brings `body`, just placed at `arrival_transform(offset)` with its exit velocity, out of the open arrival vortex (M6-T22): it
 ## starts at the funnel's black ring, shrunk, and flies out to that place, growing to its whole size by the mouth (`always`: even
-## when too small on screen to see, as the player's own ship).
-func bring_through(body: RigidBody3D, always: bool = false) -> void:
+## when too small on screen to see, as the player's own ship; `burst_s` > 0: out in that many seconds, as the player bursts out).
+func bring_through(body: RigidBody3D, always: bool = false, burst_s: float = 0.0) -> void:
 	var transits: VortexTransits = VortexTransits.for_node(self)
 	if transits != null:
-		transits.begin_arrival(body, vortex, body.global_position, body.linear_velocity, always)
+		transits.begin_arrival(body, vortex, body.global_position, body.linear_velocity, always, burst_s)
 
 
 ## Where the `k`-th ship of an arrival comes out, World-local: the arrival point plus `offset` in the gate's frame (x right, y up,
@@ -274,7 +321,13 @@ func _step_departures() -> void:
 		var entry: Dictionary = _departures[i]
 		var ship := entry["body"] as Node3D
 		if not is_instance_valid(ship) or not ship.is_inside_tree() or not ship.is_visible_in_tree():
+			_release_flown(entry)
 			_departures.remove_at(i)
+			continue
+		if vortex.is_active() and vortex.direction == JumpVortex.Direction.DEPARTURE:
+			vortex.spare(ship)  # on its way through: neither killed nor kept out by it (M8-T17)
+		if arrival_first():
+			_hold_back(entry)
 			continue
 		var local: Vector3 = to_local(ship.global_position)
 		var was_z: float = entry["z"]
@@ -282,8 +335,11 @@ func _step_departures() -> void:
 		var inside: bool = fit.contains(Vector2(local.x, local.y), THROUGH_RADIUS)
 		if was_z < 0.0 and local.z >= 0.0 and inside and vortex.is_passable_for(JumpVortex.Direction.DEPARTURE):
 			_departures.remove_at(i)
-			_through_mouth(ship, entry["on_through"] as Callable)
+			var swallow: float = float(entry.get("swallow_s", 0.0))
+			_through_mouth(ship, entry["on_through"] as Callable, swallow if swallow > 0.0 else AI_SWALLOW_S)
 			continue
+		if local.z < 0.0 and local.length() <= LINE_UP_ZONE_M:
+			_fly_in(entry, ship, local)
 		if local.z < 0.0 and local.length() <= DEPARTURE_OPEN_M:
 			if not open_vortex(JumpVortex.Direction.DEPARTURE):
 				continue  # an arrival is running: it opens once that one has closed
@@ -292,15 +348,86 @@ func _step_departures() -> void:
 		vortex.close()
 
 
+# A departing AI ship in front of the gate: the gate flies it (its pilot set aside), lining it up on the axis and running it in at
+# the run-in's speed as far as its mains can take it, so a civilian jumps briskly and on the axis instead of slowing for the gate.
+# The player's own jump has its own autopilot (`GateAutopilot` through `JumpgateHost`).
+func _fly_in(entry: Dictionary, ship: Node3D, local: Vector3) -> void:
+	var body := ship as Ship
+	var driver: AiPilotDriver = null
+	for child: Node in ship.get_children():
+		if child is AiPilotDriver and (child as AiPilotDriver).brain != null:
+			driver = child as AiPilotDriver
+	if body == null or body.spec == null or driver == null:
+		return
+	if not entry.has("capability"):
+		entry["capability"] = ShipCapability.from_spec(body.spec, body.get_layout())
+		entry["driver"] = driver
+		driver.in_passage = true
+		if collision_body != null:
+			body.add_collision_exception_with(collision_body)  # flown by the gate: never against its own arms
+	var capability: ShipCapability = entry["capability"]
+	var transits: VortexTransits = VortexTransits.for_node(self)
+	var velocity: Vector3 = body.linear_velocity - (transits.rest_velocity() if transits != null else Vector3.ZERO)
+	var axis: Vector3 = (global_basis * departure_forward).normalized()
+	var speed: float = minf(AI_RUN_IN_MPS, sqrt(velocity.length_squared() + capability.a_main * local.length()))
+	var at_mouth: float = float(entry.get("at_mouth_s", -1.0))
+	if at_mouth >= 0.0:  # paced to cross the mouth on time
+		speed = clampf(local.length() / maxf(at_mouth - SimClock.now(), 0.25), PACED_MIN_MPS, PACED_MAX_MPS)
+	var cmd: FlightCommand
+	var lane: Vector2 = entry.get("lane", Vector2.ZERO)
+	var lined: bool = bool(entry.get("lined_up", false)) \
+			or GateAutopilot.lined_up(local, global_basis.inverse() * velocity, Vector3(lane.x, lane.y, local.z + 1.0), departure_forward)
+	if lined:
+		entry["lined_up"] = true
+		cmd = GateAutopilot.follow_axis(body.global_position, velocity, body.global_basis,
+				global_transform * Vector3(lane.x, lane.y, 0.0), axis, Vector3.ZERO, speed, capability)
+	else:
+		# Onto its lane a little ahead of the ship, so it joins the lane heading in rather than crossing it.
+		var join: Vector3 = Vector3(lane.x, lane.y, minf(local.z + AI_JOIN_AHEAD_M, -AI_JOIN_LAST_M))
+		var target: Vector3 = global_transform * GateAutopilot.line_up_target(local, join)
+		cmd = GateAutopilot.line_up(body.global_position, velocity, body.global_basis, target, capability, speed)
+	body.set_flight_command(cmd)
+
+
+# A departing ship the gate was flying is given back to its pilot (its departure called off).
+func _release_flown(entry: Dictionary) -> void:
+	var driver: AiPilotDriver = entry.get("driver")
+	if driver != null and is_instance_valid(driver):
+		driver.in_passage = false
+	var ship := entry.get("body") as PhysicsBody3D
+	if ship != null and is_instance_valid(ship) and collision_body != null:
+		ship.remove_collision_exception_with(collision_body)
+
+
+## Whether an arrival has the gate now (asked for, or its vortex running): it goes first, every departure waits (M8-T17,
+## maintainer 2026-11-20: a civilian flew in as the player came out).
+func arrival_first() -> bool:
+	return not _pending_arrivals.is_empty() or vortex.is_active() and vortex.direction == JumpVortex.Direction.ARRIVAL
+
+
+# A departing ship waits while an arrival has the gate: the gate stops flying it, so its own pilot keeps it clear of the mouth
+# and the way out (the keep-out); it is flown in again once the arrival is through.
+func _hold_back(entry: Dictionary) -> void:
+	if entry.has("driver"):
+		_release_flown(entry)
+		for key: String in ["capability", "driver", "lined_up"]:
+			entry.erase(key)
+	var ship := entry["body"] as Node3D
+	entry["z"] = to_local(ship.global_position).z
+	held_back += 1
+
+
 # A departing ship crossed the mouth: it flies on down the funnel to the ring (M6-T22) and is handed back from there.
-func _through_mouth(ship: Node3D, on_through: Callable) -> void:
+func _through_mouth(ship: Node3D, on_through: Callable, swallow_s: float = 0.0) -> void:
 	var through: Callable = func(body: Node3D) -> void:
 		departed += 1
+		if body is PhysicsBody3D and is_instance_valid(body) and collision_body != null:
+			(body as PhysicsBody3D).remove_collision_exception_with(collision_body)
 		on_through.call(body)
 		if _departures.is_empty() and vortex.passing == 0 and vortex.direction == JumpVortex.Direction.DEPARTURE:
 			vortex.close()  # its last ship is through
 	var transits: VortexTransits = VortexTransits.for_node(self)
-	if ship is RigidBody3D and transits != null and transits.begin_departure(ship as RigidBody3D, vortex, through):
+	if ship is RigidBody3D and transits != null and transits.begin_departure(ship as RigidBody3D, vortex, through, swallow_s):
 		return
 	through.call(ship)
 

@@ -18,6 +18,7 @@ use crate::brain_maths::{
 use crate::brain_step::{
     self, Done, DriverFrame, EVENTS_HEAD, Hosted, Job, Params, Snapshot, Work,
 };
+use crate::keep_out;
 use crate::rows::{Bolts, Rows};
 use crate::sim_core::ScsSimCore;
 use crate::threads::{Runner, StepThread, Threads};
@@ -139,6 +140,8 @@ pub struct ScsBrains {
     // False from a launch until `join_step` hands the job's results over: the hosted readers see the launch's view until
     // then, whatever an early join brought back, so a reader never sees a think before the tick that applies it.
     handed_over: bool,
+    // The jump vortices' no-go volumes (M8-T17), set per event by `VortexKeepOuts`, copied into each launch.
+    keep_outs: Vec<keep_out::KeepOut>,
     // What arrived for the hosted drivers while the brains were away, and what the frame's readers see meanwhile.
     pending: Vec<Pending>,
     mirror: Vec<HostedView>,
@@ -475,6 +478,48 @@ impl ScsBrains {
         }
     }
 
+    /// A flight of three's rules for the pilot (M8-T19; `AiContext.cover`, `cohesion_m`, `rejoined_m`): cover its
+    /// flight-mates, and as a wingman stay within `cohesion_m` of its lead (0: no limit).
+    #[func]
+    fn set_flight(&mut self, slot: i64, cover: bool, cohesion_m: f64, rejoined_m: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.cover = cover;
+            b.ctx.cohesion_m = cohesion_m;
+            b.ctx.rejoined_m = rejoined_m;
+        }
+    }
+
+    /// A long rejoin's band for the pilot (M8-T17; `AiContext.catch_up_m`, `catch_up_mps`): in formation farther than
+    /// `beyond_m` from its slot it closes at up to `fast_mps`, braking back to formation's own closing in time (0: none).
+    #[func]
+    fn set_catch_up(&mut self, slot: i64, beyond_m: f64, fast_mps: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.catch_up_m = beyond_m;
+            b.ctx.catch_up_mps = fast_mps;
+        }
+    }
+
+    /// Weapons free in formation for the pilot (M8-T13; `AiContext.form_engage_m`, `form_leash_m`, `form_off_slot_s`): under
+    /// FORM ON ME it shoots at hostiles within `engage_m` of its leader from any bearing, its slot slipping at most `leash_m`
+    /// for at most `off_slot_s` (0: only what crosses its leader's nose).
+    #[func]
+    fn set_form_fire(&mut self, slot: i64, engage_m: f64, leash_m: f64, off_slot_s: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.form_engage_m = engage_m;
+            b.ctx.form_leash_m = leash_m;
+            b.ctx.form_off_slot_s = off_slot_s;
+        }
+    }
+
+    /// The evasion's leash for the pilot (M8-T06; `AiContext.leash_m`): evading farther than this from its lead it breaks
+    /// toward the lead (0: none).
+    #[func]
+    fn set_leash(&mut self, slot: i64, leash_m: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.leash_m = leash_m;
+        }
+    }
+
     /// `AiContext.clear_wing`.
     #[func]
     fn clear_wing(&mut self, slot: i64) {
@@ -747,6 +792,7 @@ impl ScsBrains {
             origin: [origin_x, origin_y, origin_z],
             rows_version,
             from_rows: false,
+            keep_outs: self.keep_outs.clone(),
         };
         self.launch(params, threaded, true);
         true
@@ -815,6 +861,7 @@ impl ScsBrains {
             origin: [origin_x, origin_y, origin_z],
             rows_version,
             from_rows: true,
+            keep_outs: self.keep_outs.clone(),
         };
         self.launch(params, threaded, true);
         true
@@ -1025,6 +1072,19 @@ impl ScsBrains {
             period: period.max(1),
             tier_period: tier_period.max(1),
         };
+    }
+
+    /// The jump vortices' no-go volumes (M8-T17), as `VortexKeepOuts` sends them when one is announced, changes or folds:
+    /// `keep_out::FLOATS` numbers a volume (mouth and base centres as universe positions, the frame's rest velocity, the
+    /// radius, how many ships it leaves alone) and those ships' body ids from `ids` in turn. Every launch after reads them.
+    #[func]
+    fn set_keep_outs(&mut self, floats: PackedFloat64Array, ids: PackedInt64Array) {
+        self.keep_outs = keep_out::unpack(floats.as_slice(), ids.as_slice());
+    }
+
+    #[func]
+    fn keep_out_count(&self) -> i64 {
+        self.keep_outs.len() as i64
     }
 
     /// The relation matrix over the core's factions, a row per faction of `stride` entries (`Factions.Relation` values),

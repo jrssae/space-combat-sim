@@ -29,8 +29,6 @@ const CLEAR_STEP_DEG: float = 0.5
 const FLIGHT_CHECK_S: float = 5.0
 const FLIGHT_STEP_S: float = 0.1
 const EPS_S: float = 1e-6
-## A door leaf's thickness, m (the generator's leaves are 0.5 m deep).
-const LEAF_THICKNESS_M: float = 0.5
 
 var valid: bool = false
 var error: String = ""
@@ -165,9 +163,9 @@ func step_time(id: String) -> float:
 	return time_s - float(f["step_since"]) if not f.is_empty() else 0.0
 
 
-## A door's leaves' swing now, degrees (eased).
-func door_angle_deg(bay_index: int) -> float:
-	return smoothstep(0.0, 1.0, float(doors[bay_index]["open"])) * profile.door_open_deg
+## How far a door's leaves have slid apart now: 0 shut to 1 fully back (eased).
+func door_share(bay_index: int) -> float:
+	return smoothstep(0.0, 1.0, float(doors[bay_index]["open"]))
 
 
 ## The fighter's pose in the drum's frame: stored on its rack, turning in the clamp, on its way up, or nose first on its rail.
@@ -266,19 +264,16 @@ static func clearances(fighter_aabb: AABB, arm: Dictionary, p_profile: LaunchPro
 			"turn_neighbour_m": float(arm.get("pitch_m", 0.0)) - turn_z - stored_z, "release_tail_m": release_y + lo.y - top_y}
 
 
-## Room across between a nose-first fighter of bounds `fighter_aabb` and the leaves of `bay`'s door swung `open_deg` outward, m
-## (negative: they meet). Each leaf runs from its hinge toward the door's middle and is `LEAF_THICKNESS_M` thick; a leaf opened past
-## 90 degrees stands outside the opening, short of it leans over it.
-static func leaf_clearance(fighter_aabb: AABB, bay: Dictionary, open_deg: float, p_profile: LaunchProfile) -> float:
-	var frame: Transform3D = door_frame(bay)
+## Room across between a nose-first fighter of bounds `fighter_aabb` and the leaves of `bay`'s door slid `share` of their way back
+## (0 shut to 1 open), m (negative: they meet). Shut, a leaf's teeth reach `reach_m` past the door's middle; it draws back
+## `travel_m`, and once it is out of the well the well's own walls are what is left beside the fighter.
+static func leaf_clearance(fighter_aabb: AABB, bay: Dictionary, share: float, p_profile: LaunchProfile) -> float:
 	var half_span: float = 0.0
 	for i: int in 8:
 		half_span = maxf(half_span, absf((p_profile.launch_basis() * fighter_aabb.get_endpoint(i)).x))
-	var room: float = INF
+	var room: float = (bay["door_half_m"] as Vector2).x - half_span
 	for leaf: Dictionary in bay.get("leaves", []) as Array:
-		var hinge: float = absf((frame.affine_inverse() * (leaf["point"] as Vector3)).x)
-		var lean: float = hinge * cos(deg_to_rad(open_deg))  # how far its free edge reaches back over the opening
-		room = minf(room, hinge - LEAF_THICKNESS_M - maxf(lean, 0.0) - half_span)
+		room = minf(room, share * float(leaf["travel_m"]) - float(leaf["reach_m"]) - half_span)
 	return room
 
 

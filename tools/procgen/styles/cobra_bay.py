@@ -32,7 +32,7 @@ SCHEME: dict[str, tuple[int, bool, float, float]] = {
     "hatch": (0xCAA75F, True, 0.45, 0.50),  # the yellow-orange hazard bands
     "door": (0x7A4A3A, True, 0.55, 0.44),  # the launch doors' leaves, as outside
     "canister": (0xC2662E, True, 0.45, 0.48),  # the show's orange canisters
-    "machinery": (0x5A5856, False, 0.90, 0.30),  # bare steel: pipes, rails, hinges, rams
+    "machinery": (0x5A5856, False, 0.90, 0.30),  # bare steel: pipes, rails, the doors' slide rails and drives
     "rubber": (0x1E1E1E, False, 0.0, 0.85),  # the clamps' pads and the cable runs
 }
 # The bare metals' reflectance (sRGB), in place of a painted colour.

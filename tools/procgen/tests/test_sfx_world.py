@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from tools.procgen.assets import ASSETS, sfx_world
-from tools.procgen.core import audio
+from tools.procgen.core import audio, loudness
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 
@@ -76,8 +76,12 @@ class SfxWorldTests(unittest.TestCase):
     def test_peak_is_at_most_minus_one_dbfs_and_matches_the_manifest(self) -> None:
         peak = audio.peak_dbfs(self.jump)
         self.assertLessEqual(peak, -1.0)
-        self.assertGreater(peak, -3.0, "not needlessly quiet")
         self.assertAlmostEqual(peak, self.manifest["sounds"]["jump_in"]["peak_dbfs"], places=2)
+
+    def test_it_is_at_the_loudness_reference(self) -> None:
+        level = loudness.loudness_lufs(self.jump)
+        self.assertAlmostEqual(level, loudness.TARGET_LUFS, delta=loudness.TOLERANCE_LU)
+        self.assertAlmostEqual(level, self.manifest["sounds"]["jump_in"]["loudness_lufs"], places=2)
 
     def test_the_same_seed_gives_the_same_bytes_and_another_seed_other_noise(self) -> None:
         self.assertEqual(sha256(self.dir_a / "jump_in.wav"), sha256(self.dir_b / "jump_in.wav"))

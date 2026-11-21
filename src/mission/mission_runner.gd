@@ -17,7 +17,11 @@ extends Node
 ## a hold, as on a target that offers an interaction, and a completed hold skips the opening (M7-T54); a `SkipPrompt` says so.
 ## The ships the script names with `show_hull` get a hull bar on the HUD.
 ##
-## Console (`MissionConsole`): provider `mission`, `mission [status|skip|goto <step>|objectives|journal]`.
+## Control checks (M8 D80): the checks of `data/checks/controls.json` are loaded into the API's `check_book`; while one is open
+## the runner measures the player's ship each tick (`ControlCheckProbe`) and a `ControlHint` shows what to press.
+##
+## Console (`MissionConsole`): provider `mission`, `mission [status|skip|goto <step>|objectives|journal]`; (`ControlCheckConsole`)
+## provider `checks`, `checks [status|list|pass|start|stop] [id]`.
 
 ## The mission ended (success or not); `result` as `MissionApi.result` plus the player's counters.
 signal mission_ended(result: Dictionary)
@@ -40,6 +44,8 @@ var jumps: JumpPointPool = null
 var comms: CommsPanel = null
 ## The opening's `HOLD X: SKIP` and its bar (M7-T54).
 var skip_prompt: SkipPrompt = null
+## The open control check's hint with the live bindings (M8 D80).
+var hint: ControlHint = null
 ## Counts the player's shots, hits, kills and wing losses for the debrief.
 var recorder: DebriefRecorder = null
 ## `DEBRIEF_DELAY_S`; tests shorten it.
@@ -76,6 +82,7 @@ func _ready() -> void:
 	main.effects.add_child(jumps)
 	jumps.prepare(JUMP_POINTS)
 	CarrierJumps.attach(main.world).prepare(CARRIERS)  # raids behind a carrier (M6-T23), built at load (D22)
+	CarrierJumps.attach(main.world).prepare(CARRIERS, CapitalStandin.STRIKE_CARRIER)  # the raiders' own (M12-T19)
 	stage = MissionStage.new()
 	stage.setup(main, jumps)
 	var world := MissionWorld.new()
@@ -96,8 +103,13 @@ func _ready() -> void:
 	comms = CommsPanel.new()
 	add_child(comms)
 	comms.bind(api.dialog, api.dialog_book, main.audio)
+	comms.device_source = func() -> InputSource.Device: return main.input_source.device if main.input_source != null \
+			else InputSource.Device.PAD
 	skip_prompt = SkipPrompt.new()
 	add_child(skip_prompt)
+	_load_checks()
+	hint = ControlHint.new()
+	add_child(hint)
 	api.ended.connect(_on_ended)
 	main.director.player_destroyed.connect(_on_player_destroyed)
 	recorder = DebriefRecorder.new()
@@ -105,6 +117,7 @@ func _ready() -> void:
 	add_child(recorder)
 	main.hud.extra_input = fill_hud_input
 	MissionConsole.register(DebugConsole.registry, self)
+	ControlCheckConsole.register(DebugConsole.registry, self)
 	# The first step starts once Main is ready (deferred), before the first tick and before any console startup script.
 	_begin.call_deferred(String(block.get("script", "")))
 
@@ -121,8 +134,10 @@ func _exit_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	if api != null:
+		api.check_sample = ControlCheckProbe.sample(main) if api.checks.is_active() else null
 		api.tick(delta, PlayerActions.from_command(main.adapter.last))
 	_show_skip_prompt()
+	_show_hint()
 	if _debrief_in_s < INF:
 		_debrief_in_s -= delta
 		if _debrief_in_s <= 0.0:
@@ -178,6 +193,19 @@ func _show_skip_prompt() -> void:
 		skip_prompt.progress = 0.0
 
 
+# The open check's hint, naming the live bindings; hidden with none open, and under a cinematic.
+func _show_hint() -> void:
+	if hint == null or api == null:
+		return
+	var open: ControlCheck = api.checks.current
+	hint.label = open.label if open != null else ""
+	hint.buttons = ControlHintText.bindings(open) if open != null else ""
+	if hint.buttons.is_empty() and open != null:
+		hint.buttons = ControlHintText.UNBOUND
+	hint.progress = open.progress if open != null else 0.0
+	hint.suppressed = main.camera_rig.is_playing_shot()
+
+
 ## The HUD's line for a result: `MISSION COMPLETE`, or `MISSION FAILED - PLAYER DESTROYED`.
 static func result_line(result: Dictionary) -> String:
 	if bool(result.get("success", false)):
@@ -205,8 +233,31 @@ func _begin(script_path: String) -> void:
 	if script != null:
 		print("[mission] %s: %s, %d steps" % [api.scenario_id, api.title, script.steps().size()])
 		error = api.begin(script)
+		_resume_checkpoint()
 	if not error.is_empty():
 		push_error("Mission %s: %s" % [api.scenario_id, error])
+
+
+# A restart from a lost run's checkpoint (M8 D79): the notes it held, then every step before it skipped on this fresh world.
+func _resume_checkpoint() -> void:
+	var checkpoint: Dictionary = main.mission_checkpoint
+	var step := StringName(str(checkpoint.get("step", "")))
+	if step == &"" or not error.is_empty():
+		return
+	api.notes = (checkpoint.get("notes", {}) as Dictionary).duplicate(true)
+	var problem: String = api.goto(step)
+	if not problem.is_empty():
+		push_error("Mission %s: checkpoint %s: %s" % [api.scenario_id, step, problem])
+	print("[mission] restarted from checkpoint %s" % step)
+
+
+## The pause menu's skip of the script's block (`MissionScript.skip_block`): its label while it is offered, else "".
+func skip_label() -> String:
+	return String(api.skip_block.get("label", "")) if api != null and api.skip_offered() else ""
+
+
+func take_skip() -> String:
+	return api.take_skip() if api != null else "no mission"
 
 
 # The mission's dialog file, if it names one: a file that does not validate is the mission's start error.
@@ -217,8 +268,26 @@ func _load_dialog(path: String) -> void:
 	if bool(made["ok"]):
 		api.dialog_book = made["book"]
 		api.dialog_book.fill(api.placeholders)
+		api.dialog_book.fill(_callsigns(api.dialog_book))
 	else:
 		error = "dialog: %s" % made["error"]
+
+
+# `{<speaker id>}` -> that speaker's callsign as spoken ("{instructor}" -> "Sextant"), so a renamed voice needs one data entry.
+static func _callsigns(book: DialogBook) -> Dictionary:
+	var out: Dictionary = {}
+	for id: StringName in book.speaker_ids():
+		out["{%s}" % id] = book.speaker(id).callsign.capitalize()
+	return out
+
+
+# The control checks every mission may run. A file that does not validate leaves the mission without checks, and says so.
+func _load_checks() -> void:
+	var made: Dictionary = ControlCheckBook.load_file()
+	if bool(made["ok"]):
+		api.check_book = made["book"]
+	else:
+		push_error("Mission: control checks: %s" % made["error"])
 
 
 func _load_script(path: String) -> MissionScript:

@@ -6,6 +6,7 @@ extends "res://src/autoload/game.gd"
 var played: Array[Dictionary] = []
 var restarts: int = 0
 var retries: int = 0
+var checkpoint_retries: int = 0
 var menus_shown: int = 0
 var refusal: String = ""
 ## What the loading screen handed over, and why a load failed.
@@ -23,8 +24,9 @@ func restart() -> String:
 	return refusal
 
 
-func retry() -> String:
+func retry(from_checkpoint: bool = false) -> String:
 	retries += 1
+	checkpoint_retries += 1 if from_checkpoint else 0
 	return refusal
 
 

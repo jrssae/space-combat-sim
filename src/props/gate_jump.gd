@@ -6,19 +6,23 @@ extends RefCounted
 ##
 ## The flow: `LINE_UP` (controls locked, the autopilot flies to the departure point), `RUN_IN` (it accelerates along the gate's
 ## axis, the orange vortex opens, the cinematic follows it in and down the funnel as it shrinks, M6-T22), `FLASH` (through the
-## black ring: the shot holds on the ring's white flash, then fades to black, the shot's last frame), `AWAY` (black, "in
-## hyperspace"; M11 puts hyperspace here), `ARRIVING` (the fade lifts on the blue vortex opening; the gate brings the ship out of
-## its ring), `CLEARING` (the ship flies out of the funnel, growing, and on clear of the mouth), then `IDLE` with the controls
+## black ring, swallowed within about a second of the mouth: the ring's white flash, then a hard cut, M8-T29), `AWAY` (a moment
+## of black; M28's hyperspace goes here),
+## `HOLD` (M8-T17: only while following wingmen are still on their way in: the vortex is held open for them, the camera outside on
+## the gate, no black; then the black as usual), `ARRIVING` (the arrival side opens on the gate's pylon glow; the gate brings the ship out of its ring, bursting out within about
+## a second), `CLEARING` (the ship flies on clear of the mouth), then `IDLE` with the controls
 ## back. Losing the ship, or a stage that takes too long, ends it early (`ended_why`). The screen shows no flash of its own: the
 ## flash is the ring's, in the world.
 
-enum State { IDLE, LINE_UP, RUN_IN, FLASH, AWAY, ARRIVING, CLEARING }
-const STATE_NAMES: Array[String] = ["idle", "line_up", "run_in", "flash", "away", "arriving", "clearing"]
+enum State { IDLE, LINE_UP, RUN_IN, FLASH, AWAY, ARRIVING, CLEARING, HOLD }
+const STATE_NAMES: Array[String] = ["idle", "line_up", "run_in", "flash", "away", "arriving", "clearing", "hold"]
 
 ## Events for the host, at most a few per tick, in order.
 const EV_START: StringName = &"start"  # lock the controls, assist on
 const EV_RUN_IN: StringName = &"run_in"  # tell the gate a departure is coming, start the departure shot
 const EV_THROUGH: StringName = &"through"  # hide the ship, close the departure
+const EV_HOLD: StringName = &"hold"  # the vortex waits for following wingmen: the camera goes outside on the gate
+const EV_HOLD_END: StringName = &"hold_end"  # the last is through (or the hold was called off): on to the black
 const EV_ASK_ARRIVAL: StringName = &"ask_arrival"  # ask the gate for an arrival that places the ship
 const EV_ARRIVED: StringName = &"arrived"  # the ship is back in sight: the arrival shot follows it out
 const EV_DONE: StringName = &"done"  # controls back, shot stopped
@@ -29,18 +33,37 @@ const LINE_UP_DONE_M: float = 200.0
 ## The run-in starts only once the ship is no longer flying away from the gate faster than this: one that has just come out of
 ## the gate crosses the departure point outbound, and must turn round first (M7-T28).
 const LINE_UP_RECEDE_MAX_MPS: float = 10.0
-## From 10 km at the autopilot's 300 m/s the line-up takes well under a minute; past this something is in the way.
+## The run-in starts only at a speed it can carry down to its own through the mouth (M8-T18): a faster ship passes the point,
+## turns and comes back as one that overshot.
+const RUN_IN_ENTRY_MAX_MPS: float = 300.0
+## From 10 km the line-up takes well under a minute from rest; past this something is in the way. A jump asked at speed gets
+## more (`line_up_timeout_for`): it may first overshoot and come back.
 const LINE_UP_TIMEOUT_S: float = 120.0
+## Extra line-up time per m/s of the ship's speed at the request, at its braking: stop, come back, slow again.
+const LINE_UP_PER_SPEED: float = 4.0
 ## The run-in is 1 440 m to the mouth and 1 200 m on down the funnel; at the slowest it waits for the vortex and then flies it in
 ## about 20 s.
 const RUN_IN_TIMEOUT_S: float = 45.0
-## Through the ring the shot holds on its flash this long, then the picture fades to black.
-const RING_HOLD_S: float = 0.8
-const FADE_OUT_S: float = 0.9
-## Black while "in hyperspace": long enough to read as a passage, short enough not to bore (M11 replaces it).
-const AWAY_S: float = 2.0
-## The fade lifts while the blue vortex's tips glow, so the opening is seen from its start.
-const FADE_IN_S: float = 1.2
+## The jump's beats, from `data/jump/player_jump.json` (maintainer, 2026-11-19): the ring's flash shows this long, then a hard cut
+## to black for `AWAY_S` (no fades; M28's hyperspace goes there), then the arrival side opens on the pylons' glow.
+const TIMING_PATH: String = "res://data/jump/player_jump.json"
+static var RING_HOLD_S: float = _timing("ring_flash_s", 0.3)
+static var AWAY_S: float = _timing("black_s", 0.75)
+## No fades: the cuts are hard.
+const FADE_OUT_S: float = 0.0
+const FADE_IN_S: float = 0.0
+## The ship goes from the mouth's plane to the ring in this long, and comes back out of the ring to the mouth in this long.
+static var SWALLOW_S: float = _timing("swallow_s", 1.2)
+static var BURST_OUT_S: float = _timing("burst_out_s", 1.0)
+## Coming back out the main engines glow at least this much (0..1), so the ship reads against the vortex.
+static var ENGINE_GLOW_FLOOR: float = _timing("engine_glow_floor", 0.35)
+## Following wingmen count within this of the mouth's centre as the player crosses it; the hold never runs longer than this.
+static var FOLLOW_RANGE_M: float = _timing("follow_range_m", 3000.0)
+static var HOLD_MAX_S: float = _timing("follow_hold_max_s", 20.0)
+## They cross the mouth this long after the player, the next ones this far apart.
+static var FOLLOW_TRAIL_S: float = _timing("follow_trail_s", 3.0)
+static var FOLLOW_SPACING_S: float = _timing("follow_spacing_s", 1.5)
+
 ## The vortex takes 3.5 s to open; past this the arrival is stuck.
 const ARRIVING_TIMEOUT_S: float = 20.0
 ## Out of the arrival: clear once this far in front of the mouth, or this long after leaving it (M6-T22: the ship first flies out
@@ -64,6 +87,10 @@ var black_level: float = 0.0
 
 ## Gate-local z of the mouth (CLEARING measures from it).
 var arrival_z: float = 0.0
+## This jump's line-up limit, s (`start`).
+var line_up_timeout_s: float = LINE_UP_TIMEOUT_S
+## Set by the host before each step: following wingmen are still on their way through (the `HOLD` waits while it is true).
+var hold_wanted: bool = false
 
 var _out_s: float = 0.0  # seconds since the ship left the mouth, while clearing
 
@@ -76,12 +103,18 @@ func is_active() -> bool:
 	return state != State.IDLE
 
 
-## Starts a jump. False when one is under way.
-func start() -> PackedStringArray:
+## The line-up's limit for a ship asking at `speed_mps` that brakes at `decel_mps2`.
+static func line_up_timeout_for(speed_mps: float, decel_mps2: float) -> float:
+	return LINE_UP_TIMEOUT_S + LINE_UP_PER_SPEED * absf(speed_mps) / maxf(decel_mps2, 0.1)
+
+
+## Starts a jump, its line-up given `p_line_up_timeout_s`. Nothing when one is under way.
+func start(p_line_up_timeout_s: float = LINE_UP_TIMEOUT_S) -> PackedStringArray:
 	var out := PackedStringArray()
 	if state != State.IDLE:
 		return out
 	ended_why = ""
+	line_up_timeout_s = maxf(p_line_up_timeout_s, LINE_UP_TIMEOUT_S)
 	_enter(State.LINE_UP)
 	out.append(EV_START)
 	return out
@@ -103,13 +136,19 @@ func step(dt: float, local: Vector3, departure: Vector3, alive: bool, went_throu
 		State.LINE_UP:
 			if went_through:
 				return _abort("went through before lining up")
-			if local.distance_to(departure) <= LINE_UP_DONE_M and closing_mps >= -LINE_UP_RECEDE_MAX_MPS:
+			if local.distance_to(departure) <= LINE_UP_DONE_M and closing_mps >= -LINE_UP_RECEDE_MAX_MPS \
+					and closing_mps <= RUN_IN_ENTRY_MAX_MPS:
 				_enter(State.RUN_IN)
 				out.append(EV_RUN_IN)
-			elif state_s > LINE_UP_TIMEOUT_S:
-				return _abort("could not line up in %.0f s" % LINE_UP_TIMEOUT_S)
+			elif state_s > line_up_timeout_s:
+				return _abort("could not line up in %.0f s" % line_up_timeout_s)
 		State.RUN_IN:
-			if went_through:
+			if went_through and hold_wanted:
+				# Wingmen follow: the cut goes outside on the gate at the ring flash's peak, never holding on the white.
+				_enter(State.HOLD)
+				out.append(EV_THROUGH)
+				out.append(EV_HOLD)
+			elif went_through:
 				_enter(State.FLASH)
 				out.append(EV_THROUGH)
 			elif state_s > RUN_IN_TIMEOUT_S:
@@ -117,6 +156,10 @@ func step(dt: float, local: Vector3, departure: Vector3, alive: bool, went_throu
 		State.FLASH:
 			if state_s >= RING_HOLD_S + FADE_OUT_S:
 				_enter(State.AWAY)
+		State.HOLD:
+			if not hold_wanted or state_s >= HOLD_MAX_S:
+				_enter(State.AWAY)
+				out.append(EV_HOLD_END)
 		State.AWAY:
 			if state_s >= AWAY_S:
 				_enter(State.ARRIVING)
@@ -146,7 +189,7 @@ func cancel(why: String = "cancelled") -> PackedStringArray:
 
 ## The ship should be out of sight (between going through and coming back).
 func ship_hidden() -> bool:
-	return state == State.FLASH or state == State.AWAY or state == State.ARRIVING
+	return state == State.FLASH or state == State.HOLD or state == State.AWAY or state == State.ARRIVING
 
 
 ## The autopilot flies the ship (line-up and run-in); otherwise it coasts.
@@ -158,11 +201,13 @@ func autopilot_on() -> bool:
 static func screen_at(p_state: State, t: float) -> Vector2:
 	match p_state:
 		State.FLASH:
+			if FADE_OUT_S <= 0.0:
+				return Vector2(0.0, 0.0)  # the flash, then the hard cut to black is the next state's
 			return Vector2(0.0, clampf((t - RING_HOLD_S) / FADE_OUT_S, 0.0, 1.0))
 		State.AWAY:
-			return Vector2(0.0, 1.0)
+			return Vector2(0.0, 1.0 if AWAY_S > 0.0 else 0.0)
 		State.ARRIVING:
-			return Vector2(0.0, 1.0 - clampf(t / FADE_IN_S, 0.0, 1.0))
+			return Vector2(0.0, 1.0 - clampf(t / FADE_IN_S, 0.0, 1.0) if FADE_IN_S > 0.0 else 0.0)
 	return Vector2.ZERO
 
 
@@ -184,3 +229,9 @@ func _abort(why: String) -> PackedStringArray:
 	aborted += 1
 	_enter(State.IDLE)
 	return PackedStringArray([EV_ABORT])
+
+
+static func _timing(key: String, fallback: float) -> float:
+	var parsed: Variant = JSON.parse_string(FileAccess.get_file_as_string(TIMING_PATH))
+	var value: Variant = (parsed as Dictionary).get(key) if parsed is Dictionary else null
+	return float(value) if (value is float or value is int) and float(value) >= 0.0 else fallback

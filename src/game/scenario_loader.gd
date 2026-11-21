@@ -11,6 +11,7 @@ extends RefCounted
 ##      "scenario_id": StringName, "system_id": StringName,
 ##      "player": {"position": UniversePos, "forward": Vector3, "basis": Basis,
 ##                 "velocity": Vector3,             # the start velocity (M5-T10), zero unless given
+##                 "home": StringName,              # (M8-T06) `player.home`: the dock it belongs to ("babylon5"), &"" for none
 ##                 "launch_bay": String},           # (M7-T08) `player.launch_bay` or `player.launch` {wing, door}: the start on
 ##                                                  #       that Cobra bay's rack ("cobra_bay_alpha_3"); "" in flight
 ##      "station": Dictionary,                      # (M7-T12) the station's traffic at the start: {"cargo_ferry": int} (the Saturn 3 backed
@@ -36,18 +37,26 @@ extends RefCounted
 ##                                                  #       the members of `wings[]` come last, in their order
 ##      "wings": Array[Dictionary],                 # `wings[]` (M3-T10): {name, faction (StringName, &"" for any), leader
 ##                                                  #       ("player", a spawn's name, or "" for its first ship), formation
-##                                                  #       (Formation.Shape), order (AiContext.Order)}; may be empty
+##                                                  #       (Formation.Shape), order (AiContext.Order), home (StringName, M8-T06: the
+##                                                  #       dock its ships belong to; a spawn's own `home` goes before it, and
+##                                                  #       `home_set` says the spawn gave one), flight (bool, M8-T19: the wing
+##                                                  #       flies as flights of three; led by the player, only the player's own
+##                                                  #       flight of two wingmen takes its orders)}; may be empty
 ##      "mission": Dictionary,                      # (M5-T05, D51) {} for none, else {title, briefing, script (a res://
 ##                                                  #       MissionScript path, loaded by the runner), dialog (a dialog file
 ##                                                  #       path), objectives: the raw `objectives[]`, already checked by
 ##                                                  #       `ObjectiveBook.declare`, closing_lines: {reason, "success" or
-##                                                  #       "failure" -> line id (StringName)} (M5-T10)}; strings may be ""
+##                                                  #       "failure" -> line id (StringName)} (M5-T10), order: its place in
+##                                                  #       the New game list, lowest first (M8 D79)}; strings may be ""
 ##      "cinematics": Dictionary,                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
 ##      "belts": Array[Dictionary],                 # `asteroid_belts[]` (M5-T29, D63): each {centre: UniversePos, size: Vector3,
-##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m},
+##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m,
+##                                                  #       lane_m (a clear lane along its Z axis, M8-T26; 0: none)},
 ##                                                  #       the input `BeltLayout.place` takes; may be empty
 ##      "civilian_names": Dictionary,               # (M5-T30) civilian hull -> PackedStringArray of names; may be empty
 ##      "placeholders": Dictionary,                 # (M5-T30) filled by `resolve_random_civilian`: "{civilian}" -> name
+##      "hud": Dictionary,                          # (M8-T08) HUD options: {"capital_markers": bool} turns the far capitals' markers
+##                                                  #       on or off for this scenario (absent: `data/hud/capital_markers.json`)
 ##      "frame": Dictionary}                        # (M6-T09) the `anchor` and `epoch` blocks: where the World anchors and
 ##                                                  #       the system time at the start (`ScenarioFrame.parse`); every
 ##                                                  #       position above is measured from that anchor
@@ -65,6 +74,8 @@ const PROP_TYPES: Array[StringName] = [&"nav_buoy"]
 ## A `jumpgates[]` entry's type (M6-T14): placed from `data/star_systems.json` beside the station's stand-in unless it gives a
 ## position.
 const JUMPGATE: StringName = &"jumpgate"
+## A mission's place in the New game list when its block gives no `order`.
+const MISSION_ORDER: int = 100
 const SANDBOX_PATH: String = "res://data/scenarios/combat_sandbox.json"
 const ANCHORS: Array[StringName] = [&"player", &"origin"]
 ## A spawn and pool type that stands for one civilian hull drawn from the run's seed (M5-T30, D62).
@@ -106,6 +117,8 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if not (player is Dictionary):
 		return _failure("%s: player must be an object" % source)
 	var player_dict: Dictionary = player
+	if not (player_dict.get("home", "") is String):
+		return _failure("%s: player.home must be a dock's id (\"babylon5\") or \"none\"" % source)
 	var launch_bay: Variant = _launch_bay(player_dict, source)
 	if launch_bay is Dictionary:
 		return launch_bay
@@ -219,13 +232,17 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	var station: Variant = _station(root.get("station", {}), source)
 	if station is String:
 		return _failure(station as String)
+	var hud: Variant = _hud(root.get("hud", {}), source)
+	if hud is String:
+		return _failure(hud as String)
 
 	var result: Dictionary = _empty()
 	result["ok"] = true
 	result["scenario_id"] = StringName(scenario_id as String)
 	result["system_id"] = system
 	result["player"] = {"position": player_pos as UniversePos, "forward": forward_unit,
-			"basis": basis_facing(forward_unit), "velocity": start_velocity as Vector3, "launch_bay": launch_bay as String}
+			"basis": basis_facing(forward_unit), "velocity": start_velocity as Vector3, "launch_bay": launch_bay as String,
+			"home": home_id(player_dict.get("home", "") as String)}
 	result["props"] = props
 	result["jumpgates"] = jumpgates
 	result["pools"] = pools
@@ -238,6 +255,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["cinematics"] = cinematics
 	result["belts"] = belts
 	result["station"] = station
+	result["hud"] = hud
 	result["civilian_names"] = civilian_names
 	result["frame"] = frame
 	return result
@@ -319,6 +337,18 @@ static func _civilian_names(raw: Variant, source: String) -> Variant:
 
 ## `station` (M7-T12): the station's traffic at the start, `{"cargo_ferry": n}` with n from 0 to 12 (the cargo scene's cargo pods)
 ## and `{"reserve_traffic": true}` (M7-T13: the raids' and wings' ships are built at load); or an error string.
+# The scenario's HUD options (M8-T08): a known key with a bool, or an error.
+static func _hud(raw: Variant, source: String) -> Variant:
+	if not raw is Dictionary:
+		return "%s: hud must be an object" % source
+	for key: String in (raw as Dictionary).keys():
+		if key != "capital_markers":
+			return "%s: hud.%s is not a known key (capital_markers)" % [source, key]
+		if typeof((raw as Dictionary)[key]) != TYPE_BOOL:
+			return "%s: hud.capital_markers must be true or false" % source
+	return (raw as Dictionary).duplicate()
+
+
 static func _station(raw: Variant, source: String) -> Variant:
 	if not raw is Dictionary:
 		return "%s: station must be an object" % source
@@ -370,9 +400,12 @@ static func _belts(raw: Variant, system: StringName, source: String) -> Variant:
 		var seed_value: Variant = belt.get("seed", 1)
 		if not (seed_value is float or seed_value is int):
 			return "%s: seed must be a number" % where
+		var lane: Variant = belt.get("lane_m", 0.0)
+		if not (lane is float or lane is int) or float(lane) < 0.0:
+			return "%s: lane_m must be a number of at least 0" % where
 		out.append({"centre": centre as UniversePos, "size": size as Vector3, "count": int(count),
 				"radius_m": Vector2(float((radii as Array)[0]), float((radii as Array)[1])), "seed": int(seed_value),
-				"min_gap_m": float(gap)})
+				"min_gap_m": float(gap), "lane_m": float(lane)})
 	return out
 
 
@@ -399,6 +432,10 @@ static func _mission(raw: Variant, system: StringName, source: String) -> Varian
 	if closing is String:
 		return closing
 	out["closing_lines"] = closing
+	var order: Variant = block.get("order", MISSION_ORDER)
+	if not (order is float or order is int):
+		return "%s: mission.order must be a number" % source
+	out["order"] = int(order)  # its place in the New game list, lowest first (M8 D79: the tutorial leads)
 	return out
 
 
@@ -457,6 +494,14 @@ static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, 
 		var order: int = AiContext.order_from_word(order_word as String) if order_word is String else -1
 		if order < 0:
 			return "%s.order must be one of %s, got %s" % [where, ", ".join(PackedStringArray(AiContext.ORDER_WORDS)), JSON.stringify(order_word)]
+		var wing_home: Variant = wing.get("home", "")
+		if not (wing_home is String):
+			return "%s.home must be a dock's id (\"babylon5\", a capital ship's name) or \"none\"" % where
+		var flight: Variant = wing.get("flight", false)
+		if not (flight is bool):
+			return "%s.flight must be true or false" % where
+		if flight and leader != "player" and not (leader as String).is_empty():
+			return "%s: a wing of flights names no leader but \"player\": the first ship of each flight leads it" % where
 		var members_raw: Variant = wing.get("members", [])
 		if not (members_raw is Array):
 			return "%s.members must be an array" % where
@@ -484,7 +529,8 @@ static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, 
 		if leader != "player" and not (leader as String).is_empty() and not names.has((leader as String).to_lower()):
 			return "%s.leader '%s' is not a spawn of this scenario (\"player\", or the name of a spawn or member)" % [where, leader]
 		out.append({"name": (wing_name as String).strip_edges(), "faction": StringName(faction as String),
-				"leader": leader as String, "formation": shape_value, "order": order})
+				"leader": leader as String, "formation": shape_value, "order": order, "home": home_id(wing_home as String),
+				"flight": flight as bool})
 	return out
 
 
@@ -720,9 +766,13 @@ static func _spawn(raw: Variant, where: String, system: StringName) -> Variant:
 	var forward: Variant = _vector3(entry.get("forward", [0.0, 0.0, 0.0]))
 	if forward == null:
 		return "%s: forward must be [x, y, z] (numbers)" % where
+	var home: Variant = entry.get("home", "")
+	if not (home is String):
+		return "%s: home must be a dock's id (\"babylon5\", a capital ship's name) or \"none\"" % where
 	return {"type": StringName(type as String), "name": str(entry.get("name", "")), "anchor": StringName(anchor as String),
 			"offset": offset as Vector3, "velocity": velocity as Vector3, "at_s": float(at_s), "behaviour": behaviour,
-			"wing": (wing as String).strip_edges(), "cargo_pods": int(pods), "forward": forward as Vector3}
+			"wing": (wing as String).strip_edges(), "cargo_pods": int(pods), "forward": forward as Vector3,
+			"home": home_id(home as String), "home_set": entry.has("home")}
 
 
 ## An orientation whose forward axis (-Z) points along `forward`, up as close to +Y as possible.
@@ -791,6 +841,12 @@ static func _numbers3(value: Variant) -> Variant:
 	return out
 
 
+## A scenario's `home` as a dock's id (M8-T06): lower case, &"" for none (`""` or `"none"`).
+static func home_id(raw: String) -> StringName:
+	var word: String = raw.strip_edges().to_lower()
+	return &"" if word == "none" else StringName(word)
+
+
 ## The player's launch bay (M7-T08, D76): `player.launch_bay` ("cobra_bay_<wing>_<door>"), or `player.launch` ({"wing", "door"})
 ## written as that name; "" when the scenario starts in flight, or a failure dictionary.
 static func _launch_bay(player: Dictionary, source: String) -> Variant:
@@ -817,11 +873,11 @@ static func _is_door(value: Variant) -> bool:
 static func _empty() -> Dictionary:
 	return {"ok": false, "error": "", "scenario_id": &"", "system_id": &"local",
 			"player": {"position": UniversePos.new(), "forward": Vector3.FORWARD, "basis": Basis.IDENTITY,
-					"velocity": Vector3.ZERO, "launch_bay": ""},
+					"velocity": Vector3.ZERO, "launch_bay": "", "home": &""},
 			"props": [] as Array[Dictionary], "jumpgates": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
-			"civilian_names": {}, "placeholders": {}, "station": {}}
+			"civilian_names": {}, "placeholders": {}, "station": {}, "hud": {}}
 
 
 static func _failure(message: String) -> Dictionary:

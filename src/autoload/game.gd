@@ -26,6 +26,9 @@ var registry: ConsoleRegistry = null  ## null: the registry of /root/DebugConsol
 var main_scene_path: String = MAIN_SCENE
 ## Where scenes go. null: the tree's root, as its current scene.
 var scene_parent: Node = null
+## The pilot's standing (M8 D79), read from `career_path` at start and saved when a mission earns a rank.
+var career: Career = Career.new()
+var career_path: String = CareerStore.DEFAULT_PATH
 
 
 func _ready() -> void:
@@ -35,6 +38,7 @@ func _ready() -> void:
 		var console: DebugConsoleScript = get_node_or_null(^"/root/DebugConsole") as DebugConsoleScript
 		if console != null:
 			registry = console.registry
+	career = CareerStore.load_file(career_path)
 	_register_console()
 
 
@@ -107,6 +111,7 @@ func finish_loading(packed: PackedScene) -> void:
 	main.set(&"scenario_path", GameFlow.scenario_path(flow.request["scenario_id"]))
 	main.set(&"scenario_seed", int(flow.request["seed"]))
 	main.set(&"encounters", bool(flow.request.get("encounters", false)))
+	main.set(&"mission_checkpoint", flow.request.get("checkpoint", {}))
 	flow.finish_loading()
 	_show.call_deferred(main)
 
@@ -123,6 +128,7 @@ func fail_loading(reason: String) -> void:
 ## `scenario` command's reload, free flight) only keeps the result, and nothing is shown.
 func end_mission(result: Dictionary) -> bool:
 	if GameFlow.is_mission(flow.request) and flow.end_run(result):
+		earn(StringName(str(result.get("rank", ""))), StringName(str((result.get("notes", {}) as Dictionary).get("course", ""))))
 		return true
 	flow.keep_result(result)
 	return false
@@ -137,9 +143,27 @@ func show_debrief() -> String:
 	return problem
 
 
-## From the debrief, the same scenario and seed again through the loading screen. Returns why it was refused, or "".
-func retry() -> String:
-	if not flow.retry():
+## A mission earned `rank` (and flew the buoy course to `course`): the career keeps the better of each and is saved.
+func earn(rank: StringName, course: StringName = &"") -> void:
+	var changed: bool = career.award(rank)
+	var ratings: Array[StringName] = TutorialRules.RATINGS
+	if ratings.has(course) and (career.course == &"" or ratings.find(course) < ratings.find(career.course)):
+		career.course = course
+		changed = true
+	if changed:
+		save_career()
+
+
+func save_career() -> void:
+	var problem: String = CareerStore.save_file(career, career_path)
+	if not problem.is_empty():
+		push_warning("Game: career not saved: %s" % problem)
+
+
+## From the debrief, the same scenario and seed again through the loading screen: from the start, or from the lost mission's
+## checkpoint. Returns why it was refused, or "".
+func retry(from_checkpoint: bool = false) -> String:
+	if not flow.retry(from_checkpoint):
 		return flow.error
 	_show_scene.call_deferred(LOADING_SCENE)
 	return ""
@@ -199,8 +223,17 @@ func _register_console() -> void:
 			[ConsoleArg.enum_required(&"scenario_id", scenario_ids), ConsoleArg.int_optional(&"seed", 0, 0, SEED_MAX)]),
 			_cmd_play, self)
 	registry.register_command(ConsoleCommand.new(&"retry",
-			"From the debrief, play the same mission again (same scenario and seed) through the loading screen",
-			[] as Array[ConsoleArg]), _cmd_retry, self)
+			"From the debrief, play the same mission again (same scenario and seed) through the loading screen; retry checkpoint restarts a lost mission from its checkpoint (the tutorial: the raid's start)",
+			[ConsoleArg.enum_optional(&"from", [&"start", &"checkpoint"] as Array[StringName], &"start")]), _cmd_retry, self)
+	registry.register_command(ConsoleCommand.new(&"career",
+			"The pilot's rank, saved beside the settings: career (shows it), career set <rank>, career reset",
+			[ConsoleArg.enum_optional(&"action", [&"status", &"set", &"reset"] as Array[StringName], &"status"),
+			ConsoleArg.enum_optional(&"rank", Career.RANKS)]), _cmd_career, self)
+	registry.register_provider(&"career", ConsoleVars.new({
+		&"rank": {"get": func() -> String: return String(career.rank), "doc": "unassigned, squadron_pilot or squadron_leader"},
+		&"course": {"get": func() -> String: return String(career.course) if career.course != &"" else "none",
+				"doc": "The best buoy-course rating flown: exemplary, par, below_par, buoy_destroyed, or none"},
+	}), self)
 	registry.register_provider(&"debrief", _debrief_provider(), self)
 	registry.register_provider(&"game", ConsoleVars.new({
 		&"state": {"get": func() -> String: return GameFlow.state_name(flow.state),
@@ -220,6 +253,8 @@ func _debrief_provider() -> ConsoleVars:
 		&"time": "Mission time (sim time), m:ss", &"kills": "Raiders the player destroyed", &"assists": "Raiders someone else destroyed after the player fired at them",
 		&"wing_losses": "Wingmen lost", &"shots_fired": "Bolts the player's cannon fired", &"shots_hit": "Of them, the bolts that hit",
 		&"accuracy": "Hits over shots, whole percent", &"objectives": "Each objective and its state",
+		&"options": "The debrief's choices: retry, front_end, and checkpoint for a lost mission that left one",
+		&"notes": "The lines the mission added to the debrief",
 	}
 	for key: StringName in docs:
 		keys[key] = {"get": func() -> String: return _debrief_value(key), "doc": docs[key]}
@@ -231,8 +266,21 @@ func _debrief_value(key: StringName) -> String:
 	return "none" if model == null else str(model.summary()[str(key)])
 
 
-func _cmd_retry(_args: Dictionary) -> ConsoleResult:
-	var problem: String = retry()
+func _cmd_career(args: Dictionary) -> ConsoleResult:
+	match StringName(args[&"action"]):
+		&"set":
+			if args[&"rank"] == null:
+				return ConsoleResult.failure("career set <%s>" % "|".join(PackedStringArray(Career.RANKS)))
+			career.set_rank(StringName(args[&"rank"]))
+			save_career()
+		&"reset":
+			career = Career.new()
+			save_career()
+	return ConsoleResult.line("career: %s" % career.describe())
+
+
+func _cmd_retry(args: Dictionary) -> ConsoleResult:
+	var problem: String = retry(StringName(args[&"from"]) == &"checkpoint")
 	if not problem.is_empty():
 		return ConsoleResult.failure(problem)
 	return ConsoleResult.line("loading %s" % GameFlow.describe_request(flow.request))

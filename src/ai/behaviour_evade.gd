@@ -33,6 +33,10 @@ const JINK_MIN_S: float = 2.0
 const JINK_MAX_S: float = 4.0
 const JINK_SPEED_MPS: float = 100.0
 const REVERSAL_SPREAD_DEG: float = 45.0
+## On the leash (`AiContext.leash_m`): the evasion closes on the lead at this speed, and is let off again once within this
+## share of the leash.
+const LEASH_CLOSE_MPS: float = 150.0
+const LEASH_BACK: float = 0.5
 
 ## The current jink: the sideways direction (World frame, unit), seconds left, and how many jinks so far this evasion.
 var side: Vector3 = Vector3.ZERO
@@ -46,6 +50,8 @@ var _threat: Contact = null
 var _reason: StringName = &""
 var _base_velocity: Vector3 = Vector3.ZERO
 var _fresh: bool = true
+## Past the leash: the evasion is carrying the ship back toward its lead.
+var leashed: bool = false
 ## The hit reaction holds control until `jinks` reaches this (0: no hold).
 var _lock_until_jinks: int = 0
 var _jink_scale: float = 1.0
@@ -70,6 +76,7 @@ func reset() -> void:
 	_threat = null
 	_reason = &""
 	_fresh = true
+	leashed = false
 	_lock_until_jinks = 0
 	_threat_since_s = -INF
 
@@ -129,6 +136,7 @@ func score(ctx: AiContext) -> float:
 
 func enter() -> void:
 	_fresh = true
+	leashed = false
 	_lock_until_jinks = 0
 
 
@@ -158,12 +166,44 @@ func think(ctx: AiContext, dt: float) -> PilotCommand:
 		jink_left_s -= dt
 		if jink_left_s <= 0.0:
 			_new_jink(line_of_fire)
+	_keep_to_leash(ctx)
 	var across: Vector3 = _across(line_of_fire)
 	var v_des: Vector3 = _base_velocity + across * JINK_SPEED_MPS
+	if ctx.leash_m > 0.0:
+		# On a leash it jinks among its wing, or comes back into it: it keeps off its wingmates as a ship rejoining its slot
+		# does (M7-T76). M8-T13's seeded fight lost two to a jink across the formation without this.
+		v_des = BehaviourFormation.keep_apart(p, v_des)
 	var dv: Vector3 = v_des - p.velocity
 	cmd.flight.rot = PilotSteering.face(p.basis, dv if dv.length() > 1.0 else across, p.capability.rate_max_rad)
 	seek_velocity(cmd.flight, p, v_des)
 	return cmd
+
+
+# A wingman on a leash does not let a chaser drag it off: past the leash the jinks ride on a course back toward its lead
+# (in sight, else where the wing's link puts it), and once it is back it stays with the lead's motion.
+func _keep_to_leash(ctx: AiContext) -> void:
+	if ctx.leash_m <= 0.0:
+		return
+	var p: Perception = ctx.perception
+	var lead_at: Vector3
+	var lead_velocity: Vector3
+	if ctx.leader != null:
+		lead_at = ctx.leader.position
+		lead_velocity = ctx.leader.velocity
+	elif ctx.leader_link_position != null:
+		lead_at = p.to_local(ctx.leader_link_position)
+		lead_velocity = ctx.leader_link_velocity
+	else:
+		leashed = false
+		return
+	var to_lead: Vector3 = lead_at - p.position
+	var away_m: float = to_lead.length()
+	var was: bool = leashed
+	leashed = away_m > (LEASH_BACK * ctx.leash_m if was else ctx.leash_m)
+	if leashed:
+		_base_velocity = lead_velocity + to_lead / away_m * LEASH_CLOSE_MPS
+	elif was:
+		_base_velocity = lead_velocity
 
 
 ## The threat's name ("" without one), for the console and the tests.

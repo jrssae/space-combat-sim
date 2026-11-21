@@ -154,12 +154,13 @@ func test_the_stick_points_a_selects_and_the_game_resumes_with_nothing_fired() -
 	assert_eq(_read("target_menu.highlight"), "ENEMIES")
 	await _press(InputAdapter.RADIAL_SELECT)
 	assert_eq(_read("target_menu.page"), "enemies")
-	assert_eq(_read("target_menu.entries"), PackedStringArray(["raider 1", "raider 2", "-", "none", "-", "-"]))
+	assert_eq(_read("target_menu.entries"), PackedStringArray(["raider 1", "raider 2", "none"]),
+			"one slice per entry, 120 degrees each (M8-T24)")
 	assert_true(get_tree().paused, "still paused on the second ring")
-	await _point(60.0)
-	assert_eq(_read("target_menu.highlight"), "RAIDER 2")
+	await _point(240.0)
+	assert_eq(_read("target_menu.highlight"), "NONE")
 	await _point(120.0)
-	assert_eq(_read("target_menu.highlight"), "RAIDER 2", "a blank slice keeps the last highlight")
+	assert_eq(_read("target_menu.highlight"), "RAIDER 2")
 	# A is also fire, and the left stick that points also strafes: both stay held through the pick (M7-T37).
 	var bolts: int = main.projectiles.get_child_count()
 	source.hold(InputAdapter.STRAFE_RIGHT, 1.0)
@@ -180,6 +181,28 @@ func test_the_stick_points_a_selects_and_the_game_resumes_with_nothing_fired() -
 	await _ticks(3)
 	assert_true(main.adapter.last.combat.fire, "let go and pressed again, A fires")
 	assert_gt(main.adapter.last.flight.strafe.x, 0.5, "and the stick strafes")
+
+
+func test_the_numbered_keys_pick_by_the_entrys_place() -> void:
+	# M8-T24 (D90): keys 1-N pick the ring's N entries in page order, for rings of six, three and one.
+	_raider("RAIDER 1", 900.0)
+	_raider("RAIDER 2", 1400.0)
+	await _ticks(3)
+	await _hold_open()
+	await _press(InputAdapter.RADIAL_ENTRIES[0])
+	assert_eq(_read("target_menu.page"), "enemies", "key 1: the first category")
+	await _press(InputAdapter.RADIAL_ENTRIES[5])
+	assert_true(main.target_menu.is_open(), "key 6: nothing in that place on a ring of three")
+	await _press(InputAdapter.RADIAL_ENTRIES[1])
+	assert_false(main.target_menu.is_open(), "key 2: the second entry, picked")
+	assert_eq(main.ship.targeting.selected_name(), "RAIDER 2")
+	await _hold_open()
+	await _press(InputAdapter.RADIAL_ENTRIES[5])
+	assert_eq(_read("target_menu.page"), "objectives", "key 6: the sixth category")
+	assert_eq(main.target_menu.menu.count(TargetCategories.Category.OBJECTIVES), 0, "free flight has no objectives")
+	await _press(InputAdapter.RADIAL_ENTRIES[0])
+	assert_false(main.target_menu.is_open(), "none is the only entry, and key 1 picks it")
+	assert_eq(_read("target_menu.last_pick"), "clear_waypoint")
 
 
 func test_b_goes_back_a_ring_then_closes_and_resumes() -> void:
@@ -278,7 +301,7 @@ func test_a_picked_beacon_is_the_hud_waypoint_and_never_the_target() -> void:
 	var places: Array[String] = ["babylon 5 docking bay", "babylon 5 cargo bay", "jumpgate"]
 	assert_true(places.has(entries[0]) if station_placed else entries[0] == "nav alpha", "a place first: %s" % [entries])
 	assert_true(entries.has("nav alpha"), "the nearest beacon is listed: %s" % [entries])
-	assert_eq(entries[3], "none")
+	assert_eq(entries[RadialMenu.none_slice(entries.size())], "none", "none down: %s" % [entries])
 	assert_true(_run("targetmenu highlight \"nav alpha\"").ok)
 	await _press(InputAdapter.RADIAL_SELECT)
 	assert_false(main.target_menu.is_open())
@@ -329,9 +352,9 @@ func test_the_later_of_the_pilots_pick_and_the_missions_waypoint_wins() -> void:
 	assert_eq((_read("target_menu.entries") as PackedStringArray)[5], "objectives")
 	_run("targetmenu pick objectives")
 	var entries: PackedStringArray = _read("target_menu.entries")
-	assert_eq(entries[3], "none", "none is the down slice here too")
+	assert_eq(entries[entries.size() - 1], "none", "none is past the down slice here too")
 	assert_eq(entries[1], "keep nav alpha…", "an active objective that names an actor is listed, cut to its slice: %s" % [entries])
-	assert_eq(entries.count("-"), 3, "the objectives not shown yet are not listed")
+	assert_eq(entries.size(), 3, "the objectives not shown yet are not listed, nor blank slices for them")
 	_run("targetmenu pick none")
 	assert_false(_frame().waypoint_present, "the pilot's none hides the script's waypoint")
 	api.waypoint("NAV ALPHA")
@@ -363,7 +386,7 @@ func test_a_silent_contact_beyond_five_km_reads_unknown_until_it_is_near() -> vo
 	# It is offered under UNKNOWN, not ENEMIES, and has no name there.
 	_run("targetmenu open")
 	_run("targetmenu pick enemies")
-	assert_eq(_read("target_menu.entries"), PackedStringArray(["raider 2", "-", "-", "none", "-", "-"]))
+	assert_eq(_read("target_menu.entries"), PackedStringArray(["raider 2", "none"]))
 	_run("targetmenu back")
 	_run("targetmenu pick unknown")
 	assert_eq((_read("target_menu.entries") as PackedStringArray)[0], "unknown")
@@ -445,6 +468,29 @@ func test_the_station_is_an_ally_to_pick_as_a_target() -> void:
 	assert_false(main.target_menu.view.visible, "the pick closed the menu")
 
 
+func test_the_launch_base_heads_allies_however_many_allies_are_nearer() -> void:
+	# Maintainer, 2026-11-20: in free flight the player launched from Babylon 5 (the scenario's `player.home`), so the station is
+	# always on the ALLIES ring, at the top, however many allies are nearer; the ring holds eight and NONE.
+	main.ships.prepare(ShipPool.ALLY_TYPE, 12)
+	for i: int in 10:
+		assert_true(_run("spawn ally idle %d %d" % [300 + 40 * i, 10 * i]).ok, "ally %d" % i)
+	await _ticks(3)
+	assert_ne(main.target_menu.launch_base_id(), 0, "free flight has a launch base")
+	_run("targetmenu open")
+	assert_gte(main.target_menu.menu.count(TargetCategories.Category.ALLIES), 11)
+	_run("targetmenu pick allies")
+	var entries: PackedStringArray = _read("target_menu.entries")
+	assert_eq(entries[0], "babylon 5", "pinned first: %s" % [entries])
+	assert_eq(entries.size(), 9, "eight ships, the base among them, and NONE")
+	_run("targetmenu close")
+
+
+func test_a_mission_with_no_launch_base_pins_nothing() -> void:
+	await _boot("res://data/scenarios/civilian_escort.json")
+	assert_eq(main.combatant.home, &"", "the escort names no launch source")
+	assert_eq(main.target_menu.launch_base_id(), 0, "so nothing is pinned")
+
+
 func test_the_console_opens_picks_and_closes_it() -> void:
 	_raider("RAIDER 1", 900.0)
 	await _ticks(3)
@@ -458,7 +504,7 @@ func test_the_console_opens_picks_and_closes_it() -> void:
 	assert_false(_run("targetmenu back enemies").ok, "only pick takes an entry")
 	assert_true(_run("targetmenu pick enemies").ok)
 	assert_eq(_read("target_menu.page"), "enemies")
-	assert_false(_run("targetmenu pick 1").ok, "a blank slice is not an entry")
+	assert_false(_run("targetmenu pick 2").ok, "past the last entry (raider 1, none) is nothing")
 	assert_true(_run("targetmenu pick \"raider 1\"").ok)
 	assert_false(_read("target_menu.open"))
 	assert_false(get_tree().paused)
@@ -488,7 +534,7 @@ func test_the_ring_is_drawn_vertically_centred_at_the_left_with_its_entries() ->
 	assert_eq(view.drawn_heading, "TACTICAL PAUSE")
 	_run("targetmenu pick enemies")
 	await wait_process_frames(3)
-	assert_eq(view.drawn_labels, ["RAIDER 1", "", "", "NONE", "", ""] as Array[String])
+	assert_eq(view.drawn_labels, ["RAIDER 1", "NONE"] as Array[String], "one slice per entry, no blanks (M8-T24)")
 	assert_eq(view.drawn_heading, "TACTICAL PAUSE · ENEMIES")
 	assert_eq(view.hint, TargetMenuDirector.HINT_TARGET)
 	_run("targetmenu close")

@@ -34,6 +34,7 @@ const PAD_BINDINGS: Dictionary = {
 const KEYBOARD_ONLY: Array[StringName] = [
 	&"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
 	&"wing_attack", &"wing_form", &"wing_engage", &"wing_cover", &"roll_left", &"roll_right", &"target_next",
+	&"wing_dock", &"wing_form_hold", &"wing_hold",
 ]
 
 # Keyboard layout B (architecture §6.1, M3-T01): every flight key under the left hand, because the right hand flies the
@@ -67,6 +68,9 @@ const KEYS_B: Dictionary = {
 	&"wing_engage": [KEY_3],
 	&"wing_cover": [KEY_4],
 	&"toggle_running_lights": [KEY_5],
+	&"wing_dock": [KEY_6],
+	&"wing_form_hold": [KEY_7],
+	&"wing_hold": [KEY_8],
 	&"comms_menu": [KEY_CTRL],
 }
 
@@ -94,6 +98,9 @@ const OUTSIDE_THE_BLOCK: Dictionary = {
 	KEY_N: [&"screenshot"],
 	KEY_PRINT: [&"screenshot"],
 	KEY_F3: [&"debug_toggle_overlay"],
+	KEY_6: [&"wing_dock"],  # the next key of the number row: the wing's order to dock (M8-T06)
+	KEY_7: [&"wing_form_hold"],  # and the two after it: the hold-fire orders (M8-T19)
+	KEY_8: [&"wing_hold"],
 }
 
 
@@ -252,7 +259,7 @@ func test_the_radial_menus_actions_are_fixed_and_outside_the_profiles() -> void:
 		&"radial_up": [JOY_AXIS_LEFT_Y, -1.0, KEY_UP], &"radial_down": [JOY_AXIS_LEFT_Y, 1.0, KEY_DOWN],
 		&"radial_left": [JOY_AXIS_LEFT_X, -1.0, KEY_LEFT], &"radial_right": [JOY_AXIS_LEFT_X, 1.0, KEY_RIGHT],
 	}
-	assert_eq(InputAdapter.RADIAL_ACTIONS.size(), 6)
+	assert_eq(InputAdapter.RADIAL_ACTIONS.size(), 6 + InputAdapter.RADIAL_ENTRIES.size())
 	for action: StringName in InputAdapter.RADIAL_ACTIONS:
 		assert_true(InputMap.has_action(action), "InputMap has %s" % action)
 		assert_false(InputAdapter.ACTIONS.has(action), "%s is not a profile action" % action)
@@ -272,6 +279,20 @@ func test_the_radial_menus_actions_are_fixed_and_outside_the_profiles() -> void:
 		assert_eq((events[0] as InputEventJoypadButton).button_index, buttons[action][0], String(action))
 		assert_eq((events[1] as InputEventKey).physical_keycode, buttons[action][1], String(action))
 		assert_eq((events[2] as InputEventMouseButton).button_index, buttons[action][2], String(action))
+
+
+func test_the_radial_entry_picks_are_the_dpad_and_the_numbered_keys() -> void:
+	# M8-T24 (D90): keys 1-9 are entries 1-9, the keyboard only (the D-pad does nothing in a radial menu, maintainer
+	# 2026-11-19; key 9 for a target ring of eight ships and NONE, 2026-11-20). Fixed, outside the profiles, read only while a
+	# radial menu is open.
+	assert_eq(InputAdapter.RADIAL_ENTRIES.size(), 9)
+	for i: int in 9:
+		var action: StringName = InputAdapter.RADIAL_ENTRIES[i]
+		assert_true(InputAdapter.RADIAL_ACTIONS.has(action), String(action))
+		assert_false(InputAdapter.ACTIONS.has(action), "%s is not a profile action" % action)
+		var events: Array[InputEvent] = InputMap.action_get_events(action)
+		assert_eq(events.size(), 1, "%s: one key, no pad button" % action)
+		assert_eq((events[0] as InputEventKey).physical_keycode, KEY_1 + i, "%s: key %d" % [action, i + 1])
 
 
 func _actions_on_button(button: JoyButton) -> Array[StringName]:

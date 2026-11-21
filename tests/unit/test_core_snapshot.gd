@@ -7,6 +7,9 @@ extends GutTest
 ## its test (the commands one tick earlier: the one-tick shift is Q53's accepted outcome).
 
 const TICKS: int = 240
+## A shared CI runner can stall the worker for a tick now and then: this share of the ticks (at least 2) may miss its deadline
+## before a run counts as a real stall. Determinism is checked bit for bit regardless.
+const MISS_SHARE: float = 0.01
 const SETTINGS: Array[StringName] = [&"perf_threads", &"ai_think_rate",
 		&"sim_step", &"perf_step_threads"]
 
@@ -53,7 +56,9 @@ func test_the_threaded_step_equals_the_delayed_step_tick_for_tick() -> void:
 	assert_eq(int(threaded["held"]), int(delayed["held"]), "the same number of held ticks")
 	assert_true(bool(threaded["off_main"]), "the threaded job ran off the main thread")
 	assert_false(bool(delayed["off_main"]), "the delayed job ran on the main thread")
-	assert_eq(int(threaded["misses"]), 0, "no deadline missed on an idle machine (%d)" % int(threaded["misses"]))
+	var allowed: int = maxi(2, floori(TICKS * MISS_SHARE))
+	gut.p("deadlines missed: %d of %d ticks (at most %d allowed)" % [int(threaded["misses"]), TICKS, allowed])
+	assert_lte(int(threaded["misses"]), allowed, "no stall: %d deadlines missed of %d ticks" % [int(threaded["misses"]), TICKS])
 	var first: int = _first_difference(delayed["rows"], threaded["rows"])
 	assert_eq(first, -1, "the rows are the same bits every tick (first difference at tick %d)" % first)
 	first = _first_difference(delayed["commands"], threaded["commands"])

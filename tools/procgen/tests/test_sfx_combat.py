@@ -1,4 +1,4 @@
-"""``sfx_combat`` (AC14 of M2, AC15 and AC19 of M5): nine sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, seeded, the engine bursts
+"""``sfx_combat`` (AC14 of M2, AC15 and AC19 of M5): nine sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, one loudness reference (M8-T12), seeded, the engine bursts
 seamless; the guns, the impact and the bursts keep the shapes measured from the reference (docs/design-references.md "Combat
 sounds")."""
 
@@ -15,7 +15,7 @@ from typing import NamedTuple
 import numpy as np
 
 from tools.procgen.assets import sfx_combat
-from tools.procgen.core import audio
+from tools.procgen.core import audio, loudness
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 
@@ -187,7 +187,13 @@ class SfxCombatTests(unittest.TestCase):
             peak = audio.peak_dbfs(samples)
             self.assertLessEqual(peak, -1.0, name)
             self.assertAlmostEqual(peak, entry["peak_dbfs"], places=2, msg=name)
-            self.assertGreater(peak, -3.0, f"{name}: not needlessly quiet")
+
+    def test_every_sound_is_at_the_loudness_reference(self) -> None:
+        for name, entry in self.manifest["sounds"].items():
+            samples, _ = audio.read_wav(self.dir_a / entry["file"])
+            level = loudness.loudness_lufs(samples, "loop_begin" in entry)
+            self.assertAlmostEqual(level, loudness.TARGET_LUFS, delta=loudness.TOLERANCE_LU, msg=name)
+            self.assertAlmostEqual(level, entry["loudness_lufs"], places=2, msg=name)
 
     def test_no_sound_is_silent_or_dc(self) -> None:
         for name, entry in self.manifest["sounds"].items():
@@ -286,13 +292,15 @@ class SfxCombatTests(unittest.TestCase):
         self.assertNotIn("warning_beep.wav", changed, "no randomness in a pure tone")
         self.assertNotIn("target_blip.wav", changed)
 
-    def test_the_peak_option_is_respected_and_limited(self) -> None:
+    def test_the_loudness_option_moves_the_target_under_the_peak_ceiling(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            out = sfx_combat.build(BuildContext(Path(tmp), seed=1, options={"peak_dbfs": -6.0}))
-            self.assertAlmostEqual(out.manifest["sounds"]["pulse_fire"]["peak_dbfs"], -6.0, places=2)
+            out = sfx_combat.build(BuildContext(Path(tmp), seed=1, options={"loudness_lufs": -26.0}))
+            self.assertAlmostEqual(out.manifest["sounds"]["pulse_fire"]["loudness_lufs"], -26.0, delta=loudness.TOLERANCE_LU)
+            self.assertEqual(out.manifest["loudness_target_lufs"], -26.0)
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(ValueError):
-                sfx_combat.build(BuildContext(Path(tmp), seed=1, options={"peak_dbfs": -0.5}))
+            out = sfx_combat.build(BuildContext(Path(tmp), seed=1, options={"loudness_lufs": 0.0}))
+            for name, entry in out.manifest["sounds"].items():
+                self.assertLessEqual(entry["peak_dbfs"], loudness.PEAK_CEILING_DBFS + 0.01, f"{name}: the ceiling holds")
 
     def test_the_manifest_file_is_valid_json_without_timestamps(self) -> None:
         text = (self.dir_a / "manifest.json").read_text(encoding="utf-8")

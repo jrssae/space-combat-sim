@@ -1,7 +1,7 @@
 class_name DebriefScreen
 extends Control
 ## The debrief (architecture §18, D56, AC9): the sky behind a `MenuFrame` (the menu kit of D57) whose page offers Retry (the same
-## scenario and seed, through the loading screen) and Front end, with the result, the objectives, the time, the kills and
+## scenario and seed, through the loading screen; a lost mission with a checkpoint also a restart from it, M8 D79) and Front end, with the result, the objectives, the time, the kills and
 ## assists, the wing losses and the shots and hits on the right. `Game.show_debrief` puts it up after a mission; it is pad-first
 ## like every menu.
 ##
@@ -53,7 +53,7 @@ func frame() -> MenuFrame:
 
 
 func _page() -> MenuScreen:
-	var entries: Array[Dictionary] = [{"id": &"retry", "text": "Retry"}, {"id": &"front_end", "text": "Front end"}]
+	var entries: Array[Dictionary] = model.options()
 	var page := DebriefPage.new()
 	page.setup(model.headline(), entries)
 	page.panel = model.panel()
@@ -65,8 +65,8 @@ func _on_chosen(id: StringName) -> void:
 	if _age_s < input_guard_s or game == null:
 		return
 	match id:
-		&"retry":
-			var problem: String = game.retry()
+		&"retry", &"checkpoint":
+			var problem: String = game.retry(id == &"checkpoint")
 			if not problem.is_empty():
 				_frame.show_message(problem)
 		&"front_end":

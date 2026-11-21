@@ -609,10 +609,10 @@ const BOLT_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin
 ## rules; they may import each other and the kernels, nothing else.
 ## M5-T16: the civilians' flight (`civilian.rs`) is one of them, and the behaviours may import it.
 const BRAIN_FILES: Array[String] = ["res://native/src/v3.rs", "res://native/src/brain_maths.rs",
-		"res://native/src/brain_behaviours.rs", "res://native/src/civilian.rs"]
+		"res://native/src/brain_behaviours.rs", "res://native/src/civilian.rs", "res://native/src/keep_out.rs"]
 const BRAIN_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::kernels::", "use crate::civilian;",
-		"use crate::surface;"]
+		"use crate::surface;", "use crate::keep_out::"]
 ## The big hulls' surfaces (M7-T06): the station's volumes, nearest points, the sweep and the drum's skin speed, held to the
 ## kernels' rules; they import the row tables and the vector maths only. The core's shell (`surface_rows.rs`) reaches them.
 const SURFACE_KERNEL_FILE: String = "res://native/src/surface.rs"
@@ -640,6 +640,10 @@ const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::built
 const GRID_KERNEL_FILE: String = "res://native/src/grid_kernels.rs"
 const GRID_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::kernels::contact::",
 		"use crate::rows::", "use crate::surface;", "use crate::sweep_cells::", "use crate::turret_kernels::", "use crate::v3::"]
+## The docking kernel (M12-T19): held to the kernels' rules; its shell (`dock_rows.rs`) is what GDScript reaches.
+const DOCK_KERNEL_FILE: String = "res://native/src/dock_kernels.rs"
+const DOCK_KERNEL_USER: String = "res://native/src/dock_rows.rs"
+const DOCK_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::v3::"]
 ## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
 ## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
@@ -705,6 +709,9 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(SURFACE_KERNEL_FILE, KERNEL_FORBIDDEN, SURFACE_KERNEL_USE_ALLOWED))
 	assert_true(FileAccess.get_file_as_string("res://native/src/surface_rows.rs").contains("use crate::surface;"),
 			"the core's shell reads the surfaces")
+	violations.append_array(_engine_free_violations(DOCK_KERNEL_FILE, KERNEL_FORBIDDEN, DOCK_KERNEL_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string(DOCK_KERNEL_USER).contains("use crate::dock_kernels::"), "the shell reads the docking kernel")
+	assert_false(FileAccess.get_file_as_string(DOCK_KERNEL_FILE).contains("static mut"), "no shared state in the docking kernel")
 	assert_true(FileAccess.get_file_as_string(RAM_TRACKER_USER).contains("use crate::ram_tracker::"), "the shell reads the ram tracker")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_FILE).contains("pub fn ships_near("), "the voice kernel holds ships_near")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_USER).contains("use crate::voice_kernels"), "the shell reads the voice kernel")
@@ -824,7 +831,7 @@ const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin:
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::brain_behaviours::", "use crate::kernels::",
 		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CommandMap, IdMap, IdSet, RowCommand};",
 		"use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};",
-		"use crate::threads::", "use crate::turret_kernels::"]
+		"use crate::threads::", "use crate::turret_kernels::", "use crate::keep_out::"]
 
 
 ## The low-attention tier's table and integrator (M4-T21): held to the kernels' rules; they import the row tables, the shared

@@ -29,6 +29,10 @@ var assists: int = 0
 var wing_losses: int = 0
 var shots_fired: int = 0
 var shots_hit: int = 0
+## Lines the mission added (`MissionApi.debrief_line`), shown under the verdict.
+var extra_lines: PackedStringArray = PackedStringArray()
+## What a lost mission's checkpoint restarts from ("the raid's start"), or "" when it left none.
+var checkpoint_label: String = ""
 
 
 ## The model for `result`, or null for an empty one (nothing ended, so there is nothing to debrief).
@@ -46,6 +50,10 @@ static func from_result(result: Dictionary) -> DebriefModel:
 	model.wing_losses = int(result.get("wing_losses", 0))
 	model.shots_fired = int(result.get("shots_fired", 0))
 	model.shots_hit = int(result.get("shots_hit", 0))
+	model.extra_lines = PackedStringArray(result.get("debrief_lines", PackedStringArray()))
+	if GameFlow.has_checkpoint(result):
+		var label: String = str((result["checkpoint"] as Dictionary).get("label", ""))
+		model.checkpoint_label = label if not label.is_empty() else "the checkpoint"
 	for raw: Variant in result.get("objectives", []):
 		var entry: Dictionary = raw as Dictionary
 		var state := StringName(str(entry.get("state", &"hidden")))
@@ -90,8 +98,10 @@ static func format_time(seconds: float) -> String:
 func panel() -> Dictionary:
 	var lines: Array[Dictionary] = []
 	if not title.is_empty():
-		lines.append(_line(title, "", &"", true))
+		lines.append(ObjectivesModel.headline(title))
 	lines.append(_line(result_text(), "", &"done" if success else &"failed", true))
+	for extra: String in extra_lines:
+		lines.append(_line(extra, "", &"", true))
 	for row: Dictionary in objectives:
 		lines.append(_objective_line(row))
 	lines.append(_line("Time: %s" % format_time(time_s), "", &"", true))
@@ -101,6 +111,14 @@ func panel() -> Dictionary:
 	return {"title": PANEL_TITLE, "lines": lines, "compact": true}
 
 
+## The debrief's choices, first to last: a lost mission with a checkpoint offers a restart from it before the full restart.
+func options() -> Array[Dictionary]:
+	if checkpoint_label.is_empty():
+		return [{"id": &"retry", "text": "Retry"}, {"id": &"front_end", "text": "Front end"}]
+	return [{"id": &"checkpoint", "text": "Restart from %s" % checkpoint_label},
+			{"id": &"retry", "text": "Restart whole mission"}, {"id": &"front_end", "text": "Front end"}]
+
+
 ## One value per key, for the console's `debrief` provider.
 func summary() -> Dictionary:
 	var states := PackedStringArray()
@@ -108,7 +126,9 @@ func summary() -> Dictionary:
 		states.append("%s %s" % [row["id"], row["state"]])
 	return {"result": "success" if success else "failure", "reason": reason, "time": format_time(time_s), "kills": kills,
 			"assists": assists, "wing_losses": wing_losses, "shots_fired": shots_fired, "shots_hit": shots_hit,
-			"accuracy": accuracy_text(), "objectives": ", ".join(states)}
+			"accuracy": accuracy_text(), "objectives": ", ".join(states),
+			"options": ", ".join(PackedStringArray(options().map(func(o: Dictionary) -> String: return String(o["id"])))),
+			"notes": " | ".join(extra_lines)}
 
 
 # The reason, with a failed objective's id turned into its text, and a capital letter.

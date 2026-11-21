@@ -320,29 +320,55 @@ nose to a pointed tip, notched at 2.7 to 3.4 m out for two short guns, a straigh
 ridge and keel between two flat engine housings). The sections, the scores and what changed are in `docs/assets-raider.md`
 ("What it is", "Fidelity"); this supersedes the sheet's proportions above and answers the open scale question (16 m).
 
-## Raider carrier (M12)
+## Raider strike carrier (M10; built early as M12-T19, merged into M8 by M8-T07)
 
-A blocky "battlewagon": a long rectangular box hull, dark green-grey with plating. **Two large concentric
-rings** encircle the middle and aft of the box. Many cone- or spike-shaped launch pods (yellow-gold triangular
-fins) stand around the rings, which gives it a spiky wheel look. Spindly antennae at the corners.
-This is the first of two raider capital types.
+The raiders' first capital type and the first working capital ship (M12-T19). It has no weapons: it carries Delta-Vs on
+open cradles, launches and retrieves them, and opens its own jump points. As built: `docs/assets-capital.md`.
 
-## Raider Battle Wagon (second raider carrier type, M12)
+References (untracked, in the main checkout's `references/`): the maintainer's model `Rader_strike_carrier.stl`, the
+show's still `radier strike carrier.jpg`, and a painted print of the model with fighters docked,
+`raider ships docked to strike carrier.jpg`.
 
-A heavier raider carrier built around one huge ring, weathered grey-brown with heavy plating.
-
-- **Core hull.** A long body of octagonal cross-section running fore-aft, tapering at the bow into a faceted
-  cone. The cone ends in a small circular "eye" frame (an open ring) with two or three long, thin antenna spikes
-  pointing forward.
-- **Main ring.** One very thick ring encircles the hull just aft of mid-length: deep, with buttresses and panel
-  bays around its rim, and its diameter about 1.3x the hull's length is wide. Seen end-on, the ring frames
-  everything. Inside it, a cross-braced lattice (X-braces) connects the ring to the hull.
-- **Launch tubes.** Four big tubes of hexagonal or octagonal section run fore-aft through the ring: one above,
-  one below and one on each side of the core. Ribbed, with open fronts. Fighters (Delta-Vs) launch from these.
-- **Stern.** A flat aft face with an engine block of **eight yellow-glowing nozzles** in two rows of four,
-  between the upper and lower tubes.
-- **Scale.** Several Delta-V lengths across the ring. A Delta-V beside it in the reference is tiny (roughly
-  1/15 of the ring diameter).
+- **Mapping.** `--right=+y --up=+z --aft=+x`. The bow is the ring end; the stern is the pair of boxes and the engine
+  cluster. Up is +z: the sensor housing sits over the hangar mouth, the cradles stack three deep at twelve o'clock, and
+  the skirt fins hang under the boxes' stern, which is how the print stands on its base. (`refview`'s default mapping
+  has the stern as its front and a flank as its top.)
+- **Length.** None is published. **112 m**, pinned by the cradles as the painted print shows them (Q26, the maintainer,
+  2026-11-15: about 110 m): a docked Delta-V overhangs its pad out to the line of the clamp pins. The pins' tips are
+  15.24 % of the length apart and the Delta-V's span is 17 m (17 / 0.1524 = 111.5). At 112 m the model's box is 85.6 m
+  wide and 84.5 m high. (The first reading, 144 m, fitted the span to the pad's own wide edge, inside the pins.)
+- **Bow drum** (stations in percent of the length from the spike tips). A drum of radius 13.3 from 10.5 to 32.8, with
+  three raised collars (radius 14.3) and an open rim at its bow (6.8 to 10.5, radius 14.8). In the rim's mouth, the
+  recessed face holds the **hangar mouth** in an eight-sided frame (17 across, 12.6 high) and a sensor housing above it.
+  Ten antenna spikes stand forward from the rim: six long blades (7 long) at 0, 60, 120 and 180 degrees from up on both
+  sides, and four short ones between them at 30 and 150.
+- **Two rings** round the drum, each a flat band 5.3 long with bevelled edges, carried by one thick spoke on each side:
+  the mid ring at station 21.4 (radius 19.7 to 21.3), the outer ring at 29.8 (radius 26.8 to 28.4). The space between
+  the drum and each ring is open.
+- **Cradles, eighteen.** Each is an arm 8.1 long standing straight out, a short beam aft from its top, and a pad: a
+  slab 2.96 deep, 11.83 wide at its forward edge and 8.87 at its aft edge, with an L-shaped clamp pin at each end
+  (their tips 15.2 apart). Seen from the bow, clock angles from up: **nine on the outer ring** at 0 and at 40, 80, 120
+  and 160 degrees on both sides; **six on the mid ring** at 0, 60, 120 (both sides) and 180; **three on the drum's
+  first collar** at 0 and at 120 on both sides. The arms stand at stations 12.7, 21.4 and 29.8; the pads' centres are
+  at 17.1, 25.8 and 34.3, with their outer faces 23.5, 30.6 and 37.7 from the axis.
+- **Docked fighters.** The gold triangular "launch pods" of the show's still and of the print are **Delta-Vs docked on
+  the cradles**: belly on the pad, back outward, nose towards the carrier's bow, the span along the pad and out over
+  the clamp pins (which lie below the pad's face) to their tips. The model has the cradles and no fighters.
+- **Spine.** A tube of radius 2.6 from the drum's aft cap (32.8) to the centre section (44.9).
+- **Centre section** (44.9 to 79.7). A slab on the axis between a cross beam at each end, a long bar above and below
+  it on each side, and four pipe elbows above and four below on each side from the bars into the boxes.
+- **Two box hulls**, one each side, from x = 11.1 to 37.0. Each is a slab-sided box: a low nose block (41.2 to 44.2)
+  behind a bow plate, a bow slope up to the body, a body whose roof and keel spread from 18.1 above and below the axis
+  at 48.6 to 24.8 at 79.7, and a stern slope back in to 15.2 at 86.7. The outer flank carries **five hangar slats**:
+  recesses 2.96 high and 25.9 long (51.2 to 77.1), 6.65 apart about the axis, each with five posts across it; the
+  show's still has them lit pale. A small tapered housing sits on the roof and one under the keel, a fitting under the
+  bow slope, and four skirt fins hang under the stern slope down to 28.7 below the axis.
+- **Engine cluster.** A mount disc (radius 4.7) on the aft beam, four tanks (radius 1.85, 81.5 to 90.4) round the axis,
+  and one main engine through them whose bell (radius 2.25) ends at 97, with four petals to the stern (100).
+- **Colours and surface.** The show's still: dark green flanks with grey plated decks in a brick pattern of big
+  plates, pale lit slats, dark structure, and gold-ochre fighters. The Delta-V and the raider base scene give the
+  raiders' ochre accents and yellow-white engine glow. The maintainer chose this "show green" surface (option A of
+  three, 2026-11-15); its numbers are in `docs/assets-capital.md`.
 
 ## Raider base scene (mood reference)
 

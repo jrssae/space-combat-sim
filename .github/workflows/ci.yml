@@ -23,6 +23,12 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch replaces the run still going for an older commit: the newest commit carries every older
+# change, and a superseded run would only time out or fail on something already fixed (and send a failure email).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Builds the generated assets once and fills the cache that every other job restores, so a cache miss costs one
   # generation (about 6 minutes) instead of one per job. On a hit this job only looks the key up and downloads nothing.

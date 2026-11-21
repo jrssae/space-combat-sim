@@ -122,12 +122,15 @@ func test_the_stick_moves_the_preview_with_the_highlight() -> void:
 	await _ticks(2)
 	var preview: TargetPreview = main.target_menu.preview
 	assert_eq(preview.model.title, "RAIDER 1")
-	# The second entry is the next slice clockwise, 60 degrees from the top.
-	source.hold(InputAdapter.RADIAL_RIGHT, sin(deg_to_rad(60.0)))
-	source.hold(InputAdapter.RADIAL_UP, cos(deg_to_rad(60.0)))
+	# The second entry is the next slice clockwise, as wide as the ring's entry count makes it (M8-T24).
+	var second: float = RadialMenu.slice_angle(1, main.target_menu.menu.radial.slice_count())
+	source.hold(InputAdapter.RADIAL_RIGHT, maxf(sin(second), 0.0))
+	source.hold(InputAdapter.RADIAL_UP, maxf(cos(second), 0.0))
+	source.hold(InputAdapter.RADIAL_DOWN, maxf(-cos(second), 0.0))
 	await _ticks(2)
 	source.release(InputAdapter.RADIAL_RIGHT)
 	source.release(InputAdapter.RADIAL_UP)
+	source.release(InputAdapter.RADIAL_DOWN)
 	await _ticks(2)
 	assert_eq(preview.model.title, "RAIDER 2")
 	source.hold(InputAdapter.RADIAL_DOWN)

@@ -12,7 +12,7 @@ const PLANET_GM: float = 1.68e14
 const STATION_ORBIT_M: float = 2.75e7
 const AT: Array = [5500, -1200, -6000]
 const SCENARIOS: Array[String] = ["free_flight", "combat_sandbox", "instructor_route", "dogfight", "civilian_showcase",
-		"belt_showcase", "civilian_escort"]
+		"belt_showcase"]
 
 var system: StarSystem
 
@@ -194,3 +194,20 @@ func test_every_shipped_scenario_starts_beside_the_station_lit_with_the_planet_i
 		var station: Vector3 = _v(ScenarioFrame.place_in_scene(out, system, STATION, out["epoch_s"]))
 		var apart: float = station.distance_to(_v(start))
 		assert_between(apart, 6000.0, 12000.0, "%s: the station beside the start, %.1f km off" % [id, apart / 1000.0])
+
+
+## D89 (M8-T23): the escort starts at the Leporis Relay in its own system, lit, with the ice world ahead and no station.
+func test_the_escort_starts_lit_at_the_leporis_relay_with_its_planet_in_view() -> void:
+	var leporis := StarSystem.load_system(&"gamma_leporis")
+	var s: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
+	assert_true(s["ok"], s["error"])
+	assert_eq(s["system_id"], &"gamma_leporis")
+	var spec: Dictionary = s["frame"]
+	assert_eq(spec["id"], &"leporis_relay")
+	var player: UniversePos = s["player"]["position"]
+	var start := PackedFloat64Array([player.x, player.y, player.z])
+	var forward: Vector3 = s["player"]["forward"]
+	var out: Dictionary = ScenarioFrame.resolve(spec, leporis, 1, start, forward)
+	assert_true(out["ok"], out["error"])
+	assert_true(ScenarioFrame.good_start(spec, leporis, start, forward, out["epoch_s"]), "lit, the planet ahead")
+	assert_eq(ScenarioFrame.place_in_scene(out, leporis, STATION, out["epoch_s"]).size(), 0, "no station to place")

@@ -43,3 +43,5 @@ Thumbs.db
 # --- Claude Code agent worktrees (local only) ---
 .claude/worktrees/
 references/
+# Release export (scripts/build_release.sh)
+/build/

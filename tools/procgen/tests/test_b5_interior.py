@@ -20,6 +20,7 @@ from tools.procgen.core.geometry import Mesh
 from tools.procgen.core.sampling import sample_mesh
 from tools.procgen.parts import cobra_bay as cb
 from tools.procgen.parts import station_hardpoints as sh
+from tools.procgen.parts import station_props as sp
 from tools.procgen.styles.cobra_bay import COBRA_BAY, SCHEME
 
 SMALL = (1024, 512, 256, 64)  # bay, ends, signs and detail tile in px: the tests' bake (the bay's 1 500 charts need 1 024)
@@ -122,6 +123,18 @@ class HallShapeTests(unittest.TestCase):
         ends = Mesh.concatenate(p.mesh for p in interior.end_parts())
         self.assertGreaterEqual(float(ends.bounds()[1][2]), cb.END_Z)
         self.assertLessEqual(float(ends.vertices[:, 2][ends.vertices[:, 2] > 0].min()), cb.ROW_HALF + 1e-6)
+
+    def test_the_leaves_meet_on_the_stations_sawtooth_seam(self) -> None:
+        # Inside matches outside (M8-T02): the hall's leaves end on the station's seam line (the arm's x flipped), a lit gap between.
+        for name in ("leaves", "door_glow"):
+            v = self.bay[name].vertices
+            for z, x in sp.seam_line():
+                for side in (1.0, -1.0):
+                    at = np.array([cb.RACK_X - x + side * cb.SEAM_HALF, z])
+                    self.assertLess(float(np.linalg.norm(v[:, [0, 2]] - at, axis=1).min()), 1e-6, f"{name}: no corner at {at.tolist()}")
+        self.assertNotIn("seam", self.bay, "no straight seam strip is left over the teeth")
+        top = self.bay["leaves"].vertices
+        self.assertLessEqual(float(top[:, 1].max()), cb.LEAF_TOP + 0.55 + 1e-9, "the rails and drives stay low, under the fighter")
 
     def test_the_fighter_hangs_over_its_door_clear_of_the_floor(self) -> None:
         lo, hi = self.fighter.bounds()

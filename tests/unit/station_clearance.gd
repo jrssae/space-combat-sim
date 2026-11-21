@@ -31,7 +31,7 @@ static func load_station() -> StationClearance:
 
 
 # The faces of a piece's props (clamps, gantries, panels) where the manifest places them, in the piece's frame. The door leaves are
-# left out: they swing, and the tests that care place them for the moment they test.
+# left out: they slide, and the tests that care place them for the moment they test.
 static func _prop_faces(piece: Dictionary) -> PackedVector3Array:
 	var out := PackedVector3Array()
 	var props: Dictionary = piece.get("props", {})

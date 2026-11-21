@@ -35,6 +35,10 @@ signal section_repaired(index: int, section_name: String, health: float)
 
 const ASSET_ID: String = "babylon5_station"
 const DISPLAY_NAME: String = "BABYLON 5"
+## The id fighters name as their home dock (`Combatant.home`, M8-T06): the scenario's `home: "babylon5"`.
+const HOME_ID: StringName = &"babylon5"
+## Every station in the tree, for a ship that keeps clear of a hostile one's guns (M8-T08: a raider carrier).
+const GROUP: StringName = &"stations"
 ## The station's beacon is heard 1 000 km out, as a nav buoy's and the gate's (M3-T17, D69).
 const BROADCAST_RANGE_M: float = 1.0e6
 ## Before the core's sync (-11), so the rows and Jolt see the drum at this tick's angle; after the frame's sample (-100).
@@ -64,6 +68,8 @@ var targetable: Targetable = null
 ## The main docking bay's and the cargo bay's navigation targets (M7-T27), at the bay mouths; placeholders until missions fill
 ## their interactions (docking, loading, unloading).
 var docking_bay: NavPoint = null
+## Whose home this station is: its docking bay takes only the fighters that name it (M8-T06).
+var home_id: StringName = HOME_ID
 var cargo_bay: NavPoint = null
 ## The defense grid (M7-T07).
 var grid: StationGrid = null
@@ -106,6 +112,7 @@ var _goto_after_launch: String = ""  # the tour point a `station goto` during a 
 func _init() -> void:
 	add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	add_to_group(WorldFrame.ANCHORED_GROUP)
+	add_to_group(GROUP)
 	process_physics_priority = SPIN_PRIORITY
 
 
@@ -163,6 +170,7 @@ func far_visuals() -> Array[Node3D]:
 
 
 func _ready() -> void:
+	add_to_group(TargetCategories.LAUNCH_BASES)  # the fighters it launches name it home; the target menu pins it in ALLIES
 	_register_surfaces()
 	_register_console()
 	_world = WorldFrame.of(self)
@@ -391,6 +399,7 @@ func _build_nav_points() -> void:
 			BROADCAST_RANGE_M)
 	docking_bay.position = (dock.get("main_docking_bay_mouth", Vector3.ZERO) as Vector3) + drum_origin
 	docking_bay.class_text = "Docking bay"
+	docking_bay.home_id = home_id
 	add_child(docking_bay)
 	cargo_bay = NavPoint.make(CARGO_BAY_NAME, TargetInteraction.new(&"cargo", "CARGO", Callable(), Callable(), BAY_REACH_M),
 			BROADCAST_RANGE_M)

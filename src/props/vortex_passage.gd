@@ -18,6 +18,11 @@ var exit_velocity_rel: Vector3 = Vector3.ZERO
 var emerged: bool = false
 ## Its speed through the funnel, m/s, and the longest its passage may take before it is ended anyway, s.
 var speed_mps: float = 0.0
+## A passage flown in this many seconds whatever the ship's speed (the player's swallow into and burst out of a gate, M8-T29); 0:
+## its own pace.
+var burst_s: float = 0.0
+## Seconds to the core's next glow flash during a burst out.
+var glow_s: float = 0.0
 var limit_s: float = 20.0
 ## Departing: called with the body once its nose touches the base.
 var on_through: Callable = Callable()

@@ -56,6 +56,13 @@ var target_closing_mps: float = 0.0
 var target_hull: float = -1.0
 ## A navigation target (a nav buoy, a gate, a station bay; M7-T27): drawn as a diamond in the navigation colour, not brackets.
 var target_nav: bool = false
+## The approach cue on a navigation target with an interaction (M8-T18): its readout (`+450 m/s  BRAKE`), the bar's fill (the
+## stopping distance) and brake mark (the room left, -1 for none), 0..1, and the state's colour.
+var cue_present: bool = false
+var cue_text: String = ""
+var cue_fill: float = 0.0
+var cue_mark: float = -1.0
+var cue_color: Color = Color.WHITE
 ## Edge arrow: shown when the target is off screen or behind; `edge_arrow_angle` points the way (radians, screen frame).
 var edge_arrow_visible: bool = false
 var edge_arrow_pos: Vector2 = Vector2.ZERO
@@ -108,6 +115,12 @@ var waypoint_edge_pos: Vector2 = Vector2.ZERO
 var waypoint_edge_angle: float = 0.0
 ## The waypoint's contact in `radar_plot` (M5-T25), or -1: the radar marks it with a diamond.
 var waypoint_radar_index: int = -1
+
+## Far capitals' markers (M8-T08, `CapitalMarksLayout`): each `{on_screen, pos, angle, label, range_m, color}`; off screen, `pos`
+## and `angle` are its edge arrow's.
+var capital_marks: Array[Dictionary] = []
+## Whether the markers are switched on (off: `capital_marks` stays empty).
+var capital_marks_enabled: bool = false
 
 ## The mission's objectives list (M5-T05), top right, right-aligned: the caption's baseline, then one line per active objective
 ## (`{text: String, pos: Vector2, primary: bool}`).

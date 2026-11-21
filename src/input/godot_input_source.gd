@@ -8,6 +8,11 @@ extends InputSource
 ## Emitted when calibration proves a pad's trigger rest value; the owner stores it in Settings.
 signal trigger_rest_changed(guid: String, rest: float)
 
+## How far the mouse moves in one event, and how far a stick or trigger is pushed, before it counts as the pilot using that
+## device (a bumped mouse or a drifting stick must not flip the names the comms lines show).
+const MOUSE_WAKE_PX: float = 8.0
+const PAD_WAKE: float = 0.5
+
 var trigger_deadzone: float = 0.05
 
 ## True while the mouse belongs to the desktop (Alt held, the console or pause open, the window not focused): its buttons, motion
@@ -21,6 +26,7 @@ var calibration: TriggerCalibration = TriggerCalibration.new()
 
 func _init() -> void:
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
+	device = Device.KEYS if Input.get_connected_joypads().is_empty() else Device.PAD
 
 
 ## Seed calibration from saved data ({guid: rest}).
@@ -67,6 +73,8 @@ func get_trigger(action: StringName) -> float:
 func add_mouse_motion(relative: Vector2) -> void:
 	if keyboard_mouse_enabled and not mouse_free:
 		_mouse_delta += relative
+		if relative.length() >= MOUSE_WAKE_PX:
+			device = Device.KEYS
 
 
 func add_wheel(steps: int) -> void:
@@ -89,6 +97,13 @@ func take_wheel_steps() -> int:
 func is_pressed(action: StringName) -> bool:
 	for event: InputEvent in _events(action):
 		if _event_active(event, action):
+			return true
+	return false
+
+
+func is_key_pressed(action: StringName) -> bool:
+	for event: InputEvent in _events(action):
+		if (event is InputEventKey or event is InputEventMouseButton) and _event_active(event, action):
 			return true
 	return false
 
@@ -123,10 +138,10 @@ func _pad_name(pad: int) -> String:
 	return Input.get_joy_name(pad)
 
 
-func _pads_for(device: int) -> Array[int]:
-	if device < 0:
+func _pads_for(joy: int) -> Array[int]:
+	if joy < 0:
 		return _pad_ids()
-	var only: Array[int] = [device]
+	var only: Array[int] = [joy]
 	return only
 
 
@@ -165,15 +180,21 @@ func _event_strength(event: InputEvent) -> float:
 		var key := event as InputEventKey
 		var pressed: bool = Input.is_physical_key_pressed(key.physical_keycode) if key.physical_keycode != KEY_NONE \
 				else Input.is_key_pressed(key.keycode)
+		if pressed:
+			device = Device.KEYS
 		return 1.0 if pressed else 0.0
 	if event is InputEventMouseButton:
 		if not keyboard_mouse_enabled or mouse_free:
 			return 0.0
-		return 1.0 if Input.is_mouse_button_pressed((event as InputEventMouseButton).button_index) else 0.0
+		if Input.is_mouse_button_pressed((event as InputEventMouseButton).button_index):
+			device = Device.KEYS
+			return 1.0
+		return 0.0
 	if event is InputEventJoypadButton:
 		var button := event as InputEventJoypadButton
 		for pad: int in _pads_for(button.device):
 			if Input.is_joy_button_pressed(pad, button.button_index):
+				device = Device.PAD
 				return 1.0
 		return 0.0
 	if event is InputEventJoypadMotion:
@@ -185,6 +206,8 @@ func _event_strength(event: InputEvent) -> float:
 				best = maxf(best, TriggerCalibration.normalize(raw, calibration.get_rest(_pad_guid(pad))))
 			else:
 				best = maxf(best, maxf(0.0, raw * signf(motion.axis_value)))
+		if best >= PAD_WAKE:
+			device = Device.PAD
 		return best
 	return 0.0
 
@@ -195,6 +218,8 @@ func _event_active(event: InputEvent, action: StringName) -> bool:
 	return _event_strength(event) > 0.5
 
 
-func _on_joy_connection_changed(device: int, connected: bool) -> void:
+func _on_joy_connection_changed(pad: int, connected: bool) -> void:
 	if connected:
-		calibration.restart(_pad_guid(device))
+		calibration.restart(_pad_guid(pad))
+	elif Input.get_connected_joypads().is_empty():
+		device = Device.KEYS  # the last pad is gone: the keys are what is left

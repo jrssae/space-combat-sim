@@ -110,6 +110,8 @@ func test_the_input_carries_the_players_state() -> void:
 
 
 func test_the_radar_contacts_are_the_players_candidates_without_the_list() -> void:
+	# The wing holds its fire, so nobody turns its guns on the raider (M8-T19) between the radar's read and the list's.
+	main.wings.give_order(AiContext.Order.FORM_HOLD_FIRE)
 	DebugConsole.registry.execute("spawn raider 900")
 	DebugConsole.registry.execute("spawn raider 20000")
 	await _ticks(2)

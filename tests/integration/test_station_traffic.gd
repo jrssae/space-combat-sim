@@ -287,7 +287,10 @@ func test_a_scrambled_wing_is_a_wing_with_orders_and_engages_a_raid_on_the_stati
 	if wing == null:
 		return
 	assert_not_null(wing.leader, "with a leader")
-	assert_eq(wing.members().size(), 11, "and eleven on its slots")
+	# Twelve Starfuries in four flights of three (M8-T19): this is the first, BETA 1 with its two wingmen.
+	assert_eq(main.wings.flights_of("BETA").size(), 4, "four flights")
+	assert_eq(main.wings.flight_strength("BETA"), LaunchDirector.WING_SIZE)
+	assert_eq(wing.members().size(), 2, "and two on its slots")
 	assert_eq(wing.order, AiContext.Order.ENGAGE_AT_WILL)
 	await get_tree().physics_frame
 	var second: AiPilot = (wing.members()[0].driver as AiPilotDriver).brain as AiPilot

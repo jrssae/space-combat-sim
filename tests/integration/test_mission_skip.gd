@@ -65,6 +65,16 @@ func _explosions() -> int:
 	return n
 
 
+# Waits until every raid carrier has left through its own point (M12-T19: the strike carrier stands off, recalls and only then
+# jumps out), so a played and a skipped run have opened the same points. Their drives are charged at once (M8-T08: else each
+# would run for minutes first).
+func _carriers_gone() -> void:
+	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
+	for run: CarrierRun in carriers.runs():
+		run.carrier.jump_drive.charge()
+	await _wait_for("the raid's carrier to jump out through its own point", func() -> bool: return carriers.runs().is_empty(), 3600)
+
+
 # What a run leaves behind: its world changes in order, its objectives, the ships still in play, and how it ended.
 func _outcome() -> Dictionary:
 	var spawns := PackedStringArray()
@@ -86,6 +96,7 @@ func test_a_skipped_run_leaves_the_same_spawns_and_objectives_as_a_played_one() 
 	await _wait_for("the report step", func() -> bool: return _api().step_name() == &"report")
 	await _ticks(70)
 	await _tap(InputAdapter.TOGGLE_ASSIST)
+	await _carriers_gone()
 	var played: Dictionary = _outcome()
 	assert_eq(played["result"], "success: every primary objective done", "the played run finished")
 	main.queue_free()
@@ -95,6 +106,7 @@ func test_a_skipped_run_leaves_the_same_spawns_and_objectives_as_a_played_one() 
 	main = await _make_main()
 	assert_true(_run("mission goto report").ok)
 	assert_true(_run("mission skip").ok)
+	await _carriers_gone()
 	var skipped: Dictionary = _outcome()
 	gut.p("played: %s" % ", ".join(played["journal"]))
 	assert_eq(skipped["spawns"], played["spawns"], "the same ships spawned and sent, in the same order")

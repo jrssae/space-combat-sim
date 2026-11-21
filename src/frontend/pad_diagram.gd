@@ -11,6 +11,8 @@ const LEGEND_EDGE_RIGHT: float = 676.0
 const FONT_DESIGN: float = 17.0
 const LINE: Color = Color(0.55, 1.0, 0.6)
 const LIT: Color = Color(1.0, 0.85, 0.3)
+## A part held or moved on the real pad right now (M8-T22): brighter than `LIT`, so it reads over an action in focus.
+const PRESSED: Color = Color(1.0, 1.0, 1.0)
 ## The radial menus (target menu, comms menu) are pointed with the left stick (M7-T37), whatever the profile binds to it.
 const MENU_POINTER_WIDGET: StringName = &"ls"
 const MENU_POINTER_LABEL: String = "Menu pointer"
@@ -45,6 +47,7 @@ const _LETTERED: Array[StringName] = [&"a", &"b", &"x", &"y"]
 
 var legend: PadLegend = PadLegend.new()
 var _lit: Array[StringName] = []
+var _pressed: Array[StringName] = []
 
 
 func _ready() -> void:
@@ -71,6 +74,18 @@ func set_highlight(widgets: Array[StringName]) -> void:
 
 func highlighted() -> Array[StringName]:
 	return _lit.duplicate()
+
+
+## Lights the pad parts the player is holding or moving, so they see which button is which (M8-T22).
+func set_pressed(widgets: Array[StringName]) -> void:
+	if widgets == _pressed:
+		return
+	_pressed = widgets.duplicate()
+	queue_redraw()
+
+
+func pressed() -> Array[StringName]:
+	return _pressed.duplicate()
 
 
 ## The legend as it is listed beside the pad: "TAG  what it does", left side then right, top to bottom.
@@ -104,7 +119,7 @@ func _draw() -> void:
 		return
 	var origin: Vector2 = (size - DESIGN * fit) * 0.5
 	var font: Font = get_theme_default_font()
-	var font_size: int = clampi(roundi(FONT_DESIGN * fit), 9, 30)
+	var font_size: int = _fit_rows(font, clampi(roundi(FONT_DESIGN * fit), 9, 30), fit, origin)
 	var rows: Array[Dictionary] = _layout_rows(fit, origin, font, font_size)
 	for row: Dictionary in rows:  # leaders first, so the parts of the pad cover them
 		if not _LETTERED.has(row["widget"]):
@@ -114,14 +129,33 @@ func _draw() -> void:
 	_draw_body(fit, origin)
 	_draw_parts(fit, origin, font, font_size)
 	for row: Dictionary in rows:
-		var lit: bool = _lit.has(row["widget"])
-		var color: Color = LIT if lit else Color(LINE.r, LINE.g, LINE.b, 0.95)
+		var color: Color = Color(LINE.r, LINE.g, LINE.b, 0.95)
+		if _pressed.has(row["widget"]):
+			color = PRESSED
+		elif _lit.has(row["widget"]):
+			color = LIT
 		var edge: float = origin.x + (LEGEND_EDGE_LEFT if row["left"] else LEGEND_EDGE_RIGHT) * fit
 		var baseline: float = row["y"] + font.get_ascent(font_size) * 0.5 - font.get_descent(font_size) * 0.5
 		if row["left"]:
 			draw_string(font, Vector2(origin.x, baseline), row["text"], HORIZONTAL_ALIGNMENT_RIGHT, edge - origin.x, font_size, color)
 		else:
 			draw_string(font, Vector2(edge, baseline), row["text"], HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, color)
+
+
+# The largest size up to `wanted` at which every legend line fits beside the pad (the game's fonts are wide).
+func _fit_rows(font: Font, wanted: int, fit: float, origin: Vector2) -> int:
+	var fitted: int = wanted
+	while fitted > 9 and not _rows_fit(font, fitted, fit, origin):
+		fitted -= 1
+	return fitted
+
+
+func _rows_fit(font: Font, font_size: int, fit: float, origin: Vector2) -> bool:
+	for widget: StringName in legend.widgets():
+		var room: float = LEGEND_EDGE_LEFT * fit if _LEFT_SIDE.has(widget) else size.x - origin.x - LEGEND_EDGE_RIGHT * fit
+		if font.get_string_size(_row_text(widget), HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x > room:
+			return false
+	return true
 
 
 func _draw_body(fit: float, origin: Vector2) -> void:
@@ -140,7 +174,7 @@ func _draw_parts(fit: float, origin: Vector2, font: Font, font_size: int) -> voi
 				Color(LINE.r, LINE.g, LINE.b, 0.6), maxf(1.0, 1.5 * fit), true)
 	var stick_fill: Dictionary = {&"ls": Vector2(100, 100), &"rs": Vector2(270, 148)}
 	for widget: StringName in stick_fill:
-		if bound.has(widget) or _lit.has(widget):
+		if bound.has(widget) or _lit.has(widget) or _pressed.has(widget):
 			draw_circle(_map(PAD_OFFSET + (stick_fill[widget] as Vector2), fit, origin), 22.0 * fit, _fill_of(widget, bound))
 	for widget: StringName in _RECTS:
 		var rect: Rect2 = _RECTS[widget]
@@ -159,16 +193,21 @@ func _draw_parts(fit: float, origin: Vector2, font: Font, font_size: int) -> voi
 			var letter: String = PadLegend.tag_of(widget)
 			var width: float = font.get_string_size(letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size).x
 			draw_string(font, center + Vector2(-width * 0.5, (font.get_ascent(font_size) - font.get_descent(font_size)) * 0.5),
-					letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size, _edge_of(widget, bound))
+					letter, HORIZONTAL_ALIGNMENT_LEFT, -1.0, font_size,
+					Color(0.02, 0.06, 0.05) if _pressed.has(widget) else _edge_of(widget, bound))  # dark on the bright fill
 
 
 func _fill_of(widget: StringName, bound: Array[StringName]) -> Color:
+	if _pressed.has(widget):
+		return Color(PRESSED.r, PRESSED.g, PRESSED.b, 0.85)
 	if _lit.has(widget):
 		return Color(LIT.r, LIT.g, LIT.b, 0.65)
 	return Color(LINE.r, LINE.g, LINE.b, 0.28) if bound.has(widget) else Color(0, 0, 0, 0)
 
 
 func _edge_of(widget: StringName, bound: Array[StringName]) -> Color:
+	if _pressed.has(widget):
+		return PRESSED
 	if _lit.has(widget):
 		return LIT
 	return Color(LINE.r, LINE.g, LINE.b, 0.95 if bound.has(widget) else 0.4)

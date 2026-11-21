@@ -13,6 +13,11 @@ extends RefCounted
 ## as the glows (`ThrusterGlowLevels`).
 ##
 ## Envelopes follow docs/design-references.md "Roars and pass-bys" and run on the frame's delta (sim time).
+##
+## A voice's envelope only says where on the ship the sound is (M8-T12): how loud the ship is comes from its group level, one
+## per ship for its pods and one for its jets, which follows the ship's throttle (its strongest pod, its strongest jet)
+## with its own slower attack and release. Each voice gets the group level times its share of the group's power, so pods
+## starting, stopping and overlapping move the sound about the ship but never its loudness (`gain`).
 
 enum Kind { POD, RCS }
 
@@ -29,6 +34,10 @@ const RCS_ATTACK_TAU_S: float = 0.027  # a 60 ms rise (reference: 25-100 ms)
 const RCS_RELEASE_SHORT_TAU_S: float = 0.15  # after a pulse (reference: 120-250 ms)
 const RCS_RELEASE_LONG_TAU_S: float = 0.65  # after a long burn (reference: up to 0.65 s)
 const RCS_LONG_BURN_S: float = 1.5  # a burn this long earns the longest release
+## Group level time constants, s: slower than a voice's, so the flight computer's pulses do not make the ship pump.
+const POD_GROUP_ATTACK_TAU_S: float = 0.03  # a 66 ms rise
+const POD_GROUP_RELEASE_TAU_S: float = 0.08  # 30 dB down in 0.28 s
+const RCS_GROUP_ATTACK_TAU_S: float = 0.04  # a 90 ms rise; the release is the jets' own (`rcs_release_tau`)
 ## A jet plays an octave low at silence and at its own pitch at full level: its brightness follows its level.
 const RCS_DULL_PITCH: float = 0.5
 ## Along each axis, jets within this fraction of the farthest jet's offset from the centre of mass are on the centre line.
@@ -48,6 +57,12 @@ var voice_retro_position := PackedVector3Array()
 var level := PackedFloat64Array()
 var target := PackedFloat64Array()
 var at_retro := PackedByteArray()
+## Per voice: the amplitude it plays at (the group level times its share) and its share of its group's power.
+var gain := PackedFloat64Array()
+var share := PackedFloat64Array()
+## Per ship: the group levels of its pods and its jets (0..1, amplitude; a whole ship at full thrust is 1).
+var pod_level := PackedFloat64Array()
+var rcs_level := PackedFloat64Array()
 ## The voices the last `allocate` granted, the ships they belong to, and those that lost their grant (their players stop).
 var active := PackedInt32Array()
 var voiced_ships := PackedInt32Array()
@@ -70,6 +85,11 @@ var _granted := PackedByteArray()
 var _before := PackedInt32Array()
 var _budget: int = 0
 var _removed: int = 0
+var _pod_max := PackedFloat64Array()
+var _pod_power := PackedFloat64Array()
+var _rcs_max := PackedFloat64Array()
+var _rcs_power := PackedFloat64Array()
+var _rcs_group_burn_s := PackedFloat64Array()
 
 
 ## Registers a ship and makes its voices; returns its id. The player's ship also gets its RCS cluster voices.
@@ -78,6 +98,13 @@ func add_ship(layout: ThrusterLayout, is_player: bool) -> int:
 	_layouts.append(layout)
 	_outputs.append(null)
 	_first_voice.append(voice_ship.size())
+	pod_level.append(0.0)
+	rcs_level.append(0.0)
+	_pod_max.append(0.0)
+	_pod_power.append(0.0)
+	_rcs_max.append(0.0)
+	_rcs_power.append(0.0)
+	_rcs_group_burn_s.append(0.0)
 	var mains := PackedInt32Array()
 	var retros := PackedInt32Array()
 	mains.resize(layout.pod_count())
@@ -152,6 +179,8 @@ func finish_allocation() -> void:
 		if _granted[v] == 0:
 			revoked.append(v)
 			_go_cold(v)
+			if not voiced_ships.has(voice_ship[v]):
+				_quiet_ship(voice_ship[v])
 	_before = PackedInt32Array()
 
 
@@ -174,6 +203,7 @@ func remove_ship(ship: int) -> PackedInt32Array:
 	if at >= 0:
 		voiced_ships.remove_at(at)
 	_voice_count[ship] = 0
+	_quiet_ship(ship)
 	_layouts[ship] = null
 	_outputs[ship] = null
 	if _player == ship:
@@ -182,10 +212,16 @@ func remove_ship(ship: int) -> PackedInt32Array:
 	return gone
 
 
-## Moves every granted voice's envelope on by `delta` seconds of sim time toward its thrusters' demand.
+## Moves every granted voice's envelope, and its ship's group levels, on by `delta` seconds of sim time toward its thrusters'
+## demand, and sets each voice's `gain`.
 func step(delta: float) -> void:
 	step_work = 0
 	var dt: float = maxf(delta, 0.0)
+	for ship: int in voiced_ships:
+		_pod_max[ship] = 0.0
+		_pod_power[ship] = 0.0
+		_rcs_max[ship] = 0.0
+		_rcs_power[ship] = 0.0
 	for v: int in active:
 		step_work += 1
 		var ship: int = voice_ship[v]
@@ -213,6 +249,31 @@ func step(delta: float) -> void:
 		target[v] = demand
 		if demand == 0.0 and level[v] < SILENT:
 			level[v] = 0.0
+		if voice_kind[v] == Kind.POD:
+			_pod_max[ship] = maxf(_pod_max[ship], demand)
+			_pod_power[ship] += level[v] * level[v]
+		else:
+			_rcs_max[ship] = maxf(_rcs_max[ship], demand)
+			_rcs_power[ship] += level[v] * level[v]
+	for ship: int in voiced_ships:
+		var pod_demand: float = _pod_max[ship]
+		pod_level[ship] = _settle(step_level(pod_level[ship], pod_demand, dt, POD_GROUP_ATTACK_TAU_S,
+				POD_GROUP_RELEASE_TAU_S), pod_demand)
+		var rcs_demand: float = _rcs_max[ship]
+		_rcs_group_burn_s[ship] = _rcs_group_burn_s[ship] + dt if rcs_demand > 0.0 else 0.0
+		var release: float = RCS_RELEASE_SHORT_TAU_S
+		if rcs_demand > 0.0:
+			release = rcs_release_tau(_rcs_group_burn_s[ship])
+		elif rcs_level[ship] > 0.0:
+			release = _rcs_group_release(ship)
+		rcs_level[ship] = _settle(step_level(rcs_level[ship], rcs_demand, dt, RCS_GROUP_ATTACK_TAU_S, release), rcs_demand)
+	for v: int in active:
+		var ship: int = voice_ship[v]
+		var is_pod: bool = voice_kind[v] == Kind.POD
+		var power: float = _pod_power[ship] if is_pod else _rcs_power[ship]
+		if power > SILENT * SILENT:
+			share[v] = level[v] / sqrt(power)
+		gain[v] = (pod_level[ship] if is_pod else rcs_level[ship]) * share[v]
 
 
 ## Groups a layout's RCS jets by where they sit: each jet falls on one side of the centre of mass, or on its centre line,
@@ -283,6 +344,8 @@ func _add_voice(ship: int, kind: Kind, at: Vector3, retro_at: Vector3, main_nozz
 	level.append(0.0)
 	target.append(0.0)
 	at_retro.append(0)
+	gain.append(0.0)
+	share.append(0.0)
 	_main_nozzle.append(main_nozzle)
 	_retro_nozzle.append(retro_nozzle)
 	_tags.append(tags)
@@ -305,8 +368,30 @@ func _grant(ship: int, budget: int) -> int:
 func _go_cold(v: int) -> void:
 	level[v] = 0.0
 	target[v] = 0.0
+	gain[v] = 0.0
+	share[v] = 0.0
 	_burn_s[v] = 0.0
 	_release_tau[v] = RCS_RELEASE_SHORT_TAU_S
+
+
+func _quiet_ship(ship: int) -> void:
+	pod_level[ship] = 0.0
+	rcs_level[ship] = 0.0
+	_rcs_group_burn_s[ship] = 0.0
+
+
+# The jets' group keeps the release its last burn earned while it fades.
+func _rcs_group_release(ship: int) -> float:
+	var tau: float = RCS_RELEASE_SHORT_TAU_S
+	for v: int in range(_first_voice[ship], _first_voice[ship] + _voice_count[ship]):
+		if voice_kind[v] == Kind.RCS:
+			tau = maxf(tau, _release_tau[v])
+	return tau
+
+
+# A level released to near silence is silence.
+static func _settle(value: float, demand: float) -> float:
+	return 0.0 if demand == 0.0 and value < SILENT else value
 
 
 static func _side(offset: float, band: float) -> int:

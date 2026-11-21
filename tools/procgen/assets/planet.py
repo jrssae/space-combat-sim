@@ -1,4 +1,4 @@
-"""``planet``: a planet's surface maps, one asset per parameter set (M6-T11, D68). The first is ``epsilon_iii``.
+"""``planet``: a planet's surface maps, one asset per parameter set (M6-T11, D68): ``epsilon_iii`` and ``gamma_leporis_ii`` (M8-T23).
 
 Epsilon III follows the maintainer's show still (``docs/design-references.md``, "Epsilon III"): a dry rust, tan and ochre world,
 dark brown lowlands, beige-cream highlands with pale patches toward the north, strong relief at every scale (ridges, wrinkled
@@ -83,6 +83,8 @@ class PlanetSpec:
     cloud_peak: float = 0.35
     ocean: bool = False
     night_lights: bool = False
+    # How dark a canyon floor is against the ground beside it: thin crack lines on an ice world.
+    groove_dark: float = 0.12
 
 
 EPSILON_III = PlanetSpec(
@@ -104,7 +106,36 @@ EPSILON_III = PlanetSpec(
     limb_srgb=(236, 150, 84),
 )
 
-PLANETS: dict[str, PlanetSpec] = {spec.asset_id: spec for spec in (EPSILON_III,)}
+# Gamma Leporis II (M8-T23, D89): the civilian escort's planet, a frozen world: blue-grey old ice in the lowlands, white
+# highlands, frost toward the north and long dark cracks. Nothing like Epsilon III's rust.
+GAMMA_LEPORIS_II = PlanetSpec(
+    asset_id="gamma_leporis_ii",
+    radius_m=5_600_000.0,
+    ramp=(
+        (0.00, (50, 68, 92)),
+        (0.30, (86, 110, 138)),
+        (0.48, (132, 158, 184)),
+        (0.64, (174, 194, 214)),
+        (0.80, (208, 220, 232)),
+        (1.00, (236, 241, 246)),
+    ),
+    rust=(118, 150, 196),
+    ochre=(170, 182, 194),
+    pale=(246, 249, 252),
+    cloud_srgb=(228, 238, 255),
+    limb_srgb=(140, 186, 255),
+    canyon_freq=4.5,
+    canyon_width=0.05,
+    groove_dark=0.55,
+    ridge_freq=4.0,
+    height_range_m=7_000.0,
+    normal_exaggeration=9.0,
+    pale_lat_deg=(30.0, 75.0),
+    pale_cover=0.45,
+    cloud_peak=0.12,
+)
+
+PLANETS: dict[str, PlanetSpec] = {spec.asset_id: spec for spec in (EPSILON_III, GAMMA_LEPORIS_II)}
 
 
 # --- the grid ---------------------------------------------------------------------------------
@@ -399,7 +430,7 @@ def albedo_map(spec: PlanetSpec, terrain: Terrain, sampler: SphereSampler) -> np
     colour = colour + 0.35 * (colour.mean(axis=-1, keepdims=True) * hue - colour)
 
     # Relief in the colour: darker canyon floors, lighter exposed crests, darker hollows between the lumps.
-    colour *= (1.0 - 0.12 * terrain.groove)[..., None]
+    colour *= (1.0 - spec.groove_dark * terrain.groove)[..., None]
     colour *= (0.92 + 0.16 * terrain.crest * (0.4 + 0.6 * terrain.highland))[..., None]
     colour *= (1.0 + 0.08 * terrain.grain)[..., None]
 

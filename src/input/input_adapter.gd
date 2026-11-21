@@ -28,7 +28,8 @@ extends RefCounted
 ## menu's stick, select and back (and Start), `begin_radial` and `end_radial` bracket it so that nothing fires, steers or
 ## targets on the tick the game resumes. The menu's own actions (`RADIAL_ACTIONS`) are fixed like the menu kit's `ui_*`
 ## ones, not part of a control profile: the LEFT stick or the arrow keys point (M7-T37; the right stick is not read, and the game is
-## paused, so it flies again as the menu closes), A or Enter selects, B or Backspace backs.
+## paused, so it flies again as the menu closes), A or Enter selects, B or Backspace backs, and keys 1-8 pick the ring's entries
+## by their order (M8-T24, `RADIAL_ENTRIES`; key 9 too, for a target ring of eight and NONE). The D-pad does nothing while a radial menu is open (maintainer, 2026-11-19).
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -64,6 +65,11 @@ const WING_ATTACK := &"wing_attack"
 const WING_FORM := &"wing_form"
 const WING_ENGAGE := &"wing_engage"
 const WING_COVER := &"wing_cover"
+## The wing order to dock for repair (M8-T06): key 6, and the comms menu's DOCK.
+const WING_DOCK := &"wing_dock"
+## The hold-fire orders (M8-T19): key 7 forms the wing up with its guns silent, key 8 stops it where it is; both on the comms menu.
+const WING_FORM_HOLD := &"wing_form_hold"
+const WING_HOLD := &"wing_hold"
 const TOGGLE_RUNNING_LIGHTS := &"toggle_running_lights"
 const COMMS_MENU := &"comms_menu"
 const RADIAL_UP := &"radial_up"
@@ -72,6 +78,10 @@ const RADIAL_LEFT := &"radial_left"
 const RADIAL_RIGHT := &"radial_right"
 const RADIAL_SELECT := &"radial_select"
 const RADIAL_BACK := &"radial_back"
+## Pick the ring's entries by order while a radial menu is open (M8-T24): keys 1-9, the keyboard only (a target ring holds eight
+## ships and NONE).
+const RADIAL_ENTRIES: Array[StringName] = [&"radial_entry_1", &"radial_entry_2", &"radial_entry_3", &"radial_entry_4",
+		&"radial_entry_5", &"radial_entry_6", &"radial_entry_7", &"radial_entry_8", &"radial_entry_9"]
 
 ## Every action the game reads; project.godot must declare each one (tests/unit/test_input_map.gd).
 const ACTIONS: Array[StringName] = [
@@ -79,11 +89,13 @@ const ACTIONS: Array[StringName] = [
 	STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, ROLL_LEFT, ROLL_RIGHT, TARGET_NEXT, WEAPON_NEXT,
 	TARGET_AHEAD, FIRE, TOGGLE_ASSIST, BRAKE, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TARGET_CYCLE,
-	TOGGLE_RUNNING_LIGHTS, COMMS_MENU,
+	TOGGLE_RUNNING_LIGHTS, COMMS_MENU, WING_DOCK, WING_FORM_HOLD, WING_HOLD,
 ]
 
 ## A radial menu's own actions: declared in project.godot, read only while one is open, never rebound by a profile.
-const RADIAL_ACTIONS: Array[StringName] = [RADIAL_UP, RADIAL_DOWN, RADIAL_LEFT, RADIAL_RIGHT, RADIAL_SELECT, RADIAL_BACK]
+const RADIAL_ACTIONS: Array[StringName] = [RADIAL_UP, RADIAL_DOWN, RADIAL_LEFT, RADIAL_RIGHT, RADIAL_SELECT, RADIAL_BACK,
+	&"radial_entry_1", &"radial_entry_2", &"radial_entry_3", &"radial_entry_4", &"radial_entry_5", &"radial_entry_6",
+	&"radial_entry_7", &"radial_entry_8", &"radial_entry_9"]
 
 ## Actions reported as one-tick edges on press rather than held state. `TARGET_NEXT` and `TARGET_CYCLE` are not among
 ## them: they are the tap-or-hold buttons (see `target_hold_s`). `AUTOTRACK`'s edge is kept for the resync but it acts
@@ -91,7 +103,7 @@ const RADIAL_ACTIONS: Array[StringName] = [RADIAL_UP, RADIAL_DOWN, RADIAL_LEFT, 
 const EDGE_ACTIONS: Array[StringName] = [
 	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, SCREENSHOT, AUTOTRACK, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TOGGLE_RUNNING_LIGHTS,
-	COMMS_MENU,
+	COMMS_MENU, WING_DOCK, WING_FORM_HOLD, WING_HOLD,
 ]
 
 const AIM_EXPO := 1.5
@@ -104,6 +116,8 @@ const MOUSE_SMOOTHING := 0.4
 const STICK_SECTOR_HALF_DEG := 22.5
 ## The tap-or-hold target buttons: a tap picks the nearest enemy, a hold opens the target menu.
 const TAP_HOLD: Array[StringName] = [TARGET_NEXT, TARGET_CYCLE]
+# Where the comms key's own (keyboard) edge is remembered while a radial menu is open.
+const _COMMS_KEY := &"comms_menu:key"
 ## Mouse travel, pixels, that points a radial menu as far as a stick held over.
 const RADIAL_MOUSE_REACH_PX := 120.0
 ## Default for `target_hold_s` (`Settings.target_hold_s`).
@@ -139,6 +153,8 @@ var autotrack_on: bool = false
 var interaction_offered: bool = false
 ## X's tap and hold (M7-T27).
 var hold: HoldInteract = HoldInteract.new()
+## Taps of X do nothing (M8-T32: while an autopilot holds the controls, X is only its abort's hold, never auto-track).
+var taps_blocked: bool = false
 ## The console holds X this much longer, s (`interact hold`, for scripts and captures): as if the button were down.
 var console_hold_s: float = 0.0
 
@@ -214,7 +230,7 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	var x_down: bool = source.is_pressed(AUTOTRACK) or console_hold_s > 0.0
 	console_hold_s = maxf(console_hold_s - dt, 0.0)
 	hold.step(x_down, interaction_offered, dt)
-	if hold.tapped:
+	if hold.tapped and not taps_blocked:
 		autotrack_on = not autotrack_on
 	flight.autotrack = autotrack_on
 	cmd.ui.interact = hold.fired
@@ -243,6 +259,9 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.ui.wing_form = edges[WING_FORM]
 	cmd.ui.wing_engage = edges[WING_ENGAGE]
 	cmd.ui.wing_cover = edges[WING_COVER]
+	cmd.ui.wing_dock = edges[WING_DOCK]
+	cmd.ui.wing_form_hold = edges[WING_FORM_HOLD]
+	cmd.ui.wing_hold = edges[WING_HOLD]
 	cmd.ui.toggle_running_lights = edges[TOGGLE_RUNNING_LIGHTS]
 	cmd.ui.comms_open = edges[COMMS_MENU]
 	cmd.ui.look_active = looking
@@ -282,25 +301,28 @@ func sample_menu(source: InputSource, dt: float) -> UiCommand:
 	return cmd.ui
 
 
-## A radial menu opens: its select and back, and the comms key, are seeded from what is held (the button that opened it is also its back), and
-## the mouse points from the centre again.
+## A radial menu opens: its select, back and entry picks, and the comms key, are seeded from what is held (the button that opened
+## it is also its back), and the mouse points from the centre again.
 func begin_radial(source: InputSource) -> void:
-	for action: StringName in [RADIAL_SELECT, RADIAL_BACK, PAUSE, COMMS_MENU]:
+	for action: StringName in [RADIAL_SELECT, RADIAL_BACK, PAUSE] + RADIAL_ENTRIES:
 		_prev_pressed[action] = source.is_pressed(action)
+	_prev_pressed[_COMMS_KEY] = source.is_key_pressed(COMMS_MENU)
 	_radial_pointer = Vector2.ZERO
 	source.take_mouse_delta()
 
 
 ## One tick while a radial menu has the pad: the direction pointed (`UiCommand.radial_point`: the menu's stick or arrow keys,
-## else the mouse while it moves), the select and back edges, the comms key's edge and Start. Everything else is re-seeded from what is held, as
-## behind the pause menu.
+## else the mouse while it moves), the select and back edges, an entry picked by a numbered key, the comms key's edge (its key
+## only: the D-pad is quiet in a radial menu) and Start. Everything else is re-seeded from what is held, as behind the pause menu.
 func sample_radial(source: InputSource, dt: float) -> UiCommand:
 	source.poll(dt)
 	var cmd := PilotCommand.new()
 	var ui: UiCommand = cmd.ui
 	ui.pause = source.is_pressed(PAUSE) and not bool(_prev_pressed.get(PAUSE, false))
-	# The comms key closes the comms menu again; the target menu ignores it.
-	ui.comms_open = source.is_pressed(COMMS_MENU) and not bool(_prev_pressed.get(COMMS_MENU, false))
+	# Ctrl closes the comms menu again (the target menu ignores it); D-pad Right, the pad's comms button, does not.
+	var comms_key: bool = source.is_key_pressed(COMMS_MENU)
+	ui.comms_open = comms_key and not bool(_prev_pressed.get(_COMMS_KEY, false))
+	_prev_pressed[_COMMS_KEY] = comms_key
 	for action: StringName in [RADIAL_SELECT, RADIAL_BACK]:
 		var pressed: bool = source.is_pressed(action)
 		var edge: bool = pressed and not bool(_prev_pressed.get(action, false))
@@ -309,6 +331,11 @@ func sample_radial(source: InputSource, dt: float) -> UiCommand:
 			ui.radial_select = edge
 		else:
 			ui.radial_back = edge
+	for i: int in RADIAL_ENTRIES.size():
+		var pressed: bool = source.is_pressed(RADIAL_ENTRIES[i])
+		if pressed and not bool(_prev_pressed.get(RADIAL_ENTRIES[i], false)) and ui.radial_entry < 0:
+			ui.radial_entry = i
+		_prev_pressed[RADIAL_ENTRIES[i]] = pressed
 	ui.radial_point = source.get_vector(RADIAL_LEFT, RADIAL_RIGHT, RADIAL_DOWN, RADIAL_UP, stick_deadzone)
 	var px: Vector2 = source.take_mouse_delta()
 	if not px.is_zero_approx():

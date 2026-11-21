@@ -40,3 +40,19 @@ static func temperature_in(table: Dictionary, system_id: StringName) -> float:
 	var systems: Dictionary = table["systems"]
 	var entry: Dictionary = systems.get(String(system_id), systems[table["default"]])
 	return float(entry["temperature_k"])
+
+
+## Whether `system_id`'s sky has the nebula (M8-T23): a system's `sky.nebula`, true when it does not say.
+static func shows_nebula(system_id: StringName) -> bool:
+	var file := FileAccess.open(PATH, FileAccess.READ)
+	return nebula_in(parse(file.get_as_text() if file != null else ""), system_id)
+
+
+## Whether the system's sky in `table` has the nebula; the default system's for a system it does not list.
+static func nebula_in(table: Dictionary, system_id: StringName) -> bool:
+	if table.has("error") or not table.has("systems"):
+		return true
+	var systems: Dictionary = table["systems"]
+	var entry: Dictionary = systems.get(String(system_id), systems[table["default"]])
+	var sky: Variant = entry.get("sky", {})
+	return not (sky is Dictionary) or bool((sky as Dictionary).get("nebula", true))

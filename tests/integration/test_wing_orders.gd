@@ -108,6 +108,19 @@ func test_a_buoy_is_no_hostile_to_attack() -> void:
 	_assert_orders(AiContext.Order.COVER_ME, "a neutral buoy selected")
 
 
+func test_an_order_taken_is_counted_and_passes_its_control_check_and_a_refusal_does_not() -> void:
+	var check: ControlCheck = (ControlCheckBook.load_file()["book"] as ControlCheckBook).make(&"wing_form")
+	check.observe(ControlCheckProbe.sample(main), 1.0 / 60.0)
+	var before: int = main.wings.orders_given
+	assert_true(main.ship.targeting.select_by_name("NAV ALPHA"))
+	main.wings.give_order(AiContext.Order.ATTACK_MY_TARGET)
+	assert_eq(main.wings.orders_given, before, "a refused order is not one the wing took")
+	assert_false(check.observe(ControlCheckProbe.sample(main), 1.0 / 60.0))
+	main.wings.give_order(AiContext.Order.FORM_ON_ME)
+	assert_eq(main.wings.orders_given, before + 1)
+	assert_true(check.observe(ControlCheckProbe.sample(main), 1.0 / 60.0), "M8's check reads the wing's order, however it was given")
+
+
 func test_the_console_orders_the_wing_and_changes_its_formation() -> void:
 	var form: ConsoleResult = _run("wing order form")
 	assert_true(form.ok, form.error)
@@ -128,7 +141,7 @@ func test_the_console_orders_the_wing_and_changes_its_formation() -> void:
 
 	var bad: ConsoleResult = _run("wing order dance")
 	assert_false(bad.ok)
-	assert_string_contains(bad.error, "wing order expects one of attack|form|engage|cover, got 'dance'")
+	assert_string_contains(bad.error, "wing order expects one of attack|form|engage|cover|form_hold|hold, got 'dance'")
 	assert_false(_run("wing dance").ok, "only order and formation")
 	assert_signal_emit_count(main.wings, "acknowledged", 4, "bad words post nothing")
 
@@ -143,6 +156,99 @@ func test_the_console_orders_the_wing_and_changes_its_formation() -> void:
 	assert_false(_run("wing formation box").ok)
 	assert_eq(_run("wing").text(), "ALPHA: order cover, formation wedge, members ALPHA 2, ALPHA 3, ALPHA 4")
 	assert_eq(_run("wing order").text(), "ALPHA order: cover")
+
+
+func test_keys_seven_and_eight_and_the_console_give_the_hold_fire_orders_and_any_other_order_lifts_them() -> void:
+	# M8-T19 (D85): form up and hold fire, hold position and hold fire.
+	var lines: Array[String] = []
+	main.wings.acknowledged.connect(func(line: String) -> void: lines.append(line))
+	await _press(InputAdapter.WING_FORM_HOLD)
+	_assert_orders(AiContext.Order.FORM_HOLD_FIRE, "key 7")
+	assert_eq(lines, ["ALPHA 2: COPY, FORMING UP, HOLDING FIRE"] as Array[String])
+	await _press(InputAdapter.WING_HOLD)
+	_assert_orders(AiContext.Order.HOLD_POSITION, "key 8")
+	assert_eq(lines[1], "ALPHA 2: COPY, HOLDING POSITION, HOLDING FIRE")
+	await _press(InputAdapter.WING_COVER)
+	_assert_orders(AiContext.Order.COVER_ME, "key 4 lifts the hold")
+	var held: ConsoleResult = _run("wing order form_hold")
+	assert_true(held.ok, held.error)
+	assert_eq(held.text(), "ALPHA 2: COPY, FORMING UP, HOLDING FIRE")
+	_assert_orders(AiContext.Order.FORM_HOLD_FIRE, "wing order form_hold")
+	assert_eq(_read("wing.order"), "form_hold")
+	assert_true(_run("wing order hold").ok)
+	_assert_orders(AiContext.Order.HOLD_POSITION, "wing order hold")
+	assert_eq(_run("wing order").text(), "ALPHA order: hold")
+	assert_true(_run("wing order engage").ok)
+	_assert_orders(AiContext.Order.ENGAGE_AT_WILL, "another order lifts it")
+
+
+func test_in_formation_every_ship_fires_at_a_hostile_in_reach_and_keeps_its_slot_and_hold_fire_silences_it() -> void:
+	# M8-T19 (D85): under FORM ON ME the wingmen shoot from their slots; under form up, hold fire they only hold them.
+	var shots: Dictionary = {}
+	for ally: Combatant in allies:
+		shots[ally] = 0
+		ally.cannon.shot_fired.connect(func(_muzzle: int, _at: Vector3) -> void: shots[ally] += 1)
+	main.wings.give_order(AiContext.Order.FORM_HOLD_FIRE)
+	DebugConsole.registry.execute("spawn raider idle 900")
+	await _ticks(240)
+	for ally: Combatant in allies:
+		var pilot := ally.driver.brain as AiPilot
+		assert_eq(pilot.current.id, &"formation", "%s holds its slot" % ally.display_name)
+		assert_eq(shots[ally], 0, "%s holds its fire" % ally.display_name)
+		assert_eq(pilot.wanted_target_id, PilotBrain.TARGET_NONE, "%s shows no target" % ally.display_name)
+		assert_lt(_slot_error(ally), 30.0, "%s is on its slot" % ally.display_name)
+	main.wings.give_order(AiContext.Order.FORM_ON_ME)
+	await _ticks(240)
+	for ally: Combatant in allies:
+		var pilot := ally.driver.brain as AiPilot
+		assert_eq(pilot.current.id, &"formation", "%s still flies formation" % ally.display_name)
+		assert_gt(shots[ally], 0, "%s fired from its slot" % ally.display_name)
+		assert_lt(_slot_error(ally), 30.0, "%s kept its slot while it fired" % ally.display_name)
+	# Back to hold fire: the guns stop.
+	main.wings.give_order(AiContext.Order.FORM_HOLD_FIRE)
+	await _ticks(30)
+	var before: Dictionary = shots.duplicate()
+	await _ticks(120)
+	for ally: Combatant in allies:
+		assert_eq(shots[ally], before[ally], "%s stopped firing" % ally.display_name)
+
+
+func test_hold_position_stops_the_wing_where_it_is_without_firing_and_another_order_brings_it_back() -> void:
+	var shots: Array[int] = [0]
+	for ally: Combatant in allies:
+		ally.cannon.shot_fired.connect(func(_muzzle: int, _at: Vector3) -> void: shots[0] += 1)
+	main.wings.give_order(AiContext.Order.HOLD_POSITION)
+	DebugConsole.registry.execute("spawn raider idle 900")
+	await _ticks(120)
+	var held_at: Array[Vector3] = []
+	for ally: Combatant in allies:
+		held_at.append(ally.ship.global_position)
+	# The player goes solo: it flies off and the wing stays.
+	main.ship.linear_velocity = main.ship.global_basis.x * 150.0
+	await _ticks(300)
+	for i: int in allies.size():
+		var ally: Combatant = allies[i]
+		var pilot := ally.driver.brain as AiPilot
+		assert_eq(pilot.current.id, &"formation", "%s: the formation behaviour holds it" % ally.display_name)
+		assert_eq(str(pilot.describe()["state"]), "holding")
+		assert_lt(ally.ship.linear_velocity.length(), 1.0, "%s is stopped" % ally.display_name)
+		assert_lt(ally.ship.global_position.distance_to(held_at[i]), 5.0, "%s stayed where it was" % ally.display_name)
+	for row: Dictionary in main.wings.hud_roster():
+		assert_eq(row["behaviour"], "holding", "%s: the roster says so" % row["callsign"])
+		assert_eq(HudLayout.roster_tag(row["behaviour"]), "HOLD")
+	assert_gt(main.ship.global_position.distance_to(allies[0].ship.global_position), 500.0, "the player left them behind")
+	assert_eq(shots[0], 0, "nobody fired")
+	main.wings.give_order(AiContext.Order.FORM_ON_ME)
+	await _ticks(180)
+	for ally: Combatant in allies:
+		assert_gt(ally.ship.linear_velocity.length(), 20.0, "%s is on its way back to its slot" % ally.display_name)
+
+
+# How far `ally` is from its formation slot on the player, m.
+func _slot_error(ally: Combatant) -> float:
+	var basis: Basis = main.ship.global_basis
+	return ally.ship.global_position.distance_to(Formation.slot_point(main.ship.global_position, -basis.z, basis.y,
+			wing.slot_offset(wing.slot_of(ally))))
 
 
 func test_the_roster_lists_callsigns_hull_and_behaviour() -> void:
@@ -185,20 +291,64 @@ func test_while_the_player_is_dead_the_wing_engages_at_will_and_resumes_on_respa
 func test_a_downed_member_leaves_its_slot_and_the_next_one_answers() -> void:
 	allies[0].damageable.kill()
 	await _ticks(2)
-	assert_eq(wing.empty_slots(), PackedInt32Array([1]), "ALPHA 2's slot is free for a replacement (M3-T08)")
+	# The wing closes up (M8-T13): ALPHA 4, the last of the right arm, takes the empty left arm's slot.
+	assert_eq(wing.empty_slots(), PackedInt32Array([3]), "the place at the back is free for a replacement (M3-T08)")
+	assert_eq(wing.member_at(1), allies[2], "ALPHA 4 moved up into ALPHA 2's slot")
+	assert_eq(wing.member_at(2), allies[1], "ALPHA 3 keeps its own")
+	assert_eq(allies[2].display_name, "ALPHA 4", "and keeps its callsign")
+	assert_eq((allies[2].driver.brain as AiPilot).context.slot_offset, wing.slot_offset(1), "briefed with its new slot")
 	assert_eq(wing.members().size(), 2)
 	assert_eq((_read("wing.members") as PackedStringArray).size(), 2)
 	var result: Dictionary = main.wings.give_order(AiContext.Order.FORM_ON_ME)
-	assert_eq(result["line"], "ALPHA 3: COPY, FORMING UP")
+	assert_eq(result["line"], "ALPHA 4: COPY, FORMING UP", "the lowest slot answers")
 	assert_eq(main.wings.add_member(wing, allies[0]), -1, "a ship out of play cannot join")
-	assert_eq(wing.empty_slots(), PackedInt32Array([1]))
-	# The HUD roster keeps the slot, as DOWN, until a replacement takes it (M3-T11).
+	assert_eq(wing.empty_slots(), PackedInt32Array([3]))
+	# The HUD roster goes by slot: the wingmen as they now fly, then the hole at the back, DOWN under the downed wingman's
+	# callsign until a replacement takes it (M3-T11).
 	var rows: Array[Dictionary] = main.wings.hud_roster()
 	assert_eq(rows.size(), 3)
-	assert_eq(rows[0]["callsign"], "ALPHA 2")
-	assert_true(bool(rows[0]["down"]))
+	assert_eq(rows[0]["callsign"], "ALPHA 4")
+	assert_false(bool(rows[0]["down"]))
+	assert_eq(rows[0]["behaviour"], "formation")
+	assert_eq(rows[1]["callsign"], "ALPHA 3")
 	assert_false(bool(rows[1]["down"]))
-	assert_eq(rows[1]["behaviour"], "formation")
+	assert_eq(rows[2]["callsign"], "ALPHA 2")
+	assert_true(bool(rows[2]["down"]))
+	assert_eq(main.wings.callsign_for(wing, 3), "ALPHA 2", "the replacement takes the downed wingman's callsign")
+
+
+func test_only_a_loss_closes_the_wing_up() -> void:
+	# A member that leaves without being shot down (released by a mission, taken out by the console) leaves its slot open.
+	main.wings.remove_member(wing, allies[0])
+	await _ticks(2)
+	assert_eq(wing.empty_slots(), PackedInt32Array([1]), "ALPHA 2's slot stays open")
+	assert_eq(wing.slot_of(allies[2]), 3, "nobody moved up")
+	assert_false(wing.is_lost(1), "and it is not lost")
+	assert_eq(main.wings.hud_roster().size(), 2, "the roster leaves an open slot out")
+	# So does a change of shape, whatever the new arms are.
+	main.wings.set_formation(Formation.Shape.WEDGE)
+	await _ticks(2)
+	assert_eq(wing.slot_of(allies[1]), 2)
+	assert_eq(wing.slot_of(allies[2]), 3)
+	main.wings.set_formation(Formation.Shape.FINGER_FOUR)
+	# An AI-led group whose leader goes down hands the lead to its lowest slot, and that slot stays open too.
+	var group: Wing = main.wings.create_wing("GROUP", _ai_ship("GROUP LEAD", Vector3(0.0, 300.0, 0.0), 9))
+	var followers: Array[Combatant] = []
+	for n: int in 3:
+		followers.append(_ai_ship("GROUP %d" % (n + 2), Vector3(60.0 * (n + 1), 300.0, 60.0), 20 + n))
+		assert_eq(main.wings.add_member(group, followers[n]), n + 1)
+	group.leader.damageable.kill()
+	await _ticks(2)
+	assert_eq(group.leader, followers[0], "the lowest slot leads on")
+	assert_eq(group.empty_slots(), PackedInt32Array([1]), "its old slot stays open")
+	assert_eq(group.slot_of(followers[2]), 3)
+	# A wingman shot down closes the wing up, the open slot with it.
+	allies[1].damageable.kill()
+	await _ticks(2)
+	assert_eq(wing.members(), [allies[2]] as Array[Combatant])
+	assert_eq(wing.slot_of(allies[2]), 2, "ALPHA 4 moved up its arm behind ALPHA 3")
+	assert_true(wing.is_lost(3), "the hole at the back is ALPHA 3's")
+	assert_eq(wing.lost_callsign(3), "ALPHA 3")
 
 
 func test_a_member_parked_in_the_low_attention_tier_keeps_its_slot() -> void:

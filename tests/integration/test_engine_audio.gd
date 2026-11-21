@@ -106,10 +106,12 @@ func test_main_thrust_brings_up_the_pod_voices() -> void:
 	await _ticks(10)
 	await get_tree().process_frame
 	assert_eq(_playing(pods), pods.size(), "every main pod roars")
+	# Full thrust shares the ship's level among its pods: together they sum to the mix's level (M8-T12).
+	var share_db: float = SoundMix.level_db(&"main_burst") + linear_to_db(1.0 / sqrt(float(pods.size())))
 	for pod: AudioStreamPlayer3D in pods:
-		assert_almost_eq(pod.volume_db, AudioDirector.POD_DB, 1.0, "%s near full level" % pod.name)
+		assert_almost_eq(pod.volume_db, share_db, 1.0, "%s near its share of full level" % pod.name)
 	source.release_all()
-	await _ticks(20)  # 0.33 s: the 40 ms cut is long over
+	await _ticks(40)  # 0.67 s: the ship's release (30 dB in 0.28 s) is long over
 	await _frames(2)
 	var output: FlightOutput = main.ship.get_flight_output()
 	assert_eq(_max(output.main_levels) + _max(output.retro_levels), 0.0, "the pods have stopped")

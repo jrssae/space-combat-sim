@@ -23,6 +23,8 @@ const DIRECTION_NAMES: Array[StringName] = [&"arrival", &"departure"]
 
 const SCENE_PATH: String = "res://src/props/jump_vortex.tscn"
 const FUNNEL_SHADER: Shader = preload("res://src/props/jump_vortex.gdshader")
+## Its second pass, over a gate's hull alone (M8-T17): solid walls there, so the arms never show through the vortex.
+const OVER_GATE_SHADER: Shader = preload("res://src/props/jump_vortex_over_gate.gdshader")
 const GLOW_SHADER: Shader = preload("res://src/props/jump_glow.gdshader")
 ## Colours (linear) when the opener gives none, from `data/jump/vortex_look.json` (the gate generator's values).
 static var DEFAULT_COLOURS: Dictionary = {
@@ -44,7 +46,6 @@ static var BRIGHTNESS: Dictionary = {&"arrival": VortexLook.brightness("arrival"
 		&"departure": VortexLook.brightness("departure", 1.2)}
 ## An arrival's sound (the generated `jump_in`); silent without it.
 const SOUND_PATH: String = "res://assets/generated/sfx_world/jump_in.wav"
-const SOUND_DB: float = 2.0
 
 ## The mouth's semi-axes and the depth.
 var fit: VortexFit = VortexFit.new()
@@ -91,6 +92,9 @@ var hold_range_m: float = 0.0
 var opener_through_at_s: float = -1.0
 ## Why the last opening collapsed (`JumpCapability`'s reasons; empty when it closed by its timing).
 var collapse_reason: StringName = &""
+## Ships the rule that jump points kill destroyed as this vortex formed, and as it closed (M8-T17).
+var form_kills: int = 0
+var close_kills: int = 0
 ## The node whose frame is the vortex's true one when it is drawn under a far stand-in (a gate's vortex follows its gate's
 ## `FarProp` look, which shrinks toward the eye far away); null for a stand-alone point.
 var frame_owner: Node3D = null
@@ -123,6 +127,13 @@ var emitter: LightEmitter = null
 var sound: AudioStreamPlayer3D = null
 
 var _active: bool = false
+var _formed: bool = false  # this opening has formed (its ships swept)
+var _close_swept: bool = false  # and closed (swept again)
+var _spared: Dictionary = {}  # instance id -> true: the ships this opening brings through or takes away
+## How long this opening held its lead-in for AI pilots leaving its funnel (M8-T17; at most `VortexTiming.CLEAR_WAIT_S`).
+var clear_waited_s: float = 0.0
+## Bumped whenever the spared ships change, so `VortexKeepOuts` sends its volumes again.
+var spared_version: int = 0
 var _materials: Array[ShaderMaterial] = []  # by direction, shared with every vortex of these colours
 var _colours: Dictionary = DEFAULT_COLOURS.duplicate()
 var _rig: LightRig = null
@@ -197,16 +208,28 @@ func setup(vortex_data: Dictionary = {}, with_sound: bool = true) -> void:
 		sound = AudioStreamPlayer3D.new()
 		sound.name = "Sound"
 		sound.bus = AudioDirector.BUS
-		sound.unit_size = 120.0
+		sound.unit_size = SoundMix.UNIT_SIZE_M[&"jump_in"]
 		sound.max_distance = 15000.0
-		sound.volume_db = SOUND_DB
+		sound.volume_db = SoundMix.level_db(&"jump_in")
 		sound.stream = _jump_sound()
 		add_child(sound)
 	_hide_all()
 
 
+## Every jump vortex joins this group, so the HUD can warn a pilot sitting in one about to form (`VortexHazard.warning`).
+const GROUP: StringName = &"jump_vortices"
+
+
 func _ready() -> void:
+	add_to_group(GROUP)
 	_sync_processing()
+	_make_keep_outs.call_deferred()
+
+
+# The World's `VortexKeepOuts` is made with its first vortex, so no node enters the tree when one opens.
+func _make_keep_outs() -> void:
+	if is_inside_tree():
+		VortexKeepOuts.wake(self)
 
 
 func _exit_tree() -> void:
@@ -222,8 +245,16 @@ static func funnel_material(colours: Dictionary, p_direction: Direction) -> Shad
 	var cached: ShaderMaterial = _material_cache.get(key)
 	if cached != null:
 		return cached
+	var material := _funnel_pass(FUNNEL_SHADER, pair, way, p_direction)
+	material.next_pass = _funnel_pass(OVER_GATE_SHADER, pair, way, p_direction)
+	_material_cache[key] = material
+	return material
+
+
+# One pass of the funnel's material, its look set from the colours and the look data.
+static func _funnel_pass(shader: Shader, pair: Array, way: StringName, p_direction: Direction) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
-	material.shader = FUNNEL_SHADER
+	material.shader = shader
 	material.set_shader_parameter(&"colour", pair[0])
 	material.set_shader_parameter(&"highlight", pair[1])
 	material.set_shader_parameter(&"flow", VortexSwirl.radial(p_direction))
@@ -233,7 +264,6 @@ static func funnel_material(colours: Dictionary, p_direction: Direction) -> Shad
 	for name: String in look:
 		if look[name] is float:
 			material.set_shader_parameter(StringName(name), float(look[name]))
-	_material_cache[key] = material
 	return material
 
 
@@ -294,6 +324,11 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	timing.reset(hold_s, VortexTiming.POINT_LEAD_S if own_point and lead_s <= 0.0 else lead_s, own_point)
 	age_s = 0.0
 	_active = true
+	_formed = false
+	_close_swept = false
+	clear_waited_s = 0.0
+	_spared.clear()
+	spared_version += 1
 	_sounded = false
 	openings += 1
 	funnel.material_override = _materials[direction]
@@ -304,6 +339,7 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	_sync_processing()
 	if not driven:
 		update_visuals()
+	VortexKeepOuts.wake(self)  # AI pilots keep clear from now until it folds (M8-T17)
 	return true
 
 
@@ -345,6 +381,50 @@ func stop() -> void:
 func extend(hold_s: float) -> void:
 	if _active:
 		timing.extend(age_s, hold_s)
+
+
+## Spares `body` from this opening's sweeps: it is coming out of it or going in on purpose (cleared by the next opening).
+func spare(body: Node) -> void:
+	if body != null and not _spared.has(body.get_instance_id()):
+		_spared[body.get_instance_id()] = true
+		spared_version += 1
+
+
+## No longer spares `body` (a wingman that was to follow through and now keeps clear instead).
+func unspare(body: Node) -> void:
+	if body != null and _spared.erase(body.get_instance_id()):
+		spared_version += 1
+
+
+## The closing sweep now, if this opening formed and has not had it yet (an opening stopped early still kills on its close).
+func sweep_close_now() -> void:
+	if _active and _formed and not _close_swept:
+		_close_swept = true
+		close_kills += VortexHazard.sweep(self)
+
+
+## The body ids this opening leaves alone (its opener among them), for the AI's keep-out.
+func spared_ids() -> PackedInt64Array:
+	var out := PackedInt64Array(_spared.keys())
+	if is_instance_valid(opener) and not _spared.has(opener.get_instance_id()):
+		out.append(opener.get_instance_id())
+	return out
+
+
+## Whether this opening's sweeps leave `body` whole: its opener, a ship it brings through or takes away, or one riding its opener.
+func spares(body: Node) -> bool:
+	if body == null:
+		return false
+	if body == opener or _spared.has(body.get_instance_id()):
+		return true
+	var carrier := opener as CapitalStandin
+	return carrier != null and is_instance_valid(carrier) and carrier.dock != null and body is Ship \
+			and carrier.dock.is_docked(body as Ship)
+
+
+## Whether it is about to form: the opener's lead-in runs, the flash not yet come (`VortexHazard.warning`).
+func is_forming() -> bool:
+	return _active and timing.phase(age_s) == VortexTiming.Phase.ACTIVATE
 
 
 func is_active() -> bool:
@@ -395,7 +475,21 @@ func _process(_delta: float) -> void:
 func advance(delta: float) -> void:
 	if not _active:
 		return
+	# Every AI pilot clears an opening point's mouth (M8-T17, maintainer 2026-11-20): it does not form on one still leaving.
+	if not _formed and age_s + delta >= timing.lead_s and clear_waited_s < VortexTiming.CLEAR_WAIT_S \
+			and VortexHazard.strays(self) > 0:
+		var wait: float = minf(age_s + delta - timing.lead_s + 1e-4, VortexTiming.CLEAR_WAIT_S - clear_waited_s)
+		timing.delay(wait)
+		clear_waited_s += wait
 	age_s += delta
+	var now: VortexTiming.Phase = timing.phase(age_s)
+	# Jump points kill (M8-T17): the ships where it forms as it flashes, and those still in it as its funnel folds away.
+	if not _formed and now != VortexTiming.Phase.ACTIVATE:
+		_formed = true
+		form_kills += VortexHazard.sweep(self)
+	if _formed and not _close_swept and now >= VortexTiming.Phase.END_FLASH:
+		_close_swept = true
+		close_kills += VortexHazard.sweep(self)
 	if not _sounded and age_s >= timing.lead_s:
 		_sounded = true
 		if not muted and sound != null and sound.stream != null and direction == Direction.ARRIVAL and is_inside_tree():

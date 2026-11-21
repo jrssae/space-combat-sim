@@ -11,6 +11,8 @@ var _from_keyboard: Dictionary = {}  # action -> true when the value comes from 
 
 
 func hold(action: StringName, strength: float = 1.0, from_keyboard: bool = false) -> void:
+	if strength > 0.0:
+		device = Device.KEYS if from_keyboard else Device.PAD
 	_strengths[action] = strength
 	if from_keyboard:
 		_from_keyboard[action] = true
@@ -72,6 +74,11 @@ func get_trigger(action: StringName) -> float:
 
 func is_pressed(action: StringName) -> bool:
 	return _value(action) > 0.5
+
+
+## Only what a test held `from_keyboard`.
+func is_key_pressed(action: StringName) -> bool:
+	return _from_keyboard.has(action) and _value(action) > 0.5
 
 
 func _stick_value(action: StringName) -> float:

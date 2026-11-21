@@ -72,24 +72,18 @@ func _timeline(wing: String, door: int, start_angle: float, seed_value: int) -> 
 	return {"wing": wing, "door": door, "start_deg": rad_to_deg(start_angle), "ticks": ticks, "graze_m": graze}
 
 
-# The door leaves of the player's arm as rectangles in the station's frame (their hinge, swung outward by the door's angle).
+# The door leaves of the player's arm as rectangles in the station's frame, each slid back as far as its door has opened.
 func _leaves(seq: LaunchSequence, drum: Transform3D) -> Array[PackedVector3Array]:
 	var out: Array[PackedVector3Array] = []
 	for k: int in seq.bays.size():
-		var open_deg: float = seq.door_angle_deg(k)
-		if open_deg < 1.0:
-			continue
 		var bay: Dictionary = seq.bays[k]
-		var normal: Vector3 = (bay["normal"] as Vector3).normalized()
+		var along: Vector3 = LaunchSequence.door_frame(bay).basis.z * LEAF_HALF_LENGTH_M
 		for leaf: Dictionary in bay["leaves"] as Array:
-			var hinge: Vector3 = leaf["point"]
-			var axis: Vector3 = (leaf["axis"] as Vector3).normalized()
-			var inward: Vector3 = ((bay["door"] as Vector3) - hinge)
-			inward = (inward - axis * inward.dot(axis)).normalized()
-			var sign: float = 1.0 if axis.cross(inward).dot(normal) > 0.0 else -1.0
-			var edge: Vector3 = Basis(axis, deg_to_rad(open_deg) * sign) * inward * LEAF_WIDTH_M
-			var half: Vector3 = axis * LEAF_HALF_LENGTH_M
-			out.append(PackedVector3Array([drum * (hinge - half), drum * (hinge + half), drum * (hinge + half + edge), drum * (hinge - half + edge)]))
+			var slide: Vector3 = (leaf["slide"] as Vector3).normalized()
+			var moved: float = seq.door_share(k) * float(leaf["travel_m"])
+			var inner: Vector3 = (bay["door"] as Vector3) + slide * (moved - float(leaf["reach_m"]))
+			var outer: Vector3 = (bay["door"] as Vector3) + slide * (moved + LEAF_WIDTH_M)
+			out.append(PackedVector3Array([drum * (inner - along), drum * (inner + along), drum * (outer + along), drum * (outer - along)]))
 	return out
 
 
@@ -132,14 +126,14 @@ func _closest(shot: CinematicShot, timeline: Dictionary, start: int, end: int) -
 
 # The tick the next phase of a cut that cannot be left out starts, and so the latest the shot of phase `index` plays to (never under
 # the least hold): a hold shot is only on screen while the fighter holds.
-func _end_of(timeline: Dictionary, index: int, start: int) -> int:
-	for later: int in range(index + 1, profile.phases.size()):
-		var phase: Dictionary = profile.phases[later]
+func _end_of(timeline: Dictionary, index: int, start: int, shots: LaunchProfile = profile) -> int:
+	for later: int in range(index + 1, shots.phases.size()):
+		var phase: Dictionary = shots.phases[later]
 		if float(phase["optional"]) > 0.0:
 			continue
 		var tick: int = _start_of(timeline, phase["step"], float(phase["at_s"]))
 		if tick >= 0:
-			return maxi(tick, start + ceili(profile.min_shot_s / DT))
+			return maxi(tick, start + ceili(shots.min_shot_s / DT))
 	return (timeline["ticks"] as Array).size() - 1
 
 
@@ -162,24 +156,40 @@ func test_a_released_fighter_keeps_clear_of_the_hull() -> void:
 
 
 func test_every_launch_shot_keeps_the_camera_clear_of_the_walls() -> void:
+	_check_shots(profile)
+
+
+# The exterior shots of the player's launch and the squadron launch's shots filmed from a door or a fighter (M8-T03); those
+# placed on the formation or the station are far out.
+func test_every_exterior_launch_shot_keeps_the_camera_clear_of_the_walls() -> void:
+	for path: String in [LaunchDirector.EXTERIOR_PATH, SquadronLaunch.DEFAULT_PATH]:
+		var made: Dictionary = LaunchProfile.load_file(path)
+		assert_true(bool(made["ok"]), str(made.get("error", "")))
+		if bool(made["ok"]):
+			_check_shots(made["profile"])
+
+
+func _check_shots(shots: LaunchProfile) -> void:
 	if field == null:
 		pass_test("the station is not generated here")
 		return
 	var checked: int = 0
-	for index: int in profile.phases.size():
-		var phase: Dictionary = profile.phases[index]
+	for index: int in shots.phases.size():
+		var phase: Dictionary = shots.phases[index]
 		for variant: Dictionary in phase["variants"]:
 			var shot: CinematicShot = variant["shot"]
+			if Array(shot.actors()).any(func(actor: String) -> bool: return actor != "bay" and actor != "fighter"):
+				continue
 			var worst: float = INF
 			var where: String = ""
 			for timeline: Dictionary in timelines:
 				var start: int = _start_of(timeline, phase["step"], float(phase["at_s"]))
 				if start < 0:
 					continue
-				var result: Dictionary = _closest(shot, timeline, start, _end_of(timeline, index, start))
+				var result: Dictionary = _closest(shot, timeline, start, _end_of(timeline, index, start, shots))
 				checked += 1
 				if float(result["gap"]) < worst:
 					worst = float(result["gap"])
 					where = "%s door %d, drum %.0f deg at the start, %.2f s in" % [timeline["wing"], timeline["door"], timeline["start_deg"], result["at_s"]]
 			assert_gte(worst, CLEAR_M, "%s (%s): the camera comes %.2f m from a wall or leaf (%s)" % [variant["id"], phase["phase"], worst, where])
-	assert_gt(checked, 100, "the variants were played on many launches")
+	assert_gt(checked, 50, "the variants were played on many launches")

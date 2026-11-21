@@ -17,6 +17,9 @@ extends Node3D
 ## whose opener is out of range, destroyed or disabled collapses at once in its closing flash, and every ship in its funnel is
 ## destroyed (`HitInfo.CAUSE_VORTEX_COLLAPSE`, no kill credit); an opener gone through its own point holds it
 ## `JumpCapability.OWN_DEPARTURE_HOLD_S` more, then the same. A point with no opener is a debug tool's (the console) or a test's.
+##
+## Opening a point empties its opener's jump drive (M8-T08, D83): until its class's recharge has passed the pool refuses it
+## another (`refused_charging`). Jumpgates are not the pool's and need no drive.
 
 const DEFAULT_COUNT: int = 4
 ## The most points one pool holds: the 1 000-ship battle's arrival waves open this many at once.
@@ -36,6 +39,8 @@ var collapse_kills: int = 0
 var last_collapse: StringName = &""
 ## Openings refused because the opener cannot open a point.
 var refused: int = 0
+## Openings refused because the opener's drive was still recharging (M8-T08).
+var refused_charging: int = 0
 
 var _points: Array[JumpVortex] = []
 var _cursor: int = 0  # where the search for a free point starts: points free up in the order they opened
@@ -97,6 +102,8 @@ func open_for(at: UniversePos, forward: Vector3, ship_radius_m: float,
 					and point.position.distance_to(local) < SHARE_M and (opener == null or point.held):
 				_widen(point, local, ship_radius_m)
 				return point
+	if not _drive_ready(opener):
+		return null
 	var up: Vector3 = Vector3.UP if absf(ahead.dot(Vector3.UP)) < 0.99 else Vector3.BACK
 	var mouth: Vector3 = local - ahead * maxf(ship_radius_m, 0.0)
 	var point: JumpVortex = _take()
@@ -108,6 +115,7 @@ func open_for(at: UniversePos, forward: Vector3, ship_radius_m: float,
 	_open(point, Transform3D(Basis.looking_at(ahead, up), mouth), direction, VortexTiming.DEFAULT_HOLD_S)
 	if opener != null:
 		point.hold_by(opener, JumpCapability.hold_range_of(opener))
+		_fire_drive(opener)
 	return point
 
 
@@ -179,6 +187,8 @@ func open_with(xform: Transform3D, p_fit: VortexFit, direction: JumpVortex.Direc
 		refused += 1
 		push_warning("JumpPointPool: %s cannot open a jump point; it must use a gate or a capable ship's point" % opener.name)
 		return null
+	if not _drive_ready(opener):
+		return null
 	var chosen: JumpVortex = _take()
 	chosen.fit.mouth_radius_m = p_fit.mouth_radius_m
 	chosen.fit.mouth_half_width_m = p_fit.mouth_half_width_m
@@ -187,7 +197,23 @@ func open_with(xform: Transform3D, p_fit: VortexFit, direction: JumpVortex.Direc
 	_open(chosen, xform, direction, hold_s)
 	if opener != null:
 		chosen.hold_by(opener, JumpCapability.hold_range_of(opener))
+		_fire_drive(opener)
 	return chosen
+
+
+# Whether `opener`'s drive lets it open a point now (M8-T08); a point with no opener needs none.
+func _drive_ready(opener: Node3D) -> bool:
+	if opener == null or JumpCapability.drive_ready(opener, SimClock.now()):
+		return true
+	refused_charging += 1
+	return false
+
+
+# Opening a point empties the opener's drive.
+func _fire_drive(opener: Node3D) -> void:
+	var drive: JumpDrive = JumpCapability.drive_of(opener)
+	if drive != null:
+		drive.fire(SimClock.now())
 
 
 # A point to open: the next free one after the last taken, else the oldest open one, taken back.

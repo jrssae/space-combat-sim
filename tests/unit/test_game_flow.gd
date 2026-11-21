@@ -274,3 +274,50 @@ func test_other_arguments_do_not_skip_the_front_end() -> void:
 	assert_false(_route([], ["--console-strict"])["straight"], "strict alone runs no script")
 	assert_false(_route([], ["scene=quiet", "--console-exec-not"])["straight"])
 	assert_false(_route([], ["--console-exec"])["straight"], "a flag with no script after it runs nothing")
+
+
+# --- a checkpoint restart (M8 D79) -------------------------------------------------------------------------------------
+
+
+func _lost_with_checkpoint() -> Dictionary:
+	return {"success": false, "reason": "player destroyed",
+			"checkpoint": {"step": &"raid", "label": "the raid's start", "notes": {&"course": &"exemplary"}}}
+
+
+func test_a_lost_mission_with_a_checkpoint_may_restart_from_it_and_the_request_carries_it() -> void:
+	flow.enter_directly(GameFlow.make_request(&"mission", &"tutorial", false, 9))
+	flow.end_run(_lost_with_checkpoint())
+	assert_true(GameFlow.has_checkpoint(flow.last_result))
+	assert_true(flow.retry(true))
+	assert_eq(flow.state, GameFlow.State.LOADING)
+	assert_eq(int(flow.request["seed"]), 9, "the same seed")
+	assert_eq(flow.request["checkpoint"]["step"], &"raid")
+	assert_eq(flow.request["checkpoint"]["notes"][&"course"], &"exemplary")
+
+
+func test_a_full_retry_after_a_checkpoint_restart_carries_no_checkpoint() -> void:
+	flow.enter_directly(GameFlow.make_request(&"mission", &"tutorial", false, 9))
+	flow.end_run(_lost_with_checkpoint())
+	flow.retry(true)
+	flow.finish_loading()
+	flow.end_run(_lost_with_checkpoint())
+	assert_true(flow.retry())
+	assert_false(flow.request.has("checkpoint"))
+
+
+func test_no_checkpoint_restart_without_one_or_after_a_success() -> void:
+	flow.enter_directly(GameFlow.make_request(&"mission", &"tutorial", false, 9))
+	flow.end_run({"success": false, "reason": "player destroyed", "checkpoint": {}})
+	assert_false(flow.retry(true))
+	assert_string_contains(flow.error, "no checkpoint")
+	assert_eq(flow.state, GameFlow.State.DEBRIEF, "still in the debrief")
+	var won: Dictionary = _lost_with_checkpoint()
+	won["success"] = true
+	assert_false(GameFlow.has_checkpoint(won))
+
+
+func test_a_new_request_never_carries_a_checkpoint() -> void:
+	var request: Dictionary = GameFlow.make_request(&"mission", &"tutorial", false, 9)
+	request["checkpoint"] = {"step": &"raid"}
+	assert_true(flow.start_loading(request))
+	assert_false(flow.request.has("checkpoint"), "only a debrief's restart sets one")

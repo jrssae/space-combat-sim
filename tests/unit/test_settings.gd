@@ -100,6 +100,20 @@ func test_a_removed_key_in_an_old_file_is_ignored_and_dropped_on_save() -> void:
 	assert_false(saved.has_section_key("settings", "yaw_ramp_s"), "save writes only schema keys")
 
 
+func test_an_old_encounters_value_loads_into_all_three_switches() -> void:
+	var cfg := ConfigFile.new()
+	cfg.set_value("settings", "encounters", false)
+	cfg.save(CONFIG_PATH)
+	assert_eq(settings.revert(), OK)
+	for key: StringName in [&"encounters_civilian", &"encounters_allied", &"encounters_enemy"]:
+		assert_false(bool(settings.get_value(key)), "%s takes the old value" % key)
+	assert_eq(settings.save(), OK)
+	var saved := ConfigFile.new()
+	assert_eq(saved.load(CONFIG_PATH), OK)
+	assert_false(saved.has_section_key("settings", "encounters"), "the old key is dropped on save")
+	assert_true(saved.has_section_key("settings", "encounters_enemy"))
+
+
 func test_a_file_from_before_m4_t37_loads_its_removed_switches_and_the_inline_step_without_error() -> void:
 	# M4-T37 removed the old paths' switches and the single-thread step: a saved file that still names them loads, the keys
 	# ignored and `sim_step inline` read as the default, with no warning, and the next save drops them.

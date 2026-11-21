@@ -9,7 +9,7 @@ const ACTIONS: Array[StringName] = [&"status", &"on", &"off", &"next", &"force",
 static func register(director: EncounterDirector) -> void:
 	var registry: ConsoleRegistry = DebugConsole.registry
 	registry.register_command(ConsoleCommand.new(&"encounters",
-			"Free-flight encounters: status, on (builds the pools), off, next (start the next one now; the one after comes its gap later), force <raid|patrol|traffic>, clear (every encounter ship back to its pool)",
+			"Free-flight encounters: status, on (builds the pools), off (with a kind: that kind's switch, raid = enemy encounters, patrol = allied patrols, traffic = civilian traffic), next (start the next one now; the one after comes its gap later), force <raid|patrol|traffic>, clear (every encounter ship back to its pool)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"),
 			ConsoleArg.enum_optional(&"kind", EncounterPlan.KINDS, null)] as Array[ConsoleArg]),
 			func(args: Dictionary) -> ConsoleResult: return _run(director, args), director)
@@ -46,9 +46,16 @@ static func register(director: EncounterDirector) -> void:
 static func _run(director: EncounterDirector, args: Dictionary) -> ConsoleResult:
 	var action: StringName = StringName(args[&"action"])
 	match action:
-		&"on":
-			return ConsoleResult.line(director.enable())
-		&"off":
+		&"on", &"off":
+			var which: Variant = args.get(&"kind")
+			if which != null:
+				var key: StringName = EncounterDirector.SWITCHES[StringName(which)]
+				Settings.set_value(key, action == &"on")
+				director.sync_switches()
+				return ConsoleResult.line("%s %s%s" % [key, "on" if action == &"on" else "off",
+						"" if director.on else " (encounters themselves are off)"])
+			if action == &"on":
+				return ConsoleResult.line(director.enable())
 			director.disable()
 			return ConsoleResult.line("encounters off; %d ship(s) in play fly on until released" % director.alive_count())
 		&"clear":
@@ -59,6 +66,11 @@ static func _run(director: EncounterDirector, args: Dictionary) -> ConsoleResult
 			var kind: Variant = args.get(&"kind")
 			if action == &"force" and kind == null:
 				return ConsoleResult.failure("encounters force <%s>" % "|".join(PackedStringArray(EncounterPlan.KINDS)))
+			if action == &"force" and not director.kind_on(StringName(kind)):
+				return ConsoleResult.failure("%s is switched off (encounters on %s)" % [kind, kind])
+			director.sync_switches()
+			if action == &"next" and director.waiting == null and not director.plan.any_on():
+				return ConsoleResult.failure("all three switches are off (empty sky)")
 			if action == &"next" and director.waiting != null:
 				var held: EncounterEvent = director.waiting
 				if not director.start_scheduled(held):
@@ -83,6 +95,8 @@ static func _status(director: EncounterDirector) -> String:
 	var parts := PackedStringArray(["encounters %s" % ("on" if director.on else "off")])
 	parts.append("%d of %d ships in play (%d raiders, %d patrol, %d traffic)" % [director.alive_count(), director.cap(),
 			director.alive_of(&"raid"), director.alive_of(&"patrol"), director.alive_of(&"traffic")])
+	parts.append("switches: civilian %s, allied %s, enemy %s" % ["on" if director.kind_on(&"traffic") else "off",
+			"on" if director.kind_on(&"patrol") else "off", "on" if director.kind_on(&"raid") else "off"])
 	if director.plan != null:
 		parts.append("next #%d in %.0f s" % [director.next_index, director.next_in_s()])
 	if director.waiting != null:

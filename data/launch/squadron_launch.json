@@ -1,0 +1,1305 @@
+{
+ "about": "The squadron-launch cinematic (M8-T03, D81, AC2): the squadron's Starfuries (the AI flights and the player's two wingmen) launch from their wing's Cobra arm in M7-T08's sequence, flip, light their engines and fly to their slots in the formation, which hangs 'form_up.radius_m' out from the drum's axis at 'form_up.angle_deg' (the station's frame, away from the spine), level with the arm; then the player launches alone from 'player_door' with the exterior shots of data/launch/exterior_launch.json and its hand-off ends the cinematic. 'flights' counts the squadron's flights of three, the player's own included. The camera is filmed from outside the station only, in phases as cobra_launch.json's, each following one fighter of the launch ('follows': lead, the first fighter; wave2, the second wave's first; last, the last one). Extra actors: 'formation' (the formation's anchor: -z its heading, +y away from the station) and 'station'. Each variant's 'move' says the camera's move in one line (M8-T30, for the review sheets). No shot lasts 3 s or more unless flagged 'feature' (an interesting one, up to 5 s; maintainer, 2026-11-19): between phases the director cuts to other shots of the pool, none twice in one launch while unplayed ones remain.",
+ "flights": 4,
+ "player_door": 3,
+ "form_up": {
+  "angle_deg": 270.0,
+  "radius_m": 650.0,
+  "duration_s": 7.0,
+  "flip_s": 2.5,
+  "main_s": 3.0,
+  "retro_s": 2.0
+ },
+ "min_shot_s": 1.5,
+ "row_ejections": 3,
+ "row_max_s": 2.8,
+ "row_wave_min": 3,
+ "phases": [
+  {
+   "phase": "doors",
+   "step": "door",
+   "at_s": 0.0,
+   "follows": "lead",
+   "variants": [
+    {
+     "id": "sq_doors_wide",
+     "weight": 2.0,
+     "row": false,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -55,
+         38,
+         -45
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         0,
+         55
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -50,
+         34,
+         -40
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         0,
+         55
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "outside wide and forward of the arm, the row of doors opening"
+    },
+    {
+     "id": "sq_doors_low",
+     "weight": 1.0,
+     "row": false,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         16,
+         22,
+         -60
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         4,
+         50
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         16,
+         23,
+         -52
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         4,
+         50
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "outside low and forward along the arm, the doors opening"
+    }
+   ]
+  },
+  {
+   "phase": "hold",
+   "step": "hold",
+   "at_s": 0.0,
+   "follows": "lead",
+   "variants": [
+    {
+     "id": "sq_hold_arm",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -30,
+         48,
+         -45
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         0,
+         25
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -36,
+         56,
+         -52
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         0,
+         25
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "outside high over the arm, the squadron waiting under the spine"
+    },
+    {
+     "id": "sq_hold_side",
+     "weight": 1.0,
+     "move": "outside off the arm's side at door height, the doors waiting while the spine passes over",
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -45,
+         15,
+         20
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         5,
+         0
+        ]
+       },
+       "fov": 50,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 1.5,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -48,
+         17,
+         30
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         5,
+         0
+        ]
+       },
+       "fov": 50,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  },
+  {
+   "phase": "drop",
+   "step": "drop",
+   "at_s": 0.0,
+   "follows": "lead",
+   "variants": [
+    {
+     "id": "sq_drop_row",
+     "weight": 2.0,
+     "row": true,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -42,
+         15,
+         46
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         12,
+         55
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -43,
+         15,
+         48
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         14,
+         55
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "outside beside the arm, the doors firing in turn (held for several ejections) (low, 15 m off the arm)"
+    },
+    {
+     "id": "sq_drop_above",
+     "weight": 1.0,
+     "row": true,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         20,
+         70,
+         -30
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         0,
+         50
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 1.4,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         22,
+         74,
+         -26
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         0,
+         50
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         22,
+         74,
+         -26
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ],
+     "move": "outside high above the arm looking down on the row firing, tilting to follow the Fury as it leaves the arm"
+    },
+    {
+     "id": "sq_drop_below",
+     "weight": 1.0,
+     "move": "15 m off the drop path out past the door, fov 35 on the Fury as it is ejected past the lens",
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         19,
+         60,
+         10
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 35,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 2.2,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         19,
+         60,
+         10
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 35,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ],
+     "row": false
+    },
+    {
+     "id": "sq_drop_pan",
+     "weight": 1.0,
+     "row": true,
+     "move": "slow pan along the arm from beside it as the Furies drop out one after another, space (and the planet) beyond",
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -70,
+         25,
+         -10
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         8,
+         20
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 3.5,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -70.0,
+         25.0,
+         21.11
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0.0,
+         8.0,
+         39.44
+        ]
+       },
+       "fov": 60.0,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "feature": true
+    }
+   ]
+  },
+  {
+   "phase": "flyout",
+   "step": "release",
+   "at_s": 0.3,
+   "follows": "lead",
+   "variants": [
+    {
+     "id": "sq_flyout_bay",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -25,
+         30,
+         -25
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 25,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -25,
+         30,
+         -25
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 25,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "from just outside the door, zooming in on the lead as it flips and burns away"
+    },
+    {
+     "id": "sq_flyout_formation",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         120,
+         40,
+         -160
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 6,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         120,
+         40,
+         -160
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 10,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "from out by the formation, a very long lens (fov 6-10) on the lead flipping and coming in"
+    },
+    {
+     "id": "sq_flyout_trail",
+     "weight": 1.0,
+     "move": "wide trailing shot: well behind and below the fighter, drifting back as its engines burn",
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         6,
+         -14,
+         10
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -20
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         8,
+         -26,
+         60
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         -28
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         0.0,
+         -1.0
+        ]
+       }
+      }
+     ]
+    },
+    {
+     "id": "sq_flyout_station",
+     "weight": 1.0,
+     "move": "station behind: long lens from ahead of the fighter looking back, the station filling the frame behind it",
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         10,
+         12,
+         -70
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 36,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "fighter",
+        "offset": [
+         12,
+         14,
+         -62
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 40,
+       "up": {
+        "actor": "fighter",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "delay_s": 0.5
+    },
+    {
+     "id": "sq_flyout_face",
+     "weight": 1.0,
+     "feature": true,
+     "move": "riding 15 m ahead of the lead without turning with it, from the moment it starts to turn: it rotates to face the lens and lights all four engines together, under the key light",
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "fighter_fixed",
+        "offset": [
+         3,
+         4,
+         -15
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 40,
+       "up": {
+        "actor": "bay_fixed",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 3.5,
+       "position": {
+        "actor": "fighter_fixed",
+        "offset": [
+         4,
+         5,
+         -16
+        ]
+       },
+       "look_at": {
+        "actor": "fighter",
+        "offset": [
+         0,
+         0,
+         0
+        ]
+       },
+       "fov": 40,
+       "up": {
+        "actor": "bay_fixed",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "delay_s": 0.3
+    }
+   ]
+  },
+  {
+   "phase": "wave2",
+   "step": "drop",
+   "at_s": 0.0,
+   "follows": "wave2",
+   "variants": [
+    {
+     "id": "sq_wave2_row",
+     "weight": 1.0,
+     "row": true,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         60,
+         30,
+         20
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         10,
+         55
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         62,
+         32,
+         24
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         12,
+         55
+        ]
+       },
+       "fov": 58,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "outside off the arm's far side, the second wave firing in turn"
+    },
+    {
+     "id": "sq_wave2_aft",
+     "weight": 1.0,
+     "row": true,
+     "keys": [
+      {
+       "t": 0.0,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -30,
+         55,
+         140
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         5,
+         40
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "bay",
+        "offset": [
+         -28,
+         52,
+         134
+        ]
+       },
+       "look_at": {
+        "actor": "bay",
+        "offset": [
+         0,
+         6,
+         40
+        ]
+       },
+       "fov": 55,
+       "up": {
+        "actor": "bay",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "outside high and aft along the arm, the second wave firing"
+    }
+   ]
+  },
+  {
+   "phase": "formup",
+   "step": "release",
+   "at_s": 2.0,
+   "follows": "last",
+   "variants": [
+    {
+     "id": "sq_formup_wide",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         -70,
+         25,
+         -130
+        ]
+       },
+       "look_at": {
+        "actor": "formation",
+        "offset": [
+         0,
+         0,
+         40
+        ]
+       },
+       "fov": 30,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         -64,
+         23,
+         -118
+        ]
+       },
+       "look_at": {
+        "actor": "formation",
+        "offset": [
+         0,
+         0,
+         40
+        ]
+       },
+       "fov": 30,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "very wide from forward of the formation, the squadron settling on its slots"
+    },
+    {
+     "id": "sq_formup_behind",
+     "weight": 1.0,
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         8,
+         25,
+         120
+        ]
+       },
+       "look_at": {
+        "actor": "formation",
+        "offset": [
+         0,
+         0,
+         -40
+        ]
+       },
+       "fov": 40,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         6,
+         22,
+         110
+        ]
+       },
+       "look_at": {
+        "actor": "formation",
+        "offset": [
+         0,
+         0,
+         -40
+        ]
+       },
+       "fov": 40,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "move": "120 m behind the lead flight, fov 40: the squadron settling on its slots, the station beyond"
+    },
+    {
+     "id": "sq_formup_dolly",
+     "weight": 1.0,
+     "move": "ahead of the formation, dollying in while the lens widens: the squadron comes at the camera as the station shrinks behind it",
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         0,
+         12,
+         -240
+        ]
+       },
+       "look_at": {
+        "actor": "formation",
+        "offset": [
+         0,
+         0,
+         100
+        ]
+       },
+       "fov": 20,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 3.5,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         0,
+         9,
+         -120
+        ]
+       },
+       "look_at": {
+        "actor": "formation",
+        "offset": [
+         0,
+         0,
+         100
+        ]
+       },
+       "fov": 36,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         1.0,
+         0.0
+        ]
+       }
+      }
+     ],
+     "feature": true
+    },
+    {
+     "id": "sq_formup_station",
+     "weight": 1.0,
+     "move": "below and beyond one flight, about 60 m from it, looking up past it: the flight fills the lower foreground, the drum above at an angle",
+     "keys": [
+      {
+       "t": 0,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         -186,
+         8,
+         128
+        ]
+       },
+       "look_at": {
+        "actor": "formation",
+        "offset": [
+         -90,
+         -420,
+         900
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      },
+      {
+       "t": 2.8,
+       "position": {
+        "actor": "formation",
+        "offset": [
+         -184,
+         6,
+         134
+        ]
+       },
+       "look_at": {
+        "actor": "formation",
+        "offset": [
+         -90,
+         -420,
+         900
+        ]
+       },
+       "fov": 60,
+       "up": {
+        "actor": "formation",
+        "direction": [
+         0.0,
+         -1.0,
+         0.0
+        ]
+       }
+      }
+     ]
+    }
+   ]
+  }
+ ]
+}

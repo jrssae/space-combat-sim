@@ -4,6 +4,9 @@ extends RefCounted
 ## one: today the capital stand-ins; every designed hull (the Starfury, the raiders, the civilian ships) cannot, and arrives or
 ## leaves through a jumpgate or through a point a capable ship holds open (any side's). Pure apart from reading the ship.
 ##
+## After a jump the opener's drive needs its class's recharge before it opens another point (M8-T08, D83; `JumpDrive`); a
+## jumpgate needs no drive.
+##
 ## A point holds only while its opener is near it: within its hold range (by default twice its length) from the ship to the
 ## funnel's mouth. Out of range, destroyed or disabled, the point collapses at once and kills every ship in its funnel. An opener
 ## leaving through its own point holds it a few seconds more for the ships behind it. Gates are exempt.
@@ -22,9 +25,12 @@ const OUT_OF_RANGE: StringName = &"out_of_range"
 const OPENER_THROUGH: StringName = &"opener_through"
 
 
-## The hold range for a ship of `length_m`, or `override_m` when its type sets one.
-static func hold_range_m(length_m: float, override_m: float = 0.0) -> float:
-	return override_m if override_m > 0.0 else HOLD_LENGTHS * maxf(length_m, 0.0)
+## The hold range for a ship of `length_m`, or `override_m` when its type sets one. A hull that opens its point at its own anchor,
+## `anchor_m` from its centre (M12-T19), holds it at least a length beyond that, or its point would collapse as it opens.
+static func hold_range_m(length_m: float, override_m: float = 0.0, anchor_m: float = 0.0) -> float:
+	var length: float = maxf(length_m, 0.0)
+	var range_m: float = override_m if override_m > 0.0 else HOLD_LENGTHS * length
+	return maxf(range_m, anchor_m + length) if anchor_m > 0.0 else range_m
 
 
 ## Whether a point still holds, and if not, why. `through_s` is how long ago the opener touched its own ring (negative: it has
@@ -54,6 +60,25 @@ static func can_open(ship: Node) -> bool:
 	if ship.has_method(&"can_open_jump_point"):
 		return bool(ship.call(&"can_open_jump_point"))
 	return false
+
+
+## `ship`'s jump drive, or null for one that keeps none (a fighter riding another's point, a test's stand-in).
+static func drive_of(ship: Node) -> JumpDrive:
+	if ship == null or not is_instance_valid(ship):
+		return null
+	return ship.get(&"jump_drive") as JumpDrive
+
+
+## Whether `ship`'s drive can open a point at `now_s` (M8-T08): recharged since its last jump, or it keeps no drive to wait on.
+static func drive_ready(ship: Node, now_s: float) -> bool:
+	var drive: JumpDrive = drive_of(ship)
+	return drive == null or drive.is_ready(now_s)
+
+
+## Seconds until `ship`'s drive can open a point again (0: now).
+static func recharge_left_s(ship: Node, now_s: float) -> float:
+	var drive: JumpDrive = drive_of(ship)
+	return drive.left_s(now_s) if drive != null else 0.0
 
 
 ## `ship`'s hold range, m: its type's value, else twice its length (0 for a ship that cannot open a point).

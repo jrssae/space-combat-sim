@@ -199,6 +199,45 @@ impl ScsSimCore {
         }
     }
 
+    /// Switches the grid of `grid` people off (`off`: no gun or interceptor fires, M8-T34) or on again; its guns drop their
+    /// targets as it goes off.
+    #[func]
+    fn set_grid_off(&mut self, grid: StringName, off: bool) {
+        let g = self.faction_index(grid);
+        self.turrets.latch.set_off(g, off);
+        if off {
+            let t = &mut self.turrets;
+            for s in 0..t.mounts.taken.len() {
+                if t.mounts.taken[s] && t.mounts.kind[s] != MOUNT_TURRET && t.mounts.faction_ix[s] == g {
+                    t.mounts.target[s] = 0;
+                }
+            }
+        }
+    }
+
+    #[func]
+    fn grid_is_off(&self, grid: StringName) -> bool {
+        self.factions.iter().position(|f| *f == grid).is_some_and(|g| self.turrets.latch.is_off(g as u32))
+    }
+
+    /// Covering fire (M8-T34): the guns of `grid` people take hostiles within `radius_m` of body `body_id` first, latched or not;
+    /// `body_id` 0 ends it.
+    #[func]
+    fn set_grid_cover(&mut self, grid: StringName, body_id: i64, radius_m: f64) {
+        let g = self.faction_index(grid);
+        self.turrets.latch.set_cover(g, body_id, radius_m);
+    }
+
+    /// The body the grid of `grid` people covers, or 0.
+    #[func]
+    fn grid_cover_body(&self, grid: StringName) -> i64 {
+        self.factions
+            .iter()
+            .position(|f| *f == grid)
+            .and_then(|g| self.turrets.latch.cover_of(g as u32))
+            .map_or(0, |c| c.body)
+    }
+
     /// The sides grid people are weapons free against, as `[grid, side, grid, side, ...]` faction names in latch order.
     #[func]
     fn grid_free_sides(&self) -> PackedStringArray {
@@ -547,6 +586,10 @@ impl ScsSimCore {
             }
             let body = m.body[s];
             let grid = m.kind[s] != MOUNT_TURRET;
+            if grid && self.turrets.latch.is_off(m.faction_ix[s]) {
+                m.target[s] = 0;  // a pick made before the grid went off
+                continue;
+            }
             let row = self.row_for_kernel(body);
             let Some(own) = (if grid { gk::firing_row(&self.rows, row) } else { tk::firing_row(&self.rows, row) }) else {
                 continue;
@@ -864,6 +907,9 @@ impl ScsSimCore {
             if !m.taken[s] || !m.live[s] || m.out[s] || m.kind[s] != MOUNT_INTERCEPTOR {
                 continue;
             }
+            if self.turrets.latch.is_off(m.faction_ix[s]) {
+                continue;
+            }
             let Some(own) = gk::firing_row(&self.rows, self.row_for_kernel(m.body[s])) else {
                 continue;
             };
@@ -922,9 +968,13 @@ impl ScsSimCore {
             let barrel = battery.fire(now_s);
             let shot = gk::battery_shot(
                 &f,
-                m.min_elevation[s],
-                battery.trunnion,
-                battery.muzzles[barrel],
+                &gk::Barrel {
+                    min_elevation: m.min_elevation[s],
+                    azimuth: m.azimuth[s],
+                    trunnion: battery.trunnion,
+                    muzzle: battery.muzzles[barrel],
+                },
+                gun.muzzle_speed,
                 {
                     let lead = lead_from(trunnion, p);
                     (lead.aim_dir, lead.t)

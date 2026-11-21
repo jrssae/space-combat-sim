@@ -29,6 +29,8 @@ const COLLISION_STEPS_PER_TICK: int = 6
 ## A passage taking this many times its planned time (or a departure this long) is ended anyway: something stopped the ship.
 const STALL_FACTOR: float = 3.0
 const DEPARTURE_LIMIT_S: float = 30.0
+## During a burst out the core flashes again this often, s, so its glow holds behind the ship (each flash fades in 0.5 s).
+const CORE_GLOW_EVERY_S: float = 0.2
 
 ## Passages begun and finished (arrivals out of the mouth, departures through the ring), and flashes shown, so far.
 var arrivals_begun: int = 0
@@ -105,10 +107,11 @@ func _exit_tree() -> void:
 ## leaving the funnel with `exit_velocity` (World-local, the frame's rest included). A ship too small on screen to see stays at its
 ## place unless `always` (the player's own). False when it cannot (no such vortex).
 func begin_arrival(body: RigidBody3D, vortex: JumpVortex, exit_position: Vector3, exit_velocity: Vector3,
-		always: bool = false) -> bool:
+		always: bool = false, burst_s: float = 0.0) -> bool:
 	if body == null or vortex == null or not body.is_inside_tree():
 		return false
 	cancel(body)
+	vortex.spare(body)  # its own vortex never kills it, however it comes out (M8-T17)
 	var frame: Transform3D = vortex.true_frame()
 	var local: Vector3 = frame.affine_inverse() * exit_position
 	if not always and not _seen(body, exit_position):
@@ -120,6 +123,7 @@ func begin_arrival(body: RigidBody3D, vortex: JumpVortex, exit_position: Vector3
 	p.lateral = VortexTransit.clamp_lateral(vortex.fit, Vector2(local.x, local.y))
 	var rest: Vector3 = _rest()
 	p.exit_velocity_rel = exit_velocity - rest
+	p.burst_s = burst_s
 	if _due(p):
 		_emerge(p, frame)
 	else:
@@ -130,15 +134,19 @@ func begin_arrival(body: RigidBody3D, vortex: JumpVortex, exit_position: Vector3
 
 ## Takes `body` on down `vortex`'s funnel from its mouth; `on_through(body)` runs once its nose touches the base (it has vanished
 ## in the flash by then and is whole again). False when it cannot.
-func begin_departure(body: RigidBody3D, vortex: JumpVortex, on_through: Callable) -> bool:
+func begin_departure(body: RigidBody3D, vortex: JumpVortex, on_through: Callable, swallow_s: float = 0.0) -> bool:
 	if body == null or vortex == null or not body.is_inside_tree():
 		return false
 	cancel(body)
+	vortex.spare(body)
 	var p: VortexPassage = _start(body, vortex, VortexPassage.Kind.DEPARTURE)
 	p.on_through = on_through
 	p.limit_s = DEPARTURE_LIMIT_S
 	var axis: Vector3 = vortex.true_frame().basis.z.normalized()
 	p.speed_mps = VortexTransit.transit_speed(vortex.fit.depth_m, (body.linear_velocity - _rest()).dot(axis))
+	if swallow_s > 0.0:  # swallowed in a set time: carried down the axis at the speed that takes
+		p.burst_s = swallow_s
+		p.speed_mps = vortex.fit.depth_m / swallow_s
 	var ship := body as Ship
 	if p.driver != null and ship != null and ship.spec != null:
 		p.capability = ShipCapability.from_spec(ship.spec, ship.get_layout())
@@ -183,6 +191,23 @@ func kill_in(vortex: JumpVortex) -> int:
 ## Whether `body` is in a funnel now.
 func is_passing(body: Node) -> bool:
 	return _by_body.has(body)
+
+
+## Seconds until `body`, waiting in an arrival's ring, comes out (0 once it has; INF in no arrival).
+func emerges_in_s(body: Node) -> float:
+	var p: VortexPassage = _by_body.get(body)
+	if p == null or p.kind != VortexPassage.Kind.ARRIVAL:
+		return INF
+	if p.emerged:
+		return 0.0
+	var vortex: JumpVortex = p.vortex
+	return maxf(VortexTransit.emerge_age_s(vortex.timing.lead_s) - vortex.age_s, 0.0) if is_instance_valid(vortex) else INF
+
+
+## Whether `body` has come out of an arrival's ring (false while it waits "in hyperspace" for its vortex, or is in no funnel).
+func has_emerged(body: Node) -> bool:
+	var p: VortexPassage = _by_body.get(body)
+	return p != null and p.kind == VortexPassage.Kind.ARRIVAL and p.emerged
 
 
 ## The scale `body` is drawn at now (1 when it is in no funnel).
@@ -247,12 +272,20 @@ func _step(p: VortexPassage, delta: float) -> void:
 	var left_m: float = maxf(local.z, 0.0) if p.kind == VortexPassage.Kind.ARRIVAL else maxf(fit.depth_m - local.z, 0.0)
 	p.vortex.extend(left_m / maxf(p.speed_mps, 1.0) + KEEP_OPEN_S)
 	if p.kind == VortexPassage.Kind.ARRIVAL:
+		if p.burst_s > 0.0:
+			# A burst out: the core glows white-blue behind the ship all the way out, so it reads as a silhouette (M8-T29).
+			p.glow_s -= delta
+			if p.glow_s <= 0.0:
+				p.glow_s = CORE_GLOW_EVERY_S
+				flash(p.vortex, frame * VortexTransit.arrival_start(fit, p.lateral))
 		if (local.z <= 0.0 and factor >= 1.0) or p.age_s > p.limit_s:
 			body.linear_velocity = _rest() + p.exit_velocity_rel
 			arrivals_done += 1
 			_end(p)
 		return
-	if p.capability != null and body is Ship:
+	if p.burst_s > 0.0:
+		body.linear_velocity = _rest() + frame.basis.z.normalized() * p.speed_mps
+	elif p.capability != null and body is Ship:
 		var axis: Vector3 = frame.basis.z.normalized()
 		var ship := body as Ship
 		ship.set_flight_command(GateAutopilot.follow_axis(ship.global_position, ship.linear_velocity - _rest(), ship.global_basis,
@@ -338,7 +371,8 @@ func _emerge(p: VortexPassage, frame: Transform3D) -> void:
 	var fit: VortexFit = p.vortex.fit
 	var start: Vector3 = VortexTransit.arrival_start(fit, p.lateral)
 	var out: Vector3 = VortexTransit.arrival_exit(fit, p.lateral) - start
-	p.speed_mps = VortexTransit.transit_speed(out.length(), p.exit_velocity_rel.length())
+	p.speed_mps = out.length() / p.burst_s if p.burst_s > 0.0 \
+			else VortexTransit.transit_speed(out.length(), p.exit_velocity_rel.length())
 	p.limit_s = p.age_s + STALL_FACTOR * out.length() / maxf(p.speed_mps, 1.0)
 	p.emerged = true
 	var at: Vector3 = frame * start
@@ -444,6 +478,11 @@ func _seen(body: RigidBody3D, at: Vector3) -> bool:
 	var radius: float = damageable.bounding_radius if damageable != null and damageable.bounding_radius > 0.0 else 10.0
 	var px: float = VortexLod.px_per_unit(camera.fov, get_viewport().get_visible_rect().size.y)
 	return VortexTransit.worth_flying(radius, camera.global_position.distance_to(at), px)
+
+
+## The frame's rest velocity, World (what "at rest" means for a gate and its funnels).
+func rest_velocity() -> Vector3:
+	return _rest()
 
 
 func _rest() -> Vector3:

@@ -155,28 +155,65 @@ func test_a_raid_jumps_in_6_to_12_km_out_and_goes_for_the_player() -> void:
 
 
 func test_a_raid_comes_in_behind_a_carrier_that_then_jumps_back() -> void:
-	# M6-T23: raiders cannot open a jump point; a cruiser stand-in opens one, they come out with it, and it leaves through its own.
+	# M6-T23: raiders cannot open a jump point; their carrier opens one, they come out with it, and it leaves through its own.
+	# M12-T19: the carrier is the raiders' strike carrier; it stands off while the raid lasts, then calls its fighters back,
+	# waits, and jumps out (M8-T08: once its drive has recharged).
 	main = await _make_main(true)
 	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
-	assert_eq(carriers.size(), EncounterDirector.CARRIERS, "the carriers are built with the pools, not in play (D22)")
+	assert_eq(carriers.size(), 2 * EncounterDirector.CARRIERS,
+			"the carriers are built with the pools, not in play (D22): cruisers, and the raiders' strike carriers")
 	var e: EncounterEvent = _raid(false)
 	assert_true(_director().start(e))
 	assert_eq(carriers.runs().size(), 1, "one carrier brings the whole raid")
 	var run: CarrierRun = carriers.runs()[0]
+	assert_eq(run.carrier.ship_class, CapitalStandin.STRIKE_CARRIER, "the strike carrier, not the cruiser stand-in")
 	assert_eq(run.arrival.opener, run.carrier, "the carrier opened the point and holds it")
-	assert_almost_eq(run.arrival.hold_range_m, 2.0 * run.carrier.length_m(), 1e-3)
+	assert_almost_eq(run.arrival.hold_range_m, run.carrier.jump_hold_range_m(), 1e-3, "held within its hull's own range")
+	assert_gt(run.carrier.jump_hold_range_m(), (run.carrier.jump_anchor["position"] as Vector3).length(),
+			"its range reaches the anchor it opens its departure at")
 	assert_eq(run.fighters.size(), e.count(), "every raider comes through it")
 	assert_eq(run.carrier.faction, Factions.RAIDERS)
+	assert_eq(run.carrier.dock.docked_count(), 0, "beside it out of its point, as the raid's data says by default (Q29)")
+	await _fly(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	assert_eq(run.state, CarrierRun.State.STANDOFF, "its fighters out, it stands off instead of leaving at once (Q30)")
 	var departed: int = carriers.carriers_departed
-	await _fly(60.0, func() -> bool: return carriers.carriers_departed > departed)
-	assert_eq(carriers.carriers_departed, departed + 1, "the carrier jumped back through its own point")
+	await _fly(10.0)
+	assert_eq(carriers.carriers_departed, departed, "it stays while the raid lasts")
+	run.options["wait_s"] = 2.0
+	run.carrier.jump_drive.charge()  # as if its recharge had passed (M8-T08): it leaves by its own point, not the gate
+	carriers.end_raid(run)
+	await _fly(90.0, func() -> bool: return carriers.carriers_departed > departed)
+	assert_eq(carriers.carriers_departed, departed + 1, "the raid over, the carrier jumped back through its own point")
 	assert_eq(_director().jumps.opened, 2, "its arrival point and its departure point")
 	assert_eq(carriers.free_count(), carriers.size(), "and is back in its pool")
+	assert_eq(run.left_behind + run.recovered, e.count(), "each raider either docked in time or was left behind (Q27)")
 	await _fly(JumpCapability.OWN_DEPARTURE_HOLD_S + 0.5)
 	assert_eq(_director().jumps.collapses, 1, "its departure point closed once the short hold was over")
 	assert_eq(_director().jumps.collapse_kills, 0, "with nothing in it")
 	for c: Combatant in _director().alive():
 		assert_false(c.damageable.hull.destroyed, "%s flies on" % c.display_name)
+
+
+func test_a_raid_can_come_in_docked_on_its_carrier_and_is_launched_at_its_target() -> void:
+	# M12-T19, Q29: by the raid's data its fighters ride in on the carrier's cradles; launched, each pilot flies its raid.
+	main = await _make_main(true)
+	var carriers: CarrierJumps = CarrierJumps.attach(main.world)
+	_director().carrier_options = {"arrival": "docked"}
+	var e: EncounterEvent = _raid(false)
+	assert_true(_director().start(e))
+	var run: CarrierRun = carriers.runs()[0]
+	assert_eq(run.carrier.dock.docked_count(), e.count(), "every raider is on a cradle")
+	assert_eq(_director().alive().size(), e.count(), "and still the encounter's own")
+	await _fly(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	assert_eq(run.state, CarrierRun.State.STANDOFF)
+	assert_eq(run.carrier.dock.docked_count(), 0, "all launched")
+	await _fly(8.0)
+	for c: Combatant in _director().alive():
+		assert_true(c.ship.is_visible_in_tree(), "%s is in play" % c.display_name)
+		assert_false(c.driver.in_passage, "%s's pilot flies it again" % c.display_name)
+		assert_gt(c.ship.linear_velocity.dot((main.ship.global_position - c.ship.global_position).normalized()), 50.0,
+				"%s is on its way to its target" % c.display_name)
+	assert_eq(run.carrier.damageable.hull.fraction(), 1.0, "nobody scraped the carrier")
 
 
 func test_patrols_and_traffic_cruise_in_from_26_to_30_km_on_their_routes() -> void:
@@ -281,6 +318,28 @@ func test_an_event_that_would_pass_the_cap_waits_until_there_is_room() -> void:
 	assert_eq(_director().alive_count(), 2)
 
 
+func test_a_held_event_whose_kind_is_switched_off_never_starts() -> void:
+	# Council round 2 (N3): a raid held back by the cap is dropped when enemy encounters are switched off while it waits.
+	var enemy: bool = bool(Settings.get_value(&"encounters_enemy"))
+	Settings.set_value(&"encounter_max_ships", 4)
+	main = await _make_main(true)
+	var first: EncounterEvent = _raid(false, 3)
+	first.trim(3)
+	assert_true(_director().start(first))
+	var held: EncounterEvent = _raid(false, 2)
+	held.trim(2)
+	_director().waiting = held
+	await wait_physics_frames(3)
+	assert_eq(_director().waiting, held, "held by the cap")
+	Settings.set_value(&"encounters_enemy", false)
+	_director().release_all()
+	await wait_physics_frames(3)
+	Settings.set_value(&"encounters_enemy", enemy)
+	assert_ne(_director().waiting, held, "dropped, not started")
+	for c: Combatant in _director().alive():
+		assert_ne(c.faction, Factions.RAIDERS, "no raider came after the switch went off")
+
+
 func test_an_event_bigger_than_the_cap_is_trimmed_to_it_when_nothing_else_is_in_play() -> void:
 	Settings.set_value(&"encounter_max_ships", 4)
 	main = await _make_main(true)
@@ -318,6 +377,64 @@ func test_free_flight_keeps_the_pace_with_the_station_run() -> void:
 	# The shipped pools: traffic on the station's run, raids for the station, the station's wing beside the patrols.
 	await _pace(EncounterDirector.pools_file(&"free_flight"))
 	assert_gt(main.traffic.alive_count(), 0, "the run is going")
+
+
+func test_the_schedule_does_not_stall_at_the_cap_with_patrols_and_civilians_about() -> void:
+	# Maintainer, 2026-11-21: seed 5 with the shipped pools filled the cap with two patrols, a raid's fighters and the station
+	# run's civilians, and the next raid waited for minutes. Civilians on the run no longer count, and a held event starts with
+	# what fits (three at least), so no event waits long once it is due.
+	DebugConsole.flags.invulnerable = true
+	Settings.set_value(&"encounter_interval_s", 20.0)
+	main = await _make_main(true, EncounterDirector.pools_file(&"free_flight"))
+	var director: EncounterDirector = _director()
+	var waited: Array[float] = [0.0, 0.0]  # this wait, the longest
+	var raids: Array[int] = [0]
+	director.event_started.connect(func(e: EncounterEvent) -> void:
+		raids[0] += 1 if e.kind == &"raid" else 0)
+	var last_s: Array[float] = [director.elapsed_s]
+	await _fly(240.0, func() -> bool:
+		var dt: float = director.elapsed_s - last_s[0]
+		last_s[0] = director.elapsed_s
+		waited[0] = waited[0] + dt if director.waiting != null else 0.0
+		waited[1] = maxf(waited[1], waited[0])
+		return false)
+	assert_lt(waited[1], 40.0, "no event waits long once due (longest %.1f s)" % waited[1])
+	assert_gte(director.events_started, 9, "an event every 10 to 30 s, never held behind the cap")
+	assert_gte(raids[0], 3, "raids among them, the patrols and the run's civilians notwithstanding")
+	assert_gt(main.traffic.encounter_count(), 0, "the run's civilians were about")
+
+
+func test_a_patrol_demoted_mid_route_finishes_it_in_the_tier_and_is_released() -> void:
+	# The maintainer's play-test (2026-11-21): seed 5's patrols passed the player, left the tier's radius and were never
+	# released: a tier row's route mirror never moved, so its end (26 to 30 km out, inside the 40 km release) was never seen.
+	DebugConsole.flags.invulnerable = true
+	Settings.set_value(&"encounter_interval_s", 20.0)
+	main = await _make_main(true, EncounterDirector.pools_file(&"free_flight"))
+	var director: EncounterDirector = _director()
+	var seen_near: Dictionary = {}  # a patrol ship flown in Jolt near the player at some point
+	var last: Array[Dictionary] = [{}]  # each patrol ship's last look: [tier row, its row's range from the player]
+	var released_in_tier: Array[String] = []
+	var released: Array[int] = [director.ships_released]
+	await _fly(360.0, func() -> bool:
+		var now: Dictionary = {}
+		for entry: Dictionary in director._own:
+			if entry["kind"] != &"patrol" or not is_instance_valid(entry["combatant"]):
+				continue
+			var c: Combatant = entry["combatant"]
+			now[c] = [c.ship.is_tier_parked(), director._local_position(c).distance_to(main.ship.global_position)]
+			if not c.ship.is_tier_parked():
+				seen_near[c] = true
+		var more_released: bool = director.ships_released > released[0]
+		released[0] = director.ships_released
+		for c: Combatant in last[0]:
+			var look: Array = last[0][c]
+			# Gone back to its pool (not destroyed) from the tier inside the 40 km release: for its route's end.
+			if not now.has(c) and more_released and bool(look[0]) and seen_near.has(c) \
+					and float(look[1]) < EncounterDirector.RELEASE_M:
+				released_in_tier.append(c.display_name)
+		last[0] = now
+		return not released_in_tier.is_empty())
+	assert_false(released_in_tier.is_empty(), "a patrol that passed the player, was demoted mid-route, ended its route as a tier row and went back to its pool")
 
 
 # Flies a fifth of the default interval until 11 events have started (the player shooting down raiders older than 15 s) and
@@ -488,3 +605,50 @@ func _load_ms(encounters_on: bool) -> int:
 	main = m
 	await wait_physics_frames(2)
 	return ms
+
+
+# --- M8-T28: the three switches ------------------------------------------------------------------------------------
+
+
+func _switch(civilian: bool, allied: bool, enemy: bool) -> void:
+	Settings.set_value(&"encounters_civilian", civilian)
+	Settings.set_value(&"encounters_allied", allied)
+	Settings.set_value(&"encounters_enemy", enemy)
+
+
+func test_the_director_never_starts_a_switched_off_kind() -> void:
+	var backup: Array = [Settings.get_value(&"encounters_civilian"), Settings.get_value(&"encounters_allied"),
+			Settings.get_value(&"encounters_enemy")]
+	main = await _make_main(true)
+	var started: Dictionary = {}
+	for combo: Array in [[true, false, false], [false, true, false], [false, false, true], [true, true, false],
+			[false, true, true], [true, false, true]]:
+		_switch(combo[0], combo[1], combo[2])
+		_director().sync_switches()
+		_run("encounters clear")
+		for i: int in 12:
+			var e: EncounterEvent = _director().take_next()
+			assert_true(_director().kind_on(e.kind), "%s is drawn with switches %s" % [e.kind, combo])
+			if _director().start_scheduled(e):
+				assert_true(_director().kind_on(_director().last_event.kind),
+						"%s started with switches %s" % [_director().last_event.kind, combo])
+			_run("encounters clear")
+	_switch(false, false, false)
+	assert_false(_run("encounters force raid").ok, "a switched-off kind cannot be forced")
+	assert_false(_run("encounters next").ok, "all off: nothing comes")
+	var before: int = _director().events_started
+	await _fly(30.0)
+	assert_eq(_director().events_started, before, "an empty sky stays empty")
+	_switch(backup[0], backup[1], backup[2])
+
+
+func test_the_console_flips_one_switch_at_a_time() -> void:
+	var backup: bool = bool(Settings.get_value(&"encounters_enemy"))
+	main = await _make_main(true)
+	assert_true(_run("encounters off raid").ok)
+	assert_false(bool(Settings.get_value(&"encounters_enemy")))
+	assert_true(bool(Settings.get_value(&"encounters_allied")))
+	assert_true(_director().on, "the director itself stays on")
+	assert_true(_run("encounters on raid").ok)
+	assert_true(bool(Settings.get_value(&"encounters_enemy")))
+	Settings.set_value(&"encounters_enemy", backup)

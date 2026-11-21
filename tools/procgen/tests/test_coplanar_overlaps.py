@@ -10,6 +10,7 @@ import numpy as np
 from tools.procgen.assets import b5_interior
 from tools.procgen.assets import babylon5_station as b5
 from tools.procgen.core.geometry import Material, Mesh
+from tools.procgen.core.sections import cut_corners, skirts
 from tools.procgen.parts import station as st
 from tools.procgen.parts import station_props as sp
 from tools.procgen.parts.station import block
@@ -86,6 +87,25 @@ class StationTests(unittest.TestCase):
         found = coplanar_overlaps(np.concatenate(tris))
         stray = [o for o in found if names[o.first] != names[o.second] or names[o.first] not in HULL_SELF_OVERLAPS]
         self.assertEqual(stray, [], describe(stray))
+
+
+class SectionTests(unittest.TestCase):
+    def test_no_section_draws_a_skirt_over_a_hull_face_in_its_cut_plane(self) -> None:
+        """M8-T11: the skirt hung at the cargo bay's cut (z 420, also the spine's front face) lay over that face, facing the same way,
+        its UVs smeared from the border: it streaked and z-fought as the camera moved across the bay's front."""
+        whole = Mesh.concatenate([part.mesh for part in b5.frame_parts()])
+        corners = whole.vertices[whole.faces]
+        normals = whole.vertex_normals()[whole.faces]
+        uvs = np.zeros((whole.face_count, 3, 2))
+        cuts = b5.section_cuts("frame")
+        for cut, part in zip(cuts, cut_corners(corners, normals, uvs, np.zeros(whole.face_count, dtype=np.int8), cuts), strict=True):
+            planes = [(z, side) for z, side in ((cut.z0, -1.0), (cut.z1, 1.0)) if np.isfinite(z)]
+            wall = skirts(part, planes)
+            if not len(wall.positions):
+                continue
+            tris = np.concatenate([part.positions, wall.positions])
+            found = [o for o in coplanar_overlaps(tris) if (o.first >= len(part.positions)) != (o.second >= len(part.positions))]
+            self.assertEqual(found, [], f"{cut.name}: {describe(found)}")
 
 
 class InteriorTests(unittest.TestCase):
