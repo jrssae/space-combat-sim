@@ -11,6 +11,7 @@ pub mod contact {
 
     use godot::builtin::Vector3;
 
+    use crate::rows::seen_ix;
     use crate::v3::{dist_sq, dot, length, length_squared, sub};
 
     // The closest-approach test of incoming fire, as `ContactScan` defines it.
@@ -43,7 +44,7 @@ pub mod contact {
     impl View<'_> {
         /// Body `j`'s faction index as the asking ship perceives it (`rows::seen_ix`).
         pub fn seen_faction(&self, j: usize) -> u32 {
-            crate::rows::seen_ix(self.body_flags.get(j).copied().unwrap_or(0), self.body_faction[j], self.observer)
+            seen_ix(self.body_flags.get(j).copied().unwrap_or(0), self.body_faction[j], self.observer)
         }
     }
 

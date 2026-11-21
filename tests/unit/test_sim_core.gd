@@ -626,7 +626,7 @@ const ROWS_FORBIDDEN: Array[String] = ["Gd<", "Variant", "InstanceId", "instance
 ## The only `use` lines the kernels may hold: the standard library, two maths builtins, and the row tables' plain data.
 const KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::{Bolts, FLAG_RIGID, Rows};", "use crate::rows::{FLAG_RIGID, Rows};", "use crate::rows::Rows;",
-		"use crate::v3::", "use crate::surface;"]  # surface: the big hulls' volumes (M7-T06), engine-free too
+		"use crate::v3::", "use crate::surface;", "use crate::rows::seen_ix;"]  # surface: the big hulls' volumes (M7-T06), engine-free too
 ## The only `use` lines the row tables may hold: the standard library and the value types the columns are made of. No engine
 ## string: the worker threads share the rows (M4-T18), and an engine string cannot be shared between threads.
 const ROWS_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};"]
