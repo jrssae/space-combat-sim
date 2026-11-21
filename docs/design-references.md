@@ -1521,9 +1521,9 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 
 ### EA Thunderbolt (`ea_thunderbolt`, T50)
 
-- **Reference.** `EA_Thunderbolt_fighter.stl` is turned 42 degrees about file z; turn it back first, then mapping
-  `--right=-x --up=+z --aft=+y`, 16.24 m. Box 12.0 m wide, 6.3 m tall. (Made with a turned copy in `reports/tmp/rot/`;
-  `refview` cannot turn, so T50 adds the turn or a `--turn` option.) Show: `ea_thunderbolt/` (three stills).
+- **Reference.** `EA_Thunderbolt_fighter.stl` is turned 42 degrees about file z; `--turn z=42` squares it up (M10-T50:
+  `refview` and `compare` turn the file before the mapping), then mapping `--right=-x --up=+z --aft=+y`, 16.24 m. Box
+  12.0 m wide, 6.3 m tall. Show: `ea_thunderbolt/` (three stills).
 - **Shape.** A long two-seat **fuselage** (0 to 55 %) with the cockpit canopy and nose guns; a centre body (45 to 80 %)
   with a dorsal fin; **four engine pods** on X-wings (x ±5.2, y ±2.5) from 55 % to 100 %, each with a nozzle cluster at
   the stern and a swept fin; seen from ahead the pods make an X, as the Starfury's.

@@ -477,6 +477,15 @@ class MainTests(TmpCase):
         self.assertEqual(report["mapping"], {"right": "-x", "up": "+z", "aft": "+y"})
         self.assertAlmostEqual(report["dimensions"]["length"]["model_m"], 12.0, places=3)
 
+    def test_a_turned_stl_is_squared_up_before_the_mapping(self) -> None:
+        rotation = refview.frame_matrix("-x", "+z", "+y")
+        askew = (_box(*HULL) @ rotation) @ refview.turn_matrix("z=-42").T  # as the Thunderbolt's file lies (M10-T50)
+        code, out, _ = self.compare(self.stl(askew), self.asset([HULL]), "--right=-x", "--up=+z", "--aft=+y", "--turn", "z=42")
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.report()["mapping"], {"right": "-x", "up": "+z", "aft": "+y", "turn": "z=42"})
+        code, out, _ = self.compare(self.stl(askew), self.asset([HULL]), "--right=-x", "--up=+z", "--aft=+y")
+        self.assertEqual(code, 1, out)  # without the turn the silhouettes do not meet
+
     def test_model_and_asset_crops_are_set_apart_and_meet_at_the_crop_start(self) -> None:
         # Two parts with a small gap between them, like the lead ship and a cargo section.
         front_part = ((-2.0, -1.0, 0.0), (2.0, 1.0, 5.8))

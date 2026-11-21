@@ -99,6 +99,30 @@ class FrameTests(unittest.TestCase):
         self.assertEqual(scale, 1.0)
         self.assertAlmostEqual(float(np.ptp(ship[..., 2])), 4.0)
 
+    def test_a_turn_squares_up_a_model_lying_askew_in_its_file(self) -> None:
+        # The Thunderbolt's file (M10-T50): a box turned -42 degrees about file z reads as itself after ``z=42``.
+        box = _box((-1.0, -4.0, 0.0), (1.0, 4.0, 3.0))
+        askew = box @ refview.turn_matrix("z=-42").T
+        self.assertGreater(float(np.ptp(askew[..., 0])), 5.0)  # askew, its box is far wider than the model
+        ship, _ = refview.to_ship_frame(askew, refview.file_rotation("-x", "+z", "+y", "z=42"), 16.0)
+        pts = ship.reshape(-1, 3)
+        np.testing.assert_allclose(np.ptp(pts, axis=0), [4.0, 6.0, 16.0], atol=1e-9)
+        straight, _ = refview.to_ship_frame(box, refview.frame_matrix("-x", "+z", "+y"), 16.0)
+        np.testing.assert_allclose(ship, straight, atol=1e-9)
+
+    def test_a_turn_is_a_rotation_about_one_file_axis(self) -> None:
+        np.testing.assert_allclose(refview.turn_matrix(None), np.eye(3))
+        np.testing.assert_allclose(refview.turn_matrix(" "), np.eye(3))
+        for axis, spec in enumerate(("x=30", "y=-75.5", "z=42")):
+            m = refview.turn_matrix(spec)
+            self.assertAlmostEqual(float(np.linalg.det(m)), 1.0)
+            np.testing.assert_allclose(m @ m.T, np.eye(3), atol=1e-12)
+            np.testing.assert_allclose(m[axis], np.eye(3)[axis], atol=1e-12)  # the axis itself stays
+        np.testing.assert_allclose(refview.turn_matrix("z=90") @ [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], atol=1e-12)  # counter-clockwise from +z
+        for bad in ("42", "w=10", "z=", "z=ten", "z 42"):
+            with self.assertRaises(ValueError):
+                refview.turn_matrix(bad)
+
 
 @needs_pillow
 class GeometryTests(unittest.TestCase):
@@ -155,6 +179,23 @@ class MainTests(unittest.TestCase):
             self.assertEqual(m["dimensions_m"], {"length": 50.0, "span": 30.0, "height": 5.0})
             self.assertEqual(len(m["shells"]), 3)
             self.assertEqual(len(m["sections"]), 4)
+
+    def test_main_turns_the_file_before_mapping_it(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "askew.stl"
+            refview.write_binary_stl(path, _box((-1.0, -4.0, 0.0), (1.0, 4.0, 3.0)) @ refview.turn_matrix("z=-42").T)
+            out = Path(tmp) / "out"
+            argv = [str(path), "--name", "askew", "--out", str(out), "--right=-x", "--up=+z", "--aft=+y", "--turn", "z=42", "--length", "16",
+                    "--px", "200", "--stations", "2", "--no-shells"]
+            with mock.patch("sys.stdout", new=io.StringIO()):
+                self.assertEqual(refview.main(argv), 0)
+            m = json.loads((out / "measurements.json").read_text())
+            self.assertEqual(m["dimensions_m"], {"length": 16.0, "span": 4.0, "height": 6.0})
+            self.assertEqual(m["mapping"], {"right": "-x", "up": "+z", "aft": "+y", "turn": "z=42"})
+            err = io.StringIO()
+            with mock.patch("sys.stderr", new=err):
+                self.assertEqual(refview.main([str(path), "--name", "askew", "--out", str(out), "--turn", "q=1"]), 2)
+            self.assertIn("turn", err.getvalue())
 
     def test_main_reports_a_bad_file_and_returns_two(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

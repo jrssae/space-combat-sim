@@ -18,6 +18,9 @@ Write the axes with ``=`` (``--right=-x``), or argparse reads ``-x`` as an optio
 file's axes are taken as they are (x right, y up, z aft): the first look, to read the nose and the engines off the
 views before choosing the mapping. ``--zrange`` renders a slice of the length larger. The mappings used for the
 civilian ships are in ``docs/design-references.md``.
+
+A model that lies askew in its file (the Thunderbolt's is 42 degrees off about file z) takes ``--turn z=42`` first: the
+file is turned about that file axis, then mapped.
 """
 
 from __future__ import annotations
@@ -149,6 +152,27 @@ def frame_matrix(right: str, up: str, aft: str) -> np.ndarray:
     if det < 0.0:
         raise ValueError("this mapping mirrors the model; flip the sign of one axis")
     return m
+
+
+def turn_matrix(spec: str | None) -> np.ndarray:
+    """A model lying askew in its file is squared up first: ``z=42`` turns the file 42 degrees about its z axis
+    (counter-clockwise seen from +z), before the mapping. ``None`` or an empty text is no turn."""
+    if spec is None or not spec.strip():
+        return np.eye(3)
+    match = re.fullmatch(r"([xyz])\s*=\s*([+-]?\d+(?:\.\d*)?)", spec.strip().lower())
+    if not match:
+        raise ValueError(f"turn {spec!r} is not an axis and degrees, e.g. z=42")
+    axis = AXIS_NAMES.index(match.group(1))
+    a = math.radians(float(match.group(2)))
+    i, j = (axis + 1) % 3, (axis + 2) % 3
+    m = np.eye(3)
+    m[i, i], m[i, j], m[j, i], m[j, j] = math.cos(a), -math.sin(a), math.sin(a), math.cos(a)
+    return m
+
+
+def file_rotation(right: str, up: str, aft: str, turn: str | None = None) -> np.ndarray:
+    """The whole way from the file's axes to the ship's: the turn that squares the model up, then the mapping."""
+    return frame_matrix(right, up, aft) @ turn_matrix(turn)
 
 
 def to_ship_frame(tris: np.ndarray, rotation: np.ndarray, length_m: float | None) -> tuple[np.ndarray, float]:
@@ -568,6 +592,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--right", default="+x", help="file axis pointing to starboard, e.g. -y")
     ap.add_argument("--up", default="+y", help="file axis pointing up")
     ap.add_argument("--aft", default="+z", help="file axis pointing from the nose to the engines")
+    ap.add_argument("--turn", default=None, metavar="AXIS=DEG", help="turn the file about one of its axes before the mapping, e.g. z=42")
     ap.add_argument("--px", type=int, default=1600, help="pixels along the ship's largest dimension")
     ap.add_argument("--stations", type=int, default=24, help="cross-sections along the length")
     ap.add_argument("--xcuts", default="0", help="comma-separated x (m) of cuts along the length")
@@ -579,7 +604,7 @@ def main(argv: list[str] | None = None) -> int:
 
     try:
         raw, fmt = read_stl(args.stl)
-        rotation = frame_matrix(args.right, args.up, args.aft)
+        rotation = file_rotation(args.right, args.up, args.aft, args.turn)
         tris, scale = to_ship_frame(raw, rotation, args.length)
     except (OSError, ValueError) as exc:
         print(f"refview: {exc}", file=sys.stderr)
@@ -620,7 +645,7 @@ def main(argv: list[str] | None = None) -> int:
         "format": fmt,
         "triangles": int(len(raw)),
         "file_extent_units": [round(float(v), 4) for v in np.ptp(raw.reshape(-1, 3), axis=0)],
-        "mapping": {"right": args.right, "up": args.up, "aft": args.aft},
+        "mapping": {"right": args.right, "up": args.up, "aft": args.aft} | ({"turn": args.turn} if args.turn else {}),
         "metres_per_unit": round(scale, 6),
         "frame": "x starboard, y up, z aft from the nose (z = 0); x and y centred on the whole model's box; metres",
         "zrange": args.zrange,

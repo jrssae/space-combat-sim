@@ -284,3 +284,45 @@ in `test_textured_mesh.py`, `test_textures.py`, `test_livery.py`; the Godot half
   small brackets and vents are not modelled; the deck's surface is flat where the reference has shallow facets; the
   claw prongs end straight where the reference's hook in slightly. The reference has no colours: the glazing (every
   facet of the beak, so the pilot can see ahead), the dark recesses and the hazard bands are our choices.
+
+## Thunderbolt (`ea_thunderbolt`, M10-T50)
+
+The Earth Alliance Thunderbolt as a **model only** (M11 gives it a `ShipSpec`, a cockpit and its unlock), on the Starfury's
+generator: `tools/procgen/assets/ea_thunderbolt.py` places parts from `parts/thunderbolt.py` in the Earthforce fighter
+finish (`styles/ea_thunderbolt.py`), with the surface drawn by `layouts.thunderbolt()`. **Stage 1** (2026-11-20): the shape,
+hardpoints, chunks, three colour options and the half-size low texture set are built; the maintainer chooses the look and
+the low set's size (Q52), then stage 2 finishes this section.
+
+- **Reference.** `references/EA_Thunderbolt_fighter.stl` at 16.24 m, squared up with `--turn z=42` (the file lies 42 degrees
+  askew about its z; `refview` and `compare` turn it before the mapping `--right=-x --up=+z --aft=+y`). The authored frame is
+  the reference's ship frame: the nose at z = 0, +z aft, x and y on its box centre.
+- **Shape.** A long two-seat fuselage with a glazed spine (two panes, a dark cabin floor under them), a chin box, three
+  guns under the nose with a store behind each side gun; two wing plates a side, a delta over the fuselage inboard, swept
+  back to x = 3.25 and bent forward again into the pods, a small blister on each near the kink; a trunk between the plates,
+  a block on the upper deck's rear, a cannon housing in each upper wing root and a store under each lower one; four
+  eight-sided pods (5.3 m) with a recessed collar, a retro bell in the nose and three thruster ports; behind each an engine
+  on a thin shaft, plates round it (the inner one a long prong) and a fin swept inboard. The lower pods are the upper ones
+  moved down 3.99 m, not mirrored; wings and tails are authored per level, the port side mirrors starboard.
+- **Fidelity (the 90 % rule).** Top 0.926, side 0.941, front 0.908; length 1.000, width 1.004, height 1.000 of the model's
+  (`compare ... --turn z=42`; overlays in `references/screenshots/M10-T50 Thunderbolt/compare/`). The model's 0.2 m gap at
+  z = 8.4 to 8.6 (where its print halves meet) is closed here and costs about two points from above and from the side.
+- **Contract.** As the Starfury's: `hardpoints.json` with `muzzles` (`nose`, `left`, `right`, `root_left`, `root_right`),
+  four `pods` (`ur`, `lr`, `ul`, `ll`; the main bell in the tail, the retro bell in the pod's nose), twelve cosmetic `rcs`
+  ports, box and capsule `collision`, `nav_lights`, `cockpit_camera` (the front seat) and the chunks `cabin` and `arm_<pod>`
+  (each with its `joint`, where the wing leaves the centre body). The mesh takes wing liveries in the Starfury's zones
+  (wings as struts, tails as claws). No cockpit interior and no screens yet.
+- **Budget (Q38, a fighter).** 8 600 triangles of 40 000; one 2 048 px atlas at 1.7 cm a texel with a 4 096 px normal map,
+  29.3 MB; the low set a mip level down (1 024 px, glow map included), 7.3 MB of 10. `--option low_shrink=1` writes the low
+  set at full size (29.3 MB, over the low budget) for the comparison Q52 asks for.
+- **Looks (stage 1, `--option look=a|b|c`).** A: the show's white with red bands across wings, pods and fin tips and a black
+  anti-glare strip; B: the Starfury's fleet grey, unmarked (a wing's livery is its colour); C: white two-toned with grey
+  panels, the bands, a red nose cap and a shark's mouth on the chin. The cabin's red light is dimmer than the Starfury's
+  (far more glass shows).
+- **Sheets.** `scripts/model_sheet.sh` photographs a model the game has no `ShipSpec` for (the game's scene, light and
+  materials; any texture set, light and livery) and `tools/refview/model_sheets.py` lays the shots out:
+  `references/screenshots/M10-T50 Thunderbolt/option_sheet.png`, `low_set_half_vs_full_lit.png` and `_dark.png`.
+- **Tests.** `test_ea_thunderbolt.py` (21: files, the low set's sizes, budget, zones, looks, dimensions, the 90 % compare
+  where the model is present, frames, symmetry, chunks, hardpoints, determinism); `test_refview.py` and
+  `test_refview_compare.py` hold the turn.
+- **Open for stage 2.** The fighter livery material does not take a texture set's own glow map yet (M10-T05's note); buried
+  faces (the decks inside the fuselage, the plates' ends) still take atlas space; collision is one primitive a part.

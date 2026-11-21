@@ -431,6 +431,60 @@ def starfury() -> dict[str, SeamLayout]:
             "pod": SeamLayout.of(pod), "fuselage": SeamLayout.of(fuselage), "claw": SeamLayout.of(claw)}
 
 
+# --- Earthforce: the Thunderbolt (M10-T50) --------------------------------------------------------------------------------
+def thunderbolt(tone: float = 0.06) -> dict[str, SeamLayout]:
+    """The Thunderbolt's parts (docs/assets-starfury.md, "Thunderbolt"): fuselage, canopy, chin, deck, wings and trunk in the
+    authored frame (the nose at z = 0, the starboard side where a part has two), pod and tail in the pod's frame. Long plates
+    along the fuselage, framed panels on the wings, two hatches on each pod's top and flank as the reference has them.
+    ``tone`` is how far the paint's value wanders from plate to plate."""
+
+    def plates(seed: int, cell: tuple[float, float], **kw: object) -> Plates:
+        return Plates(level=3, cell=cell, splits=2, min_m=0.22, keep=0.3, tone=tone, sheen=0.08, grime=0.09, grime_m=0.035, depth=0.5,
+                      dark=0.45, width=0.8, seed=seed, **kw)
+
+    fuselage: list[Feature] = [
+        *rings(2, [1.9, 5.1, 7.0], level=1, width=1.3),
+        *rings(2, [1.2, 2.8, 3.7, 4.4, 6.0, 8.0, 9.4], level=2), Cut(axis=1, at=-0.75, level=2),
+        *[Hatch(centre=(0.0, -0.45, z), right=Z, up=Y, size=(0.6, 0.3), corner_m=0.04, facing=side, min_dot=0.5, level=2)
+          for side in (OUT, IN) for z in (4.6, 6.4)],
+        plates(151, (1.1, 0.6), wrap="sides", long_axis=2),
+    ]
+    canopy: list[Feature] = [
+        Cut(axis=2, at=1.2, level=1, width=1.3), Cut(axis=2, at=6.3, level=2),
+        Hatch(centre=(0.0, 0.0, 5.8), right=X, up=Z, size=(0.36, 0.75), corner_m=0.04, sunk=0.8, tone=0.8, facing=UP, level=2),
+    ]
+    chin: list[Feature] = [
+        *rings(2, [2.3], level=1, width=1.3), *rings(2, [1.6, 3.0, 3.6], level=2), Cut(axis=1, at=-1.0, level=2),
+        plates(153, (0.9, 0.45), wrap="sides", long_axis=2),
+    ]
+    edge = ((1.0, 0.0, 6.75), (1.4, 0.0, 7.55), (1.8, 0.0, 8.4), (2.6, 0.0, 9.93), (3.25, 0.0, 10.9), (3.85, 0.0, 10.92), (4.4, 0.0, 9.5))
+    wing: list[Feature] = [
+        Cut(axis=0, at=1.8, level=1, width=1.3), Cut(axis=0, at=3.25, level=1, width=1.3), Cut(axis=2, at=8.5, level=1, width=1.3),
+        *[Path(points=edge, facing=side, level=1, width=1.2) for side in (UP, DOWN)],
+        Cut(axis=0, at=0.5, level=2), Cut(axis=0, at=2.5, level=2), Cut(axis=0, at=4.1, level=2), Cut(axis=2, at=10.2, level=2),
+        Cut(axis=2, at=11.4, level=2),
+        *[Hatch(centre=(x, 0.0, z), right=X, up=Z, size=size, corner_m=0.04, sunk=0.8, tone=0.8, facing=UP, level=2)
+          for x, z, size in ((0.9, 8.0, (0.22, 0.3)), (1.0, 9.9, (0.5, 0.7)), (2.3, 10.9, (0.45, 0.6)), (4.2, 11.3, (0.3, 0.6)))],
+        *[Hatch(centre=(x, 0.0, z), right=X, up=Z, size=size, corner_m=0.04, facing=DOWN, level=2)
+          for x, z, size in ((1.0, 9.6, (0.5, 0.9)), (2.6, 11.1, (0.4, 0.6)))],
+        plates(157, (1.0, 0.8), wrap="planar", right=X, up=Z),
+    ]
+    trunk: list[Feature] = [*rings(2, [9.6, 11.41], level=2), plates(159, (0.8, 0.5), wrap="sides", long_axis=2)]
+    # The pod, its faces flat: the collar and the engine's shaft are geometry, the courses and the hatches drawn.
+    pod: list[Feature] = [
+        *rings(2, [9.0, 10.6], level=1, width=1.3), *rings(2, [7.6, 9.9, 11.55], level=2),
+        *[Hatch(centre=(0.0, 0.0, z), right=X, up=Z, size=(0.36, 0.36), corner_m=0.03, sunk=1.0, tone=0.7, facing=UP, min_dot=0.6, level=2)
+          for z in (11.15, 11.85)],
+        *[Hatch(centre=(0.0, 0.2, z), right=Z, up=Y, size=(0.34, 0.3), corner_m=0.03, sunk=1.0, tone=0.7, facing=side, min_dot=0.7, level=2)
+          for z in (11.2, 11.95) for side in (OUT,)],
+        Hatch(centre=(0.0, 0.0, 7.75), right=X, up=Z, size=(0.4, 0.5), corner_m=0.04, sunk=0.8, tone=0.75, facing=UP, min_dot=0.6, level=2),
+        plates(161, (0.9, 0.45), wrap="sides", long_axis=2),
+    ]
+    tail: list[Feature] = [*rings(2, every(13.3, 16.0, 0.3), level=2, depth=-0.6, flat_m=0.012, lo=(-INF, -INF, 13.0))]
+    return {"fuselage": SeamLayout.of(fuselage), "canopy": SeamLayout.of(canopy), "chin": SeamLayout.of(chin), "deck": SeamLayout.of(wing),
+            "wing": SeamLayout.of(wing), "trunk": SeamLayout.of(trunk), "pod": SeamLayout.of(pod), "tail": SeamLayout.of(tail)}
+
+
 # --- Raiders: the Delta-V fighter (M7-T15) ------------------------------------------------------------------------------
 RAIDER_EDGE_M = 0.55  # the edge band's width inside the leading edge
 RAIDER_TE_M = 0.3  # and inside the trailing edge

@@ -598,6 +598,7 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--right", default="+x", help="file axis pointing to starboard, e.g. -y")
     ap.add_argument("--up", default="+y", help="file axis pointing up")
     ap.add_argument("--aft", default="+z", help="file axis pointing from the nose to the engines")
+    ap.add_argument("--turn", default=None, metavar="AXIS=DEG", help="turn the file about one of its axes before the mapping, e.g. z=42")
     ap.add_argument("--model-offset", default=None, metavar="X,Y,Z", help="metres added to the model's coordinates, for a generator whose origin is not the model's box centre")
     ap.add_argument("--model-zrange", nargs=2, type=float, default=None, metavar=("Z0", "Z1"), help="keep this z range (m) of the model")
     ap.add_argument("--asset-zrange", nargs=2, type=float, default=None, metavar=("Z0", "Z1"), help="keep this z range (m) of the asset")
@@ -613,7 +614,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         model_range, asset_range = check_range("model", args.model_zrange), check_range("asset", args.asset_zrange)
         raw, fmt = refview.read_stl(args.stl)
-        rotation = refview.frame_matrix(args.right, args.up, args.aft)
+        rotation = refview.file_rotation(args.right, args.up, args.aft, args.turn)
         tris, _ = refview.to_ship_frame(raw, rotation, args.length)
         model_offset = parse_vec3(args.model_offset) if args.model_offset else np.zeros(3)
         tris = tris + model_offset
@@ -697,7 +698,7 @@ def main(argv: list[str] | None = None) -> int:
                 "centroid_offset": manifest["centroid_offset"],
                 "dims_m": {n: round(v, 3) for n, v in comp.asset_dims.items()},
             },
-            "mapping": {"right": args.right, "up": args.up, "aft": args.aft},
+            "mapping": {"right": args.right, "up": args.up, "aft": args.aft} | ({"turn": args.turn} if args.turn else {}),
             "basis": "mesh",
             "length_m": round(length_ref, 3),
             "pixel_m": round(comp.pixel_m, 5),

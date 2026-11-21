@@ -368,7 +368,7 @@ points (Q22; T03 finalises it): **own**, **gate** (uses a gate or another ship's
 | `shadow_fighter` | T41 | Shadow fighter | **15.3** | ITF (via TBP); SotG | | x/y/z | 10.9 x 6.3 | |
 | `shadow_scout` | T41 | Shadow scout | **201** | FN | 350 (SotG) | x/y/z | 168 x 120 | A small capital ship: **capital framework with the battlecrab's organic parts** (Q49). Shimmers (Q44) |
 | `vorlon_fighter` | T42 | Vorlon light fighter | **21.92** | TE 1.1; TBP | 25.5 (a B5 game, per WPL; SotG) | y/x/z | 15.9 x 15.9 (petals open) | TBP: Vorlon fighters seem to jump on their own (for T04) |
-| `ea_thunderbolt` | T50 | Thunderbolt | **16.24** | TE 1.1 | 15.3 (TBP, SotG) | turned 42 degrees about file z, then 168 x 228 x 89 units | 22.0 x 8.6 (if the shorter in-plane extent is the length) | **The STL is not axis-aligned**: refview needs a turn first (stage 2) |
+| `ea_thunderbolt` | T50 | Thunderbolt | **16.24** | TE 1.1 | 15.3 (TBP, SotG) | turned 42 degrees about file z, then 168 x 228 x 89 units | 22.0 x 8.6 (if the shorter in-plane extent is the length) | **The STL is not axis-aligned**: `refview --turn z=42` squares it up (M10-T50) |
 
 All fighters: the fighter pipeline (the Starfury's); none opens a jump point (Q22).
 
@@ -446,7 +446,7 @@ is the approved length unless noted.
 | `shadow_fighter` | `Shadow_advanced_fighter.stl` | `+y +z +x` | |
 | `shadow_scout` | `Shadow_Scout_fighter_201m.stl` | `+y +z +x` | |
 | `vorlon_fighter` | `Vorlon_Light_Fighter (pedals open).stl` | `+x +z -y` | |
-| `ea_thunderbolt` | `EA_Thunderbolt_fighter.stl` | turn +42 degrees about file z, then `-x +z +y` | `refview` has no turn: T50 adds one |
+| `ea_thunderbolt` | `EA_Thunderbolt_fighter.stl` | turn +42 degrees about file z, then `-x +z +y` | `--turn z=42` (M10-T50) |
 | `ea_panama`, `ea_explorer`, `ea_construction_tender`, `ea_shuttle`, `ea_atmo_shuttle` | (their files) | `-x +z +y` | the Explorer's bow is the end with the dome and the launch bay (Q50) |
 | `ea_asimov`, `ea_mining_transport` | `EA Asimov liner.stl`, `EA_Mining_Transport.stl`, `..._doors_open.stl` | `-x +z +y` | one scale (3.47 m a unit): the liner 600 m, the mining transport 632 m closed and 716 m open (`--length 632.4` and `716.3`) |
 | `centauri_shuttle`, `minbari_flyer` | (their files) | `+y +z +x` | |
