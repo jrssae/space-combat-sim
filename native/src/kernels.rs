@@ -25,6 +25,10 @@ pub mod contact {
         pub body_ids: &'a [i64],
         pub positions: &'a [Vector3],
         pub body_faction: &'a [u32],
+        // The disguise flags per body (empty for none) and the asking ship's faction index: a ship sees a disguised body as
+        // the faction it broadcasts unless it is that body's own side (M10-T02).
+        pub body_flags: &'a [u32],
+        pub observer: u32,
         pub is_ship: &'a [bool],
         pub reach: &'a [f64],
         pub is_static: &'a [bool],
@@ -34,6 +38,13 @@ pub mod contact {
         pub bolt_velocities: &'a [Vector3],
         pub bolt_faction: &'a [u32],
         pub bolt_shooters: &'a [i64],
+    }
+
+    impl View<'_> {
+        /// Body `j`'s faction index as the asking ship perceives it (`rows::seen_ix`).
+        pub fn seen_faction(&self, j: usize) -> u32 {
+            crate::rows::seen_ix(self.body_flags.get(j).copied().unwrap_or(0), self.body_faction[j], self.observer)
+        }
     }
 
     /// The grid over the scan: built once per rows version and only read by the queries, so every worker shares it
@@ -199,7 +210,7 @@ pub mod contact {
         for &(d_sq, i) in in_range {
             let j = i as usize;
             let is_hostile =
-                view.is_ship[j] && hostile.is_some_and(|row| flagged(row, view.body_faction[j]));
+                view.is_ship[j] && hostile.is_some_and(|row| flagged(row, view.seen_faction(j)));
             if is_hostile && nearest_hostile.is_none_or(|(best, _)| d_sq < best) {
                 nearest_hostile = Some((d_sq, i));
             }
@@ -1875,6 +1886,7 @@ pub mod pilot {
     pub fn fire_lane(
         rows: &Rows,
         relations: &[u8],
+        observer: u32,
         contacts: &[i32],
         position: Vector3,
         aim_dir: Vector3,
@@ -1888,7 +1900,7 @@ pub mod pilot {
         let dir = normalized(aim_dir);
         for j in contacts.iter().filter_map(|&r| row(rows, r)) {
             if rows.ids[j] == target_id
-                || !protected(relation(rows, relations, j), rows.rigid[j], friendly_fire)
+                || !protected(relation(rows, relations, observer, j), rows.rigid[j], friendly_fire)
             {
                 continue;
             }
@@ -1918,6 +1930,7 @@ pub mod pilot {
     pub fn context_lists(
         rows: &Rows,
         relations: &[u8],
+        observer: u32,
         contacts: &[i32],
         position: Vector3,
         self_id: i64,
@@ -1936,7 +1949,7 @@ pub mod pilot {
             let Some(j) = row(rows, r) else {
                 continue;
             };
-            match relation(rows, relations, j) {
+            match relation(rows, relations, observer, j) {
                 HOSTILE => {
                     if rows.rigid[j] {
                         let offset = sub(rows.positions[j], position);
@@ -1962,9 +1975,9 @@ pub mod pilot {
     }
 
     // How the asking ship regards row `j`'s faction; a faction its row does not reach is neutral.
-    fn relation(rows: &Rows, relations: &[u8], j: usize) -> u8 {
+    fn relation(rows: &Rows, relations: &[u8], observer: u32, j: usize) -> u8 {
         relations
-            .get(rows.faction_ix[j] as usize)
+            .get(rows.seen_ix(j, observer) as usize)
             .copied()
             .unwrap_or(NEUTRAL)
     }

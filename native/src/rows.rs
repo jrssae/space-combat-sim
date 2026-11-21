@@ -17,6 +17,20 @@ pub const FLAG_LATE: u32 = 8;
 pub const FLAG_TIER: u32 = 16;
 pub const FLAG_HULK: u32 = 32;
 pub const FLAG_SHELTERED: u32 = 64;
+/// The transponder disguise (M10-T02): from this bit up a row's flags hold the index of the faction it broadcasts plus one
+/// (0 for no disguise). Ships of other factions see the row as that faction until it is revealed; its own side sees it as it is.
+pub const FLAG_DISGUISE_SHIFT: u32 = 8;
+
+/// The faction index an `observer` of faction index `observer` perceives for a row with `flags` and true faction
+/// `true_ix`: the broadcast faction while disguised, the true one for the row's own side or when nothing is disguised.
+pub fn seen_ix(flags: u32, true_ix: u32, observer: u32) -> u32 {
+    let broadcast = flags >> FLAG_DISGUISE_SHIFT;
+    if broadcast != 0 && true_ix != observer {
+        broadcast - 1
+    } else {
+        true_ix
+    }
+}
 
 /// A row's role (M5-T16, Q24): what the ship is for, beside its faction and kind. A civilian is a big non-combat hull (a
 /// freighter up to 260 m) that the brains, the raiders' picks, the turrets, avoidance and the tier treat by its size.
@@ -415,6 +429,11 @@ impl Rows {
     /// Whether row `r` is a ship sheltered inside a station (M7-T62): out of every other ship's sight, aim and fire.
     pub fn is_sheltered(&self, r: usize) -> bool {
         self.flags.get(r).is_some_and(|f| f & FLAG_SHELTERED != 0)
+    }
+
+    /// The faction index a ship of faction index `observer` perceives row `r` to have (`seen_ix`).
+    pub fn seen_ix(&self, r: usize, observer: u32) -> u32 {
+        seen_ix(self.flags.get(r).copied().unwrap_or(0), self.faction_ix[r], observer)
     }
 
     /// Whether row `r` is a navigation marker (M7-T27).

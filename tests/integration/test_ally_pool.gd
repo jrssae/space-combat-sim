@@ -141,6 +141,50 @@ func test_a_renegade_starfury_has_red_engines_and_marks_and_an_ally_keeps_blue_w
 	assert_eq(ally.ship.livery.engine_tint.a, 0.0)
 
 
+func test_a_renegade_passes_for_earth_alliance_until_it_hits_the_player() -> void:
+	assert_eq(pool.prepare(ShipPool.RENEGADE_TYPE, 1), 1)
+	var renegade: Combatant = pool.acquire("RENEGADE 1", UniversePos.new(0.0, 0.0, 300.0), Basis.IDENTITY, Vector3.ZERO, null, ShipPool.RENEGADE_TYPE)
+	var ally: Combatant = _ally_at(600.0)
+	assert_true(renegade.targetable.is_disguised())
+	assert_eq(renegade.targetable.to_target_info().faction, Factions.EARTH_ALLIANCE, "the player's list shows the transponder")
+	assert_eq(renegade.targetable.faction_seen_by(&"renegades"), &"renegades", "its own side sees it as it is")
+	assert_false(ally.targetable.is_disguised())
+	Transponder.note_hit(ally.ship.get_instance_id(), renegade.damageable)  # an ally firing on a renegade is no act of the renegade's
+	assert_true(renegade.targetable.is_disguised())
+	Transponder.note_hit(renegade.ship.get_instance_id(), ally.damageable)  # a renegade's bolt hits an Earth Alliance ship
+	assert_false(renegade.targetable.is_disguised(), "revealed")
+	assert_eq(renegade.targetable.to_target_info().faction, &"renegades")
+	assert_false(SimCore.is_disguised(renegade.ship.get_instance_id()))
+	pool.release(renegade)
+	var again: Combatant = pool.acquire("RENEGADE 2", UniversePos.new(0.0, 0.0, 300.0), Basis.IDENTITY, Vector3.ZERO, null, ShipPool.RENEGADE_TYPE)
+	assert_true(again.targetable.is_disguised(), "a ship from the pool is disguised again")
+
+
+func test_the_ai_scan_takes_a_disguised_renegade_for_a_friend_until_it_is_revealed() -> void:
+	assert_eq(pool.prepare(ShipPool.RENEGADE_TYPE, 1), 1)
+	var renegade: Combatant = pool.acquire("RENEGADE 1", UniversePos.new(0.0, 0.0, 300.0), Basis.IDENTITY, Vector3.ZERO, null, ShipPool.RENEGADE_TYPE)
+	var ally: Combatant = _ally_at(600.0)
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	assert_not_null(sim, "the world's core")
+	await wait_physics_frames(2)
+	var relations: Dictionary = {}
+	for step: Array in [["hidden", renegade.faction], ["revealed", renegade.faction]]:
+		if step[0] == "revealed":
+			renegade.targetable.reveal()
+			await wait_physics_frames(2)
+		var scan: ContactScan = ContactScan.shared(get_tree())
+		for c: Contact in scan.contacts_for(ally.ship.get_instance_id(), ally.ship.global_position, ally.faction):
+			if c.id == renegade.targetable.get_instance_id():
+				relations[step[0]] = c.relation
+		for c: Contact in scan.contacts_for(renegade.ship.get_instance_id(), renegade.ship.global_position, renegade.faction):
+			if c.id == ally.targetable.get_instance_id():
+				relations["renegade sees ally " + step[0]] = c.relation
+	assert_eq(relations.get("hidden"), Factions.Relation.FRIENDLY, "the Earth Alliance ship takes it for one of its own")
+	assert_eq(relations.get("revealed"), Factions.Relation.HOSTILE)
+	assert_eq(relations.get("renegade sees ally hidden"), Factions.Relation.HOSTILE, "the renegade is never fooled")
+	assert_eq(relations.get("renegade sees ally revealed"), Factions.Relation.HOSTILE)
+
+
 func test_alive_is_per_type() -> void:
 	var a: Combatant = _ally_at(-200.0)
 	var b: Combatant = _ally_at(-300.0, "ALPHA 3")

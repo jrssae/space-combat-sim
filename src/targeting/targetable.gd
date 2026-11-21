@@ -25,6 +25,9 @@ enum Role { SHIP, CIVILIAN, BEACON }
 @export var display_name: String = ""
 ## IFF (§14.9, `Factions`). Buoys are `neutral`; ships carry their own.
 @export var faction: StringName = &"neutral"
+## The faction this ship broadcasts instead of its own while it is disguised (M10-T02): `&""` for none. Everyone but its own side
+## reads it in place of `faction`, the HUD, the radar, the target lists and the AI alike, until `reveal` takes it off.
+var transponder: StringName = &""
 ## Its `Kind` (M4-T07).
 @export var kind: Kind = Kind.SHIP
 ## Its `Role` (M5-T25).
@@ -128,10 +131,45 @@ func get_target_velocity() -> Vector3:
 	return velocity
 
 
+## Broadcasts `as_faction` (`&""` for the ship's own) from now on, in the native core's rows too.
+func disguise_as(as_faction: StringName) -> void:
+	if as_faction == faction:
+		as_faction = &""
+	transponder = as_faction
+	var body: Node = get_parent()
+	if body != null:
+		SimCore.set_disguise(body.get_instance_id(), as_faction)
+
+
+## A first hostile act gives the ship away for the rest of its life: its true faction shows from the next tick on.
+func reveal() -> void:
+	if not transponder.is_empty():
+		disguise_as(&"")
+
+
+func is_disguised() -> bool:
+	return not transponder.is_empty()
+
+
+## The faction a ship of `observer` takes this one to be.
+func faction_seen_by(observer: StringName) -> StringName:
+	return Transponder.seen_faction(faction, transponder, observer)
+
+
+## The `Targetable` among `body`'s children, or null.
+static func of(body: Node) -> Targetable:
+	if body == null:
+		return null
+	for child: Node in body.get_children():
+		if child is Targetable:
+			return child as Targetable
+	return null
+
+
 ## A snapshot for `TargetingSystem`: this tick's position and velocity, never kept across ticks.
 func to_target_info() -> TargetInfo:
 	var damageable: Damageable = _owner_hull()
-	var info := TargetInfo.new(get_instance_id(), display_name, faction, global_position, get_target_velocity(),
+	var info := TargetInfo.new(get_instance_id(), display_name, transponder if not transponder.is_empty() else faction, global_position, get_target_velocity(),
 			damageable.hull.fraction() if damageable != null else -1.0,
 			damageable.bounding_radius if damageable != null else 0.0)
 	info.broadcast_range_m = broadcast_range_m

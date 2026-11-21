@@ -212,6 +212,7 @@ impl ScsPilotKernels {
         pilot::fire_lane(
             rows,
             relations.as_slice(),
+            u32::MAX,
             contacts.as_slice(),
             position,
             aim_dir,
@@ -248,6 +249,7 @@ impl ScsPilotKernels {
         pilot::context_lists(
             rows,
             relations.as_slice(),
+            u32::MAX,
             contacts.as_slice(),
             position,
             self_id,

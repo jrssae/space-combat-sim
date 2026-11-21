@@ -100,6 +100,8 @@ struct Attrs {
     role: u8,
     // Inside a station (M7-T62, `set_sheltered`): its row flies, but takes `FLAG_SHELTERED` in place of an active hull.
     sheltered: bool,
+    // The faction index plus one its transponder broadcasts while the ship is disguised (M10-T02, `set_disguise`), else 0.
+    disguise: u32,
 }
 
 // One `Targetable` (or, for a body without one, one `Damageable`) of the tree, with the body it marks.
@@ -286,6 +288,8 @@ pub struct ScsSimCore {
     pub(crate) nav_bodies: std::collections::HashSet<i64>,
     // The ships sheltered inside a station by id (M7-T62, `set_sheltered`): their rows take `FLAG_SHELTERED`.
     pub(crate) sheltered: std::collections::HashSet<i64>,
+    // The ships broadcasting another faction's transponder, by body id (M10-T02, `set_disguise`): the faction index to show.
+    pub(crate) disguised: std::collections::HashMap<i64, u32>,
 }
 
 #[godot_api]
@@ -463,6 +467,32 @@ impl ScsSimCore {
         self.touch(body_id);
     }
 
+    /// Makes a ship broadcast `transponder` as its faction to every other side (M10-T02), or, with an empty name, shows its
+    /// own again: a renegade looks like an Earth Alliance ship until it fires. The ship's own side still sees it as it is.
+    #[func]
+    pub fn set_disguise(&mut self, body_id: i64, transponder: StringName) {
+        if transponder.is_empty() {
+            self.disguised.remove(&body_id);
+        } else {
+            let at = self.faction_index(transponder);
+            self.disguised.insert(body_id, at);
+        }
+        self.touch(body_id);
+    }
+
+    /// The flag bits a row of body `body_id` takes for its disguise (0 when it broadcasts its own faction).
+    pub(crate) fn disguise_bits(&self, body_id: i64) -> u32 {
+        self.disguised
+            .get(&body_id)
+            .map_or(0, |&f| (f + 1) << crate::rows::FLAG_DISGUISE_SHIFT)
+    }
+
+    /// Ships broadcasting a disguise now.
+    #[func]
+    fn disguised_count(&self) -> i64 {
+        self.disguised.len() as i64
+    }
+
     /// Ships sheltered inside a station now.
     #[func]
     fn sheltered_count(&self) -> i64 {
@@ -576,6 +606,9 @@ impl ScsSimCore {
         // The tier's rows after the statics (M4-T21): contacts to the brains, out of the scan GDScript builds.
         let tier_base = rows.body_ids.len();
         self.tier.append_to(&mut rows);
+        for (k, body_id) in self.tier.body_ids.iter().enumerate() {
+            rows.flags[tier_base + k] |= self.disguise_bits(*body_id);
+        }
         // A tier ship's selection is its own (M4-T23): its brain sees what it holds, as a near brain does.
         for (k, body_id) in self.tier.body_ids.iter().enumerate() {
             if let Some(&target) = self.latest_target.get(body_id) {
@@ -1025,6 +1058,9 @@ impl ScsSimCore {
                 });
                 if let Some(&i) = map.get(id) {
                     self.tier.push_row(i, &mut rows);
+                    if let Some(f) = rows.flags.last_mut() {
+                        *f |= self.disguise_bits(self.tier.body_ids[i]);
+                    }
                     self.row_name_ids.push(self.tier_name_ids[i]);
                     found.push(j as i32);
                 }
@@ -1431,6 +1467,7 @@ impl ScsSimCore {
         } else if has_hull && !attrs.destroyed {
             flags |= FLAG_HULL_ACTIVE;
         }
+        flags |= attrs.disguise << crate::rows::FLAG_DISGUISE_SHIFT;
         // The brains' two live reads of a contact (M4-T17), `Damageable.hull.fraction()` and the ship's selection: the
         // values the events last gave (M4-T35), read live only with the attributes.
         Read {
@@ -1903,6 +1940,7 @@ impl ScsSimCore {
         Attrs {
             role,
             sheltered: self.sheltered.contains(&m.body_id),
+            disguise: self.disguised.get(&m.body_id).map_or(0, |&f| f + 1),
             faction_ix: self.faction_index(faction),
             name_id,
             key_id,
@@ -2217,6 +2255,12 @@ impl ScsSimCore {
         let mut faction_ix: Vec<i32> = Vec::new();
         let mut reach: Vec<f64> = Vec::new();
         let mut civilian: Vec<u8> = Vec::new();
+        // The player sees a disguised ship as the faction it broadcasts, unless it is the ship's own side (M10-T02).
+        let observer = r
+            .body_ids
+            .iter()
+            .position(|&b| b == own_body)
+            .map_or(u32::MAX, |i| r.faction_ix[i]);
         for i in 0..r.body_ids.len() {
             let marked =
                 r.flags[i] & FLAG_TIER != 0 || (r.ids[i] != r.body_ids[i] && !r.is_static[i]);
@@ -2236,7 +2280,7 @@ impl ScsSimCore {
             }
             ids.push(r.ids[i]);
             positions.push(p);
-            faction_ix.push(r.faction_ix[i] as i32);
+            faction_ix.push(r.seen_ix(i, observer) as i32);
             reach.push(r.reach[i]);
             civilian.push(u8::from(r.is_civilian(i)));
         }

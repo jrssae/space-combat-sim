@@ -6,14 +6,15 @@ extends RefCounted
 ## File shape:
 ##
 ##     {"factions":  [{"id": "earth_alliance", "name": "Earth Alliance", "style": "earthforce", "fighters": [...],
-##                     "weapons": [...], "mine": "ea_mine", "battle_mine": "", "marking": "", "engine_glow": []}, ...],
+##                     "weapons": [...], "mine": "ea_mine", "battle_mine": "", "marking": "", "engine_glow": [], "transponder": ""}, ...],
 ##      "relations": [{"a": "earth_alliance", "b": "raiders", "relation": "hostile"}, ...],
 ##      "default":   "neutral"}
 ##
 ## The profile keys after `name` are optional and are what hulls read instead of code (M10-T02, D12.3): `style` (the
 ## procgen paint family), `fighters` (hull ids), `weapons` (weapon ids of `data/capitals/loadouts.json`), `mine` (the
 ## minefield mine's weapon id) and `battle_mine` (a hull's in-battle mine), `marking` (the livery row its ships wear, "" for
-## the hull's own paint). An absent key is "" or [].
+## the hull's own paint), `transponder` (the faction id its ships broadcast until they fire, "" for their own, M10-T02). An absent
+## key is "" or [].
 ##
 ## Rule, checked in this order (M2's rule with the data behind it):
 ## 1. Same faction id -> FRIENDLY, always (this includes two identical unknown ids).
@@ -34,7 +35,7 @@ var _names: Dictionary = {}
 # id -> {other id -> relation (int)}, symmetric: both directions are stored so a lookup allocates nothing.
 var _matrix: Dictionary = {}
 # id -> {"style": String, "fighters": Array[StringName], "weapons": Array[StringName], "mine", "battle_mine", "marking": String,
-# "engine_glow": Color (alpha 0: none)}.
+# "engine_glow": Color (alpha 0: none), "transponder": String}.
 var _profiles: Dictionary = {}
 # The listed pairs in the order they were set: {"a": StringName, "b": StringName, "relation": int}.
 var _pairs: Array[Dictionary] = []
@@ -108,6 +109,11 @@ static func from_dict(data: Variant) -> Dictionary:
 			return _failure(profile as String)
 		table._add_faction(StringName(id as String), display as String)
 		table._profiles[StringName(id as String)] = profile
+
+	for tid: StringName in table._profiles.keys():
+		var broadcast: String = String(table._profiles[tid]["transponder"])
+		if not broadcast.is_empty() and (broadcast == String(tid) or not listed_at.has(broadcast)):
+			return _failure("%s.transponder must name another listed faction, got %s" % [listed_at[String(tid)], JSON.stringify(broadcast)])
 
 	var default_name: Variant = root.get("default")
 	var default_relation: int = relation_from_name(default_name)
@@ -251,6 +257,12 @@ func engine_glow(id: StringName) -> Color:
 	return _profile_of(id)["engine_glow"] as Color
 
 
+## The faction id this faction's ships broadcast on their transponders until they commit a hostile act (the renegades pass for
+## Earth Alliance, M10-T02); `&""` when they broadcast their own.
+func transponder(id: StringName) -> StringName:
+	return StringName(_profile_of(id)["transponder"])
+
+
 ## The relation of a known pair that `relations` does not list.
 func default_relation() -> Factions.Relation:
 	return _default as Factions.Relation
@@ -280,13 +292,13 @@ func _profile_of(id: StringName) -> Dictionary:
 	if _profiles.has(id):
 		return _profiles[id]
 	var none: Array[StringName] = []
-	return {"style": "", "fighters": none, "weapons": none, "mine": "", "battle_mine": "", "marking": "", "engine_glow": Color(0.0, 0.0, 0.0, 0.0)}
+	return {"style": "", "fighters": none, "weapons": none, "mine": "", "battle_mine": "", "marking": "", "engine_glow": Color(0.0, 0.0, 0.0, 0.0), "transponder": ""}
 
 
 # The optional profile keys of one `factions[]` entry, or the path-qualified error.
 static func _profile(entry: Dictionary, path: String) -> Variant:
 	var out: Dictionary = {}
-	for key: String in ["style", "mine", "battle_mine", "marking"]:
+	for key: String in ["style", "mine", "battle_mine", "marking", "transponder"]:
 		var text: Variant = entry.get(key, "")
 		if not (text is String) or ((text as String) != "" and id_regex().search(text as String) == null):
 			return "%s.%s must be \"\" or match %s, got %s" % [path, key, ID_PATTERN, JSON.stringify(text)]

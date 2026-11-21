@@ -213,6 +213,8 @@ pub fn pick<F: Fn(i64) -> i64>(rows: &Rows, row_of: &F, m: &PickMount, ctx: &mut
         body_ids: &rows.body_ids,
         positions: &rows.positions,
         body_faction: &rows.faction_ix,
+        body_flags: &[],
+        observer: u32::MAX,
         is_ship: &rows.rigid,
         reach: &rows.reach,
         is_static: &rows.is_static,

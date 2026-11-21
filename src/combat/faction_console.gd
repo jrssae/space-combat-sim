@@ -19,7 +19,7 @@ static func provider() -> ConsoleVars:
 		&"relations": {"get": relations,
 				"doc": "The listed pairs as `a b relation`; every other pair of listed factions is the file's default"},
 		&"profiles": {"get": profiles,
-				"doc": "Each faction's `id style=... fighters=... weapons=<count> mine=... battle_mine=... marking=...` (M10-T02)"},
+				"doc": "Each faction's `id style=... fighters=... weapons=<count> mine=... battle_mine=... marking=... transponder=...` (M10-T02)"},
 		&"friendly_fire": {"get": friendly_fire, "type": TYPE_BOOL,
 				"doc": "Mirror of settings.friendly_fire: bolts hurt any ship but their shooter"},
 	})
@@ -51,9 +51,9 @@ static func profiles() -> Array:
 	var table: FactionTable = Factions.table()
 	var out: Array = []
 	for id: StringName in table.ids():
-		out.append("%s style=%s fighters=%s weapons=%d mine=%s battle_mine=%s marking=%s" % [id, table.style(id),
+		out.append("%s style=%s fighters=%s weapons=%d mine=%s battle_mine=%s marking=%s transponder=%s" % [id, table.style(id),
 				",".join(PackedStringArray(table.fighters(id))), table.weapons(id).size(), table.mine(id),
-				table.battle_mine(id), table.marking(id)])
+				table.battle_mine(id), table.marking(id), table.transponder(id)])
 	return out
 
 

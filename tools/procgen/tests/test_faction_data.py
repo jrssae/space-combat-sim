@@ -53,6 +53,13 @@ class FactionDataTests(unittest.TestCase):
             if f.get("marking"):
                 self.assertEqual(f["marking"], f["id"], "the row is named for the faction")
 
+    def test_a_transponder_names_another_listed_faction(self) -> None:
+        ids = {f["id"] for f in FACTIONS["factions"]}
+        for f in FACTIONS["factions"]:
+            if f.get("transponder"):
+                self.assertIn(f["transponder"], ids, f["id"])
+                self.assertNotEqual(f["transponder"], f["id"])
+
     def test_the_catalogue_flies_each_faction_it_names(self) -> None:
         ids = {f["id"] for f in FACTIONS["factions"]}
         for ship in CATALOGUE["ships"]:

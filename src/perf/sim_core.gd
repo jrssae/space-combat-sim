@@ -84,6 +84,9 @@ static var _civilians: Dictionary[int, bool] = {}
 static var _nav_bodies: Dictionary[int, bool] = {}
 # The ships sheltered inside a station (M7-T62, `set_sheltered`), given again to each core that attaches.
 static var _sheltered: Dictionary[int, bool] = {}
+# The ships broadcasting another faction's transponder (M10-T02, `Targetable.disguise_as`): body id -> the faction it shows,
+# given again to each core that attaches.
+static var _disguised: Dictionary[int, StringName] = {}
 ## Warnings that bodies were asked about in a tree with no world (said once a run).
 static var no_world_warnings: int = 0
 
@@ -222,6 +225,11 @@ func _ready() -> void:
 			core.set_sheltered(body_id, true)
 		else:
 			_sheltered.erase(body_id)
+	for body_id: int in _disguised.keys():
+		if is_instance_id_valid(body_id):
+			core.set_disguise(body_id, _disguised[body_id])
+		else:
+			_disguised.erase(body_id)
 	TurretMount.rebind_all()
 
 
@@ -329,6 +337,30 @@ static func set_sheltered(body_id: int, on: bool) -> void:
 	var sim: SimCore = current()
 	if sim != null and sim.core != null:
 		sim.core.set_sheltered(body_id, on)
+
+
+## Makes ship `body_id` broadcast `transponder` as its faction to every other side (M10-T02), or its own again with `&""`: the
+## scan, the brains and the radar then take it for that faction.
+static func set_disguise(body_id: int, transponder: StringName) -> void:
+	if transponder.is_empty():
+		_disguised.erase(body_id)
+	else:
+		_disguised[body_id] = transponder
+	var sim: SimCore = current()
+	if sim != null and sim.core != null:
+		sim.core.set_disguise(body_id, transponder)
+
+
+## Whether body `body_id` is broadcasting a disguise now.
+static func is_disguised(body_id: int) -> bool:
+	return _disguised.has(body_id)
+
+
+## The faction a ship of `observer` takes body `body_id` (of `true_faction`) to be: the transponder it broadcasts while disguised.
+static func seen_faction(body_id: int, true_faction: StringName, observer: StringName) -> StringName:
+	if _disguised.is_empty() or not _disguised.has(body_id):
+		return true_faction
+	return Transponder.seen_faction(true_faction, _disguised[body_id], observer)
 
 
 ## A bolt of `shooter_id` hit `victim_id` (the hit resolver, in the sweep's order): the turrets' attacker memory (M5-T21).

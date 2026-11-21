@@ -98,6 +98,10 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	targetable.role = Targetable.Role.CIVILIAN if combatant.civilian else Targetable.Role.SHIP
 	ship.add_child(targetable)
 	combatant.targetable = targetable
+	# A faction that broadcasts another's transponder (the renegades) is found out by its first hostile shot (M10-T02).
+	targetable.disguise_as(Factions.table().transponder(combatant.faction))
+	if not Factions.table().transponder(combatant.faction).is_empty():
+		cannon.shot_fired.connect(func(_muzzle: int, _at: Vector3) -> void: Transponder.note_shot(targetable))
 
 	ship.ready.connect(_wire.bind(combatant, projectiles_parent, console_owner), CONNECT_ONE_SHOT)
 	return combatant

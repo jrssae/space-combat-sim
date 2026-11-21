@@ -360,7 +360,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
-| T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
+| T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | in progress |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |

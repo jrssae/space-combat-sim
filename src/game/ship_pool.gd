@@ -151,6 +151,7 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 		ship.set_livery(Livery.for_wing(wing_and_number[0], wing_and_number[1], section).with_faction(
 				Factions.table(), combatant.faction, section))
 	_tint_engines(combatant)
+	combatant.targetable.disguise_as(Factions.table().transponder(combatant.faction))  # a used ship's reveal does not carry over
 	_set_brain(combatant, brain)
 	_in_use.append(combatant)
 	acquired.emit(combatant)

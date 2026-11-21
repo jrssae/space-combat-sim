@@ -512,7 +512,7 @@ impl Tick<'_> {
 
     fn relation(&self, row: usize) -> u8 {
         self.relations
-            .get(self.rows.faction_ix[row] as usize)
+            .get(self.rows.seen_ix(row, self.rows.faction_ix[self.own_row]) as usize)
             .copied()
             .unwrap_or(pilot::NEUTRAL)
     }
@@ -908,6 +908,8 @@ impl Brain {
             body_ids: &rows.body_ids,
             positions: &rows.positions,
             body_faction: &rows.faction_ix,
+            body_flags: &rows.flags,
+            observer: rows.faction_ix[own_row],
             is_ship: &rows.rigid,
             reach: &rows.reach,
             is_static: &rows.is_static,
@@ -1066,7 +1068,7 @@ impl Brain {
             );
             if let Some(&r) = scratch.contacts.iter().find(|&&r| rows.body_ids[r as usize] == shooter && shooter != 0) {
                 let j = r as usize;
-                let relation = inputs.relations.get(rows.faction_ix[j] as usize).copied().unwrap_or(pilot::NEUTRAL);
+                let relation = inputs.relations.get(rows.seen_ix(j, rows.faction_ix[own_row]) as usize).copied().unwrap_or(pilot::NEUTRAL);
                 // A hostile's fire is M5's business (the threat list); this is for everyone else's. A big hull's (the
                 // station's grid) is aimed past its traffic, not at it (M7-T40).
                 if relation != pilot::HOSTILE && rows.surface(j).is_none() {
@@ -1081,6 +1083,7 @@ impl Brain {
         pilot::context_lists(
             rows,
             inputs.relations,
+            rows.faction_ix[own_row],
             &scratch.contacts,
             p.position,
             inputs.self_id,
@@ -1278,7 +1281,7 @@ impl Brain {
             // A wingman forming up keeps off its friends whatever the dodges ask (M7-T76).
             scratch.friend_rows.clear();
             if self.current_kind() == i32::from(KIND_FORMATION) {
-                let relation = |j: usize| inputs.relations.get(rows.faction_ix[j] as usize).copied();
+                let relation = |j: usize| inputs.relations.get(rows.seen_ix(j, rows.faction_ix[own_row]) as usize).copied();
                 scratch.friend_rows.extend(scratch.contacts.iter().copied().filter(|&r| {
                     let j = r as usize;
                     j != own_row
@@ -3067,6 +3070,7 @@ fn lane_clear(tick: &Tick, range_m: f64, target_id: i64) -> bool {
     pilot::fire_lane(
         tick.rows,
         tick.relations,
+        tick.rows.faction_ix[tick.own_row],
         tick.contacts,
         tick.p.position,
         tick.p.forward,

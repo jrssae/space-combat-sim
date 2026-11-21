@@ -57,10 +57,15 @@ impl ScsSimCore {
             ids.push(t.marker_ids[i]);
             positions.push(t.positions[i]);
             velocities.push(t.velocities[i]);
+            // A disguised ship answers with the faction it broadcasts (M10-T02).
+            let shown = self
+                .disguised
+                .get(&t.body_ids[i])
+                .map_or(t.faction_ix[i], |&f| f);
             factions.push(
                 &self
                     .factions
-                    .get(t.faction_ix[i] as usize)
+                    .get(shown as usize)
                     .cloned()
                     .unwrap_or_default(),
             );

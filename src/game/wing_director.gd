@@ -484,7 +484,7 @@ func leader_hostile_target(wing: Wing) -> Targetable:
 	if id == 0 or not is_instance_id_valid(id):
 		return null
 	var target := instance_from_id(id) as Targetable
-	if target == null or not target.is_active() or not Factions.is_hostile(wing.leader.faction, target.faction):
+	if target == null or not target.is_active() or not Factions.is_hostile(wing.leader.faction, target.faction_seen_by(wing.leader.faction)):
 		return null
 	return target
 

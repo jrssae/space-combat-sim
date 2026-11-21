@@ -231,7 +231,7 @@ func raiders_near() -> int:
 	var reach: float = raider_scan_km * 1000.0
 	var n: int = 0
 	for c: Combatant in main.ships.alive():
-		if is_instance_valid(c.ship) and Factions.is_hostile(s.targetable.faction, c.faction) \
+		if is_instance_valid(c.ship) and Factions.is_hostile(s.targetable.faction, c.targetable.faction_seen_by(s.targetable.faction)) \
 				and c.ship.global_position.distance_to(s.global_position) <= reach:
 			n += 1
 	return n

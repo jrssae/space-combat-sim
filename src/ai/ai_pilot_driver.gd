@@ -653,7 +653,7 @@ func perceive() -> Perception:
 		var targetable := instance_from_id(targeting.selected_id()) as Targetable
 		if targetable != null and targetable.is_active():
 			p.target = targetable.to_target_info()
-			p.target_hostile = Factions.is_hostile(combatant.faction, targetable.faction)
+			p.target_hostile = Factions.is_hostile(combatant.faction, targetable.faction_seen_by(combatant.faction))
 	var timed: bool = ContactScan.timing
 	var scan_started_us: int = Time.get_ticks_usec() if timed else 0  # profiling readout only (M4-T01)
 	var scan: ContactScan = ContactScan.shared(get_tree())

@@ -228,7 +228,7 @@ impl ScsContactField {
     #[func]
     fn contacts(&mut self, own_body_id: i64, at: Vector3, range: f64) -> PackedInt32Array {
         let guard = self.core.as_ref().map(|c| c.bind());
-        let view = view_of(&guard, &self.own);
+        let view = view_of(&guard, &self.own, u32::MAX);
         let out = contact::contacts(
             &view,
             &mut Work {
@@ -260,7 +260,7 @@ impl ScsContactField {
             .find(|(f, _)| *f == faction)
             .map(|(_, row)| row.as_slice());
         let guard = self.core.as_ref().map(|c| c.bind());
-        let view = view_of(&guard, &self.own);
+        let view = view_of(&guard, &self.own, self.observer_ix(&guard, &faction));
         let out = contact::nearest(
             &view,
             &mut Work {
@@ -294,7 +294,7 @@ impl ScsContactField {
             .find(|(f, _)| *f == faction)
             .map_or(&[], |(_, row)| row.as_slice());
         let guard = self.core.as_ref().map(|c| c.bind());
-        let view = view_of(&guard, &self.own);
+        let view = view_of(&guard, &self.own, u32::MAX);
         let out = contact::statics(
             &view,
             &mut Work {
@@ -314,7 +314,7 @@ impl ScsContactField {
     #[func]
     fn broadcasts(&self, own_body_id: i64, at: Vector3, near: f64) -> PackedInt32Array {
         let guard = self.core.as_ref().map(|c| c.bind());
-        let view = view_of(&guard, &self.own);
+        let view = view_of(&guard, &self.own, u32::MAX);
         let out = contact::broadcasts(&view, own_body_id, at, near);
         PackedInt32Array::from(out.as_slice())
     }
@@ -337,12 +337,18 @@ impl ScsContactField {
             return 0;
         };
         let guard = self.core.as_ref().map(|c| c.bind());
-        let view = view_of(&guard, &self.own);
+        let view = view_of(&guard, &self.own, u32::MAX);
         contact::incoming(&view, hostile, own_body_id, at, velocity)
     }
 }
 
 impl ScsContactField {
+    // The faction index of the asking ship in the scan's table (u32::MAX when the table has not met it).
+    fn observer_ix(&self, core: &Option<GdRef<'_, ScsSimCore>>, faction: &StringName) -> u32 {
+        let table = core.as_ref().map_or(&self.own.factions, |c| &c.factions);
+        table.iter().position(|f| f == faction).map_or(u32::MAX, |at| at as u32)
+    }
+
     // Forgets the whole scan, so a rejected load leaves nothing for a query to index.
     fn clear(&mut self) {
         self.core = None;
@@ -367,7 +373,7 @@ fn scan_len(c: &ScsSimCore) -> usize {
 }
 
 // The scan the queries read: the core's rows when attached, else the field's own.
-fn view_of<'a>(core: &'a Option<GdRef<'a, ScsSimCore>>, own: &'a Own) -> View<'a> {
+fn view_of<'a>(core: &'a Option<GdRef<'a, ScsSimCore>>, own: &'a Own, observer: u32) -> View<'a> {
     match core {
         Some(c) => {
             let n = scan_len(c);
@@ -375,6 +381,8 @@ fn view_of<'a>(core: &'a Option<GdRef<'a, ScsSimCore>>, own: &'a Own) -> View<'a
                 body_ids: &c.rows.body_ids[..n],
                 positions: &c.rows.positions[..n],
                 body_faction: &c.rows.faction_ix[..n],
+                body_flags: &c.rows.flags[..n.min(c.rows.flags.len())],
+                observer,
                 is_ship: &c.rows.rigid[..n],
                 reach: &c.rows.reach[..n.min(c.rows.reach.len())],
                 is_static: &c.rows.is_static[..n],
@@ -390,6 +398,8 @@ fn view_of<'a>(core: &'a Option<GdRef<'a, ScsSimCore>>, own: &'a Own) -> View<'a
             body_ids: &own.body_ids,
             positions: &own.positions,
             body_faction: &own.body_faction,
+            body_flags: &[],
+            observer,
             is_ship: &own.is_ship,
             reach: &own.reach,
             is_static: &own.is_static,

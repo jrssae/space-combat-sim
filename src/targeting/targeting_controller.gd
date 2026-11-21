@@ -79,7 +79,10 @@ func _register_console() -> void:
 		&"selected": {"get": _console_selected, "set": _console_set_selected, "type": TYPE_STRING,
 				"choices": _console_choices, "doc": "Selected target by display name, or none"},
 		&"range_m": {"get": _console_range, "unit": "m", "doc": "Range to the selected target"},
-		&"faction": {"get": _console_faction, "doc": "The selected target's transponder: its faction id, or none"},
+		&"faction": {"get": _console_faction, "doc": "The selected target's transponder: the faction id it shows, or none"},
+		&"true_faction": {"get": _console_true_faction, "doc": "The selected target's real faction id (a disguised renegade shows another), or none"},
+		&"revealed": {"get": _console_revealed, "type": TYPE_BOOL,
+				"doc": "The selected target's faction broadcasts another's transponder and this ship has already given itself away (M10-T02)"},
 		&"closing_mps": {"get": _console_closing, "unit": "m/s",
 				"doc": "Closing speed of the selected target (positive = closing)"},
 		&"candidates": {"get": _console_candidates, "doc": "Targets in sensor range, nearest first"},
@@ -426,7 +429,7 @@ func _nearest_hostile() -> TargetInfo:
 		var targetable := node as Targetable
 		if targetable == null or _body.is_ancestor_of(targetable) or not targetable.is_active():
 			continue
-		var faction: StringName = targetable.faction
+		var faction: StringName = targetable.faction_seen_by(system.own_faction)
 		if not hostile.has(faction):
 			hostile[faction] = Factions.is_hostile(system.own_faction, faction)
 		if not hostile[faction]:
@@ -532,6 +535,21 @@ func _console_range() -> Variant:
 func _console_faction() -> Variant:
 	var readout: TargetReadout = selected_readout()
 	return String(readout.faction) if readout != null else "none"
+
+
+func _console_selected_targetable() -> Targetable:
+	var id: int = selected_id()
+	return instance_from_id(id) as Targetable if id != 0 and is_instance_id_valid(id) else null
+
+
+func _console_true_faction() -> Variant:
+	var targetable: Targetable = _console_selected_targetable()
+	return String(targetable.faction) if targetable != null else "none"
+
+
+func _console_revealed() -> Variant:
+	var targetable: Targetable = _console_selected_targetable()
+	return targetable != null and not Factions.table().transponder(targetable.faction).is_empty() and not targetable.is_disguised()
 
 
 func _console_closing() -> Variant:

@@ -278,6 +278,7 @@ fn the_fire_lane_is_blocked_by_a_friendly_big_hulls_volumes_only() {
     assert!(fire_lane(
         &rows,
         &relations,
+        0,
         &[0],
         Vector3::new(0.0, 0.0, -300.0),
         Vector3::BACK,
@@ -289,6 +290,7 @@ fn the_fire_lane_is_blocked_by_a_friendly_big_hulls_volumes_only() {
     assert!(!fire_lane(
         &rows,
         &relations,
+        0,
         &[0],
         Vector3::new(-300.0, 0.0, 0.0),
         Vector3::RIGHT,
@@ -300,6 +302,7 @@ fn the_fire_lane_is_blocked_by_a_friendly_big_hulls_volumes_only() {
     assert!(fire_lane(
         &rows,
         &relations,
+        0,
         &[0],
         Vector3::new(-300.0, 57.0, 0.0),
         Vector3::RIGHT,

@@ -328,3 +328,70 @@ fn a_sheltered_row_is_out_of_the_brains_lists_and_the_tier_guns_pick() {
     assert_eq!(field.ship_rows, vec![0, 1, 2, 3], "out of the station, a contact again");
     assert_eq!(crate::tier_fire::nearest_hostile_fighter(&rows, &hostile, rows.positions[2], 1.0e6, 0), Some(2));
 }
+
+// M10-T02: a renegade (faction 1) broadcasting the Earth Alliance (faction 0) transponder looks Earth Alliance to everyone
+// but its own side, until its flags drop the disguise.
+#[test]
+fn a_disguised_row_is_seen_as_its_transponder_except_by_its_own_side() {
+    use crate::kernels::pilot::{FRIENDLY, HOSTILE, context_lists};
+    let mut rows = rows_with(&[1, 2, 3]);
+    rows.faction_ix = vec![0, 1, 2];
+    rows.flags = vec![FLAG_RIGID; 3];
+    rows.rigid = vec![true; 3];
+    rows.flags[1] |= 1 << FLAG_DISGUISE_SHIFT; // broadcasts faction 0 (index plus one)
+    assert_eq!(rows.seen_ix(1, 0), 0, "the Earth Alliance sees an Earth Alliance ship");
+    assert_eq!(rows.seen_ix(1, 2), 0, "a third party sees it the same way");
+    assert_eq!(rows.seen_ix(1, 1), 1, "its own side sees it as it is");
+    assert_eq!(rows.seen_ix(2, 0), 2, "an undisguised row is itself to everyone");
+    // Earth Alliance: friends with 0, hostile to 1 and 2; renegades: hostile to 0, friends with 1.
+    let ea = [FRIENDLY, HOSTILE, HOSTILE];
+    let renegade = [HOSTILE, FRIENDLY, HOSTILE];
+    let contacts = [1, 2];
+    let mut out = crate::kernels::pilot::Lists::default();
+    context_lists(&rows, &ea, 0, &contacts, Vector3::ZERO, 0, 0, &mut out);
+    assert_eq!(out.hostiles, vec![1], "the Earth Alliance ship fights only the raider while the renegade hides");
+    context_lists(&rows, &renegade, 1, &[0, 2], Vector3::ZERO, 0, 0, &mut out);
+    assert_eq!(out.hostiles, vec![0, 1], "the renegade fights both as ever");
+    rows.flags[1] = FLAG_RIGID; // revealed
+    context_lists(&rows, &ea, 0, &contacts, Vector3::ZERO, 0, 0, &mut out);
+    assert_eq!(out.hostiles, vec![0, 1], "once it has fired the Earth Alliance ship sees it for what it is");
+}
+
+// M10-T02: the nearest-hostile pick of a contact query reads the broadcast faction too.
+#[test]
+fn the_nearest_hostile_pick_is_fooled_by_a_transponder() {
+    use crate::kernels::contact::{Grid, Query, View, Work, nearest};
+    let positions = [Vector3::ZERO, Vector3::new(10.0, 0.0, 0.0), Vector3::new(30.0, 0.0, 0.0)];
+    let faction = [0u32, 1, 2];
+    let mut flags = [0u32, 1 << FLAG_DISGUISE_SHIFT, 0];
+    let mut grid = Grid::default();
+    grid.cell_m = 100.0;
+    crate::kernels::contact::sorted_cells_into(&positions, 100.0, &mut grid.cells);
+    let hostile = [false, true, true]; // the Earth Alliance's view of the table
+    let pick = |observer: u32, flags: &[u32]| {
+        let view = View {
+            body_ids: &[1, 2, 3],
+            positions: &positions,
+            body_faction: &faction,
+            body_flags: flags,
+            observer,
+            is_ship: &[true; 3],
+            reach: &[],
+            is_static: &[false; 3],
+            is_mine: &[false; 3],
+            radii: &[1.0; 3],
+            bolt_positions: &[],
+            bolt_velocities: &[],
+            bolt_faction: &[],
+            bolt_shooters: &[],
+        };
+        let mut query = Query::default();
+        // k = 1 keeps only the nearest body besides the nearest hostile, so the hostile pick is what survives the cut.
+        nearest(&view, &mut Work { grid: &grid, query: &mut query }, Some(&hostile), 99, Vector3::new(-1.0, 0.0, 0.0), 1, 1000.0)
+    };
+    let fooled = pick(0, &flags);
+    assert!(fooled.contains(&2) && !fooled.contains(&1), "the disguised ship is no hostile: {fooled:?}");
+    flags[1] = 0;
+    let seen = pick(0, &flags);
+    assert!(seen.contains(&1) && !seen.contains(&2), "revealed, the renegade is the nearest hostile: {seen:?}");
+}

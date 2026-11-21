@@ -37,6 +37,7 @@ signal hit_resolved(info: HitInfo)
 const LATE_PRIORITY: int = 200
 const TARGET_CHOICES: Array[StringName] = [&"player", &"target"]
 const HEAL_CHOICES: Array[StringName] = [&"player", &"target", &"all"]
+const TRANSPONDER_ACTIONS: Array[StringName] = [&"reveal", &"hide"]
 
 ## Bolts considered and ship pairs swept on the last tick, total hits, and the last tick's cost in microseconds.
 var projectiles_last_tick: int = 0
@@ -163,6 +164,10 @@ func _ready() -> void:
 			[ConsoleArg.enum_optional(&"who", HEAL_CHOICES, &"player")]), _cmd_heal, self)
 	DebugConsole.registry.register_provider(&"factions", FactionConsole.provider(), self)
 	DebugConsole.registry.register_command(FactionConsole.command(), FactionConsole.run, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"transponder",
+			"Reveal or hide (M10-T02) the transponder of a ship whose faction broadcasts another's: the selected target, the player or all",
+			[ConsoleArg.enum_required(&"action", TRANSPONDER_ACTIONS), ConsoleArg.enum_optional(&"who", HEAL_CHOICES, &"target")]),
+			_cmd_transponder, self)
 
 
 func _exit_tree() -> void:
@@ -537,6 +542,7 @@ func _land(i: int, delta: float) -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	if sim != null:
 		sim.note_hit(info.target_id, shooter_id)  # the turrets' attacker memory, in the sweep's order (M5-T21)
+	Transponder.note_hit(shooter_id, damageable)  # a disguised shooter that hit its own side's friend is found out (M10-T02)
 	_apply(damageable, info)
 	_flash_at(j, local_point, i)
 	if fx != null:
@@ -625,6 +631,25 @@ func _cmd_damage(args: Dictionary) -> ConsoleResult:
 	hit_resolved.emit(info)
 	return ConsoleResult.line("%s: %.1f applied of %.1f, hull %.1f / %.1f%s" % [who, info.applied, info.damage,
 			damageable.hull.hp, damageable.hull.max_hp, " (destroyed)" if damageable.hull.destroyed else ""])
+
+
+func _cmd_transponder(args: Dictionary) -> ConsoleResult:
+	var who: StringName = StringName(args[&"who"])
+	var ships: Array[Targetable] = []
+	match who:
+		&"all":
+			for node: Node in get_tree().get_nodes_in_group(Targetable.GROUP):
+				if node is Targetable:
+					ships.append(node as Targetable)
+		&"player":
+			var hull: Damageable = _player_damageable()
+			if hull != null:
+				ships.append(Targetable.of(hull.body()))
+		_:
+			var damageable: Damageable = _target_damageable()
+			if damageable != null:
+				ships.append(Targetable.of(damageable.body()))
+	return TransponderConsole.apply(StringName(args[&"action"]), ships)
 
 
 func _cmd_heal(args: Dictionary) -> ConsoleResult:

@@ -509,8 +509,8 @@ func _stamp(faction: StringName, i: int) -> Contact:
 	var c := Contact.new()
 	c.id = _ids[i]
 	c.name = _names[i]
-	c.faction = _factions[i]
-	c.relation = _relation(faction, _factions[i])
+	c.faction = SimCore.seen_faction(_body_ids[i], _factions[i], faction)  # a disguised ship's transponder (M10-T02)
+	c.relation = _relation(faction, c.faction)
 	c.position = _positions[i]
 	c.velocity = _velocities[i]
 	c.forward = _forwards[i]
