@@ -377,7 +377,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | not started |
 | T16 | E | The `capital` brain and fighters' attacks on capitals | T12, T14 | Opus | not started |
 | T17 | E | Carriers launch fighters from bays and tubes | T07, T16 | Opus | not started |
-| T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | not started |
+| T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | in progress |
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
