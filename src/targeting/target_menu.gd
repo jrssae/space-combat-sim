@@ -2,7 +2,7 @@ class_name TargetMenu
 extends RefCounted
 ## The target menu's pages on a `RadialMenu` (architecture §18.19, M5-T25), pure. Opened with the candidate list as it is at
 ## that moment (the game is paused while it shows, so nothing in it goes stale): the first ring is the six categories with
-## their counts, the second the nearest five of one category and "none" in the down slice; each ring has one slice per entry
+## their counts, the second the nearest eight of one category (the launch base first in ALLIES) and "none" in the down slice; each ring has one slice per entry
 ## (D90, M8-T24). `select` opens a category or returns what the pilot picked, for the owner to carry out:
 ##     {action: target, id, label}           a ship becomes the target
 ##     {action: waypoint, id, label, point}  a beacon or an objective becomes the HUD waypoint (`id` 0 for a bare place)
@@ -39,11 +39,13 @@ static func range_text(range_m: float) -> String:
 
 
 ## Opens on the categories. `objectives` are the mission's active objectives that name a place or an actor, in the mission's
-## order: `{text, label, target_id, point (UniversePos or null), position (World-local)}`; the first five show.
+## order: `{text, label, target_id, point (UniversePos or null), position (World-local)}`; the first eight show.
+## `base_id` is the launch base's target id (0 for none): it heads its ring while it is a candidate (maintainer, 2026-11-20).
 func open(candidates: Array[TargetInfo], own_position: Vector3, own_faction: StringName,
-		objectives: Array[Dictionary] = []) -> void:
+		objectives: Array[Dictionary] = [], base_id: int = 0) -> void:
 	_own_position = own_position
-	var summary: Dictionary = TargetCategories.summarise(candidates, own_position, own_faction)
+	var summary: Dictionary = TargetCategories.summarise(candidates, own_position, own_faction, TargetCategories.RING_SIZE,
+			TargetCategories.IDENT_RANGE_M, base_id)
 	_counts = summary["counts"]
 	_nearest = summary["nearest"]
 	_objectives = objectives.slice(0, TargetCategories.RING_SIZE)

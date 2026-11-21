@@ -1,5 +1,5 @@
 extends GutTest
-## TargetMenu, pure (M5-T25): the categories ring with counts, a category's ring of the nearest five with "none" straight
+## TargetMenu, pure (M5-T25): the categories ring with counts, a category's ring of the nearest eight with "none" straight
 ## down (one slice per entry, M8-T24), what a pick returns, and B walking back out. Also HudWaypoint: the later of the pilot's pick and a script's wins.
 
 const C := TargetCategories.Category
@@ -78,13 +78,13 @@ func test_the_first_ring_is_the_six_categories_with_counts() -> void:
 	assert_eq(menu.radial.slots()[3]["color"], Factions.UNIDENTIFIED_COLOR)
 
 
-func test_a_category_ring_holds_the_nearest_five_and_none_in_the_down_slice() -> void:
+func test_a_category_ring_holds_the_nearest_eight_and_none_in_the_down_slice() -> void:
 	_open_category(C.ENEMIES)
 	assert_eq(menu.page_name(), "enemies")
 	assert_eq(menu.radial.depth(), 2)
 	assert_eq(menu.radial.title(), "TACTICAL PAUSE · ENEMIES")
-	assert_eq(_labels(), ["RAIDER 16", "RAIDER 15", "RAIDER 14", "NONE", "RAIDER 13", "RAIDER 12"] as Array[String],
-			"nearest first, clockwise from the top, none straight down")
+	assert_eq(_labels(), ["RAIDER 16", "RAIDER 15", "RAIDER 14", "RAIDER 13", "NONE", "RAIDER 12", "RAIDER 11", "RAIDER 10"]
+			as Array[String], "all seven, nearest first, clockwise from the top, none straight down")
 	assert_eq(str(menu.radial.slots()[0]["sub"]), "1.2 km")
 	assert_true(menu.point(DOWN))
 	assert_eq(str(menu.radial.highlighted()["label"]), "NONE")
@@ -189,17 +189,57 @@ func test_back_goes_to_the_categories_then_closes() -> void:
 	assert_eq(menu.radial.closed_by, &"back")
 
 
-func test_an_empty_category_still_offers_none_and_at_most_five_objectives_show() -> void:
+func test_an_empty_category_still_offers_none_and_at_most_eight_objectives_show() -> void:
 	var objectives: Array[Dictionary] = []
-	for i: int in 8:
+	for i: int in 10:
 		objectives.append({"text": "Objective %d" % i, "label": "p", "target_id": 0, "point": null, "position": Vector3.ZERO})
 	menu.open([] as Array[TargetInfo], Vector3.ZERO, OWN, objectives)
 	assert_eq(str(menu.radial.slots()[0]["sub"]), "0 in range")
-	assert_eq(menu.count(C.OBJECTIVES), 5, "up to five objectives")
+	assert_eq(menu.count(C.OBJECTIVES), TargetCategories.RING_SIZE, "up to eight objectives")
 	assert_true(menu.select().is_empty())
 	assert_eq(_labels(), ["NONE"] as Array[String], "a ring of one")
 	assert_eq(menu.radial.highlight(), 0, "the highlight starts on the only entry")
 	assert_eq(menu.select()["action"], TargetMenu.ACTION_CLEAR_TARGET)
+
+
+func test_a_ring_holds_eight_of_ten_candidates() -> void:
+	# Maintainer, 2026-11-20: up to eight ships a target ring, from ten in range.
+	var candidates: Array[TargetInfo] = []
+	for i: int in 10:
+		candidates.append(_info(100 + i, 500.0 + 100.0 * float(i)))
+	menu.open(candidates, Vector3.ZERO, OWN)
+	assert_eq(menu.count(C.ENEMIES), 10)
+	menu.radial.set_highlight(TargetCategories.ORDER.find(C.ENEMIES))
+	menu.select()
+	assert_eq(menu.radial.slice_count(), 9, "eight ships and NONE")
+	assert_false(_labels().has("RAIDER 108"), "the two farthest are left out")
+	assert_false(_labels().has("RAIDER 109"))
+
+
+func test_the_launch_base_heads_allies_whatever_is_nearer() -> void:
+	# Maintainer, 2026-11-20: the base the player launched from is always listed in ALLIES while it is a candidate, first.
+	var candidates: Array[TargetInfo] = []
+	for i: int in 10:
+		candidates.append(_info(200 + i, 300.0 + 50.0 * float(i), OWN, Targetable.Role.SHIP, 1.0e5, "Alpha %d" % (i + 2)))
+	var base: TargetInfo = _info(77, 9000.0, OWN, Targetable.Role.SHIP, 1.0e6, "Babylon 5")
+	candidates.append(base)
+	menu.open(candidates, Vector3.ZERO, OWN, [] as Array[Dictionary], 77)
+	menu.radial.set_highlight(TargetCategories.ORDER.find(C.ALLIES))
+	menu.select()
+	assert_eq(_labels()[0], "BABYLON 5", "pinned at the top, the farthest of eleven")
+	assert_eq(_labels().size(), 9, "it counts toward the eight")
+	menu.close()
+	menu.open(candidates, Vector3.ZERO, OWN)
+	menu.radial.set_highlight(TargetCategories.ORDER.find(C.ALLIES))
+	menu.select()
+	assert_false(_labels().has("BABYLON 5"), "no launch base (an escort with none): nothing pinned, range alone")
+	menu.close()
+	candidates.erase(base)
+	menu.open(candidates, Vector3.ZERO, OWN, [] as Array[Dictionary], 77)
+	menu.radial.set_highlight(TargetCategories.ORDER.find(C.ALLIES))
+	menu.select()
+	assert_false(_labels().has("BABYLON 5"), "destroyed or out of range, it is no candidate and drops out")
+	assert_eq(_labels()[0], "ALPHA 2")
 
 
 func test_range_text() -> void:
@@ -277,7 +317,7 @@ func test_opening_on_five_hundred_candidates_is_one_cheap_pass() -> void:
 	for category: C in TargetCategories.ORDER:
 		menu.radial.set_highlight(TargetCategories.ORDER.find(category))
 		menu.select()
-		assert_lte(menu.radial.slice_count(), 6)
+		assert_lte(menu.radial.slice_count(), TargetCategories.RING_SIZE + 1)
 		menu.back()
 	assert_eq(TargetInfo.built_count, built, "the rings are cut from the one sorted read: nothing is built again")
 	# Opening is per event, during a pause: half a frame at 60 fps is plenty, and far above what it takes.

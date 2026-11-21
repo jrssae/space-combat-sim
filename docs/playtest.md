@@ -735,7 +735,10 @@ Wheel                cycles through every target, as before
 ```
 
 The categories, clockwise from the top: **Enemies**, **Allies**, **Civilian**, **Unknown**, **Navigation**, **Objectives**. Each
-opens a ring of its nearest five with **NONE** straight down. A ship you pick becomes the target and the game resumes. A beacon
+opens a ring of its nearest eight with **NONE** straight down (keys 1-9 pick by place). A ship you pick becomes the target and the game resumes.
+- [ ] **(H) Launch base in Allies (2026-11-20):** in free flight with encounters on (you launch from Babylon 5) spawn a crowd of
+      allies (`spawn ally` a dozen times; the pool is the encounters'): ALLIES still lists BABYLON 5, first at the top, and holds eight ships and NONE; the labels of a full ring
+      still read. In the civilian escort (no launch base) nothing is pinned. A beacon
 or an objective becomes the waypoint (the diamond in the view, and a diamond round its dot on the radar); your target stays as it
 was. NONE clears the target or the waypoint. A mission that sets its waypoint after your pick takes it back.
 

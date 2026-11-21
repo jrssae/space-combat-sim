@@ -1,5 +1,5 @@
 extends GutTest
-## TargetCategories, pure (M5-T25): identification, the six categories, nearest-five ordering and the target button's tap, on
+## TargetCategories, pure (M5-T25): identification, the six categories, nearest-eight ordering and the target button's tap, on
 ## hand-built cases and on seeded sets of 500 checked against an independent sort.
 
 const C := TargetCategories.Category
@@ -102,16 +102,16 @@ func test_five_hundred_candidates_sort_into_categories_nearest_first() -> void:
 				return ra < rb or (ra == rb and a.id < b.id))
 			var got: Array[TargetInfo] = sorted[category]
 			assert_eq(_ids(got), _ids(expected), "seed %d, %s" % [rng_seed, TargetCategories.NAMES[category]])
-			assert_eq(_ids(TargetCategories.nearest(candidates, category, own, OWN)), _ids(expected).slice(0, 5),
-					"seed %d, %s: the nearest five" % [rng_seed, TargetCategories.NAMES[category]])
+			assert_eq(_ids(TargetCategories.nearest(candidates, category, own, OWN)), _ids(expected).slice(0, TargetCategories.RING_SIZE),
+					"seed %d, %s: the nearest eight" % [rng_seed, TargetCategories.NAMES[category]])
 			total += got.size()
 		var summary: Dictionary = TargetCategories.summarise(candidates, own, OWN)
 		for category: C in TargetCategories.ORDER:
 			assert_eq(int(summary["counts"][category]), (sorted[category] as Array).size(), "seed %d: the one-pass count" % rng_seed)
 		assert_eq(total, 500, "seed %d: every candidate is in exactly one category" % rng_seed)
 		assert_eq((sorted[C.OBJECTIVES] as Array).size(), 0, "objectives come from the mission, not the candidates")
-		assert_gt((sorted[C.ENEMIES] as Array).size(), 5, "seed %d: enough enemies to cut to five" % rng_seed)
-		assert_gt((sorted[C.UNKNOWN] as Array).size(), 5)
+		assert_gt((sorted[C.ENEMIES] as Array).size(), TargetCategories.RING_SIZE, "seed %d: enough enemies to cut to eight" % rng_seed)
+		assert_gt((sorted[C.UNKNOWN] as Array).size(), TargetCategories.RING_SIZE)
 
 
 func test_nearest_takes_a_limit_and_breaks_ties_by_id() -> void:

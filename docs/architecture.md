@@ -4727,7 +4727,10 @@ a radial menu is open (maintainer, 2026-11-19): `sample_radial` reads the comms 
 index in page order.
 
 **The target menu.** `TargetMenu` (pure) builds the pages from one candidate list: the six categories with counts, then
-the nearest five of one and NONE. `select` returns `{action: target | waypoint | clear_target | clear_waypoint, id, label,
+the nearest eight of one and NONE (maintainer, 2026-11-20). The launch base heads ALLIES while it is a candidate: the node in
+`TargetCategories.LAUNCH_BASES` (a station; later a carrier) whose `home_id` is the player's home (the scenario's `player.home`,
+or the station whose Cobra bay launched it) is pinned first (`summarise`'s `pinned_id`), counting toward the eight; a mission
+with no launch source pins nothing. Keys 1-9 pick a ring of eight and NONE by place. `select` returns `{action: target | waypoint | clear_target | clear_waypoint, id, label,
 point}` and closes. `TargetMenuDirector` (a node under `Main`) reads `TargetingController.candidates()` before it pauses
 the tree, since a paused marker is not in play, then carries the pick out after it resumes. `Main` calls its `step` only
 while it is open, with `InputAdapter.sample_radial`'s command.

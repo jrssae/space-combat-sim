@@ -82,7 +82,7 @@ func open() -> String:
 	# The list is read before the pause: a paused ship's marker does not count as in play.
 	var started: int = Time.get_ticks_usec()
 	var candidates: Array[TargetInfo] = main.ship.targeting.candidates()
-	menu.open(candidates, main.ship.global_position, main.combatant.faction, _objectives())
+	menu.open(candidates, main.ship.global_position, main.combatant.faction, _objectives(), launch_base_id())
 	last_open_usec = Time.get_ticks_usec() - started
 	last_candidates = candidates.size()
 	opens += 1
@@ -93,6 +93,19 @@ func open() -> String:
 	_show_page()
 	view.set_showing(true)
 	return ""
+
+
+## The target id of the base the player launched from (the scenario's `player.home`, or the station whose bay launched it), or
+## 0: a mission with no launch base pins nothing.
+func launch_base_id() -> int:
+	var home: StringName = main.combatant.home if main != null and main.combatant != null else &""
+	if home == &"" or not is_inside_tree():
+		return 0
+	for node: Node in get_tree().get_nodes_in_group(TargetCategories.LAUNCH_BASES):
+		var marker: Variant = node.get("targetable")
+		if StringName(str(node.get("home_id"))) == home and marker is Targetable and is_instance_valid(marker):
+			return (marker as Targetable).get_instance_id()
+	return 0
 
 
 ## One tick of the open menu, from `InputAdapter.sample_radial`.

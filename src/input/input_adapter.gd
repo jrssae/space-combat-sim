@@ -29,7 +29,7 @@ extends RefCounted
 ## targets on the tick the game resumes. The menu's own actions (`RADIAL_ACTIONS`) are fixed like the menu kit's `ui_*`
 ## ones, not part of a control profile: the LEFT stick or the arrow keys point (M7-T37; the right stick is not read, and the game is
 ## paused, so it flies again as the menu closes), A or Enter selects, B or Backspace backs, and keys 1-8 pick the ring's entries
-## by their order (M8-T24, `RADIAL_ENTRIES`). The D-pad does nothing while a radial menu is open (maintainer, 2026-11-19).
+## by their order (M8-T24, `RADIAL_ENTRIES`; key 9 too, for a target ring of eight and NONE). The D-pad does nothing while a radial menu is open (maintainer, 2026-11-19).
 
 const MAIN_RIGHT := &"main_right"
 const MAIN_LEFT := &"main_left"
@@ -78,9 +78,10 @@ const RADIAL_LEFT := &"radial_left"
 const RADIAL_RIGHT := &"radial_right"
 const RADIAL_SELECT := &"radial_select"
 const RADIAL_BACK := &"radial_back"
-## Pick the ring's entries by order while a radial menu is open (M8-T24): keys 1-8, the keyboard only.
+## Pick the ring's entries by order while a radial menu is open (M8-T24): keys 1-9, the keyboard only (a target ring holds eight
+## ships and NONE).
 const RADIAL_ENTRIES: Array[StringName] = [&"radial_entry_1", &"radial_entry_2", &"radial_entry_3", &"radial_entry_4",
-		&"radial_entry_5", &"radial_entry_6", &"radial_entry_7", &"radial_entry_8"]
+		&"radial_entry_5", &"radial_entry_6", &"radial_entry_7", &"radial_entry_8", &"radial_entry_9"]
 
 ## Every action the game reads; project.godot must declare each one (tests/unit/test_input_map.gd).
 const ACTIONS: Array[StringName] = [
@@ -94,7 +95,7 @@ const ACTIONS: Array[StringName] = [
 ## A radial menu's own actions: declared in project.godot, read only while one is open, never rebound by a profile.
 const RADIAL_ACTIONS: Array[StringName] = [RADIAL_UP, RADIAL_DOWN, RADIAL_LEFT, RADIAL_RIGHT, RADIAL_SELECT, RADIAL_BACK,
 	&"radial_entry_1", &"radial_entry_2", &"radial_entry_3", &"radial_entry_4", &"radial_entry_5", &"radial_entry_6",
-	&"radial_entry_7", &"radial_entry_8"]
+	&"radial_entry_7", &"radial_entry_8", &"radial_entry_9"]
 
 ## Actions reported as one-tick edges on press rather than held state. `TARGET_NEXT` and `TARGET_CYCLE` are not among
 ## them: they are the tap-or-hold buttons (see `target_hold_s`). `AUTOTRACK`'s edge is kept for the resync but it acts
