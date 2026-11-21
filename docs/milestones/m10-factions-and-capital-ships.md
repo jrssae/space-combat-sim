@@ -326,7 +326,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
 | T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | done |
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | not started |
-| T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | in progress |
+| T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | done |
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | not started |
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | not started |
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | not started |
@@ -517,6 +517,26 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   `pivot`; `collision.pieces[].piece` names the body); a rotating piece's chunk draws with that piece's maps, which
   `MeshAssets.chunk_mesh` does not do yet (it takes the hull's); `hardpoints.turrets` stays empty (D61's civilian
   turrets), the capital mounts are `hardpoints.weapons`.
+- **Done (2026-11-20).** `CapitalBody` (what every capital shares: no damping, `Targetable` of kind capital, `Damageable`,
+  jump drive, the tier hand-over), extended by `CapitalStandin` (the bench, until T45) and the new `CapitalShip`; the tier and
+  destruction directors take either. `CapitalShip.create` builds `capital_test_cruiser` (catalogue entry, `capital_class`
+  cruiser, `assets/ships/capital_test_cruiser.tres`: 12 200 t, 2 m/s2, 4 deg/s, 20 000 hull points, reaction with stand-in
+  retros, jump-capable as a test hull) with the hull piece's 69 shapes on the one body, its habitat ring as a kinematic
+  `CapitalRotor` (aimed a tick ahead of the hull, teleported on a rebase and on the tier's return, its hits the hull's), each
+  section's hit volumes and convex hulls as the core's surfaces (no native change), a hit or ram named by its section
+  (`section_hit`, for T08), broadcast by class (Q51) and `open_own_point` at its anchor. `CapitalFlight` flies every capital
+  through its own `ScsFlightStep` from `CapitalHelm` (reaction: retros, or a flip with none; gravitic: any axis, Q51);
+  `CapitalPropulsion` makes the engines nozzles. `MeshAssets.chunk_mesh` draws a rotor's chunk with its piece's maps. Console
+  `capital`; `info.md`; `docs/architecture.md` §22.2. Tests (staged copy): GUT 133 + 109 + 72 in three batches, all passing
+  (new: `test_capital_propulsion` 6, `test_capital_helm` 5, `test_capital_sections` 4, `test_capital_ship` 10: damping, both
+  drives and a flip flown natively, a rebase, the tier and back, a ram on the bow, a held point, the console; with the parity
+  fixture, flight step, ram tracker, damping guard, strike carrier, station, tier, jump and catalogue files); compile check
+  1036 scripts clean. Cost: about 52 us a tick for one capital (helm, rotor and the step's call; `capital.flight_us`).
+  **The strike carrier** should move onto `CapitalShip` with T08 to T11 (its sections and break-up), not now: its raid code
+  (`CarrierJumps`, the dock, the helm by torque) is built round `CapitalStandin` and gains nothing before damage by section.
+  Open: a rotor is kinematic (a capital ramming another's rotor meets a wall; a ram on a rotor leaves out its skin's turn);
+  the tier's capital law caps at 2 m/s2; engines with unequal shares fly as equal; the ram tracker sees the capital's thrust
+  through `RamResolver._accel` (GDScript), not the core's accelerations.
 
 ### M10-T08 to T18 Damage, weapons, AI and the HUD
 
