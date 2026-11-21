@@ -37,6 +37,7 @@ from ..parts import mass_centroid, total_mass
 from ..styles.capital import CapitalStyle
 from . import civilian as cv
 from . import collision as col
+from . import glyphs
 from .budgets import LOW_SHRINK, low_set_mb, texture_mb
 from .context import AssetOutputs, BuildContext
 from .image import write_png
@@ -227,8 +228,9 @@ def _json_params(params: dict[str, Any], offset: np.ndarray) -> dict[str, Any]:
 
 
 def hardpoint_lists(modules: Sequence[cp.Module], offset: np.ndarray) -> dict[str, list[dict[str, Any]]]:
-    """The capital hardpoints by list (body frame): ``weapons``, ``bays``, ``engines`` and ``lights``, in module order."""
-    out: dict[str, list[dict[str, Any]]] = {"weapons": [], "bays": [], "engines": [], "lights": []}
+    """The capital hardpoints by list (body frame): ``weapons``, ``bays``, ``engines``, ``lights`` and ``marks`` (painted
+    lettering, ``core/glyphs.py``), in module order."""
+    out: dict[str, list[dict[str, Any]]] = {"weapons": [], "bays": [], "engines": [], "lights": [], "marks": []}
     for m in modules:
         for h in m.hardpoints:
             base = {"name": h.name, "section": m.section, "position": cv.r(h.position - offset)}
@@ -239,6 +241,8 @@ def hardpoint_lists(modules: Sequence[cp.Module], offset: np.ndarray) -> dict[st
                 out["bays"].append({**base, "kind": h.kind, "forward": cv.r(h.forward), "up": cv.r(h.up), **params})
             elif h.kind == cp.ENGINE:
                 out["engines"].append({**base, "thrust": cv.r(h.forward), "exhaust": cv.r(-h.forward), **params})
+            elif h.kind == cp.MARK:
+                out["marks"].append({**base, "normal": cv.r(h.forward), "up": cv.r(h.up), **params})
             else:
                 out["lights"].append({**base, "direction": cv.r(h.forward), **params})
     return out
@@ -390,6 +394,9 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
     if spec.jump_point is not None:
         hp["jump_point"] = {"position": cv.r(np.array([0.0, 0.0, float(whole_lo[2]) - spec.jump_point.ahead_m]) - offset),
                             "forward": [0.0, 0.0, -1.0], "mouth_radius_m": float(spec.jump_point.mouth_radius_m)}
+    if lists["marks"]:
+        mark_files, hp["mark_atlas"] = glyphs.write_atlas(out_dir, spec.asset_id)
+        files += mark_files
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
     files.append(hp_path)

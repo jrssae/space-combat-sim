@@ -115,6 +115,21 @@ class OmegaBuildTests(unittest.TestCase):
         port = next(light for light in self.hp["lights"] if light["role"] == "port")
         self.assertLess(port["position"][0], 0.0, "red to port")
 
+    def test_each_shield_wears_the_name_letter_on_its_lower_panel(self) -> None:
+        marks = {m["name"]: m for m in self.hp["marks"]}
+        self.assertEqual(sorted(marks), ["mark_initial_l", "mark_initial_r"])
+        right, left = marks["mark_initial_r"], marks["mark_initial_l"]
+        self.assertEqual((right["text"], right["section"], right["height_m"]), ("initial", "bow", eo.om.MARK_HEIGHT_M))
+        self.assertGreater(right["normal"][0], 0.9, "the starboard letter faces outward")
+        self.assertAlmostEqual(left["position"][0], -right["position"][0], places=3)
+        self.assertAlmostEqual(left["normal"][0], -right["normal"][0], places=3)
+        self.assertLess(self.authored(right["position"])[1], -120.0, "at the bottom of the shield, on the leaning panel")
+        self.assertAlmostEqual(float(np.dot(right["normal"], right["up"])), 0.0, places=3)
+        self.assertGreater(right["up"][1], 0.9, "the letter stands upright")
+        atlas = self.hp["mark_atlas"]
+        self.assertTrue((self.dir / atlas["file"]).is_file())
+        self.assertTrue((self.dir / (atlas["file"] + ".import")).is_file())
+
     def test_the_hull_is_inside_the_capital_budget(self) -> None:
         budget = self.manifest["budget"]
         self.assertEqual(budget["class"], "capital")

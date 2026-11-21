@@ -109,7 +109,7 @@ class CapitalFrameworkTests(unittest.TestCase):
         offset = np.array([0.0, 1.0, 30.0])
         lists = cap.hardpoint_lists(cap.all_modules(spec), offset)
         self.assertEqual({k: [e["name"] for e in v] for k, v in lists.items()},
-                         {"weapons": ["turret"], "bays": [], "engines": ["engine_r", "engine_l"], "lights": []})
+                         {"weapons": ["turret"], "bays": [], "engines": ["engine_r", "engine_l"], "lights": [], "marks": []})
         turret = lists["weapons"][0]
         self.assertEqual((turret["kind"], turret["section"], turret["forward"], turret["up"]), ("turret", "core", [0.0, 0.0, -1.0], [0.0, 1.0, 0.0]))
         module = spec.modules[1]

@@ -30,6 +30,7 @@ import numpy as np
 from ..styles import Style
 from . import capital as cp
 from . import capital_bays as bays
+from . import capital_fittings as fittings
 from . import capital_solids as cs
 from .capital_hull import HullRoles
 
@@ -87,6 +88,23 @@ def _put(section: str, m: cp.Module, side: str = cp.CENTRE) -> cp.Module:
 
 
 # --- the bow -------------------------------------------------------------------------------------------------------------
+MARK_HEIGHT_M = 40.0  # the show's letter stands about a sixth of the shield's height
+MARK_AT = 0.26  # how far up the lower panel the letter's centre sits, from its bottom edge
+
+
+def shield_mark(x: float, top: tuple[float, float, float], bottom: tuple[float, float, float]) -> cp.Hardpoint:
+    """The name letter in large white block print at the bottom of the shield (the show's), on the lower panel's outer face:
+    ``top`` and ``bottom`` are the panel's two edges at the shield's face (y, and z from, z to, with the bottom edge leaning in)."""
+    (ty, tz0, tz1), (by, bz0, bz1) = top, bottom
+    x_bottom = 26.0
+    along = np.array([x - x_bottom, ty - by, 0.5 * (tz0 + tz1) - 0.5 * (bz0 + bz1)])  # bottom edge to top edge, mid to mid
+    normal = np.cross([0.0, 0.0, 1.0], np.array([x_bottom - x, by - ty, bz0 - tz0]))  # an edge of the panel with the along-z edge
+    normal = normal / np.linalg.norm(normal) * (1.0 if normal[0] > 0.0 else -1.0)
+    up = np.array([0.0, 1.0, 0.0]) - normal[1] * normal
+    at = np.array([x_bottom, by, 0.5 * (bz0 + bz1)]) + MARK_AT * along
+    return fittings.hull_mark("mark_initial_r", at, normal, up / np.linalg.norm(up), MARK_HEIGHT_M)
+
+
 def shields(s: Style) -> list[cp.Module]:
     """The starboard armour shield: a vertical panel and two leaning in above and below it, 5 m thick."""
     thick, x = 4.0, 68.0
@@ -94,6 +112,7 @@ def shields(s: Style) -> list[cp.Module]:
     mid = cs.slab("shield_mid_r", [(x, 57.4, 193.0), (x, 57.4, 358.0), (x, -55.6, 358.0), (x, -55.6, 193.0)], thick, inward, s, PLAIN)
     upper = cs.slab("shield_upper_r", [(x, 57.4, 193.0), (x, 57.4, 358.0), (43.5, 95.4, 307.0), (43.5, 95.4, 214.0)], thick, inward, s, PLAIN)
     lower = cs.slab("shield_lower_r", [(x, -55.6, 193.0), (x, -55.6, 358.0), (26.0, -195.6, 270.0), (26.0, -195.6, 214.0)], thick, inward, s, PLAIN)
+    lower = dataclasses.replace(lower, hardpoints=(shield_mark(x, (-55.6, 193.0, 358.0), (-195.6, 214.0, 270.0)),))
     pod = cs.convex("beam_pod_r", [(px, py, pz) for px, c in ((68.0, 0.0), (88.0, 4.0)) for py in (-22.0 + c, 22.0 - c) for pz in (205.0 + c, 247.0 - c)],
                     s, DARK, skin=cp.SKIN_FITTING)
     return [_put("bow", m, cp.RIGHT) for m in (mid, upper, lower, pod)]

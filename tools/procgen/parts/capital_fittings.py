@@ -11,13 +11,14 @@
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 
 import numpy as np
 
 from ..core import collision as col
 from ..core.geometry import Material, Mesh, box, lathe, rotation_x, rotation_z, tapered_box
 from ..styles import Style
-from .capital import LIGHT, SKIN_FITTING, SKIN_HULL, SKIN_NONE, Hardpoint, Module, module
+from .capital import LIGHT, MARK, SKIN_FITTING, SKIN_HULL, SKIN_NONE, Hardpoint, Module, module
 from .raider_carrier import tube
 
 LIGHT_ROLES = ("port", "starboard", "top", "beacon", "flood")
@@ -89,4 +90,15 @@ def lamp(name: str, role: str, colour: tuple[float, float, float], range_m: floa
     return module(name, mesh, [col.box(name, (0.0, 0.25 * size_m, 0.0), (size_m, 0.5 * size_m, size_m))], [point], skin=SKIN_NONE)
 
 
-__all__ = ["LIGHT_ROLES", "antenna", "lamp", "rotating_section"]
+def hull_mark(name: str, at: Sequence[float], normal: Sequence[float], up: Sequence[float], height_m: float,
+              colour: tuple[float, float, float] = (0.84, 0.85, 0.87), text: str = "initial") -> Hardpoint:
+    """A place for painted lettering on a hull (``core/glyphs.py``): ``at`` is the letter's centre on the face, ``normal`` the
+    face's outward direction and ``up`` the way the letters stand. ``text`` is what the ship wears, chosen when it is spawned:
+    ``initial`` the first letter of its name (the EA destroyers' bows), or a fixed string. The game draws it; no geometry is made here."""
+    if height_m <= 0.0:
+        raise ValueError(f"mark {name!r} needs a height")
+    return Hardpoint(name, MARK, tuple(at), tuple(normal), tuple(up),
+                     {"text": text, "height_m": round(height_m, 2), "colour": [round(float(c), 4) for c in colour]})
+
+
+__all__ = ["LIGHT_ROLES", "antenna", "hull_mark", "lamp", "rotating_section"]
