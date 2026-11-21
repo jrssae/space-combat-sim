@@ -327,7 +327,8 @@ func _console_list(type: StringName) -> PackedStringArray:
 	for combatant: Combatant in alive(type):
 		var range_text: String = ""
 		if player != null and is_instance_valid(player):
-			range_text = " %.0f m" % player.global_position.distance_to(combatant.ship.global_position)
+			# Where it flies, its tier row's place when it is a tier row (its parked node stays where it was demoted).
+			range_text = " %.0f m" % player.global_position.distance_to(TierDirector.flying_position(combatant.ship))
 		var dark_text: String = "" if combatant.ship.running_lights else " dark"
 		out.append("%s hull %.0f%%%s%s" % [combatant.display_name, 100.0 * combatant.damageable.hull.fraction(), range_text, dark_text])
 	return out

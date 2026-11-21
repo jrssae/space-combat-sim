@@ -3427,7 +3427,9 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
   at once when it is handed over). A tier think is lean (fix round 2, Q65): it skips the rocks and mines, the incoming fire
   and the avoidance, which a tier row cannot use (it collides with nothing and dodges no bolt), and its nearest-contacts
   query walks the ships' rows in scan order (`contact::nearest_among`), the same contacts as the grid's gather for fewer rows
-  and no sort. A think went from 10.65 to about 2.5 us. 2 Hz was tried and failed the loose fairness checks (the raiders
+  and no sort. A think went from 10.65 to about 2.5 us. A tier think whose follow path is in control raises the settle event a
+  near one raises (`brain_step::tier_events`; M8-T17), and the parked driver settles its pilot's mirror: a route's progress
+  and end are seen while the ship is a tier row (before, an encounter patrol that ended its route out there was never released). 2 Hz was tried and failed the loose fairness checks (the raiders
   lost half their hits). A hit does not wake a tier think (fix round 1): it waits for its beat, so the thinks stay staggered
   however the far hits fall (every landed hit used to wake one, and a ship hit every tick thought every tick). The job counts
   and times the tier thinks (`ScsBrains.tier_thinks`, `tier_think_us`, on the job's own clock: the worker thread when threaded,

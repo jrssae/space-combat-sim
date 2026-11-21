@@ -545,9 +545,10 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
             note_ram(&mut snap.commands, body, item.out[OUT_RAM] != 0.0);
             work.tier_thinks += 1;
             work.tier_think_ns += item.ns;
-            if (wanted > 0 && wanted != selected) || (wanted < 0 && selected > 0) {
+            let tier_events = tier_events(wanted, selected, item.out[OUT_CURRENT] as i64);
+            if tier_events != 0 {
                 work.events.push(k as i64);
-                work.events.push(i64::from(EVENT_SELECT));
+                work.events.push(i64::from(tier_events));
             }
             continue;
         }
@@ -566,6 +567,20 @@ fn write_commands(work: &mut Work, snap: &mut Snapshot, n: usize) {
             work.events.push(i64::from(events));
         }
     }
+}
+
+/// The events a tier row's think hands its parked driver: the target its pilot wants, when that differs from its selection,
+/// and the mirror of a route it flies (follow path, kind 7, in control; M8-T17: a route's end was never seen in the tier, so
+/// an encounter patrol that finished its route there was never released).
+pub fn tier_events(wanted: i64, selected: i64, current_kind: i64) -> u8 {
+    let mut events = 0;
+    if (wanted > 0 && wanted != selected) || (wanted < 0 && selected > 0) {
+        events |= EVENT_SELECT;
+    }
+    if current_kind == 7 {
+        events |= EVENT_SETTLE;
+    }
+    events
 }
 
 /// Keeps a native think's command for `body_id` in `commands` (`out` is the think's output, flight numbers then the
@@ -734,4 +749,24 @@ pub fn wanted_names(slots: &[Option<Brain>]) -> impl Iterator<Item = &str> {
         .iter()
         .flatten()
         .flat_map(|b| [b.ctx.objective_key.as_str(), b.ctx.guard_key.as_str()])
+}
+
+#[cfg(test)]
+mod tier_event_tests {
+    use super::*;
+
+    #[test]
+    fn a_tier_think_mirrors_a_route_it_flies() {
+        assert_eq!(tier_events(0, 0, 7), EVENT_SETTLE, "follow path in control: the parked driver settles its mirror");
+        assert_eq!(tier_events(0, 0, 3), 0, "attacking with nothing new to select: nothing");
+        assert_eq!(tier_events(0, 0, 0), 0, "a ram in the tier is the tier's own: no settle");
+    }
+
+    #[test]
+    fn a_tier_think_selects_the_target_its_pilot_wants() {
+        assert_eq!(tier_events(42, 0, 3), EVENT_SELECT);
+        assert_eq!(tier_events(42, 42, 3), 0, "already selected");
+        assert_eq!(tier_events(-1, 42, 3), EVENT_SELECT, "none wanted, one selected: drop it");
+        assert_eq!(tier_events(42, 0, 7), EVENT_SELECT | EVENT_SETTLE, "both at once");
+    }
 }
