@@ -359,6 +359,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 |---|---|---|---|---|---|
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
+| T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | in progress |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | in progress |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -464,6 +465,20 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   `references/screenshots/M10-T62 section measure/`. Recorded scores held: all 65 station planes (`test_station_fidelity.py`;
   scores equal to 4 places) except two exempt ones, which rise (cargo_bay_side 0.405 to 0.519, tower_x0 0.389 to 0.682; their notes in `station_fidelity.py` still quote the old numbers). The strike carrier has
   no recorded section compare; its masks equal the old ones on 15 z planes.
+
+### M10-T63 Controller layout setting
+
+- **Why:** the maintainer's GameSir Nova Lite in Nintendo Switch mode (Bluetooth, `Pro Controller`, vendor 057e) had its face
+  buttons swapped against the Xbox 360 layout the bindings assume.
+- **Cause:** Godot 4.7 reads pads through SDL3, which by default lets a Nintendo pad's labels win
+  (`SDL_GAMECONTROLLER_USE_BUTTON_LABELS`): the right button printed A arrives as `JOY_BUTTON_A`. Not provable without a press,
+  so the playtest has an (H) check; picking Xbox 360 in the new setting undoes the swap if the guess is wrong.
+- **Fix:** `PadLayout` (pure): Auto | Xbox 360 | Xbox One/Series | Nintendo Switch | PlayStation | Generic, guessed from the
+  pad's name and SDL GUID (vendor 057e, 054c, 045e), setting `pad_layout`, first row of the Controls page. Bindings stay
+  positional (bottom `a`, right `b`, left `x`, top `y`); the Switch layout swaps A/B and X/Y where buttons are read
+  (`GodotInputSource`), recorded (`BindingCapture`), lit (`PadPresses`) and for the menus' own `ui_*` actions
+  (`PadUiBindings`). `PadLegend.tag_of` words every label (prompts, comms, hints, Controls page, diagram) per layout.
+- **Done when:** the tests pass and the maintainer's (H) check in `docs/playtest.md` ("Controller layout") passes.
 
 ### M10-T02 Factions as data
 
