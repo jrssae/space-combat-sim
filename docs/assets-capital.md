@@ -462,3 +462,215 @@ would close edge to edge.
 slide apart 24.2 units (84 m at the liner's scale), the hold crossed by posts. One rigid moving part, two states.
 
 **Launches settled (Q50).** The White Star launches 4 Nials; the Victory Starfuries, Thunderbolts and Kestrel shuttles.
+
+## Weapons and loadouts (T03)
+
+M10-T03 (weapons and balance concept), settled by the maintainer on 2026-11-21 (Q53). The data is
+`data/capitals/loadouts.json`: every weapon's kind and numbers, and every hull's class, hull points, weapon counts,
+interceptors, launches, in-battle mines and jump mode (`tools/procgen/tests/test_capital_loadouts.py` keeps it whole).
+A hull task builds its manifest's `hardpoints.weapons[]` (`{name, position, up, forward, arc, weapon, section}`) to
+these counts and adds its own check of the manifest against them. T12 to T15 turn each weapon into a `WeaponSpec` in
+`assets/weapons/<id>.tres`. These are starting numbers: T16 tunes damage and hull points until the balance fights below
+pass, and the fights are the contract. Where this section and `docs/design-references.md`'s source counts differ (for
+example Omega launches), this section wins.
+
+### The scale (Q53)
+
+- **No armour anywhere.** Every hit takes its full damage. Fighter numbers are unchanged from M5 (Starfury 300 hull,
+  10 dmg every 0.25 s; raider 60, 6 every 0.4 s).
+- **Anchor: an unescorted Omega (interceptors and guns working, no fighters launched) lasts 10 to 15 minutes against 12
+  Starfuries, and the squadron loses about half.**
+  - A Starfury's capacitor (100, 14 a shot, +25/s) caps it at 1.79 shots/s, about 17.9 dps sustained.
+  - Twelve Starfuries give about 215 dps nominal. That falls to about 36 dps on the hull after 50 % time on target,
+    90 % hits, 75 % of the squadron alive on average, and half the bolts taken by the 8 interceptor batteries.
+  - So the **Omega has 30 000 hull points** (about 14 minutes).
+  - Hundreds of thousands of points cannot fit the anchor. Even if every bolt hit, nothing was intercepted and no
+    Starfury died, 12 Starfuries deal at most about 161 000 in 12.5 minutes.
+- **Capital weapons** are set so equal capitals take 4 to 8 minutes.
+  - An Omega's anti-capital mounts total 187 dps nominal.
+  - At about 65 % of mounts bearing, with about 40 % of its bolts taken by the other's interceptors, it lands about
+    88 dps on another Omega: about 5.7 minutes.
+  - Anti-capital damage is about a sixth of the draft's armoured numbers. Anti-fighter guns stay at fighter scale (the
+    light gun is M5's civilian turret, 6 dmg every 2.4 s).
+- **The ladder** is hull points times nominal dps against the Omega's 5.6 M:
+  - younger-race capitals within about 1.5x (G'Quan and Primus about 0.7x, Nova about 1.35x);
+  - Minbari and ISA about 2x (Sharlin 1.9x; the Victory, a dreadnought, 3.2x);
+  - ancients 4x or more, placeholders until T04.
+- **Tuning dials for T16,** in this order: interceptor reach and rate, the anti-fighter guns' spread and traverse, hull
+  points per hull, anti-capital damage per faction.
+
+### Kinds and base numbers
+
+| Kind | Damage | Cycle | Speed m/s | Range m | Spread, traverse | Role |
+|---|---|---|---|---|---|---|
+| `bolt_light` | 6 | 2.4 s | 1 500 | 3 000 | 0.3 deg, 60/50 deg/s | anti-fighter; ranks fighters first (§20.3) |
+| `bolt_medium` | 12 | 2.0 s | 1 800 | 4 000 | 0.2 deg, 25/20 deg/s | dual role, nearer first |
+| `bolt_heavy` | 3 x 40 | burst 0.35 s, cycle 10 s | 2 000 | 6 000 | 0.1 deg, 8/6 deg/s | anti-capital; ranks capitals first |
+| `bolt_fixed` | 100 | 6 s | 2 500 | 7 000 | gimbal +/-8 deg at 2 deg/s | bow gun the ship points |
+| `beam_pulsed` | 100 | 8 s | instant | 8 000 | 4 deg/s | one tick, first hull on the line |
+| `beam_sustained` | 40 dps while on | 3 s on, 12 s cycle | instant | 7 000 | 3 deg/s sweep | each tick to the first hull under the line |
+| `missile` | 40 + blast | reload 12 s | 350 | 6 000 lock | PN gain 4, 0.6 rad/s, 20 s | M4's guidance; toughness 1 |
+| `torpedo` | 150 + blast | reload 20 s | 250 | 10 000 | 0.15 rad/s, 40 s | capitals only; toughness 3 |
+| `interceptor` | 0 | 4 pulses/s (4 barrels, 1 s recharge) | 2 000 | 1 500 reach | 0.22 deg, 360 deg/s | the grid battery (§20.3) |
+
+**Traits:** `kinetic` (an interceptor needs 2 pulses to stop it) and `push` (a small shove on the target). **Toughness**
+is how many interceptor pulses stop a shot: 1 for fighter and medium bolts and for missiles; 2 for heavy, fixed and
+kinetic bolts; 3 for torpedoes and Narn energy mines. Interceptors never stop beams, blasts or rams.
+
+### Faction weapons (show names)
+
+The numbers are in `loadouts.json` under `weapons`.
+
+| Faction | Ids (kind): show name |
+|---|---|
+| EA | `ea_sweep_beam` (beam_sustained): the Omega's particle beams (TBP: laser batteries), sweeping. `ea_sweep_beam_nova` the same at 80 % (32 dps while on): the Nova's particle beams, the Omega's arcs. `ea_particle_cannon` (beam_pulsed): phased particle cannon; `_heavy` 150 dmg, bow +/-10 deg (the Warlock's particle beam cannons). `ea_particle_array` (2 x 50): the Explorer's twin particle beam arrays. `ea_plasma_heavy` (bolt_heavy): heavy plasma pulse cannon. `ea_plasma_medium` (bolt_medium, 18): medium plasma or twin plasma cannon. `ea_pulse_medium` (bolt_medium): pulse cannon. `ea_pulse_light` (bolt_light): pulse discharge cannon. `ea_railgun` (bolt_medium 20, 3 s, 4 000 m/s, kinetic). `ea_missile`, `ea_torpedo` (tubes and silos), `ea_interceptor`, `ea_mine` (scenario only) |
+| Narn | `narn_heavy_laser` (beam_sustained 117 dps, 4 s on, 12 s, fore arc), `narn_twin_particle` (bolt_medium 2 x 8), `narn_light_pulse`, `narn_energy_mine`, `narn_mine` |
+| Centauri | `centauri_plasma_accelerator` (bolt_fixed, 2 barrels), `centauri_battle_laser` (Primus heavy X-ray laser; beam_sustained 67 dps, 3 s on, 10 s), `centauri_ion_cannon` (bolt_medium 2 x 8 / 1.8 s; not kinetic), `centauri_light_particle` (bolt_light 2 x 6), `centauri_missile`, `centauri_guided_mine`, `centauri_mine` |
+| Minbari | `minbari_neutron_cannon` (beam_pulsed 150, 9 km), `minbari_fusion_cannon` (bolt_medium 8 / 1.4 s, 2 500 m/s, 40 deg/s), `minbari_em_pulse` (beam_pulsed 50, mounts only; T04 may change it) |
+| Drazi | `drazi_particle_beam` (beam_pulsed 80, nose +/-15 deg), `drazi_plasma_medium` (13), `drazi_heavy_particle` (2 x 35 / 8 s), `drazi_solar_cannon` (beam_sustained 150 dps, 3 s on, 25 s, bow +/-5 deg), `drazi_missile`, `drazi_interceptor` (half rate), `drazi_mine` |
+| Brakiri | `brakiri_graviton_beam` (beam_sustained 37 dps, 5 s on, 15 s, push), `brakiri_graviton_pulsar` (bolt_medium 4 / 0.6 s), `brakiri_mine` |
+| Vree | `vree_antimatter` (bolt_heavy single 30 / 4 s, 3 km, belly hemisphere) |
+| ISA | `isa_neutron_laser` (the White Star's main gun; beam_pulsed 200 / 6 s, bow), `isa_neutron_cannon` (67 / 5 s, 120 deg), `isa_fusion_cannon` (2 x 8 / 1 s), `isa_fusion_beam` (Victory; beam_sustained 250 dps, 5 s on, 45 s, fore +/-15 deg), `isa_array`, `isa_pulse_light`, `isa_interceptor` |
+| Drakh | `drakh_pulse` (8 / 1.8 s), `drakh_beam` (beam_pulsed 100), `drakh_light` |
+| Ancients (T04 placeholders) | `ancient_slicer` (875 dps, 4 s on, 10 s), `ancient_slicer_small` (220), `ancient_lance` (2 500 / 8 s, 12 km), `ancient_lance_small` (1 250) |
+
+### Hull loadouts
+
+Arcs: **T** a turret (200 deg cone round its up), **F** a fore 90 deg cone, **X** fixed to the bow (gimbal only), **B**
+a broadside, **A** aft, **V** the belly hemisphere. The dps column is nominal anti-capital output, every mount bearing,
+excluding interceptors.
+
+| Hull | Class | Hull pts | Weapons | Intercep. | Launches | Mines | dps |
+|---|---|---|---|---|---|---|---|
+| Omega T21 | capital | 30 000 | 4 plasma_heavy T; 6 sweep_beam (2 F, 4 A hemispheres); 12 pulse_medium T; 2 missile | 8 | 32 Starfuries | scenario only | 187 |
+| Hyperion T22 | capital | 17 000 | 2 plasma_heavy X; 2 plasma_medium T; 2 particle_cannon F/B; 4 pulse_light T; 2 torpedo F | 4 | 6 Starfuries, 2 shuttles | | 92 |
+| Nova T23 | dreadnought | 36 000 | 18 twin plasma_medium T; 6 sweep_beam_nova (2 F, 4 A, the Omega's arcs) | 6 | 24 Starfuries | | 210 |
+| Warlock T24 | dreadnought | 45 000 | 2 particle_cannon_heavy X; 12 torpedo silos (salvos of 4); 8 plasma_medium T; 6 railgun T; 6 pulse_light T | 8 | 12 Starfuries (Thunderbolts after M11) | | 254 |
+| G'Quan T25 | capital | 30 000 | 2 heavy_laser F; 2 twin_particle T; 6 light_pulse T; 2 energy_mine F | | 12 Frazi | energy | 134 |
+| Vorchan T26 | cruiser | 7 000 | 2 plasma_accelerator X; 4 light_particle T; 2 missile; 1 guided_mine | | | guided | 108 |
+| Primus T27 | capital | 30 000 | 4 battle_laser F/B; 4 ion_cannon T; 4 light_particle T | | | | 138 |
+| Sharlin T28 | capital | 58 000 | 6 neutron_cannon F/B; 12 fusion_cannon T; 1 em_pulse X | | 15 Nial | | 187 |
+| Sunhawk T29 | cruiser | 4 000 | 1 particle_beam X; 4 plasma_medium F; 2 missile | | | | 43 |
+| Firehawk T59 | cruiser | 4 500 | 1 solar_cannon X; 2 twin heavy_particle F | | | | 36 |
+| Stormfalcon T30 | capital | 16 000 | 2 solar_cannon X; 6 heavy_particle T; 4 plasma_medium T | 4 (half rate) | 13 Sky Serpents (1 + 12 for the Star Snakes) | | 114 |
+| Avioki T31 | capital | 19 000 | 4 graviton_beam F; 6 graviton_pulsar T | | | | 89 |
+| Xill T32 | cruiser | 6 000 | 15 antimatter V (strafing) | | | | 112 |
+| White Star T33 | cruiser | 8 000 | 1 neutron_laser X; 2 neutron_cannon F; 2 fusion_cannon T | | 4 Nial | | 92 |
+| Victory T34 | dreadnought | 75 000 | 2 fusion_beam F; 12 array T; 16 pulse_light T | 10 | 12 Starfuries (Thunderbolts after M11), 2 Kestrel | | 240 |
+| Battlecrab T35 | capital | 120 000 * | 1 slicer F (belly front) | | 6 Shadow fighters | | 350 * |
+| Shadow scout T41 | cruiser | 20 000 * | 1 slicer_small | | | | 88 * |
+| Vorlon destroyer T36 | cruiser | 25 000 * | 1 lance_small | | | | 156 * |
+| Vorlon heavy cruiser T60 | capital | 120 000 * | 1 lance (claws) | | 6 Vorlon fighters | | 312 * |
+| Drakh carrier T37 | dreadnought | 50 000 | 6 beam F/B; 12 pulse T; 8 light T | | 24 Drakh fighters | | 148 |
+| Explorer T52 | dreadnought | 60 000 | 4 pulse_medium T; 4 particle_array T | 4 | 24 Starfuries | | 74 |
+| Asimov T53, mining transport T56 | capital | 9 000 | unarmed | | | | 0 |
+| Strike carrier T19, test cruiser T07 | cruiser | 10 000, 20 000 | unarmed (as built) | | 6 Delta-Vs / none | | 0 |
+
+\* T04 placeholders. Unarmed civilians (Q53): the Panama 600, the construction tender 300, the Centauri shuttle 250 and the
+Minbari Flyer 300 hull points; the EA shuttles as built.
+
+**Fighters** (flight numbers are the hull tasks'):
+
+| Fighter | Hull | Gun (damage / interval) |
+|---|---|---|
+| Thunderbolt T50 | 360 | Starfury nose gun + pod cannon 16 / 1.0 + missile (M11 flies it) |
+| Frazi T38 | 320 | 12 / 0.3 |
+| Sentri T38 | 240 | 8 / 0.25 |
+| Nial T39 | 380 | 14 / 0.3 |
+| Sky Serpent T39 | 300 | 11 / 0.3 |
+| Falkosi T40 | 180 | 7 / 0.2 |
+| Drakh fighter T40 | 280 | 10 / 0.25 |
+| Shadow fighter T41 | 400 | beam 60 dps, 2 s on in 4 (T04) |
+| Vorlon fighter T42 | 400 | lance 120 / 3 s (T04) |
+
+### Sections, mounts and blasts
+
+**Section shares** (a template; a hull task may move up to 0.05 between rows):
+
+| Section | Warship | Carrier | Civilian |
+|---|---|---|---|
+| reactor | 0.14 | 0.14 | 0.12 |
+| magazine | 0.10 (0 with no missiles, torpedoes or mines) | 0.08 | 0 |
+| fuel | 0.08 (reaction drives only) | 0.08 | 0.12 |
+| bridge | 0.05 | 0.05 | 0.06 |
+| hangar | 0.06 a bay | 0.20 in total | 0 |
+| engine | 0.15 in total | 0.15 | 0.15 |
+| structure | the rest | the rest | the rest |
+
+Habitat sections take their share as built.
+
+**Mount hit points** (no armour): light 300, medium 800, heavy or fixed 2 000, beam emitter 2 500, launcher or silo
+1 200, interceptor battery 400.
+
+**Blasts** (D12.6). `f(d) = (1 - (d/R)^2)^2`, with `d` measured to the nearest hit volume. The damage `D0 x f(d)` goes to
+the nearest section. The push is `dv = I0 x f(d) x A / m`, where `A` is the mean face area of the target's box, capped at
+50 m/s. A blast's energy, read by the flashes, is `5e6 J x D0`; T09 fits the flash constant so the Starfury's flash keeps
+its size today.
+
+| Source | D0 | R m | I0 N s/m^2 |
+|---|---|---|---|
+| raider death | 40 | 80 | 1 500 |
+| Starfury-class death (heavy fighters x1.3) | 60 | 100 | 2 000 |
+| shuttle or small craft | 100 | 150 | 2 500 |
+| Saturn-class civilian | 400 | 300 | 3 000 |
+| missile / torpedo (on top of the impact) | 20 / 100 | 20 / 60 | 500 / 1 500 |
+| proximity mine / Narn energy mine / Centauri guided mine | 300 / 250 / 400 | 120 / 300 / 60 | 2 000 / 4 000 / 1 500 |
+| cruiser: magazine / fuel / reactor | 900 / 600 / 1 800 | 400 / 500 / 1 000 | 6 000 |
+| capital: magazine / fuel / reactor | 1 800 / 1 200 / 4 500 | 600 / 800 / 2 500 | 1e4 |
+| dreadnought: magazine / fuel / reactor | 2 400 / 1 800 / 7 500 | 800 / 1 000 / 3 500 | 1.2e4 |
+| ancients | T04 (placeholder 9 000 / 3 000 m) | | |
+
+Three checks on the table:
+- A Starfury's death takes 11 % from a wingman 50 m away.
+- A capital's reactor kills fighters within about 2 km.
+- The same reactor takes 14 % from a capital 500 m away.
+
+The capital rows were scaled to the new hull points (x0.3) to keep the draft's proportions.
+
+### Mines (Q20, Q53)
+
+| Kind | Laid by | Behaviour | Trigger | On radar |
+|---|---|---|---|---|
+| `mine_prox` | scenario and mission minefields, every faction but the ancients (the Omega's mines too) | static row (§17.16), M7-T64's touch, shot and chain rules | 60 m from the hull's surface, hostile only | hostile within 1 000 m; own and friendly always |
+| `mine_energy` | G'Quan, 2 launchers, 1 a 20 s each, at capitals 4 to 12 km away | flies at 900 m/s to the lead point, arms there, goes off on a hostile capital within 200 m or 5 s after arriving | 200 m, capitals only | as a missile while flying |
+| `mine_guided` | Vorchan, while a hostile is astern within 3 km: 4 every 30 s, at most 12 in play | dormant for 60 s, homes at 150 m/s on a hostile within 800 m | 30 m | hostile within 1 000 m |
+
+### Jump points (Q22, Q49)
+
+Unchanged from Q49's list:
+- **Own point:** Omega, Hyperion, Nova, Warlock, G'Quan, Primus, Sharlin, Stormfalcon, Avioki, White Star, Victory, both
+  Vorlons (subject to T04) and the Explorer.
+- **Gate or another ship's point:** Vorchan, Sunhawk, Firehawk, Xill, the Drakh carrier and every civilian.
+- **Shimmer:** the battlecrab and the Shadow scout.
+- **Never:** fighters.
+
+Recharge by `capitals.json` category:
+- cruiser 60 s: the White Star, the Vorlon destroyer;
+- destroyer 90 s: the Omega, Hyperion, G'Quan, Primus, Sharlin, Stormfalcon, Avioki, the Vorlon heavy cruiser;
+- carrier 120 s: the Nova, Warlock, Victory, Explorer.
+
+### Balance fights (D14)
+
+Each fight is seeded and headless through the native core, run at 8x like the station grid test, behind `GUT_BALANCE`
+(`tests/balance_suite.txt`). Seeds: 3, or 5 for even fights. Each fight takes under 3 minutes of wall time. Times are
+sim time.
+
+| # | Fight | Bar |
+|---|---|---|
+| B1 | Omega vs Omega | either may win; 240 to 480 s; the winner at 60 % hull or less |
+| B2 | Omega vs G'Quan | the Omega wins at least 3 of 5; 200 to 480 s |
+| B3 | Primus vs G'Quan | the Primus wins at least 3 of 5; 240 to 540 s |
+| B4 | Sharlin vs 1 / 2 / 3 Omegas | wins every seed (240 to 480 s) / wins at least 1 of 5 / never |
+| B5 | White Star vs 1 / 2 Vorchans | wins every seed (60 to 240 s) / wins at least 1 of 5 |
+| B6 | Victory vs Sharlin | the Victory wins at least 4 of 5; 240 to 480 s |
+| B7 | Vorchan vs Sunhawk | the Vorchan wins at least 4 of 5; 45 to 150 s |
+| B8 | 12 Starfuries vs a Vorchan | the squadron wins in 70 to 180 s, losing 1 to 4 |
+| B9 | 12 Starfuries vs a Sunhawk | the squadron wins in 40 to 120 s, losing 2 or fewer |
+| B10 | 12 Starfuries vs an Omega, none launched, the squadron ordered to press (no abort) | the Omega is destroyed in 600 to 900 s; the squadron loses 4 to 8 |
+| B11 | 12 Starfuries vs a Sharlin | the squadron aborts after losing 6 within 10 min; the Sharlin keeps 40 % hull or more |
+| B12 | strike carrier + 6 Delta-Vs vs a Hyperion with its 6 Starfuries guarding 2 Saturns | the raid fails in at least 2 of 3 (1 Saturn lost or none) and the carrier jumps out |
+| B13 | 2 strike carriers vs an Omega | the carriers withdraw within 180 s; the Omega keeps 95 % or more |
+| B14 | EA (Omega, Hyperion, 12 Starfuries) vs Centauri (Primus, 2 Vorchans, 8 Sentri) | each side wins at least 1 of 5; 6 to 12 min |
+| B15 | battlecrab vs 3 Omegas (until T04) | the battlecrab wins at least 4 of 5; 180 to 480 s |
+| B16 | Nova vs Omega | the Nova wins at least 3 of 5; 240 to 540 s |
+| F1 | 4 Starfuries vs 4 of each new younger-race fighter | the Starfuries win 30 to 70 % over 10 seeds; against the Nial, the Nial wins 60 to 85 % |

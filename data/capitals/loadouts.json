@@ -1,0 +1,1180 @@
+{
+ "_doc": "M10-T03 (Q53): weapon kinds and numbers, and each hull's loadout, class, hull points, interceptors, launches and in-battle mines. Hull tasks build their manifests' weapon mounts to these counts; T12 to T16 read the numbers (each weapon becomes a WeaponSpec .tres in assets/weapons/). Numbers are T03's starting points; T16 tunes damage and hull points against the balance fights (docs/assets-capital.md, 'Weapons and loadouts (T03)'). damage: per bolt, shot or warhead (hull points); cycle_s: s between shots or bursts (a sustained beam's whole cycle); beams: beam_dps while on for beam_on_s; barrels fire together each cycle. launches: catalogue ids (starfury_ally stands in for the Thunderbolt until M11).",
+ "kinds": [
+  "bolt_light",
+  "bolt_medium",
+  "bolt_heavy",
+  "bolt_fixed",
+  "beam_pulsed",
+  "beam_sustained",
+  "missile",
+  "torpedo",
+  "interceptor",
+  "mine_prox",
+  "mine_energy",
+  "mine_guided",
+  "fighter_gun"
+ ],
+ "traits": [
+  "kinetic",
+  "push"
+ ],
+ "classes": [
+  "fighter",
+  "small_craft",
+  "cruiser",
+  "capital",
+  "dreadnought"
+ ],
+ "weapons": {
+  "ea_pulse_light": {
+   "kind": "bolt_light",
+   "faction": "earth_alliance",
+   "role": "af",
+   "damage": 6,
+   "cycle_s": 2.4,
+   "speed_mps": 1500,
+   "range_m": 3000
+  },
+  "ea_pulse_medium": {
+   "kind": "bolt_medium",
+   "faction": "earth_alliance",
+   "role": "dual",
+   "damage": 12,
+   "cycle_s": 2.0,
+   "speed_mps": 1800,
+   "range_m": 4000
+  },
+  "ea_plasma_medium": {
+   "kind": "bolt_medium",
+   "faction": "earth_alliance",
+   "role": "dual",
+   "damage": 18,
+   "cycle_s": 2.0,
+   "speed_mps": 1800,
+   "range_m": 4000
+  },
+  "ea_plasma_heavy": {
+   "kind": "bolt_heavy",
+   "faction": "earth_alliance",
+   "role": "ac",
+   "damage": 40,
+   "cycle_s": 10.0,
+   "burst": 3,
+   "speed_mps": 2000,
+   "range_m": 6000
+  },
+  "ea_railgun": {
+   "kind": "bolt_medium",
+   "faction": "earth_alliance",
+   "role": "ac",
+   "damage": 20,
+   "cycle_s": 3.0,
+   "speed_mps": 4000,
+   "range_m": 7000,
+   "trait": "kinetic"
+  },
+  "ea_sweep_beam": {
+   "kind": "beam_sustained",
+   "faction": "earth_alliance",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 12.0,
+   "beam_dps": 40,
+   "beam_on_s": 3.0,
+   "range_m": 7000
+  },
+  "ea_sweep_beam_nova": {
+   "kind": "beam_sustained",
+   "faction": "earth_alliance",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 12.0,
+   "beam_dps": 32,
+   "beam_on_s": 3.0,
+   "range_m": 7000
+  },
+  "ea_particle_cannon": {
+   "kind": "beam_pulsed",
+   "faction": "earth_alliance",
+   "role": "ac",
+   "damage": 100,
+   "cycle_s": 8.0,
+   "range_m": 8000
+  },
+  "ea_particle_cannon_heavy": {
+   "kind": "beam_pulsed",
+   "faction": "earth_alliance",
+   "role": "ac",
+   "damage": 150,
+   "cycle_s": 8.0,
+   "range_m": 8000,
+   "arc_deg": 20
+  },
+  "ea_particle_array": {
+   "kind": "beam_pulsed",
+   "faction": "earth_alliance",
+   "role": "ac",
+   "damage": 50,
+   "cycle_s": 8.0,
+   "barrels": 2,
+   "range_m": 6000
+  },
+  "ea_missile": {
+   "kind": "missile",
+   "faction": "earth_alliance",
+   "role": "af",
+   "damage": 40,
+   "cycle_s": 12.0,
+   "speed_mps": 350,
+   "range_m": 6000,
+   "toughness": 1
+  },
+  "ea_torpedo": {
+   "kind": "torpedo",
+   "faction": "earth_alliance",
+   "role": "ac",
+   "damage": 150,
+   "cycle_s": 20.0,
+   "speed_mps": 250,
+   "range_m": 10000,
+   "toughness": 3
+  },
+  "ea_interceptor": {
+   "kind": "interceptor",
+   "faction": "earth_alliance",
+   "role": "pd",
+   "damage": 0,
+   "cycle_s": 0.25,
+   "barrels": 4,
+   "range_m": 1500
+  },
+  "ea_mine": {
+   "kind": "mine_prox",
+   "faction": "earth_alliance",
+   "role": "area",
+   "damage": 300,
+   "cycle_s": 0.0
+  },
+  "narn_heavy_laser": {
+   "kind": "beam_sustained",
+   "faction": "narn",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 12.0,
+   "beam_dps": 117,
+   "beam_on_s": 4.0,
+   "range_m": 8000
+  },
+  "narn_twin_particle": {
+   "kind": "bolt_medium",
+   "faction": "narn",
+   "role": "dual",
+   "damage": 8,
+   "cycle_s": 2.0,
+   "barrels": 2,
+   "speed_mps": 1800,
+   "range_m": 4000
+  },
+  "narn_light_pulse": {
+   "kind": "bolt_light",
+   "faction": "narn",
+   "role": "af",
+   "damage": 6,
+   "cycle_s": 2.4,
+   "speed_mps": 1500,
+   "range_m": 3000
+  },
+  "narn_energy_mine": {
+   "kind": "mine_energy",
+   "faction": "narn",
+   "role": "ac",
+   "damage": 250,
+   "cycle_s": 20.0,
+   "speed_mps": 900,
+   "range_m": 12000,
+   "toughness": 3
+  },
+  "narn_mine": {
+   "kind": "mine_prox",
+   "faction": "narn",
+   "role": "area",
+   "damage": 300,
+   "cycle_s": 0.0
+  },
+  "centauri_plasma_accelerator": {
+   "kind": "bolt_fixed",
+   "faction": "centauri",
+   "role": "ac",
+   "damage": 100,
+   "cycle_s": 6.0,
+   "barrels": 2,
+   "speed_mps": 2500,
+   "range_m": 7000
+  },
+  "centauri_battle_laser": {
+   "kind": "beam_sustained",
+   "faction": "centauri",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 10.0,
+   "beam_dps": 67,
+   "beam_on_s": 3.0,
+   "range_m": 8000
+  },
+  "centauri_ion_cannon": {
+   "kind": "bolt_medium",
+   "faction": "centauri",
+   "role": "dual",
+   "damage": 8,
+   "cycle_s": 1.8,
+   "barrels": 2,
+   "speed_mps": 1800,
+   "range_m": 4000
+  },
+  "centauri_light_particle": {
+   "kind": "bolt_light",
+   "faction": "centauri",
+   "role": "af",
+   "damage": 6,
+   "cycle_s": 2.2,
+   "barrels": 2,
+   "speed_mps": 1500,
+   "range_m": 3000
+  },
+  "centauri_missile": {
+   "kind": "missile",
+   "faction": "centauri",
+   "role": "af",
+   "damage": 40,
+   "cycle_s": 12.0,
+   "speed_mps": 350,
+   "range_m": 6000,
+   "toughness": 1
+  },
+  "centauri_guided_mine": {
+   "kind": "mine_guided",
+   "faction": "centauri",
+   "role": "area",
+   "damage": 400,
+   "cycle_s": 30.0,
+   "toughness": 1
+  },
+  "centauri_mine": {
+   "kind": "mine_prox",
+   "faction": "centauri",
+   "role": "area",
+   "damage": 300,
+   "cycle_s": 0.0
+  },
+  "minbari_neutron_cannon": {
+   "kind": "beam_pulsed",
+   "faction": "minbari",
+   "role": "ac",
+   "damage": 150,
+   "cycle_s": 8.0,
+   "range_m": 9000
+  },
+  "minbari_fusion_cannon": {
+   "kind": "bolt_medium",
+   "faction": "minbari",
+   "role": "dual",
+   "damage": 8,
+   "cycle_s": 1.4,
+   "speed_mps": 2500,
+   "range_m": 5000
+  },
+  "minbari_em_pulse": {
+   "kind": "beam_pulsed",
+   "faction": "minbari",
+   "role": "ac",
+   "damage": 50,
+   "cycle_s": 8.0,
+   "range_m": 6000
+  },
+  "drazi_particle_beam": {
+   "kind": "beam_pulsed",
+   "faction": "drazi",
+   "role": "ac",
+   "damage": 80,
+   "cycle_s": 8.0,
+   "range_m": 6000,
+   "arc_deg": 30
+  },
+  "drazi_plasma_medium": {
+   "kind": "bolt_medium",
+   "faction": "drazi",
+   "role": "dual",
+   "damage": 13,
+   "cycle_s": 2.0,
+   "speed_mps": 1800,
+   "range_m": 4000
+  },
+  "drazi_heavy_particle": {
+   "kind": "bolt_heavy",
+   "faction": "drazi",
+   "role": "ac",
+   "damage": 35,
+   "cycle_s": 8.0,
+   "burst": 2,
+   "speed_mps": 2000,
+   "range_m": 6000
+  },
+  "drazi_solar_cannon": {
+   "kind": "beam_sustained",
+   "faction": "drazi",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 25.0,
+   "beam_dps": 150,
+   "beam_on_s": 3.0,
+   "range_m": 9000,
+   "arc_deg": 10
+  },
+  "drazi_missile": {
+   "kind": "missile",
+   "faction": "drazi",
+   "role": "af",
+   "damage": 40,
+   "cycle_s": 12.0,
+   "speed_mps": 350,
+   "range_m": 6000,
+   "toughness": 1
+  },
+  "drazi_interceptor": {
+   "kind": "interceptor",
+   "faction": "drazi",
+   "role": "pd",
+   "damage": 0,
+   "cycle_s": 0.5,
+   "barrels": 2,
+   "range_m": 1500
+  },
+  "drazi_mine": {
+   "kind": "mine_prox",
+   "faction": "drazi",
+   "role": "area",
+   "damage": 300,
+   "cycle_s": 0.0
+  },
+  "brakiri_graviton_beam": {
+   "kind": "beam_sustained",
+   "faction": "brakiri",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 15.0,
+   "beam_dps": 37,
+   "beam_on_s": 5.0,
+   "range_m": 7000,
+   "trait": "push"
+  },
+  "brakiri_graviton_pulsar": {
+   "kind": "bolt_medium",
+   "faction": "brakiri",
+   "role": "dual",
+   "damage": 4,
+   "cycle_s": 0.6,
+   "speed_mps": 2200,
+   "range_m": 3500
+  },
+  "brakiri_mine": {
+   "kind": "mine_prox",
+   "faction": "brakiri",
+   "role": "area",
+   "damage": 300,
+   "cycle_s": 0.0
+  },
+  "vree_antimatter": {
+   "kind": "bolt_heavy",
+   "faction": "vree",
+   "role": "ac",
+   "damage": 30,
+   "cycle_s": 4.0,
+   "speed_mps": 2500,
+   "range_m": 3000
+  },
+  "isa_neutron_laser": {
+   "kind": "beam_pulsed",
+   "faction": "isa",
+   "role": "ac",
+   "damage": 200,
+   "cycle_s": 6.0,
+   "range_m": 8000,
+   "arc_deg": 20
+  },
+  "isa_neutron_cannon": {
+   "kind": "beam_pulsed",
+   "faction": "isa",
+   "role": "ac",
+   "damage": 67,
+   "cycle_s": 5.0,
+   "range_m": 6000,
+   "arc_deg": 120
+  },
+  "isa_fusion_cannon": {
+   "kind": "bolt_medium",
+   "faction": "isa",
+   "role": "dual",
+   "damage": 8,
+   "cycle_s": 1.0,
+   "barrels": 2,
+   "speed_mps": 2500,
+   "range_m": 5000
+  },
+  "isa_fusion_beam": {
+   "kind": "beam_sustained",
+   "faction": "isa",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 45.0,
+   "beam_dps": 250,
+   "beam_on_s": 5.0,
+   "range_m": 12000,
+   "arc_deg": 30
+  },
+  "isa_array": {
+   "kind": "bolt_heavy",
+   "faction": "isa",
+   "role": "ac",
+   "damage": 40,
+   "cycle_s": 10.0,
+   "burst": 3,
+   "speed_mps": 2000,
+   "range_m": 6000
+  },
+  "isa_pulse_light": {
+   "kind": "bolt_light",
+   "faction": "isa",
+   "role": "af",
+   "damage": 6,
+   "cycle_s": 2.4,
+   "speed_mps": 1500,
+   "range_m": 3000
+  },
+  "isa_interceptor": {
+   "kind": "interceptor",
+   "faction": "isa",
+   "role": "pd",
+   "damage": 0,
+   "cycle_s": 0.25,
+   "barrels": 4,
+   "range_m": 1500
+  },
+  "drakh_pulse": {
+   "kind": "bolt_medium",
+   "faction": "drakh",
+   "role": "dual",
+   "damage": 8,
+   "cycle_s": 1.8,
+   "speed_mps": 1800,
+   "range_m": 4000
+  },
+  "drakh_beam": {
+   "kind": "beam_pulsed",
+   "faction": "drakh",
+   "role": "ac",
+   "damage": 100,
+   "cycle_s": 8.0,
+   "range_m": 8000
+  },
+  "drakh_light": {
+   "kind": "bolt_light",
+   "faction": "drakh",
+   "role": "af",
+   "damage": 6,
+   "cycle_s": 2.4,
+   "speed_mps": 1500,
+   "range_m": 3000
+  },
+  "ancient_slicer": {
+   "kind": "beam_sustained",
+   "faction": "shadows",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 10.0,
+   "beam_dps": 875,
+   "beam_on_s": 4.0,
+   "range_m": 8000,
+   "placeholder": true
+  },
+  "ancient_slicer_small": {
+   "kind": "beam_sustained",
+   "faction": "shadows",
+   "role": "ac",
+   "damage": 0,
+   "cycle_s": 10.0,
+   "beam_dps": 220,
+   "beam_on_s": 4.0,
+   "range_m": 6000,
+   "placeholder": true
+  },
+  "ancient_lance": {
+   "kind": "beam_pulsed",
+   "faction": "vorlons",
+   "role": "ac",
+   "damage": 2500,
+   "cycle_s": 8.0,
+   "range_m": 12000,
+   "placeholder": true
+  },
+  "ancient_lance_small": {
+   "kind": "beam_pulsed",
+   "faction": "vorlons",
+   "role": "ac",
+   "damage": 1250,
+   "cycle_s": 8.0,
+   "range_m": 10000,
+   "placeholder": true
+  },
+  "pulse_cannon_ef": {
+   "kind": "fighter_gun",
+   "faction": "earth_alliance",
+   "role": "fighter",
+   "damage": 10,
+   "cycle_s": 0.25,
+   "tres": "res://assets/weapons/pulse_cannon_ef.tres"
+  },
+  "raider_plasma": {
+   "kind": "fighter_gun",
+   "faction": "raiders",
+   "role": "fighter",
+   "damage": 6,
+   "cycle_s": 0.4,
+   "tres": "res://assets/weapons/raider_plasma.tres"
+  },
+  "thunderbolt_pod": {
+   "kind": "fighter_gun",
+   "faction": "earth_alliance",
+   "role": "fighter",
+   "damage": 16,
+   "cycle_s": 1.0
+  },
+  "frazi_gun": {
+   "kind": "fighter_gun",
+   "faction": "narn",
+   "role": "fighter",
+   "damage": 12,
+   "cycle_s": 0.3
+  },
+  "sentri_gun": {
+   "kind": "fighter_gun",
+   "faction": "centauri",
+   "role": "fighter",
+   "damage": 8,
+   "cycle_s": 0.25
+  },
+  "nial_fusion": {
+   "kind": "fighter_gun",
+   "faction": "minbari",
+   "role": "fighter",
+   "damage": 14,
+   "cycle_s": 0.3
+  },
+  "sky_serpent_gun": {
+   "kind": "fighter_gun",
+   "faction": "drazi",
+   "role": "fighter",
+   "damage": 11,
+   "cycle_s": 0.3
+  },
+  "falkosi_bolt": {
+   "kind": "fighter_gun",
+   "faction": "brakiri",
+   "role": "fighter",
+   "damage": 7,
+   "cycle_s": 0.2
+  },
+  "drakh_fighter_gun": {
+   "kind": "fighter_gun",
+   "faction": "drakh",
+   "role": "fighter",
+   "damage": 10,
+   "cycle_s": 0.25
+  },
+  "shadow_fighter_beam": {
+   "kind": "beam_sustained",
+   "faction": "shadows",
+   "role": "fighter",
+   "damage": 0,
+   "cycle_s": 4.0,
+   "beam_dps": 60,
+   "beam_on_s": 2.0,
+   "placeholder": true
+  },
+  "vorlon_fighter_lance": {
+   "kind": "beam_pulsed",
+   "faction": "vorlons",
+   "role": "fighter",
+   "damage": 120,
+   "cycle_s": 3.0,
+   "placeholder": true
+  }
+ },
+ "hulls": {
+  "ea_omega": {
+   "task": "T21",
+   "class": "capital",
+   "hull": 30000,
+   "jump": "own",
+   "weapons": {
+    "ea_plasma_heavy": 4,
+    "ea_sweep_beam": 6,
+    "ea_pulse_medium": 12,
+    "ea_missile": 2
+   },
+   "interceptors": {
+    "ea_interceptor": 8
+   },
+   "launches": {
+    "starfury_ally": 32
+   },
+   "lays_mines": null
+  },
+  "ea_hyperion": {
+   "task": "T22",
+   "class": "capital",
+   "hull": 17000,
+   "jump": "own",
+   "weapons": {
+    "ea_plasma_heavy": 2,
+    "ea_plasma_medium": 2,
+    "ea_particle_cannon": 2,
+    "ea_pulse_light": 4,
+    "ea_torpedo": 2
+   },
+   "interceptors": {
+    "ea_interceptor": 4
+   },
+   "launches": {
+    "starfury_ally": 6,
+    "ea_shuttle": 2
+   },
+   "lays_mines": null
+  },
+  "ea_nova": {
+   "task": "T23",
+   "class": "dreadnought",
+   "hull": 36000,
+   "jump": "own",
+   "weapons": {
+    "ea_plasma_medium": 18,
+    "ea_sweep_beam_nova": 6
+   },
+   "interceptors": {
+    "ea_interceptor": 6
+   },
+   "launches": {
+    "starfury_ally": 24
+   },
+   "lays_mines": null
+  },
+  "ea_warlock": {
+   "task": "T24",
+   "class": "dreadnought",
+   "hull": 45000,
+   "jump": "own",
+   "weapons": {
+    "ea_particle_cannon_heavy": 2,
+    "ea_torpedo": 12,
+    "ea_plasma_medium": 8,
+    "ea_railgun": 6,
+    "ea_pulse_light": 6
+   },
+   "interceptors": {
+    "ea_interceptor": 8
+   },
+   "launches": {
+    "starfury_ally": 12
+   },
+   "lays_mines": null
+  },
+  "narn_gquan": {
+   "task": "T25",
+   "class": "capital",
+   "hull": 30000,
+   "jump": "own",
+   "weapons": {
+    "narn_heavy_laser": 2,
+    "narn_twin_particle": 2,
+    "narn_light_pulse": 6,
+    "narn_energy_mine": 2
+   },
+   "interceptors": {},
+   "launches": {
+    "narn_frazi": 12
+   },
+   "lays_mines": "energy"
+  },
+  "centauri_vorchan": {
+   "task": "T26",
+   "class": "cruiser",
+   "hull": 7000,
+   "jump": "gate",
+   "weapons": {
+    "centauri_plasma_accelerator": 2,
+    "centauri_light_particle": 4,
+    "centauri_missile": 2,
+    "centauri_guided_mine": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": "guided"
+  },
+  "centauri_primus": {
+   "task": "T27",
+   "class": "capital",
+   "hull": 30000,
+   "jump": "own",
+   "weapons": {
+    "centauri_battle_laser": 4,
+    "centauri_ion_cannon": 4,
+    "centauri_light_particle": 4
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "minbari_sharlin": {
+   "task": "T28",
+   "class": "capital",
+   "hull": 58000,
+   "jump": "own",
+   "weapons": {
+    "minbari_neutron_cannon": 6,
+    "minbari_fusion_cannon": 12,
+    "minbari_em_pulse": 1
+   },
+   "interceptors": {},
+   "launches": {
+    "minbari_nial": 15
+   },
+   "lays_mines": null
+  },
+  "drazi_sunhawk": {
+   "task": "T29",
+   "class": "cruiser",
+   "hull": 4000,
+   "jump": "gate",
+   "weapons": {
+    "drazi_particle_beam": 1,
+    "drazi_plasma_medium": 4,
+    "drazi_missile": 2
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "drazi_firehawk": {
+   "task": "T59",
+   "class": "cruiser",
+   "hull": 4500,
+   "jump": "gate",
+   "weapons": {
+    "drazi_solar_cannon": 1,
+    "drazi_heavy_particle": 2
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "drazi_stormfalcon": {
+   "task": "T30",
+   "class": "capital",
+   "hull": 16000,
+   "jump": "own",
+   "weapons": {
+    "drazi_solar_cannon": 2,
+    "drazi_heavy_particle": 6,
+    "drazi_plasma_medium": 4
+   },
+   "interceptors": {
+    "drazi_interceptor": 4
+   },
+   "launches": {
+    "drazi_sky_serpent": 13
+   },
+   "lays_mines": null
+  },
+  "brakiri_avioki": {
+   "task": "T31",
+   "class": "capital",
+   "hull": 19000,
+   "jump": "own",
+   "weapons": {
+    "brakiri_graviton_beam": 4,
+    "brakiri_graviton_pulsar": 6
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "vree_xill": {
+   "task": "T32",
+   "class": "cruiser",
+   "hull": 6000,
+   "jump": "gate",
+   "weapons": {
+    "vree_antimatter": 15
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "isa_whitestar": {
+   "task": "T33",
+   "class": "cruiser",
+   "hull": 8000,
+   "jump": "own",
+   "weapons": {
+    "isa_neutron_laser": 1,
+    "isa_neutron_cannon": 2,
+    "isa_fusion_cannon": 2
+   },
+   "interceptors": {},
+   "launches": {
+    "minbari_nial": 4
+   },
+   "lays_mines": null
+  },
+  "isa_victory": {
+   "task": "T34",
+   "class": "dreadnought",
+   "hull": 75000,
+   "jump": "own",
+   "weapons": {
+    "isa_fusion_beam": 2,
+    "isa_array": 12,
+    "isa_pulse_light": 16
+   },
+   "interceptors": {
+    "isa_interceptor": 10
+   },
+   "launches": {
+    "starfury_ally": 12,
+    "ea_atmo_shuttle": 2
+   },
+   "lays_mines": null
+  },
+  "shadow_battlecrab": {
+   "task": "T35",
+   "class": "capital",
+   "hull": 120000,
+   "jump": "shimmer",
+   "weapons": {
+    "ancient_slicer": 1
+   },
+   "interceptors": {},
+   "launches": {
+    "shadow_fighter": 6
+   },
+   "lays_mines": null
+  },
+  "shadow_scout": {
+   "task": "T41",
+   "class": "cruiser",
+   "hull": 20000,
+   "jump": "shimmer",
+   "weapons": {
+    "ancient_slicer_small": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "vorlon_destroyer": {
+   "task": "T36",
+   "class": "cruiser",
+   "hull": 25000,
+   "jump": "own",
+   "weapons": {
+    "ancient_lance_small": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "vorlon_heavy_cruiser": {
+   "task": "T60",
+   "class": "capital",
+   "hull": 120000,
+   "jump": "own",
+   "weapons": {
+    "ancient_lance": 1
+   },
+   "interceptors": {},
+   "launches": {
+    "vorlon_fighter": 6
+   },
+   "lays_mines": null
+  },
+  "drakh_carrier": {
+   "task": "T37",
+   "class": "dreadnought",
+   "hull": 50000,
+   "jump": "gate",
+   "weapons": {
+    "drakh_beam": 6,
+    "drakh_pulse": 12,
+    "drakh_light": 8
+   },
+   "interceptors": {},
+   "launches": {
+    "drakh_fighter": 24
+   },
+   "lays_mines": null
+  },
+  "ea_explorer": {
+   "task": "T52",
+   "class": "dreadnought",
+   "hull": 60000,
+   "jump": "own",
+   "weapons": {
+    "ea_pulse_medium": 4,
+    "ea_particle_array": 4
+   },
+   "interceptors": {
+    "ea_interceptor": 4
+   },
+   "launches": {
+    "starfury_ally": 24
+   },
+   "lays_mines": null
+  },
+  "ea_asimov": {
+   "task": "T53",
+   "class": "capital",
+   "hull": 9000,
+   "jump": "gate",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "ea_mining_transport": {
+   "task": "T56",
+   "class": "capital",
+   "hull": 9000,
+   "jump": "gate",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "raider_strike_carrier": {
+   "task": "T19",
+   "class": "cruiser",
+   "hull": 10000,
+   "jump": "own",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {
+    "raider_fighter": 6
+   },
+   "lays_mines": null
+  },
+  "capital_test_cruiser": {
+   "task": "T07",
+   "class": "cruiser",
+   "hull": 20000,
+   "jump": "own",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "ea_panama": {
+   "task": "T51",
+   "class": "small_craft",
+   "hull": 600,
+   "jump": "gate",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "ea_construction_tender": {
+   "task": "T55",
+   "class": "small_craft",
+   "hull": 300,
+   "jump": "gate",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "ea_shuttle": {
+   "task": "T57",
+   "class": "small_craft",
+   "hull": 200,
+   "jump": "gate",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "ea_atmo_shuttle": {
+   "task": "T57",
+   "class": "small_craft",
+   "hull": 260,
+   "jump": "gate",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "centauri_shuttle": {
+   "task": "T58",
+   "class": "small_craft",
+   "hull": 250,
+   "jump": "gate",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "minbari_flyer": {
+   "task": "T58",
+   "class": "small_craft",
+   "hull": 300,
+   "jump": "gate",
+   "weapons": {},
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "starfury_aurora": {
+   "task": "built",
+   "class": "fighter",
+   "hull": 300,
+   "jump": "none",
+   "weapons": {
+    "pulse_cannon_ef": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "raider_fighter": {
+   "task": "built",
+   "class": "fighter",
+   "hull": 60,
+   "jump": "none",
+   "weapons": {
+    "raider_plasma": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "ea_thunderbolt": {
+   "task": "T50",
+   "class": "fighter",
+   "hull": 360,
+   "jump": "none",
+   "weapons": {
+    "pulse_cannon_ef": 1,
+    "thunderbolt_pod": 1,
+    "ea_missile": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "narn_frazi": {
+   "task": "T38",
+   "class": "fighter",
+   "hull": 320,
+   "jump": "none",
+   "weapons": {
+    "frazi_gun": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "centauri_sentri": {
+   "task": "T38",
+   "class": "fighter",
+   "hull": 240,
+   "jump": "none",
+   "weapons": {
+    "sentri_gun": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "minbari_nial": {
+   "task": "T39",
+   "class": "fighter",
+   "hull": 380,
+   "jump": "none",
+   "weapons": {
+    "nial_fusion": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "drazi_sky_serpent": {
+   "task": "T39",
+   "class": "fighter",
+   "hull": 300,
+   "jump": "none",
+   "weapons": {
+    "sky_serpent_gun": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "brakiri_falkosi": {
+   "task": "T40",
+   "class": "fighter",
+   "hull": 180,
+   "jump": "none",
+   "weapons": {
+    "falkosi_bolt": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "drakh_fighter": {
+   "task": "T40",
+   "class": "fighter",
+   "hull": 280,
+   "jump": "none",
+   "weapons": {
+    "drakh_fighter_gun": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "shadow_fighter": {
+   "task": "T41",
+   "class": "fighter",
+   "hull": 400,
+   "jump": "none",
+   "weapons": {
+    "shadow_fighter_beam": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  },
+  "vorlon_fighter": {
+   "task": "T42",
+   "class": "fighter",
+   "hull": 400,
+   "jump": "none",
+   "weapons": {
+    "vorlon_fighter_lance": 1
+   },
+   "interceptors": {},
+   "launches": {},
+   "lays_mines": null
+  }
+ }
+}

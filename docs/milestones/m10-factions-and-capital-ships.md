@@ -79,6 +79,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q50 | T01's open points (2026-11-20) | The White Star launches **4 Nials** and the Victory **Starfuries, Thunderbolts and Kestrel shuttles**, as the sources give (the Thunderbolt flies once M11 makes it flyable; until then its slots launch Starfuries). The mining transport is **632 m** closed (716 m open), sharing the Asimov liner's sphere and scale. The Explorer's **bow is the end with the dome and the launch bay** |
 | Q51 | T07's capital flight (2026-11-20) | **Broadcast** by class, heard by every side: cruiser 200 km, capital 500 km, dreadnought 1 000 km (`data/capitals/capitals.json`); small craft keep today's rules. **Propulsion** per hull in its `ShipSpec`: `reaction` (EA, Drazi and other reaction drives: mains, and retros where the hull has room, stand-ins at the mains' places at 50 % of a main by default; one with no retros flips and burns) or `gravitic` (e.g. Minbari, Vorlon, Shadow, ISA: thrust along any axis at a per-hull fraction, no flip); the hull tasks take the mode and the retros from T01's notes, T03 confirms. The test cruiser is reaction with stand-in retros and opens its own jump points (test hull only) |
 | Q52 | Half-size low texture sets on fighters (2026-11-20) | The **Thunderbolt (T50) is the test**: its low texture set is built a mip level down (T05's rule) and shown side by side with a full-size low set, the same close views (5 to 15 m), lit and dark. If the half size reads soft, the maintainer chooses full-size low sets for fighters. The older hulls' low sets (Starfury, raider fighter, the civilians) are not converted for now. **Settled (2026-11-20): half-size low sets for new fighters**, after the comparison sheets (`references/screenshots/M10-T50 Thunderbolt/low_set_half_vs_full_lit.png`, `_dark.png`); a fighter whose low set is half size names its own glow map and the fighters' livery and glass materials take it; the older hulls' low sets stay as they are |
+| Q53 | T03 weapons and balance concept (2026-11-21) | **No armour**: capitals get large hull points; traits `kinetic` and `push` only. **Scale**: an unescorted Omega (interceptors and guns working, no fighters launched) lasts 10 to 15 min against 12 Starfuries, the squadron losing about half: the Omega has 30 000 hull points (a Starfury's capacitor caps it at about 18 dps), capital weapons set so equal capitals take 4 to 8 min. Power ladder approved (younger within 1.5x, Minbari and ISA about 2x, ancients about 4x until T04); the added anti-fighter guns and interceptors approved. Mines in battle: the G'Quan's energy mines and the Vorchan's guided mines only; the Omega's in scenario minefields. The Nova is a dreadnought with 24 Starfuries and the Omega's six particle beams at 80 %; the Omega launches 32 Starfuries; G'Quan 12 Frazi, battlecrab 6, Drakh carrier 24, Warlock 12, Stormfalcon 1 + 12 Sky Serpents. Centauri ion cannons not kinetic; the Panama unarmed. Everything else as drafted: docs/assets-capital.md, "Weapons and loadouts (T03)", `data/capitals/loadouts.json` |
 
 ## The hulls
 
@@ -91,23 +92,23 @@ identification, its length (Q4) and the fighters it launches.
 | Task | Hull | Faction | Role | Reference | Launches |
 |---|---|---|---|---|---|
 | T19 | Raider strike carrier (done) | raiders | carrier | `Rader_strike_carrier.stl`, `radier strike carrier.jpg`, `raider ships docked to strike carrier.jpg` | Delta-V |
-| T21 | Omega-class destroyer | EA, renegades | destroyer and carrier, rotating section | `EA Omega Destroyer.stl` | Starfury |
+| T21 | Omega-class destroyer | EA, renegades | destroyer and carrier, rotating section | `EA Omega Destroyer.stl` | 32 Starfuries (Q53) |
 | T22 | Hyperion-class heavy cruiser | EA, renegades | heavy cruiser | `EA Hyperion Class Heavy Cruiser.stl` | 6 Starfuries, 2 shuttles (Q49) |
-| T23 | Nova-class dreadnought | EA, renegades | dreadnought | `EA Nova class destroyer.STL` | Starfury |
-| T24 | Warlock-class destroyer | EA, renegades | advanced destroyer | `EA-Warlock_destroyer.stl` | Starfury (Thunderbolt after M11) |
-| T25 | G'Quan-class heavy cruiser | Narn | heavy cruiser and carrier | `Narn Gquon battlecruiser.stl` | Frazi |
+| T23 | Nova-class dreadnought | EA, renegades | dreadnought | `EA Nova class destroyer.STL` | 24 Starfuries (Q53) |
+| T24 | Warlock-class destroyer | EA, renegades | advanced destroyer | `EA-Warlock_destroyer.stl` | 12 Starfuries (Thunderbolts after M11; Q53) |
+| T25 | G'Quan-class heavy cruiser | Narn | heavy cruiser and carrier | `Narn Gquon battlecruiser.stl` | 12 Frazi (Q53) |
 | T26 | Vorchan-class warship | Centauri | cruiser | `Centauri Vorchan Cruiser.stl` | none |
 | T27 | Primus-class battlecruiser | Centauri | battlecruiser | `Centauri_Primus_1586m.stl`, `Centauri_Primus_w_mass_driver.stl` (Q41) | none: no fighter bays (Q49) |
 | T28 | Sharlin-class warcruiser | Minbari | warcruiser | `Minbari_Sharlin_cruiser.stl` | Nial |
 | T29 | Sunhawk | Drazi | cruiser | `Drazi_Sunhawk_crusier_350m.stl` (197 m, Q49) | none (one Sky Serpent may ride a dorsal cradle) |
-| T30 | Stormfalcon | Drazi | heavy cruiser and carrier | `Drazi_Stormfalcon_cruiser_820m.stl` | Sky Serpent (and 12 Star Snakes, which have no reference) |
+| T30 | Stormfalcon | Drazi | heavy cruiser and carrier | `Drazi_Stormfalcon_cruiser_820m.stl` | 13 Sky Serpents: 1, and 12 in place of the Star Snakes, which have no reference (Q53) |
 | T31 | Avioki cruiser | Brakiri | cruiser | `Brakiri_Avioki_cruiser.stl` | none: 2 assault shuttles (Q49) |
 | T32 | Xill | Vree | saucer warship | `Vree_Xill_cruiser.stl` | none (no Vree fighter reference) |
 | T33 | White Star | ISA | light warship | `ISA Whitestar.stl` | 4 Nial (Q50) |
 | T34 | Victory-class destroyer | ISA | destroyer | `ISA Destroyer.stl` | Starfury, Thunderbolt (after M11), Kestrel shuttle (Q50) |
-| T35 | Shadow battlecrab | Shadows | warship, organic | `Shadow_Battlecrab.stl` | Shadow fighters |
+| T35 | Shadow battlecrab | Shadows | warship, organic | `Shadow_Battlecrab.stl` | 6 Shadow fighters (Q53) |
 | T36 | Vorlon destroyer (131 m, Q49) | Vorlons | destroyer, organic | `Vorlon_Destroyer (missing pedals) - 131m.stl` (the body), with the petals from `Vorlon_Destroyer-Open_petal_position.stl` and `Vorlon_Destroyer-Closed_petal_position.stl` | none (no source lists any) |
-| T37 | Drakh carrier | Drakh | carrier | `Drakh carrier.STL` | Drakh fighters |
+| T37 | Drakh carrier | Drakh | carrier | `Drakh carrier.STL` | 24 Drakh fighters (Q53) |
 | T59 | Drazi Firehawk | Drazi | advanced cruiser (Mongoose's Ships of the Galaxy; the Sunhawk's hull with a solar cannon), 197 m (Q49) | `Drazi_Firehawk_350m.stl` | none (Q49) |
 | T60 | Vorlon heavy cruiser (1 528 m, Q49) | Vorlons | heavy cruiser, organic | `Vorlon Dreadnought - 1528m.stl` (the file name is wrong: it is the heavy cruiser; it fits the gate's mouth) | Vorlon fighters (Babylon 5 Wars: 6, and 2 shuttles) |
 
@@ -224,16 +225,26 @@ Out:
 - The ship is **disabled** (D12.7) when power or control is gone and no explosive section has blown; it is **destroyed**
   (D12.8) when a reactor, magazine or fuel section blows.
 - Subsystems are targetable (Q17).
+- **Rules (T03, Q53).** No armour. Sections share the hull by a template per role (docs/assets-capital.md, "Weapons and loadouts (T03)"). A magazine or fuel
+  section at 0 blows (destroyed); a reactor at 0 shuts down (disabled) and blows after another 50 % of its points; a
+  lost bridge releases the brain (last orders at half rate of fire), disabled only with the reactor or every engine
+  gone too. Hits on a lost section pass half on to the nearest live structure. Mounts have their own points (light
+  300 to beam emitter 2 500); a mount's damage counts against its section, and it dies with it.
 
 ### D12.6 The blast model
 
 - One native kernel for every blast: mines, missiles, torpedoes, explosive sections and every ship's death. A blast has an
   energy and a radius; the damage to a hull falls smoothly to zero at the radius, measured from the blast's centre to the
-  hull's nearest hit volume, and the same falloff gives the push on nearby bodies. T09 picks the curve and pins it in tests.
+  hull's nearest hit volume, and the same falloff gives the push on nearby bodies. T09 pins T03's curve in tests.
 - A ship's death is a blast scaled by its class and what is aboard (Q18), replacing the placeholders M4 left on
   `HitInfo` (1e5 J a kilogram of hull, four bounding radii; §17.14) and the mines' flat 200 points. M4-T23's far flashes
   read the same energy.
 - Run in the tick on the main thread like the hit sweep, identical with 1 and 6 threads.
+- **Numbers (T03, Q53).** Each source has a centre damage `D0` and a radius `R` from a table by class and section kind
+  (docs/assets-capital.md, "Weapons and loadouts (T03)"): falloff `(1 - (d/R)^2)^2`, damage to the nearest section; push `dv = I0 f(d) A / m`, capped at
+  50 m/s; the flashes' energy `5e6 J x D0`. A fighter's death hurts within about 100 m (60 at the centre), a capital's
+  reactor 4 500 out to 2.5 km, a dreadnought's 7 500 out to 3.5 km. The table lives in `data/capitals/capitals.json`;
+  the manifest's `sections[].blast_energy_j` becomes a lookup by class and kind.
 
 ### D12.7 Disabled hulks
 
@@ -251,23 +262,49 @@ Out:
 
 ### D12.9 Weapons
 
-- **Beams** as native rows with no node per shot (M4-T20 measured about 20 us a beam shot through a `Projectile` node
-  against a 1 us budget): pulsed beams (one tick) and sustained beams that sweep a hull for a duration (the Shadows'
-  slicer, the Vorlons' lightning per T04), drawn in one batch per kind.
-- **Interceptors** (Q9): a native kernel that shoots down incoming bolts and missiles near its ship at a rate.
-- **Turrets** on M5's native turret rows (§18.10) with new capital kinds; **missiles** on M4-T20's native guidance path;
-  **mines** as native rows (§17.16) with D12.6's blast, placed by data and laid in battle (Q20).
-- Each weapon is a `WeaponSpec` in `assets/weapons/`; every kind's per-tick work is in the native core, threads identical,
-  parity recordings green. M4's stand-ins (`CapitalStandin`, `capital_hulls`, the turret, beam, missile, interceptor and
-  mine stand-ins and their counters, L11) are removed in T45.
+Settled in T03 (Q53). Kinds, numbers, every hull's loadout, mines and the balance fights: docs/assets-capital.md, "Weapons and loadouts (T03)"; the data is
+`data/capitals/loadouts.json` (hull tasks build their mounts to its counts, T12 to T16 read its numbers).
+
+- **Kinds, each one native row kind:** light, medium, heavy and fixed bolts (M5's turret rows, §18.10, new mount kinds);
+  pulsed beams (one tick, first hull on the line) and sustained beams (each tick for a few seconds, sweeping) as beam
+  rows with no node per shot, drawn in one batch per kind (M4-T20 measured about 20 us a beam through a `Projectile`);
+  missiles and torpedoes on M4-T20's guidance path; interceptors (the grid battery, §20.3); three mine kinds (Q20).
+  Each faction's show weapons are `WeaponSpec`s of these kinds with their own numbers and at most one trait: `kinetic`
+  (an interceptor needs 2 pulses) or `push`. The Shadow and Vorlon beams are placeholders until T04.
+- **No armour.** Fighter numbers stay as M5 left them. Hull points from 4 000 (Sunhawk) through 30 000 (Omega) to
+  75 000 (Victory); anti-capital damage set so equal capitals take 4 to 8 min; anti-fighter guns at fighter scale.
+- **Interceptors** (Q9) on the Omega 8, Warlock 8, Nova 6, Hyperion 4, Explorer 4, Victory 10, Stormfalcon 4 at half
+  rate: 4 pulses a second, 1.5 km reach, hostile shots that will meet their hull or a covered friend's; a pulse stops a
+  bolt or missile, 2 a heavy or kinetic bolt, 3 a torpedo or energy mine; never beams, blasts or rams. They fire first.
+- **Mines:** `mine_prox` in scenario minefields for every younger faction; in battle only the G'Quan's energy mines
+  (launched at capitals) and the Vorchan's guided mines (dropped astern). Radar shows a hostile mine within 1 km.
+- Every kind's per-tick work is in the native core, threads identical, parity recordings green. M4's stand-ins
+  (`CapitalStandin`, `capital_hulls`, the turret, beam, missile, interceptor and mine stand-ins and their counters, L11)
+  are removed in T45.
 
 ### D12.10 Capital AI and carriers
 
-- The `capital` brain profile (Q16) runs in the native AI job one tick behind like every brain; its commands are applied
-  at the join against the pilot's stamp.
-- Fighters gain attack runs on capitals and their subsystems, and keep out of beam arcs.
-- Carriers launch their faction's fighters from their bays and tubes through the ship pool, replacing M4's stand-in
-  launches; M7's launch sequence for AI ships is reused where it fits. Recovery into a bay is out.
+Settled in T03 (Q16, Q17, Q53).
+
+- **The `capital` brain** is native and runs in the AI job one tick behind like every brain, its commands applied at the
+  join against the pilot's stamp. It absorbs T07's GDScript `CapitalHelm` (about 52 us a tick for one capital): the helm
+  (reaction with retros or a flip; gravitic) runs every tick in Rust, the brain thinks at 5 Hz staggered; budget about
+  8 us a tick a capital, threads identical, parity recordings for the helm.
+- **States.** Approach; Engage: hold 0.7 x the main weapon's range and take the attitude that maximises mount dps times
+  bearing (broadside for turret ships, bow-on for fixed bow guns, belly-on strafing passes for the Xill); Screen: an
+  escort holds 0.8 to 1.2 km off its charge; Launch: a carrier launches on a hostile within 15 km and recalls before a
+  jump; Withdraw at hull under 30 %, reactor under 50 % or every main engine lost: through its own point, else a friendly
+  point within 20 km, else a gate, else it fights on (a disabled ship cannot); Hold on orders (the player's: M11).
+- **Targets:** `threat x value / time_to_kill` with doctrine weights per faction (`capitals.json`). Anti-capital mounts
+  take the brain's target; anti-fighter mounts pick their own on the turret rows, without the grid's "never first".
+  Subsystems (Q17): heavy weapons aim at the hull's centre, at the target's mounts bearing on it when outgunned (enemy
+  dps over 1.5x its own), at a withdrawing target's engines under the Centauri and Drazi "cripple" doctrine.
+- **Fighters' attack runs:** approach along the direction least covered by the target's arcs (beams weighed most),
+  re-planned every 2 s; fire from 1 500 to 400 m at a subsystem (mounts covering the approach, interceptors, engines,
+  bays; torpedo craft the reactor), break off across the nearest beam arc, open to 3 km, repeat; abort at half the
+  squadron lost, regroup at 5 km. Raiders never attack warships.
+- **Carriers** launch their faction's fighters (Q53's counts) from their bays and tubes through the ship pool, replacing
+  M4's stand-in launches; M7's launch sequence for AI ships is reused where it fits. Recovery into a bay is out.
 
 ### D12.11 The ancients' and special mechanics
 
@@ -322,7 +359,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | not started |
-| T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | not started |
+| T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
 | T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | done |
@@ -443,6 +480,17 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   against capital, a squadron against a capital, the raider carriers against EA escorts) and their bars.
 - **Done when:** the maintainer approves the concept, written into D12.9 and D12.10, with the loadouts as data for the
   hull tasks.
+- **Done (2026-11-21, Q53).** Drafted by the design sub-agent, settled with the maintainer decision by decision. D12.5,
+  D12.6, D12.9 and D12.10 carry the rules; the long tables (kinds, faction weapons, hull loadouts, fighters, section
+  shares, mount points, blasts, mines, jump recharge, the balance fights B1 to B16 and F1) are in docs/assets-capital.md, "Weapons and loadouts (T03)".
+  `data/capitals/loadouts.json` holds every weapon (kind, numbers) and every M10 hull, fighter and small craft (class,
+  hull points, weapons, interceptors, launches, mines, jump mode); `tools/procgen/tests/test_capital_loadouts.py` (5)
+  keeps it whole and checks every catalogued capital has an entry. Chosen within the answers: the Omega at 30 000 hull
+  points (Q53's anchor; a Starfury's capacitor caps it at about 18 dps, so hundreds of thousands cannot meet 10 to 15
+  min), anti-capital damage about a sixth of the armoured draft's, the blast table's capital rows scaled x0.3 to keep
+  their proportions, the beam ids renamed (`ea_sweep_beam` for the Omega's and Nova's particle beams,
+  `ea_particle_cannon` for the pulsed ones), the G'Quan and Primus at 30 000 and the battlecrab at 120 000 so the
+  ladder holds, and a Nova against Omega fight (B16). Hull tasks add their manifest-against-loadout check.
 
 ### M10-T04 Shadow, Vorlon and Minbari mechanics concept (discussion with the maintainer)
 
