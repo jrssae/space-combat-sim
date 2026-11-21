@@ -119,6 +119,8 @@ var waypoint_radar_index: int = -1
 ## Far capitals' markers (M8-T08, `CapitalMarksLayout`): each `{on_screen, pos, angle, label, range_m, color}`; off screen, `pos`
 ## and `angle` are its edge arrow's.
 var capital_marks: Array[Dictionary] = []
+## Whether the markers are switched on (off: `capital_marks` stays empty).
+var capital_marks_enabled: bool = false
 
 ## The mission's objectives list (M5-T05), top right, right-aligned: the caption's baseline, then one line per active objective
 ## (`{text: String, pos: Vector2, primary: bool}`).

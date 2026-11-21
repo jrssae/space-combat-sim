@@ -1,5 +1,5 @@
 extends GutTest
-## CapitalMarksLayout (M8-T08): far hostile capitals get a marker with their class and range until their hull is big enough
+## CapitalMarksLayout (M8-T08): switched on (off unless a scenario enables them), far hostile capitals get a marker with their class and range until their hull is big enough
 ## to read; off screen an edge arrow; none for the selected target or the waypoint (one label per spot, M8-T33); the nearest
 ## few only; the rules come from data/hud/capital_markers.json.
 
@@ -14,6 +14,7 @@ func after_each() -> void:
 
 func _rules() -> CapitalMarkerRules:
 	var rules := CapitalMarkerRules.new()
+	rules.enabled = true  # as a scenario's hud.capital_markers turns them on
 	rules.max_range_m = 30000.0
 	rules.hide_above_px = 14.0
 	rules.max_markers = 4
@@ -118,8 +119,22 @@ func test_the_nearest_few_only() -> void:
 		assert_gt(float(marks[k]["range_m"]), float(marks[k - 1]["range_m"]), "nearest first")
 
 
+func test_switched_off_nothing_is_drawn() -> void:
+	var input: HudInput = _hud_input([_capital(5, Vector3(0.0, 0.0, -8500.0)), _capital(6, Vector3(0.0, 0.0, 8500.0))])
+	input.capital_rules = input.capital_rules.with_enabled(false)
+	var f: HudFrame = HudLayout.compute(input)
+	assert_eq(f.capital_marks.size(), 0, "no glyph, label or edge arrow")
+	assert_false(f.items.has(HudSurface.CAPITALS))
+	assert_eq(Hud.capital_marks_text(f), "off")
+	input.capital_rules = null
+	assert_eq(Hud.capital_marks_text(HudLayout.compute(input)), "off", "no rules at all: off")
+
+
 func test_the_shipped_rules() -> void:
 	var rules: CapitalMarkerRules = CapitalMarkerRules.shared()
+	assert_false(rules.enabled, "off unless a scenario enables them (the maintainer, 2026-11-21)")
+	assert_true(rules.with_enabled(true).enabled)
+	assert_false(rules.enabled, "a scenario's copy leaves the shared rules alone")
 	assert_eq(rules.relations, [Factions.Relation.HOSTILE] as Array[Factions.Relation])
 	assert_gt(rules.max_range_m, 21000.0, "a station raid's carrier stands off about 21 km out")
 	assert_gt(rules.hide_above_px, 0.0)
@@ -130,4 +145,7 @@ func test_the_shipped_rules() -> void:
 func test_the_console_text() -> void:
 	var f: HudFrame = HudLayout.compute(_hud_input([_capital(5, Vector3(0.0, 0.0, -8500.0))]))
 	assert_eq(Hud.capital_marks_text(f), "STRIKE CARRIER 8.50 km screen")
-	assert_eq(Hud.capital_marks_text(HudFrame.new()), "none")
+	var empty := HudFrame.new()
+	empty.capital_marks_enabled = true
+	assert_eq(Hud.capital_marks_text(empty), "none")
+	assert_eq(Hud.capital_marks_text(HudFrame.new()), "off")

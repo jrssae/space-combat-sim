@@ -745,3 +745,21 @@ func test_station_traffic_at_the_start() -> void:
 	_assert_fails(data, "station.reserve_traffic must be true or false")
 	data["station"] = {"reserve_traffic": true}
 	assert_eq(ScenarioLoader.from_data(data)["station"], {"reserve_traffic": true})
+
+
+# M8-T08: a scenario may switch the far capitals' HUD markers on; no shipped scenario does.
+func test_hud_options() -> void:
+	var data: Dictionary = {"scenario_id": "t", "player": {"position": [0, 0, 0]}}
+	assert_eq(ScenarioLoader.from_data(data)["hud"], {}, "none given: the data file decides")
+	data["hud"] = {"capital_markers": true}
+	assert_eq(ScenarioLoader.from_data(data)["hud"], {"capital_markers": true})
+	data["hud"] = {"capital_markers": 1}
+	_assert_fails(data, "hud.capital_markers must be true or false")
+	data["hud"] = {"brackets": true}
+	_assert_fails(data, "hud.brackets is not a known key")
+	data["hud"] = []
+	_assert_fails(data, "hud must be an object")
+	for file_name: String in DirAccess.get_files_at("res://data/scenarios"):
+		if file_name.ends_with(".json"):
+			var file: Dictionary = ScenarioLoader.load("res://data/scenarios/" + file_name)
+			assert_false(bool((file["hud"] as Dictionary).get("capital_markers", false)), "%s keeps the markers off" % file_name)

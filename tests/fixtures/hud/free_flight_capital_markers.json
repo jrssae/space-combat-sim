@@ -1,0 +1,12 @@
+{"scenario_id": "free_flight", "system_id": "local",
+ "anchor": {"place": "babylon5", "at": [5500, -1200, -6000]}, "epoch": "seeded",
+ "player": {"home": "babylon5", "position": [0, 0, 0], "forward": [0, 0, -1]},
+ "jumpgates": [{"name": "JUMPGATE", "place": "jumpgate", "from": "babylon5", "station": [0, 0, 0], "bearing": [0, 0, -1]}],
+ "props": [
+   {"type": "nav_buoy", "name": "NAV ALPHA",   "position": [0, 0, -500]},
+   {"type": "nav_buoy", "name": "NAV BRAVO",   "position": [300, 50, -1200]},
+   {"type": "nav_buoy", "name": "NAV CHARLIE", "position": [-800, -200, -2000]},
+   {"type": "nav_buoy", "name": "NAV DELTA",   "position": [1500, 400, 800], "velocity": [0, 0, -3]},
+   {"type": "nav_buoy", "name": "NAV ECHO",    "position": [-200, 900, -4800]}],
+ "hud": {"capital_markers": true}
+}

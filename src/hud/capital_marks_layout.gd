@@ -2,14 +2,15 @@ class_name CapitalMarksLayout
 extends RefCounted
 ## Far capital ships' HUD markers (M8-T08), pure: a capital kilometres out is a few dark pixels, so the HUD shows a capital glyph
 ## with its class and range where it is, or an edge arrow when it is off screen, until its hull is big enough to read. One
-## marker per capital, the nearest few only; none for the selected target or the waypoint, whose own marks already name them
+## marker per capital, the nearest few only, and nothing at all while the rules are off; none for the selected target or the waypoint, whose own marks already name them
 ## (M8-T33's one label per spot).
 
 
 ## Fills `f.capital_marks` from `input.capitals` by `input.capital_rules`: each `{on_screen, pos, angle, label, range_m, color}`.
 static func compute(input: HudInput, f: HudFrame) -> void:
 	var rules: CapitalMarkerRules = input.capital_rules
-	if rules == null or input.capitals.is_empty() or rules.max_markers <= 0:
+	f.capital_marks_enabled = rules != null and rules.enabled
+	if not f.capital_marks_enabled or input.capitals.is_empty() or rules.max_markers <= 0:
 		return
 	var marks: Array[Dictionary] = []
 	for c: Dictionary in input.capitals:

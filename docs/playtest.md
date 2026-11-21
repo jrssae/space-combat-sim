@@ -1544,12 +1544,10 @@ M10 (`docs/architecture.md` §19.18, `docs/assets-capital.md`). Its look sheet i
       cradle. Its hull points (10 000) are a first figure: say how long it should take a Starfury to kill it.
 - [x] **A raid in free flight (H):** `encounters force raid`: the carrier arrives 6 to 12 km out, launches, stands off while its
       fighters attack, and leaves when they are all gone or after five minutes.
-- [ ] **Far off, the HUD marks it (H, 2026-11-21):** `encounters force raid`: at its stand-off (8 to 21 km) the 112 m hull is a
-      few dark pixels, so the HUD draws a red long hexagon on it with `STRIKE CARRIER` above and the range below (off screen,
-      the same glyph at the border with a chevron); `get hud.capital_marks` lists it. Fly in: the marker goes once the hull is
-      about 14 px across its radius at 1080p (about 4.5 km for this carrier). Target it: only the target's brackets and label
-      show. No fighter gets one. Say if the glyph is clear, too loud, or the 4.5 km and 30 km reach are right
-      (`data/hud/capital_markers.json`). Screenshot: `references/screenshots/M8-T08 carrier invisible/marker/standoff.png`.
+- [ ] **No capital marker in shipped scenarios (H, 2026-11-21):** `encounters force raid`: the carrier and its raiders render
+      as they are, with no red hexagon, label or edge arrow on the carrier (the maintainer: unneeded here). `get
+      hud.capital_marks` says `off`. The marker stays in the code for a later fleet mission: a scenario turns it on with
+      `"hud": {"capital_markers": true}` (rules in `data/hud/capital_markers.json`, `enabled` false by default).
 
 ## Listening checklist: the sound mix and the engines' steady level (M8-T12)
 

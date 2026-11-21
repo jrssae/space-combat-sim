@@ -55,7 +55,7 @@ func _ready() -> void:
 		&"radar_paint_us": {"get": func() -> int: return int(_radar_paint_us), "unit": "us", "doc": "What painting the radar costs a frame (the dot buffers and draws), smoothed over about twenty frames; wall clock"},
 		&"window_items": {"get": func() -> String: return ",".join(frame.items), "doc": "What the 2D layer draws this frame"},
 		&"capital_marks": {"get": func() -> String: return capital_marks_text(frame),
-				"doc": "Far capitals' markers (M8-T08): label, range and on screen or edge, nearest first"},
+				"doc": "Far capitals' markers (M8-T08): label, range and on screen or edge, nearest first; off unless the scenario enables them"},
 	}), self)
 
 
@@ -93,8 +93,10 @@ func show_frame(f: HudFrame) -> void:
 		_canvas.queue_redraw()
 
 
-## The far capitals' markers of `f` as the console reads them: `LABEL 8.52 km screen; ...`, or `none`.
+## The far capitals' markers of `f` as the console reads them: `LABEL 8.52 km screen; ...`, `none`, or `off`.
 static func capital_marks_text(f: HudFrame) -> String:
+	if not f.capital_marks_enabled:
+		return "off"
 	var parts: PackedStringArray = []
 	for mark: Dictionary in f.capital_marks:
 		parts.append("%s %.2f km %s" % [mark["label"], float(mark["range_m"]) / 1000.0, "screen" if bool(mark["on_screen"]) else "edge"])

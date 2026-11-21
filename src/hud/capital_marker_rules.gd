@@ -1,11 +1,14 @@
 class_name CapitalMarkerRules
 extends RefCounted
 ## When the HUD marks a far capital ship (M8-T08), read once from `data/hud/capital_markers.json`: a small hull kilometres out
-## is a dark speck, so the HUD shows where it is until it is big enough to read. By relation and size on screen, never by
-## class, so every capital gets it.
+## is a dark speck, so the HUD can show where it is until it is big enough to read. By relation and size on screen, never by
+## class, so every capital gets it. Off unless the file or a scenario (`hud.capital_markers`, `with_enabled`) turns it on:
+## the maintainer found it unneeded where a raid's carrier is the only capital.
 
 const PATH: String = "res://data/hud/capital_markers.json"
 
+## Whether any marker is drawn.
+var enabled: bool = false
 ## Relations whose capitals are marked.
 var relations: Array[Factions.Relation] = [Factions.Relation.HOSTILE]
 ## Farther than this, no marker, m.
@@ -32,6 +35,18 @@ static func reload() -> void:
 	_shared = null
 
 
+## A copy of these rules, switched on or off (a scenario's choice; the shared rules stay as the file has them).
+func with_enabled(on: bool) -> CapitalMarkerRules:
+	var copy := CapitalMarkerRules.new()
+	copy.enabled = on
+	copy.relations = relations.duplicate()
+	copy.max_range_m = max_range_m
+	copy.hide_above_px = hide_above_px
+	copy.max_markers = max_markers
+	copy.edge_arrows = edge_arrows
+	return copy
+
+
 ## Rules from `path`; the defaults above for anything it does not give.
 static func from_file(path: String) -> CapitalMarkerRules:
 	var rules := CapitalMarkerRules.new()
@@ -47,6 +62,7 @@ static func from_file(path: String) -> CapitalMarkerRules:
 			var key: String = str(name).to_upper()
 			if Factions.Relation.has(key):
 				rules.relations.append(Factions.Relation[key])
+	rules.enabled = bool(data.get("enabled", rules.enabled))
 	rules.max_range_m = float(data.get("max_range_m", rules.max_range_m))
 	rules.hide_above_px = float(data.get("hide_above_px", rules.hide_above_px))
 	rules.max_markers = int(data.get("max_markers", rules.max_markers))

@@ -113,6 +113,8 @@ var _player_home: StringName = &""
 ## What the player's speed is read against (M6-T08): the HUD's REF, and the ship's brake, assist, fade and ceiling.
 var flight_reference: FlightReference = null
 var _system_id: StringName = &"local"
+## The far capital markers' rules, on as the scenario's `hud.capital_markers` says, else as the data file (M8-T08: off).
+var _capital_rules: CapitalMarkerRules = null
 var _scenario_spawns: Array[Dictionary] = []
 var _scenario_routes: Array[Route] = []
 var _scenario_wings: Array[Dictionary] = []
@@ -164,6 +166,8 @@ func _ready() -> void:
 	_setup_input()
 	var scenario: Dictionary = ScenarioLoader.load(resolved_scenario_path())
 	ScenarioLoader.resolve_random_civilian(scenario, scenario_seed)
+	var shared_rules: CapitalMarkerRules = CapitalMarkerRules.shared()
+	_capital_rules = shared_rules.with_enabled(bool((scenario.get("hud", {}) as Dictionary).get("capital_markers", shared_rules.enabled)))
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
 	else:
@@ -724,8 +728,9 @@ func _build_hud_input() -> HudInput:
 	# The radar's contacts straight from the targetables (M4-T36): the candidate list is built only when something cycles it.
 	input.radar_contacts = RadarContacts.gather(get_tree(), ship, ship.targeting.system.sensor_range_m)
 	input.selected_id = ship.targeting.selected_id()
-	input.capital_rules = CapitalMarkerRules.shared()
-	input.capitals = CapitalContacts.gather(get_tree(), ship, input.capital_rules.max_range_m)
+	input.capital_rules = _capital_rules
+	if _capital_rules != null and _capital_rules.enabled:
+		input.capitals = CapitalContacts.gather(get_tree(), ship, _capital_rules.max_range_m)
 	input.status_line = status_line
 	input.roster = wings.hud_roster()
 	input.roster_color = Factions.FRIENDLY_COLOR

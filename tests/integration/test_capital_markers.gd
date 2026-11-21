@@ -2,9 +2,12 @@ extends GutTest
 ## Far capitals' HUD markers in the real main scene (M8-T08, the maintainer's play-test of 2026-11-21: "the carrier jumped in but
 ## there was no visible model"). A free-flight raid's strike carrier stands off 6-12 km out, a few dark pixels; the HUD marks it
 ## there with its class and range, hides the marker once the hull reads, gives no second label while it is the target, and its
-## fighters get no capital marker.
+## fighters get no capital marker. The markers are off unless a scenario enables them (the maintainer, 2026-11-21: shipped free flight
+## shows none); these tests fly free flight with `hud.capital_markers` on, from a fixture.
 
 const SEED: int = 5
+## Free flight with the markers switched on.
+const MARKED_PATH: String = "res://tests/fixtures/hud/free_flight_capital_markers.json"
 ## Ticks per real tick: the physics rate and the time scale raised together, so each step is still 1/60 s of sim time.
 const SPEED_UP: float = 4.0
 
@@ -17,9 +20,12 @@ func before_each() -> void:
 	get_tree().paused = false
 	_rate_backup = Engine.physics_ticks_per_second
 	_scale_backup = Engine.time_scale
+
+
+func _make(scenario_path: String = MARKED_PATH) -> void:
 	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
 	main.input_source = FakeInputSource.new()
-	main.scenario_path = ScenarioLoader.FREE_FLIGHT_PATH
+	main.scenario_path = scenario_path
 	main.scenario_seed = SEED
 	main.encounters = true
 	main.encounter_pools_path = EncounterDirector.pools_file(&"free_flight")
@@ -75,7 +81,18 @@ func _look_at(cap: Node3D, range_m: float = 0.0) -> void:
 	await wait_process_frames(3)
 
 
+func test_shipped_free_flight_marks_nothing() -> void:
+	await _make(ScenarioLoader.FREE_FLIGHT_PATH)
+	var run: CarrierRun = await _raid()
+	await _look_at(run.carrier)
+	assert_eq(main.hud.frame.capital_marks.size(), 0, "no glyph, label or edge arrow")
+	assert_false(main.hud.frame.items.has(HudSurface.CAPITALS))
+	var state: ConsoleResult = DebugConsole.registry.execute_tokens(PackedStringArray(["get", "hud.capital_marks"]))
+	assert_string_contains("\n".join(state.lines), "off", "the console says so")
+
+
 func test_the_carrier_is_marked_at_its_stand_off_and_hides_close_up() -> void:
+	await _make()
 	var run: CarrierRun = await _raid()
 	var cap: CapitalStandin = run.carrier
 	await _look_at(cap)
@@ -94,6 +111,7 @@ func test_the_carrier_is_marked_at_its_stand_off_and_hides_close_up() -> void:
 
 
 func test_targeted_it_has_one_label() -> void:
+	await _make()
 	var run: CarrierRun = await _raid()
 	await _look_at(run.carrier)
 	assert_true(main.ship.targeting.select_id(run.carrier.targetable.get_instance_id()))
@@ -103,6 +121,7 @@ func test_targeted_it_has_one_label() -> void:
 
 
 func test_its_fighters_get_no_capital_marker() -> void:
+	await _make()
 	var run: CarrierRun = await _raid()
 	var capitals: Array[Dictionary] = CapitalContacts.gather(get_tree(), main.ship, 50000.0)
 	assert_eq(capitals.size(), 1, "the carrier alone, not its %d launched fighters" % run.fighters.size())
