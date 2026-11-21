@@ -321,7 +321,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | not started |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
-| T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | in progress |
+| T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | done |
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | not started |
 | T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | not started |
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | not started |
@@ -474,6 +474,30 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Budgets (Q38):** proposed per class from a GPU test with several hulls in view; once the maintainer approves the
   table, it goes into `docs/assets-capital.md` and the budget tests read it.
 - **Done when:** AC5's hard-surface tests pass, the test asset loads in Godot and the budgets are approved.
+- **Done (2026-11-20).** The parts library (`tools/procgen/parts/capital*.py`: hull sections, prows, armour plates, turret
+  mounts, beam emitters, interceptor domes, missile launchers, mine layers, launch bays and tubes, engine blocks, rotating
+  sections, antennae, lamps), each part a `Module` (mesh, collision shapes and hardpoints in one frame); the style hook
+  (`styles/capital.py`: `PanelMosaic`, `HexGrid` for Q45 with `core/seams.Hexes` and a hexagonal tile, `Seamless` for Q46;
+  T06 joins through `capital.module` and `CapitalStyle.surface`); the section model and writer (`core/capital.py`:
+  `manifest.sections[]`, pieces with a rotating one as the station's drum, the shared detail tile, collision per section
+  from M7's builder, chunks cut along the sections, hardpoints for weapons, bays, engines, rotors and lights). The test
+  hull `capital_test_cruiser` (300 m, 3 646 triangles, ten sections, every section and weapon kind, a rotating section)
+  loads in Godot. Contract: `docs/assets-capital.md`, "Capital framework"; `docs/architecture.md` §22.1.
+  **Budgets (Q38), approved 2026-11-20** as the high texture set, with the low set one mip level down (the maintainer's
+  answer): fighter 40 000 triangles, 32.0 / 10.0 MB (high / low); small craft 30 000, 16.0 / 6.0; cruiser 60 000, 56.0 /
+  16.0; capital 100 000, 109.3 / 29.3; dreadnought 150 000, 216.0 / 56.0 (`docs/assets-capital.md`, "Class budgets"; the
+  tests read that table). The framework writes the low set half as wide, the glow map included, and the game's standard
+  hull material takes the set's glow map (`MeshAssets`). GPU test (`scripts/class_budget_probe.sh`, RX 6950 XT,
+  `forward_plus`): 96 stand-in hulls at their ceilings (2 dreadnoughts, 6 capitals, 12 cruisers, 16 small craft, 60
+  fighters; 18 types) at 1920x1080: 1 195 to 1 235 fps, GPU 0.59 to 0.76 ms, 31 draw calls with levels of detail; 506 fps
+  and 1.87 ms with none (4.5 million triangles); at 3840x2160 440 to 678 fps, 1.30 to 2.09 ms (272 fps, 3.48 ms with
+  none); twice the triangles with none 354 fps, 2.74 ms. The fleet's high sets held 1 091 MB in the renderer (1 069 by the
+  table), the card 5 761 to 7 608 MB with other programs on it: texture memory binds, not triangles. Tests: 64 Python
+  (`test_capital_parts` 15, `test_capital_style` 8, `test_capital_framework` 8, `test_budgets` 6,
+  `test_capital_test_cruiser` 27), GUT `test_capital_framework_asset.gd` 5. Open: the hulls built before M10 write their
+  low set at full size and their fighter (livery) material does not take a set's glow map; a fighter task that shrinks its
+  low set gives it one. The test hull's blast energies are placeholders until T03 (`manifest.notes`). Pictures:
+  `references/screenshots/M10-T05 capital framework/`.
 
 ### M10-T06 Organic part library and sheen
 
@@ -486,6 +510,10 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Goal:** AC7 (D12.4), on T05's test asset.
 - **Also:** the scene builder for compound bodies and rotating sections, the `capital` provider and commands, `info.md`;
   tests on the damping guard, rebase, tier hand-over, a ram on a section, a jump point opened and held.
+- **Inputs from T05:** `manifest.pieces` (the rotating piece's mesh and its sections' collision are in its own frame, on
+  `pivot`; `collision.pieces[].piece` names the body); a rotating piece's chunk draws with that piece's maps, which
+  `MeshAssets.chunk_mesh` does not do yet (it takes the hull's); `hardpoints.turrets` stays empty (D61's civilian
+  turrets), the capital mounts are `hardpoints.weapons`.
 
 ### M10-T08 to T18 Damage, weapons, AI and the HUD
 

@@ -34,7 +34,8 @@ DEFAULT_ATLAS_PX = 2048
 DEFAULT_TEXEL_M = 0.01
 GUTTER_PX = 4  # texels of the coarsest map between charts (Q34)
 MAP_KEYS = ("albedo", "normal", "orm", "emissive")
-DETAIL_KEYS = ("albedo", "normal", "orm")  # the maps a texture detail set replaces (the glow is the same in every set)
+DETAIL_KEYS = ("albedo", "normal", "orm")  # the maps a texture detail set replaces (the glow is the same in every set, but smaller in a shrunk one)
+COLOUR_KEYS = ("albedo", "emissive")  # the maps stored in sRGB
 DIGITS_KEY = "digits"
 OPAQUE_SURFACE = "hull"
 GLASS_SURFACE = "glass"
@@ -158,10 +159,10 @@ def shrink_map(image: np.ndarray, factor: int, key: str) -> np.ndarray:
         return image
     h, w = image.shape[0] // factor, image.shape[1] // factor
     values = image[: h * factor, : w * factor].astype(np.float64) / 255.0
-    if key == "albedo":
+    if key in COLOUR_KEYS:
         values[..., :3] = srgb_to_linear(values[..., :3])
     blocks = values.reshape(h, factor, w, factor, -1).mean(axis=(1, 3))
-    if key == "albedo":
+    if key in COLOUR_KEYS:
         blocks[..., :3] = linear_to_srgb(blocks[..., :3])
     elif key == "normal":
         n = blocks[..., :3] * 2.0 - 1.0
@@ -242,7 +243,7 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     (face centroids, face normals -> a flag per face) says which faces lie inside a hall or a bay, written apart in each section
     so the game keeps the sun off them (no light casts shadows). ``surface_suffix`` follows the surfaces' names, so the tiers of one
     big piece (M7-T24, each its own atlas) draw with their own materials; ``detail_shrink`` writes a detail set's maps that many
-    times smaller (a lighter set); ``high_quality_keys`` are the maps imported with the better compression. With ``joints`` (M7-T33)
+    times smaller (a lighter set; above 1 the set names a glow map of its own, shrunk too); ``high_quality_keys`` are the maps imported with the better compression. With ``joints`` (M7-T33)
     the hull's glb is skinned, each part following its ``joint``, so the game can move parts without another draw call; chunks and
     sections stay unskinned."""
     out_dir = Path(out_dir)
@@ -290,6 +291,9 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
                            paintable, normal_scale)
         files = {key: f"{asset_id}_{key}_{name}.png" for key in DETAIL_KEYS}
         shrink = int((detail_shrink or {}).get(name, 1))
+        if shrink > 1:  # a lighter set shrinks the glow map with the others (M10-T05: a low set a mip level down)
+            files["emissive"] = f"{asset_id}_emissive_{name}.png"
+            lesser = {**lesser, "emissive": maps["emissive"]}
         for key, file in files.items():
             paths.append(write_png(out_dir / file, shrink_map(lesser[key], shrink, key)))
             sidecar = out_dir / (file + ".import")

@@ -21,11 +21,13 @@ from tools.procgen.assets import ASSETS
 from tools.procgen.assets import capital_test_cruiser as ctc
 from tools.procgen.core import collision as col
 from tools.procgen.core import manifest as manifest_io
-from tools.procgen.core.budgets import over_budget, texture_mb
+from tools.procgen.core.budgets import low_set_mb, over_budget, texture_mb
 from tools.procgen.core.capital import EXPLOSIVE_KINDS, SECTION_KINDS
 from tools.procgen.core.context import BuildContext
 from tools.procgen.core.glb import read_glb
+from tools.procgen.core.image import read_png
 from tools.procgen.core.obj import read_obj
+from tools.procgen.tests.budget_table import read_budgets
 from tools.procgen.tests.mesh_checks import MAP_KEYS, assert_mirror_symmetric, assert_model_mesh, glb_triangles
 
 ID = "capital_test_cruiser"
@@ -100,10 +102,13 @@ class CapitalTestCruiserTests(unittest.TestCase):
             surface = piece["mesh"]["surfaces"][0]
             for key in MAP_KEYS:
                 self.assertTrue((self.dir_a / surface[key]).is_file(), f"{name} {key}")
-            for key in ("albedo", "normal", "orm"):
+            self.assertEqual(set(surface["detail"]["low"]), set(MAP_KEYS), "the low set names all four maps")
+            for key in MAP_KEYS:
                 low = surface["detail"]["low"][key]
                 self.assertTrue((self.dir_a / low).is_file() and (self.dir_a / (low + ".import")).is_file(), f"{name} {key}")
-                self.assertNotEqual(sha256(self.dir_a / low), sha256(self.dir_a / surface[key]), f"{name}: the low {key} map differs")
+                # Q38: the low set is one mip level down, every map half as wide as the high set's.
+                high_px, low_px = read_png(self.dir_a / surface[key]).shape[0], read_png(self.dir_a / low).shape[0]
+                self.assertEqual((high_px, low_px), (512, 256), f"{name} {key}")
 
     def test_every_piece_shares_one_detail_tile_laid_in_world_space(self) -> None:
         tiles = [s["world_detail"] for p in self.pieces.values() for s in p["mesh"]["surfaces"] if not s["blend"]]
@@ -324,14 +329,24 @@ class CapitalTestCruiserTests(unittest.TestCase):
             self.assertIn(row(s.kind, np.array([-hi[0], lo[1], lo[2]]), np.array([-lo[0], hi[1], hi[2]])), rows, s.name)
 
     # --- budget, far, determinism ----------------------------------------------------------------------------------------
-    def test_the_hull_is_inside_its_class_budget(self) -> None:
+    def test_the_hull_is_inside_its_class_budget_in_both_texture_sets(self) -> None:
         budget = self.manifest["budget"]
         self.assertEqual(budget["class"], "cruiser")
-        # As shipped: the hull's 2 048 px atlas, the rotating section's 1 024 px and the 1 024 px tile.
+        row = read_budgets()["cruiser"]  # docs/assets-capital.md, "Class budgets"
+        self.assertLessEqual(budget["triangles"], row.triangles)
+        # As shipped: the hull's 2 048 px atlas, the rotating section's 1 024 px and the 1 024 px tile; the low set half as wide.
         self.assertEqual([p.atlas_px for p in ctc.PIECES], [2048, 1024])
-        shipped = texture_mb([2048, 1024], 1024)
-        self.assertEqual(over_budget("cruiser", budget["triangles"], shipped), [])
+        high, low = texture_mb([2048, 1024], 1024), texture_mb([1024, 512], 1024)
+        self.assertLessEqual(high, row.high_mb)
+        self.assertLessEqual(low, row.low_mb)
+        self.assertEqual(over_budget("cruiser", budget["triangles"], high, low), [])
         self.assertAlmostEqual(budget["texture_mb"], texture_mb([512, 512], 128), places=2, msg="the manifest records this build's")
+        self.assertAlmostEqual(budget["texture_mb_low"], low_set_mb([512, 512], 128), places=2)
+        self.assertLess(budget["texture_mb_low"], 0.3 * budget["texture_mb"])
+
+    def test_the_manifest_says_what_is_not_final(self) -> None:
+        self.assertEqual(len(self.manifest["notes"]), 1)
+        self.assertRegex(self.manifest["notes"][0], "blast_energy_j.*placeholders.*M10-T03")
 
     def test_a_far_representation_is_written(self) -> None:
         far = self.manifest["far"]

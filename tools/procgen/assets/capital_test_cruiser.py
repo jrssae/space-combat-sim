@@ -28,7 +28,7 @@ from ..parts import capital_weapons as weapons
 from ..styles.capital import FRAMEWORK_GREY
 
 ASSET_ID = "capital_test_cruiser"
-GENERATOR_VERSION = 1
+GENERATOR_VERSION = 2  # 2: the low texture set a mip level down, the manifest's notes (stage 2)
 SHIP_CLASS = "cruiser"
 LENGTH_M = 300.0
 STYLE = FRAMEWORK_GREY
@@ -40,6 +40,7 @@ ROTOR_PIVOT = (0.0, 0.0, 162.5)
 ROTOR_SPIN_RAD_S = 0.35  # about 0.2 g at the blocks' 16 m
 # The explosive sections' blasts, J: placeholders of the right order until M10-T03 sets them (Q18).
 BLAST_J = {"reactor": 4.0e14, "magazine": 1.5e14, "fuel": 8.0e13}
+NOTES = ("sections[].blast_energy_j: placeholders until M10-T03 sets the blast sizes (Q18)",)
 
 SECTIONS = (
     cap.Section("bow", "structure", 0.12),
@@ -122,6 +123,7 @@ def spec() -> cap.CapitalSpec:
         bridge=cap.Pose((0.0, 14.0, 69.5)),
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=500.0, mouth_radius_m=200.0),
+        notes=NOTES,
     )
 
 

@@ -68,7 +68,7 @@ tools/procgen/parts/capital_engines.py   engine_block
 tools/procgen/parts/capital_fittings.py  rotating_section, antenna, lamp
 tools/procgen/styles/capital.py          CapitalStyle (a faction's paint and skin); the skins PanelMosaic, HexGrid, Seamless
 tools/procgen/core/capital.py            Section, PieceSpec, CapitalSpec, problems (the checks), build (the writer)
-tools/procgen/core/budgets.py            the class budgets (Q38) and a texture set's memory
+tools/procgen/core/budgets.py            the class budgets (Q38, "Class budgets" below) and a texture set's memory
 tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part, every section and hardpoint kind
 ```
 
@@ -84,7 +84,7 @@ tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part,
   along its modules' boundaries on its piece's atlas and keeps its own collision.
 - **Pieces** (`manifest.pieces`, the station's form): `hull`, whose mesh is also the manifest's `mesh` (`<id>.glb`), and one
   piece per rotating section (`<id>_<piece>.glb`) with `pivot` (body frame, on its axis), `axis` and `spin_rad_s`. A piece
-  has an atlas of its own with the low and high texture sets. A rotating piece's mesh and its sections' collision are in its
+  has an atlas of its own with the high texture set and the low one a mip level down ("Class budgets"). A rotating piece's mesh and its sections' collision are in its
   own frame, on the pivot (as the station's drum: the game drives it as an `AnimatableBody3D`); its chunk draws with its own
   piece's maps, not the hull's.
 - **Texel tiers** (D72): the piece's atlas carries the paint, the frame lines and the plating (tens of centimetres a texel
@@ -111,7 +111,7 @@ tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part,
   it); 64 shapes a section and 32 points a hull by default; `coverage` over the whole skin. A bay's hall and a rotating
   collar's bore stay open (four walls and a back; ring sectors).
 - **Also written:** `far` (M6's D70: the bounding sphere and silhouette areas), `budget` (`class`, `triangles`,
-  `texture_mb` of this build), `dimensions_m`.
+  `texture_mb` and `texture_mb_low` of this build), `dimensions_m`, and `notes` (what is not final).
 - **The checks** (`capital.problems`, run by `build`): unknown kinds, shares that do not add up, an explosive section
   without a blast energy, a module in no section, a section with no module, names that repeat, thrust shares that do not
   add up, a piece beside the hull that does not spin.
@@ -119,13 +119,57 @@ tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part,
   `test_capital_test_cruiser.py` (Python); `tests/unit/test_capital_framework_asset.gd` (the test hull loads in Godot).
 
 **The test hull**, `capital_test_cruiser`: the stand-ins' cruiser (300 by 60 by 45.6 m with its bay and antenna), 3 646
-triangles, a 2 048 px hull atlas (12 cm a texel) and a 1 024 px one for the rotating section, 19.3 MB a texture set; ten
-sections (every kind), 13 weapon mounts (every kind), a bay and two tubes, four engines, a rotating habitat section, four
-lamps. The explosive sections' blast energies are placeholders until M10-T03. Pictures (gitignored):
-`references/screenshots/M10-T05 capital framework/test hull/`.
+triangles, a 2 048 px hull atlas (12 cm a texel) and a 1 024 px one for the rotating section: 19.3 MB at high and 6.8 MB at
+low, inside the cruiser's row; ten sections (every kind), 13 weapon mounts (every kind), a bay and two tubes, four engines,
+a rotating habitat section, four lamps. The explosive sections' blast energies are placeholders until M10-T03
+(`manifest.notes` says so). Pictures (gitignored): `references/screenshots/M10-T05 capital framework/test hull/`.
 
-**Class budgets (Q38):** proposed in `core/budgets.py`, pending the maintainer's approval; the table and the GPU test behind
-it (`scripts/class_budget_probe.sh`) are written here once approved.
+## Class budgets (M10 Q38)
+
+What a hull of each class may cost, approved by the maintainer on 2026-11-20 (M10-T05). Every M10 hull task names its
+hull's class and stays inside its row; `tools/procgen/core/budgets.py` repeats the table (`CLASS_BUDGETS`, `over_budget`)
+and `test_budgets.py` reads this one and holds the two together.
+
+| Class | Triangles | Atlases | Normal map | High set, MB | Low set, MB |
+|---|---|---|---|---|---|
+| fighter | 40 000 | 1 x 2 048 px | 4 096 px | 32.0 | 10.0 |
+| small_craft | 30 000 | 1 x 2 048 px | as the atlas | 16.0 | 6.0 |
+| cruiser | 60 000 | 1 x 4 096 px | as the atlas | 56.0 | 16.0 |
+| capital | 100 000 | 2 x 4 096 px | as the atlas | 109.3 | 29.3 |
+| dreadnought | 150 000 | 4 x 4 096 px | as the atlas | 216.0 | 56.0 |
+
+- **Triangles**: the whole hull, every piece, the same in both texture sets. The importer's levels of detail come on top.
+- **Texture memory** is one texture set on the card as the game imports it: block compressed with mipmaps, half a byte a
+  texel for the colour, ORM and glow maps, one for the normal map (53.3 MB a 4 096 px atlas, 13.3 MB a 2 048 px one), plus
+  the shared 1 024 px detail tile (2.7 MB, the same in both sets). Only one set is loaded.
+- **High** is the atlas at its full size. **Low** is one mip level down: every map of the set half as wide (2 048 px for
+  4 096, 1 024 for 2 048, a fighter's 4 096 px normal map 2 048), about a quarter of the memory; it also keeps the major
+  seams alone, as the civilians' low set does. `core/capital.py` writes both (`LOW_SHRINK`); the low set names its own
+  glow map, which the game's hull material takes with the others (`MeshAssets.map_file`).
+- **A fighter** may carry a normal map twice its atlas, as the Starfury does. The fighters and civilians built before M10
+  write their low set at full size; they are not held to the low column until a task says so.
+- **Which class**: fighters; small craft (shuttles, pods, the Flyer); cruisers up to about 600 m; capitals to about 2 km;
+  dreadnoughts beyond. The hull task chooses, by what the hull needs up close.
+
+**The GPU test behind it** (`scripts/class_budget_probe.sh`, on the maintainer's RX 6950 XT, `forward_plus`, uncapped): 96
+stand-in hulls, each at its class's ceiling, in view at once: 2 dreadnoughts, 6 capitals, 12 cruisers, 16 small craft and 60
+fighters of 18 types (so 18 hulls' textures), each surface with four maps and the detail tile laid triplanar as the game
+lays it. The empty scene takes 0.33 ms of GPU time at 1920x1080.
+
+| Run | Frames a second | GPU time, ms | Draw calls | Triangles drawn |
+|---|---|---|---|---|
+| 1920x1080, levels of detail on | 1 195 to 1 235 | 0.59 to 0.76 | 31 | 0.40 to 0.54 million |
+| 1920x1080, none (every hull at full detail) | 506 | 1.87 | 27 | 4.5 million |
+| 3840x2160, levels of detail on | 440 to 678 | 1.30 to 2.09 | 38 | 0.62 to 0.76 million |
+| 3840x2160, none | 272 | 3.48 | 27 | 4.5 million |
+| 1920x1080, twice the triangles, none | 354 | 2.74 | 27 | 9.0 million |
+
+The ranges are the fleet spread out and the fleet with one dreadnought 50 m off the camera, across the whole view. The
+fleet's high sets took 1 091 MB in the renderer (1 069 MB by the table's arithmetic); the test hull's high set 18 MB (19.3).
+The card's own counter (`mem_info_vram_used`) rose from 5 761 to 7 608 MB, with other programs holding most of the rest.
+**Texture memory is what binds, not triangles**: twice the triangles with no level of detail still draws in under 3 ms, while
+a fleet's textures are a gigabyte at high and about 270 MB at low. Pictures (gitignored):
+`references/screenshots/M10-T05 capital framework/probe*/`.
 
 ## `raider_strike_carrier` (M12-T19)
 

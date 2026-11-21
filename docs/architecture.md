@@ -6885,3 +6885,46 @@ src/mission/control_hint_text.gd      ControlHintText: the live pad and keyboard
 - `scripts/release_smoke.sh` runs the binary headless with `--console-strict`, plays the tutorial's opening (`SMOKE_SCENARIO` for another scenario) for 600 ticks and quits: exit 0,
   no `ERROR:` lines. It is not part of `run_tests.sh` (it needs the build). The bench writes to `user://reports` in an export
   (T14, `BenchPaths`).
+
+## 22. Factions and capital ships (M10)
+
+M10 as it is built (tasks in `docs/milestones/m10-factions-and-capital-ships.md`, design D12.1 to D12.11 there). Each part goes in
+here when its task lands; until then the milestone file's design section is the plan.
+
+### 22.1 The capital asset framework (D12.1; T05)
+
+```
+tools/procgen/parts/capital.py           Module: a part, its convex collision shapes and its hardpoints in one frame; twins, mounts
+tools/procgen/parts/capital_*.py         the library: hull, weapons, bays, engines, fittings (rotating sections, antennae, lamps)
+tools/procgen/styles/capital.py          CapitalStyle: a faction's paint and its skin (PanelMosaic, HexGrid for Q45, Seamless for Q46)
+tools/procgen/core/capital.py            Section, PieceSpec, CapitalSpec; problems (the checks); build (the writer)
+tools/procgen/core/budgets.py            the class budgets (Q38): triangles, and a texture set's memory at high and at low
+tools/procgen/assets/capital_test_cruiser.py   the test hull, for T07 and as the worked example
+scripts/class_budget_probe.sh            the GPU test behind the budgets (a fleet of stand-in hulls at their ceilings)
+```
+
+- **One generator per hull, composed of modules.** A library part returns a `Module`, so a turret's mesh, its collision and its
+  mount move together and cannot disagree; the generator places modules, names each one's damage section and hands a
+  `CapitalSpec` to `capital.build`. Starboard modules and `..._r` sections get their port twins. Organic bodies (T06) join as
+  modules through `capital.module`.
+- **Sections are whole modules** (`manifest.sections[]`: kind, hull share, hardpoints held, blast energy for a reactor, magazine or
+  fuel section). So a section's break-up chunk is cut on its modules' boundaries from its piece's mesh, and its collision is one
+  entry of `manifest.collision.pieces` from M7's builder (§20.7): a chunk keeps its collision, and a hit names its section.
+- **Pieces** as the station's (§20.7): the hull, and one piece per rotating section with a pivot, an axis and a spin, its mesh and
+  collision in its own frame (the game turns it as an `AnimatableBody3D`, T07). `manifest.mesh` is the hull piece's, so
+  `MeshAssets.for_asset` and `RenderPiece` draw a capital with no new code.
+- **Two texel tiers** (M7's D72): a piece's own atlas for paint, frames and plating, and one shared 16 m tile laid triplanar in
+  the mesh's space (`world_detail`, `MeshAssets.apply_world_detail`), so a 1 to 3 km hull reads from 50 m.
+- **Two texture sets** (Q38): high at the atlas's size; low one mip level down (every map half as wide, the glow map too, and the
+  major seams alone), about a quarter of the memory. A set names the maps it replaces and `MeshAssets.map_file` picks by
+  `settings.texture_detail`; the standard hull material now takes the glow map from the set as well.
+- **Hardpoints** (`hardpoints.json`): the ships' contract, plus `weapons` (turret, beam, interceptor, missile, mine), `bays` (a
+  craft's start pose and way out), `engines` (thrust direction and share), `rotors` and `lights`, each naming its section, so a
+  section lost takes what it holds (D12.5).
+- **Budgets by class** (fighter, small craft, cruiser, capital, dreadnought): triangles and both texture sets' memory, in
+  `docs/assets-capital.md` ("Class budgets"), which the Python tests read. On the RX 6950 XT a fleet of 96 hulls at their ceilings
+  drew in 0.6 to 0.8 ms of GPU time at 1920x1080 (1.9 ms with no level of detail, 4.5 million triangles) and held 1.1 GB of
+  textures at high: texture memory binds, not triangles.
+- The contract in full, the test hull and the GPU test's numbers are in `docs/assets-capital.md` ("Capital framework", "Class
+  budgets"). Tests: `test_capital_parts`, `test_capital_style`, `test_capital_framework`, `test_budgets`,
+  `test_capital_test_cruiser` (Python); `test_capital_framework_asset.gd` (the hull loads, both sets).

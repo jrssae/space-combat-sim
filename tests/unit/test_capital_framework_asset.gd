@@ -1,6 +1,7 @@
 extends GutTest
 ## The capital framework's test hull (M10-T05, D12.1; `tools/procgen/assets/capital_test_cruiser.py`) loads in the game: every
-## piece's textured mesh with the shared detail tile on it, the break-up chunks, the collision per section and the hardpoints.
+## piece's textured mesh with the shared detail tile on it, both texture sets, the break-up chunks, the collision per section and
+## the hardpoints.
 ## What the game does with them is M10-T07's.
 
 const ASSET: String = "capital_test_cruiser"
@@ -41,6 +42,24 @@ func test_every_piece_loads_as_a_textured_mesh_with_the_detail_tile() -> void:
 		assert_true(material.detail_enabled and material.uv2_triplanar, "%s: the shared tile laid in its own space" % piece_name)
 		assert_almost_eq(material.uv2_scale.x, 1.0 / 16.0, 1e-6, "a 16 m tile")
 	assert_same(MeshAssets.for_asset(ASSET), MeshAssets.load_textured(dir, pieces["hull"]["mesh"]), "the asset's mesh is its hull piece")
+
+
+func test_the_low_texture_set_is_a_mip_level_down_glow_map_included() -> void:
+	var before: Variant = Settings.get_value(&"texture_detail")
+	Settings.set_value(&"texture_detail", &"high")
+	var material := MeshAssets.for_asset(ASSET).surface_get_material(0) as StandardMaterial3D
+	assert_not_null(material)
+	if material == null:
+		return
+	var high := Vector2i(material.albedo_texture.get_width(), material.emission_texture.get_width())
+	assert_eq(high, Vector2i(2048, 2048), "the hull's atlas at full size")
+	Settings.set_value(&"texture_detail", &"low")
+	for texture: Texture2D in [material.albedo_texture, material.normal_texture, material.ao_texture, material.emission_texture]:
+		assert_eq(texture.get_width(), 1024, "every map of the low set is half as wide (Q38)")
+	assert_true(material.emission_enabled, "the lit deck and the lamps still glow")
+	Settings.set_value(&"texture_detail", &"high")
+	assert_eq(material.emission_texture.get_width(), 2048, "and the high set comes back")
+	Settings.set_value(&"texture_detail", before)
 
 
 func test_the_rotating_piece_names_its_pivot_axis_and_spin() -> void:

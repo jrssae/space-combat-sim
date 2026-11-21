@@ -223,10 +223,12 @@ def write_hull(
     style: Style,
     ctx: BuildContext,
     comments: Sequence[str] = (),
+    low_shrink: int = 1,
 ) -> HullFiles:
     """The hull as ``<id>.glb`` with its maps, the fallback ``<id>.obj`` and one chunk per group in ``chunk_order``
     (``<id>_chunk_<name>.obj`` and its cut of the textured mesh, placed by its visible surface's centroid). Options:
-    ``atlas_px`` (default 2 048) and ``occlusion`` (default off: the hulls are far bigger than the occlusion radius)."""
+    ``atlas_px`` (default 2 048) and ``occlusion`` (default off: the hulls are far bigger than the occlusion radius).
+    ``low_shrink`` writes the low texture set's maps that many times smaller (the capitals', M10's Q38)."""
     out_dir = Path(out_dir)
     unknown = {p.group for p in parts} - set(chunk_order)
     if unknown:
@@ -253,6 +255,7 @@ def write_hull(
     paths, section = write_textured_mesh(
         out_dir, asset_id, textured, at_texel(style, texel), atlas_px=atlas_px, texel_m=texel, seed=ctx.seed,
         occlusion=bool(ctx.option("occlusion", False)), normal_scale=1, chunks=cuts, grid=False, detail_levels=DETAIL_LEVELS,
+        detail_shrink={name: low_shrink for name in DETAIL_LEVELS},
     )  # fmt: skip
     files += paths
     lo, hi = hull_mesh.bounds()

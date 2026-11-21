@@ -180,18 +180,9 @@ static func textured_material(dir: String, surface: Dictionary) -> StandardMater
 	var material := StandardMaterial3D.new()
 	material.resource_name = String(surface.get("name", ""))
 	material.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-	_apply_surface_maps(material, dir, surface, DETAIL_KEYS)
-	_watch_detail(material, dir, surface, DETAIL_KEYS)
-	var emissive_file: String = String(surface.get("emissive", ""))
-	var emissive: Texture2D = _texture(dir.path_join(emissive_file)) if not emissive_file.is_empty() else null
-	if emissive == null and not emissive_file.is_empty():
-		push_warning("MeshAssets: %s is missing or not imported" % dir.path_join(emissive_file))
-	var strength: float = float(surface.get("emissive_strength", 1.0))
-	if emissive != null and strength > 0.0:
-		material.emission_enabled = true
-		material.emission_texture = emissive
-		material.emission = Color.BLACK
-		material.emission_energy_multiplier = strength
+	# The glow map follows the texture set too: a set written smaller (M10-T05, the capitals' low set) names its own.
+	_apply_surface_maps(material, dir, surface, MAP_KEYS)
+	_watch_detail(material, dir, surface, MAP_KEYS)
 	if bool(surface.get("blend", false)):
 		material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		material.albedo_color = Color(1.0, 1.0, 1.0, 1.0 - float(surface.get("transmittance", 0.0)))
@@ -226,7 +217,8 @@ static func apply_world_detail(material: StandardMaterial3D, dir: String, surfac
 
 
 ## The file of one of a surface's maps in the texture set `settings.texture_detail` picks: a set the surface's `detail` names
-## (`low`, M5-T40), else the surface's own map: the full set, and the only set of a hull written with one.
+## (`low`, M5-T40), else the surface's own map: the full set, and the only set of a hull written with one. A set names the maps
+## it replaces: the paint's three, and the glow map too when the set is written smaller.
 static func map_file(surface: Dictionary, key: String) -> String:
 	var sets: Dictionary = surface.get("detail", {})
 	var chosen: Dictionary = sets.get(String(Settings.get_value(&"texture_detail")), {})
@@ -270,6 +262,12 @@ static func _apply_surface_maps(material: Material, dir: String, surface: Dictio
 		standard.metallic_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_BLUE
 		standard.roughness = 1.0
 		standard.metallic = 1.0
+	if maps.has("emissive"):
+		var strength: float = float(surface.get("emissive_strength", 1.0))
+		standard.emission_enabled = maps["emissive"] != null and strength > 0.0
+		standard.emission_texture = maps["emissive"] if standard.emission_enabled else null
+		standard.emission = Color.BLACK
+		standard.emission_energy_multiplier = strength
 
 
 ## The livery section of an asset's textured mesh (M4-T30b), empty when it takes no livery; read once per asset.

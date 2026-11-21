@@ -4,7 +4,8 @@ A capital generator composes modules of the capital parts library (``parts/capit
 belongs to and hands a :class:`CapitalSpec` to :func:`build`, which writes the whole output contract:
 
 * **pieces**: the hull, and one piece per rotating section (a pivot on its axis and a spin), each a textured mesh on an atlas
-  of its own with the low and high texture sets, through the civilians' writer (``core/civilian.py``). All pieces share one
+  of its own with the high texture set and the low one a mip level down (Q38), through the civilians' writer
+  (``core/civilian.py``). All pieces share one
   near-field detail tile laid in their own space by the renderer (D72's two texel tiers), named by every opaque surface's
   ``world_detail``;
 * **sections** (``manifest.sections[]``): the damage sections. A section is whole modules: its break-up chunk is cut from
@@ -36,7 +37,7 @@ from ..parts import mass_centroid, total_mass
 from ..styles.capital import CapitalStyle
 from . import civilian as cv
 from . import collision as col
-from .budgets import texture_mb
+from .budgets import LOW_SHRINK, low_set_mb, texture_mb
 from .context import AssetOutputs, BuildContext
 from .image import write_png
 from .manifest import build_manifest, write_manifest
@@ -104,7 +105,7 @@ class JumpPoint:
 class CapitalSpec:
     """What a capital generator hands the framework. ``ship_class`` names its budget class (``core/budgets.py``);
     ``bridge`` is the view from its bridge (the cockpit camera); ``collision`` what one section's body part may carry;
-    ``cover_*`` how close the collision must sit to the skin."""
+    ``cover_*`` how close the collision must sit to the skin; ``notes`` are written into the manifest (what is not final)."""
 
     asset_id: str
     generator_version: int
@@ -119,6 +120,7 @@ class CapitalSpec:
     cover_tolerance_m: float = 1.0
     cover_reach_m: float = 2.5
     detail_px: int = 1024
+    notes: tuple[str, ...] = ()
 
 
 # --- the section model (pure) ------------------------------------------------------------------------------------------
@@ -333,7 +335,8 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
                        [s.name for s in sections if s.piece == p.name])
         mine = [s for s in sampled if by_name[s.piece.group].piece == p.name]
         piece_ctx = dataclasses.replace(ctx, options={"atlas_px": p.atlas_px, **ctx.options})
-        piece.hull = cv.write_hull(out_dir, piece.stem, cv.hull_parts(mine, piece.frame), piece.sections, spec.style.style, piece_ctx, comments)
+        piece.hull = cv.write_hull(out_dir, piece.stem, cv.hull_parts(mine, piece.frame), piece.sections, spec.style.style, piece_ctx, comments,
+                                   low_shrink=LOW_SHRINK)
         files += piece.hull.files
         for surface in piece.hull.mesh_section["surfaces"]:
             if not surface["blend"]:
@@ -434,6 +437,7 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
     for p in pieces:
         faces.append(p.hull.mesh.faces + base)
         base += len(p.hull.mesh.vertices)
+    atlases, tile_px = [int(p.hull.mesh_section["atlas_px"]) for p in pieces], int(detail.get("px", 0))
     manifest = build_manifest(
         asset_id=spec.asset_id,
         generator_version=spec.generator_version,
@@ -450,9 +454,10 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
             "chunks": [c["name"] for c in chunks],
             "surface_spacing_m": spacing,
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
-            "budget": {"class": spec.ship_class, "triangles": triangles,
-                       "texture_mb": round(texture_mb([int(p.hull.mesh_section["atlas_px"]) for p in pieces], int(detail.get("px", 0))), 2)},
+            "budget": {"class": spec.ship_class, "triangles": triangles, "texture_mb": round(texture_mb(atlases, tile_px), 2),
+                       "texture_mb_low": round(low_set_mb(atlases, tile_px), 2)},
             "skin": spec.style.skin.name,
+            **({"notes": list(spec.notes)} if spec.notes else {}),
             "far": far_section(at_rest, np.concatenate(faces)),
             "collision": collision,
         },
