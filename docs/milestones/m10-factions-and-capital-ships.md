@@ -402,11 +402,11 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T41 | F | Shadow fighter and Shadow scout | T38, T06, T35 | Fable | not started |
 | T42 | F | Vorlon light fighter | T38, T06 | Fable | not started |
 | T50 | F | EA Thunderbolt fighter, model only | T01, T62; the Starfury's generator and style | Fable | done |
-| T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | not started |
+| T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | in progress |
 | T52 | F | EA Explorer class | T19, T62 | Fable | not started |
 | T53 | F | EA Asimov liner | T19, T62 | Fable | not started |
 | T54 | F | not needed: reference removed by the maintainer, 2026-11-20 | - | - | not needed |
-| T55 | F | EA construction tender | T19, T62 | Fable | not started |
+| T55 | F | EA construction tender | T19, T62 | Fable | in progress |
 | T56 | F | EA mining transport (Q43): the mining variant of T53's generator | T53 | Fable | not started |
 | T57 | F | EA shuttle and EA atmospheric shuttle | T01, T62 | Fable | done |
 | T58 | F | Centauri shuttle and Minbari Flyer | T57, T06 | Fable | not started |

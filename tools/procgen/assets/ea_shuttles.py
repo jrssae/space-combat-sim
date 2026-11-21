@@ -55,7 +55,8 @@ Port = tuple[str, Sequence[float], Sequence[float]]  # an RCS port: name, positi
 
 @dataclass(frozen=True)
 class Craft:
-    """What tells the two shuttles apart for the shared build: their pieces, chunks, paint and hardpoints."""
+    """What tells one craft from another for the shared build: its pieces, chunks, paint and hardpoints. The Panama and the
+    construction tender (``assets/ea_work_ships.py``) are built through it too."""
 
     asset_id: str
     spacing_m: float  # the surface samples' spacing: the body origin and the chunks' offsets
@@ -71,6 +72,8 @@ class Craft:
     lights: Callable[[dict[str, Part]], dict[str, np.ndarray]]
     joints: Callable[[dict[str, Part]], dict[str, np.ndarray]]
     docks: Callable[[dict[str, Part]], list[tuple[str, np.ndarray, np.ndarray]]]  # name, position, the way out of the hull
+    ship_class: str = SHIP_CLASS  # the class budget it is held to
+    atlas_px: int = cv.HULL_ATLAS_PX
 
 
 # --- surfaces ------------------------------------------------------------------------------------------------------------------
@@ -270,7 +273,7 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
         "rcs": rcs,
         "collision": cv.collision_json(parts, offset),
         "nav_lights": {
-            "port": cv.r(lights["starboard"] * FLIP - offset),
+            "port": cv.r(lights.get("port", lights["starboard"] * FLIP) - offset),
             "starboard": cv.r(lights["starboard"] - offset),
             "top": cv.r(lights["top"] - offset),
             "top_lamp": cv.r(lights["top_lamp"] - offset),
@@ -287,7 +290,7 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
 
 # --- build -------------------------------------------------------------------------------------------------------------------
 def build_craft(craft: Craft, ctx: BuildContext) -> AssetOutputs:
-    """Generate one shuttle into ``ctx.out_dir``.
+    """Generate one craft into ``ctx.out_dir``.
 
     Options: ``spacing`` (m, the surface samples' spacing), ``atlas_px`` (the hull's atlas, default 2 048), ``occlusion``
     (default off).
@@ -295,6 +298,7 @@ def build_craft(craft: Craft, ctx: BuildContext) -> AssetOutputs:
     spacing = float(ctx.option("spacing", craft.spacing_m))
     if spacing <= 0.0 or not math.isfinite(spacing):
         raise ValueError("spacing must be positive")
+    ctx = BuildContext(ctx.out_dir, ctx.seed, {"atlas_px": craft.atlas_px, **ctx.options})
     look = craft.look
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -326,7 +330,7 @@ def build_craft(craft: Craft, ctx: BuildContext) -> AssetOutputs:
             "chunks": [c["name"] for c in hull.chunks],
             "surface_spacing_m": spacing,
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
-            "budget": {"class": SHIP_CLASS, "triangles": hull.mesh_section["triangles"], "texture_mb": round(texture_mb(atlas), 2),
+            "budget": {"class": craft.ship_class, "triangles": hull.mesh_section["triangles"], "texture_mb": round(texture_mb(atlas), 2),
                        "texture_mb_low": round(low_set_mb(atlas), 2)},
         },
     )

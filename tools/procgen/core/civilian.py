@@ -36,6 +36,7 @@ from .textured_mesh import DEFAULT_TEXEL_M, TexturedPart, pack_parts, phase_step
 from .textures import Marking
 
 CENTRE, RIGHT = "c", "r"
+LONE = "a"  # a piece of a lopsided hull (M10-T51): built where it is authored, neither symmetrised nor mirrored
 JSON_DIGITS = 5
 HULL_ATLAS_PX = 2048  # every civilian hull: 4 to 16 cm a texel from the Bokmai to the Saturn 8s
 MODEL_ATLAS_PX = 1024  # a turret or a cargo pod
@@ -45,8 +46,8 @@ LINE_TEXELS = 2.0  # a panel seam is never thinner than this many texels, so it 
 @dataclass(frozen=True)
 class Piece:
     """One component: ``solid`` is the volume it buries (``None``: it hides nothing), ``side`` is :data:`CENTRE`
-    (symmetrised) or :data:`RIGHT` (mirrored to a left twin), ``fine`` scales its sampling spacing (thin parts are
-    sampled finer so their outline counts)."""
+    (symmetrised), :data:`RIGHT` (mirrored to a left twin) or :data:`LONE` (as authored, no twin), ``fine`` scales its
+    sampling spacing (thin parts are sampled finer so their outline counts)."""
 
     part: Part
     solid: Solid | None = None
@@ -104,13 +105,13 @@ def sample_pieces(
     suffix: tuple[str, ...] = (),
     buried_margin: float = 0.03,
 ) -> list[Sampled]:
-    """Every piece's visible surface: samples buried in another piece dropped, centre pieces symmetrised and right pieces
-    mirrored, in placement order."""
+    """Every piece's visible surface: samples buried in another piece dropped, centre pieces symmetrised, right pieces
+    mirrored and lone pieces left as authored, in placement order."""
     solids = [(p.name, p.solid, p.solid.bounds()) for p in with_twins(pieces) if p.solid is not None]
     out: list[Sampled] = []
     for p in pieces:
         step = spacing * p.fine
-        mesh = p.part.mesh if p.side == RIGHT else right_half_first(p.part.mesh)
+        mesh = right_half_first(p.part.mesh) if p.side == CENTRE else p.part.mesh
         s = sample_mesh(mesh, step, ctx.rng("surface", p.name, *suffix), systematic=True)
         if len(s):
             lo, hi = s.positions.min(axis=0), s.positions.max(axis=0)
@@ -124,12 +125,14 @@ def sample_pieces(
             out.append(Sampled(p, s.symmetrized("x"), step, p.name))
         else:
             out.append(Sampled(p, s, step, p.name))
-            out.append(Sampled(p.mirrored(), s.mirrored("x"), step, p.name))
+            if p.side == RIGHT:
+                out.append(Sampled(p.mirrored(), s.mirrored("x"), step, p.name))
     return out
 
 
 def centroid(sampled: Sequence[Sampled]) -> np.ndarray:
-    """The visible surface's centroid (x is zero by symmetry): the authored position of the body origin."""
+    """The visible surface's centroid, kept on the authored centre plane (x is zero by symmetry; a lopsided hull's origin
+    stays on its box's centre line): the authored position of the body origin."""
     total = sum(len(s.samples) for s in sampled)
     mean = sum(s.samples.positions.sum(axis=0) for s in sampled) / total
     return np.array([0.0, float(mean[1]), float(mean[2])])
@@ -324,6 +327,7 @@ def turret_entry(stem: str, part: Part, barrel_m: float, section: dict[str, Any]
 __all__ = [
     "CENTRE",
     "JSON_DIGITS",
+    "LONE",
     "RIGHT",
     "HullFiles",
     "HullPart",

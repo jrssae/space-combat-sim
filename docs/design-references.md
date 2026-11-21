@@ -1541,6 +1541,11 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   100 %).
 - **Subsystems.** Bridge: the bow spine's root. Engines: the stern pair. Cargo: the box (hatches in its roof).
 - **Colours (show).** Grey and dark grey plating, a lighter roof, small red and white lights; no markings legible.
+- **As measured (M10-T51).** The hull is **lopsided**, not a box: its section is a wedge, 26 m tall on the port side (a
+  round tube along its upper and its lower edge) and thinning to a blunt 4 m edge to starboard, mirrored top to bottom.
+  The bow spine stands on the port side (x -15); the fore body (12 to 24 %) is the same wedge at a smaller size with a
+  tube along its starboard edge. Aft: an octagonal core between two engines (x -11.7 and 11.5) with a flattened tank above
+  and below it, two drums by the port engine and a disc tank on the port side. `tools/procgen/parts/ea_panama.py`.
 
 ### EA Explorer class (`ea_explorer`, T52)
 
@@ -1582,6 +1587,11 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   (0 to 25 %), two above and two below, each with a two-fingered grab; a **truss crossbar** across the body at 62 to 75 %
   out to x ±35 with a **thruster pod** at each end; a drum engine aft (75 to 100 %) and two landing legs under the body.
 - **Colours.** EA work-craft yellow-ochre and grey (the work pods in the still), black hazard stripes on the claws.
+- **As measured (M10-T55).** The body is a hexagonal prism with a glazed pyramid nose and a tube along each of its four
+  corners. The two **grab arms** are on the centre line, above and below the nose. The four **claws** hang from ball joints
+  at the shoulders, each **three sickle blades** round its own axis, and the port pair is splayed wider than the starboard
+  pair. The boom is a box lattice with two tanks inside each half; the landing gear has **four feet** and stands 0.95 m to
+  port of the centre line. `tools/procgen/parts/ea_construction_tender.py`.
 
 ### EA shuttle (`ea_shuttle`, T57)
 
