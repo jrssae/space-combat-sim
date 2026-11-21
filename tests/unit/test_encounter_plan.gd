@@ -184,10 +184,13 @@ func test_a_patrol_or_traffic_route_is_straight_and_ends_as_far_out_as_it_starts
 func test_the_cap_admits_an_event_only_when_it_fits() -> void:
 	assert_eq(EncounterPlan.admit(0, 6, 24), 6, "room")
 	assert_eq(EncounterPlan.admit(18, 6, 24), 6, "exactly fits")
-	assert_eq(EncounterPlan.admit(19, 6, 24), 0, "waits")
+	assert_eq(EncounterPlan.admit(19, 6, 24), 5, "held: starts with the five that fit (maintainer, 2026-11-21)")
+	assert_eq(EncounterPlan.admit(21, 6, 24), EncounterPlan.MIN_PARTIAL, "three fit: the smallest it starts with")
+	assert_eq(EncounterPlan.admit(22, 6, 24), 0, "two would fit: it waits, never a raid of two cut from six")
 	assert_eq(EncounterPlan.admit(24, 1, 24), 0, "full")
 	assert_eq(EncounterPlan.admit(0, 6, 4), 4, "bigger than the whole cap: trimmed to it once nothing else is in play")
-	assert_eq(EncounterPlan.admit(1, 6, 4), 0, "and waits while anything is")
+	assert_eq(EncounterPlan.admit(1, 6, 4), 3, "three fit beside one: it starts with three")
+	assert_eq(EncounterPlan.admit(2, 6, 4), 0, "and waits while fewer than three fit")
 
 
 func test_an_event_can_be_trimmed() -> void:

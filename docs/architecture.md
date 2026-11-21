@@ -4577,10 +4577,15 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   objective; `ally_starfury` engaging; `civilian`), a `Route` (`pace` none, no loop; a patrol's yields to attacks) through
   `BehaviourFollowPath`, raiders through the director's own `JumpPointPool` (4 points, built with the director; M6-T19 replaced `JumpArrivalPool`). Encounter
   civilians broadcast 15 km (a transponder) so a raid sent from 6-12 km finds them; the range is cleared when they leave.
-- **Cap.** `encounter_max_ships` (24, live) counts the director's ships in play. A due event that would pass it, or whose pool
-  is spent (raids and patrols need their own type free), gives way to the same index drawn as another kind, gentlest first
+- **Cap.** `encounter_max_ships` (24, live) counts the director's ships in play near the player and those waiting for the gate.
+  A ship in the low-attention tier (a cheap native row), a raider docked aboard its carrier, or one flown off beyond 20 km
+  (`FLOWN_OFF_M`, going home before its release at 40 km) holds no slot, and civilians that joined the station's run do not count (they are bounded by their
+  pools, 27 in free flight; maintainer, 2026-11-21: the schedule stalled behind them). A due event that would pass the cap starts
+  with the ships that still fit when that is at least `EncounterPlan.MIN_PARTIAL` (3); otherwise, or when its pool is spent
+  (raids and patrols need their own type free), it gives way to the same index drawn as another kind, gentlest first
   (`EncounterPlan.substitutes`: traffic, then patrol, then raid), and waits only when none fits; one bigger than the whole cap is
-  trimmed to it once nothing else is in play. A traffic hull whose pool is spent gives way to the next civilian hull with a free ship.
+  trimmed to it once nothing else is in play. Worst case in free flight: 24 flying encounter ships, 27 run civilians, 3
+  carriers, the station's 12 raiders and 48 wing fighters, and the player's wing, about 117 ships (the M4 benchmark holds 300). A traffic hull whose pool is spent gives way to the next civilian hull with a free ship.
 - **The station's run (M7-T56, m5-056).** A pools file with `station_run` (free flight) sends traffic events along the run
   between the jumpgate and Babylon 5 (`StationTraffic.lane_event`: an arriving convoy, 800 m apart, joining the run 22-40 km
   from the station and moved toward the gate until it is past the player's radar; a Saturn to the cargo bay when it is free,

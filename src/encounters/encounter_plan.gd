@@ -26,6 +26,8 @@ const RAID_SPEED_MPS: float = 120.0
 ## Raiders spread around the jump point on a grid this wide.
 const RAID_SLOT_M: float = 60.0
 const RAID_AT_CIVILIAN_SHARE: float = 0.5
+## The fewest ships an event held by the cap starts with when only part of it fits: never a raid of one or two.
+const MIN_PARTIAL: int = 3
 const PATROL_SIZES: Array[int] = [2, 4, 6]
 const PATROL_CRUISE_MPS: float = 220.0
 const PATROL_PASS_M: Vector2 = Vector2(500.0, 5000.0)
@@ -112,11 +114,14 @@ func event(index: int, kind: StringName = &"") -> EncounterEvent:
 
 
 ## Ships of an event of `wanted` that may start now with `alive` of the encounters' ships in play under `cap`: all of them
-## when they fit, none (it waits) when they do not, and an event bigger than the whole cap trimmed to it once nothing
-## else is in play, so it cannot wait for ever.
+## when they fit; as many as fit when that is at least `MIN_PARTIAL` (a held raid starts smaller rather than stalling the
+## schedule, maintainer 2026-11-21); none (it waits) when fewer fit; and an event bigger than the whole cap trimmed to it once
+## nothing else is in play, so it cannot wait for ever.
 static func admit(alive: int, wanted: int, cap: int) -> int:
 	if alive + wanted <= cap:
 		return wanted
+	if cap - alive >= MIN_PARTIAL:
+		return cap - alive
 	if wanted > cap and alive == 0:
 		return maxi(cap, 0)
 	return 0
