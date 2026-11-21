@@ -25,6 +25,15 @@ var damage_layout: DamageZones.Layout = DamageZones.Layout.NONE
 var damage_zones: PackedFloat32Array = PackedFloat32Array()
 ## Its `Targetable.Role`: a navigation target (BEACON) gets the HUD's navigation look (M7-T27).
 var role: int = 0
+## The selected subsystem of a capital (M10-T18, Q17), or empty for the whole ship: `{key, label, state, fraction, works}`, and
+## where it is (World frame, `position` plus `aim_offset`) for the HUD's marker and the guns' lead.
+var subsystem: Dictionary = {}
+var aim_offset: Vector3 = Vector3.ZERO
+
+
+## Where the guns lead: the subsystem's point, else the target's centre.
+func aim_position() -> Vector3:
+	return position + aim_offset
 
 
 func _to_string() -> String:

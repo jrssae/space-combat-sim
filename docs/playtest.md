@@ -1613,3 +1613,12 @@ too quiet or right, against the engines (the bed the rest sits on).
       nobody is placed and nobody overshoots. Jump while civilians come and go: none flies in as you come out; they wait clear of the
       mouth and go after.
 
+
+## Play-testing capital subsystems on the HUD (M10-T18)
+
+- [ ] **(H) Subsystems in the target menu:** `capital spawn ea_omega 800`, hold the target button, open its ring and pick the Omega:
+      a ring of WHOLE SHIP, BRIDGE, REACTOR, ENGINES, LAUNCH BAYS, TURRETS and BEAM EMITTERS opens (A picks, B backs out a ring);
+      TURRETS opens a ring of its nearest eight with their state and points. The pick sets the target and the subsystem.
+- [ ] **(H) The box and the lead:** the target box shows `NAME  STATE %` under the hull bar and a square marker on the hull where the
+      subsystem is; the lead diamond and auto-track aim at it. `capital damage <mount> 200` changes its state; key 9 (L3 on a pad that
+      has it) steps through the subsystems and back to the whole ship. `set targeting.subsystem next|whole|<key>` does the same from the console.

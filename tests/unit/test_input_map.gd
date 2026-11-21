@@ -21,6 +21,7 @@ const PAD_BINDINGS: Dictionary = {
 	&"toggle_flight_assist": ["button", JOY_BUTTON_DPAD_UP, 0],
 	&"toggle_running_lights": ["button", JOY_BUTTON_DPAD_LEFT, 0],
 	&"comms_menu": ["button", JOY_BUTTON_DPAD_RIGHT, 0],
+	&"subsystem_next": ["button", JOY_BUTTON_LEFT_STICK, 0],
 	&"brake": ["button", JOY_BUTTON_RIGHT_STICK, 0],
 	&"autotrack": ["button", JOY_BUTTON_X, 0],
 	&"camera_look": ["button", JOY_BUTTON_LEFT_STICK, 0],
@@ -72,6 +73,7 @@ const KEYS_B: Dictionary = {
 	&"wing_form_hold": [KEY_7],
 	&"wing_hold": [KEY_8],
 	&"comms_menu": [KEY_CTRL],
+	&"subsystem_next": [KEY_9],  # the number row's next key: the targeted capital's next subsystem (M10-T18)
 }
 
 # action -> mouse buttons in event order (an action not listed has none).
@@ -101,6 +103,7 @@ const OUTSIDE_THE_BLOCK: Dictionary = {
 	KEY_6: [&"wing_dock"],  # the next key of the number row: the wing's order to dock (M8-T06)
 	KEY_7: [&"wing_form_hold"],  # and the two after it: the hold-fire orders (M8-T19)
 	KEY_8: [&"wing_hold"],
+	KEY_9: [&"subsystem_next"],
 }
 
 

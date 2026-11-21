@@ -246,8 +246,10 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 		f.edge_arrow_visible = true
 	if f.target_nav:
 		return  # a place to fly to, not to shoot at: no lead (M7-T27)
-	# The lead: where the bolt meets the target, from the mean muzzle position, hidden when there is no solution in range.
-	var lead: Dictionary = InterceptMath.solve(input.muzzle_position, input.own_velocity, t.position, t.velocity,
+	if not t.subsystem.is_empty() and not input.target_unknown:
+		_subsystem(input, f, t)
+	# The lead: where the bolt meets the target (a picked subsystem's point), from the mean muzzle position, hidden when there is no solution in range.
+	var lead: Dictionary = InterceptMath.solve(input.muzzle_position, input.own_velocity, t.aim_position(), t.velocity,
 			input.weapon_speed_mps, input.weapon_lifetime_s)
 	if bool(lead["ok"]):
 		var at: Dictionary = project(input, lead["lead_point"])
@@ -255,6 +257,18 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 			f.lead_pos = at["pos"]
 			f.lead_visible = on_screen(input, f.lead_pos)
 			f.lead_tof_s = float(lead["t"])
+
+
+# The picked subsystem's line, its state colour and its marker on the hull (M10-T18).
+static func _subsystem(input: HudInput, f: HudFrame, t: TargetReadout) -> void:
+	var sub: Dictionary = t.subsystem
+	f.subsystem_line = "%s  %s" % [sub["label"], CapitalSubsystems.state_text(sub)]
+	f.subsystem_fraction = float(sub["fraction"])
+	f.subsystem_color = hull_color(f.subsystem_fraction) if bool(sub["works"]) else Factions.UNIDENTIFIED_COLOR
+	var shown: Dictionary = project(input, t.aim_position())
+	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
+		f.subsystem_marker_visible = true
+		f.subsystem_marker_pos = shown["pos"]
 
 
 # A square at least MIN_BOX_PX (scaled) wide, or the target's projected bounding radius if that is larger.

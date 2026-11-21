@@ -505,6 +505,7 @@ use for the standard layout; any pad SDL3 recognises, generic XInput clones incl
 | `fire` | A `JOY_BUTTON_A` (0) | Space, mouse 1 | hold | - | - |
 | `toggle_flight_assist` | D-pad `JOY_BUTTON_DPAD_UP` (11) | T | edge | - | - |
 | `toggle_running_lights` | D-pad `JOY_BUTTON_DPAD_LEFT` (13) | 5 | edge (M3-T27) | - | - |
+| `subsystem_next` | L3 `JOY_BUTTON_LEFT_STICK` (7), shared with `camera_look` (the maintainer's pad has no stick clicks: it picks subsystems in the target menu) | 9 | edge (M10-T18: the targeted capital's next subsystem, the whole ship after the last) | - | - |
 | `comms_menu` | D-pad `JOY_BUTTON_DPAD_RIGHT` (14) | Ctrl | edge (opens the comms menu, M5-T07; while it is open the same press closes it, M5-T46) | - | - |
 | `brake` | R3 `JOY_BUTTON_RIGHT_STICK` (8) | X | hold | - | - |
 | `autotrack` | X `JOY_BUTTON_X` (2) | Shift, mouse 4 | edge (toggles auto-track; `InputAdapter.autotrack_on`); on a target that offers an interaction, tap (on release, under `target_hold_s`) or hold `interact_hold_s` (M7-T27, `HoldInteract`), the same on every binding; the HUD prompt names them all | - | - |
@@ -4772,6 +4773,18 @@ latches for the player's selection until it changes. `Targetable.role` (ship, ci
 **Waypoints.** `HudWaypoint` holds the pilot's pick and who spoke last. A script's waypoint carries a key that changes when
 it is set anew (`mission:<serial>`, `route:NAV n`); `Hud.final_input` lets the director settle the frame's waypoint after
 the mission's part. `HudInput.waypoint_id` marks the waypoint's radar contact.
+
+**Subsystems (M10-T18, Q17).** Picking an identified capital on a ship ring opens a third ring instead of targeting it: WHOLE SHIP,
+then BRIDGE, REACTOR, ENGINES, LAUNCH BAYS, TURRETS, BEAM EMITTERS and MISSILES for the groups it has (at most eight slices).
+A group of one is picked at once; a group of several opens its members (the first eight, nearest the pilot first), each with its
+state and points. `CapitalSubsystems` (pure, `src/targeting/`) lists them from the ship's `CapitalDamage` (`list`, `cycled`,
+`state_text`); `TargetMenu.subsystems_of` is the director's source (empty for an unidentified hull, so a disguised or far
+contact gives nothing away); `select` returns `subsystem` (a key, "" for the whole ship). `TargetingController.subsystem_key`
+holds the pick (cleared when the selection changes; `select_subsystem`, `cycle_subsystem`; `subsystem_next` on the pad's L3 or key 9).
+`selected_readout()` then carries `subsystem` and `aim_offset`: the HUD's lead, the target box's subsystem line (name, state,
+points), its marker on the hull and the ship's auto-track all use `aim_position()`. A subsystem sits at its mount, or at the centre of
+its section's box (engines and bays), with the rotating pieces at rest, so a turret on the drum is marked where it sits when the
+drum is at rest.
 
 **Cost.** Opening: 0.28 ms with 10 candidates, 2.56 ms with 304 (the list is most of it). Closed: nothing per tick.
 

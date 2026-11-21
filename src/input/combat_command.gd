@@ -9,8 +9,10 @@ var target_next: bool = false  ## edge
 var target_nearest: bool = false
 var target_prev: bool = false  ## edge
 var target_ahead: bool = false  ## edge
+## The next subsystem of the targeted capital (M10-T18, Q17). Edge.
+var subsystem_next: bool = false
 
 
 func to_dict() -> Dictionary:
 	return {"fire": fire, "weapon_next": weapon_next, "target_next": target_next, "target_prev": target_prev, "target_ahead": target_ahead,
-			"target_nearest": target_nearest}
+			"target_nearest": target_nearest, "subsystem_next": subsystem_next}

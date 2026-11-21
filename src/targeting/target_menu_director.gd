@@ -12,6 +12,7 @@ extends Node
 const HINT_ROOT: String = "A  OPEN      B  CLOSE"
 const HINT_TARGET: String = "A  TARGET      B  BACK"
 const HINT_WAYPOINT: String = "A  WAYPOINT      B  BACK"
+const HINT_SUBSYSTEM: String = "A  AIM AT      B  BACK"
 const ACTIONS: Array[StringName] = [&"open", &"pick", &"highlight", &"back", &"close"]
 ## What "none" says in the preview panel.
 const NONE_CLEARS_TARGET: String = "Clears the target"
@@ -82,6 +83,7 @@ func open() -> String:
 	# The list is read before the pause: a paused ship's marker does not count as in play.
 	var started: int = Time.get_ticks_usec()
 	var candidates: Array[TargetInfo] = main.ship.targeting.candidates()
+	menu.subsystems_of = _subsystems_of
 	menu.open(candidates, main.ship.global_position, main.combatant.faction, _objectives(), launch_base_id())
 	last_open_usec = Time.get_ticks_usec() - started
 	last_candidates = candidates.size()
@@ -186,6 +188,8 @@ func _resume() -> void:
 func _show_page() -> void:
 	if menu.category < 0:
 		view.hint = HINT_ROOT
+	elif menu.subsystem_level() > 0:
+		view.hint = HINT_SUBSYSTEM
 	else:
 		view.hint = HINT_WAYPOINT if TargetMenu.WAYPOINT_CATEGORIES.has(menu.category) else HINT_TARGET
 	view.refresh()
@@ -195,7 +199,8 @@ func _show_page() -> void:
 # The preview follows the highlight on the second ring and hides everywhere else. An entry is read when the highlight
 # lands on it, never again while it stays (the game is paused, so nothing in it changes).
 func _sync_preview() -> void:
-	var at := Vector2i(menu.category, menu.radial.highlight()) if menu.is_open() and menu.category >= 0 else Vector2i(-1, -1)
+	var on_ship_ring: bool = menu.is_open() and menu.category >= 0 and menu.subsystem_level() == 0
+	var at := Vector2i(menu.category, menu.radial.highlight()) if on_ship_ring else Vector2i(-1, -1)
 	if at == _previewed:
 		return
 	_previewed = at
@@ -220,6 +225,17 @@ func _sync_preview() -> void:
 		var clears_waypoint: bool = TargetMenu.WAYPOINT_CATEGORIES.has(menu.category)
 		preview.show_model(TargetPreviewModel.none(str(slot.get("label", "")),
 				NONE_CLEARS_WAYPOINT if clears_waypoint else NONE_CLEARS_TARGET))
+
+
+# The subsystems the pilot may pick on target `id` (M10-T18): a capital's whose make the pilot can tell, nearest first; else none.
+func _subsystems_of(id: int) -> Array[Dictionary]:
+	var cap := _owner_of(id) as CapitalShip
+	if cap == null or cap.damage == null:
+		return []
+	var range_m: float = TargetingSystem.range_between(main.ship.global_position, cap.global_position)
+	if not TargetCategories.is_identified(range_m, cap.targetable.broadcast_range_m):
+		return []
+	return CapitalSubsystems.list(cap.damage, cap.global_transform.affine_inverse() * main.ship.global_position)
 
 
 # The body a marker sits on, or null once it is gone.
@@ -293,7 +309,10 @@ func _carry_out(picked: Dictionary) -> void:
 	match action:
 		TargetMenu.ACTION_TARGET:
 			main.ship.targeting.select_id(int(picked["id"]))
+			main.ship.targeting.select_subsystem(String(picked.get("subsystem", "")))
 			last_pick = "target %s" % picked["label"]
+			if not String(picked.get("subsystem", "")).is_empty():
+				last_pick += " (%s)" % picked["subsystem"]
 		TargetMenu.ACTION_CLEAR_TARGET:
 			main.ship.targeting.clear_selection()
 			last_pick = String(action)

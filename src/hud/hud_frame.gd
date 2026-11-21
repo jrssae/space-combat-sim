@@ -69,6 +69,13 @@ var cue_color: Color = Color.WHITE
 var edge_arrow_visible: bool = false
 var edge_arrow_pos: Vector2 = Vector2.ZERO
 var edge_arrow_angle: float = 0.0
+## The selected subsystem of a capital (M10-T18, Q17): its line for the box ("" for none: the whole ship), the colour of its state,
+## its points 0..1, and its marker where it projects on the hull (only on screen).
+var subsystem_line: String = ""
+var subsystem_color: Color = Factions.HUD_LINE_COLOR
+var subsystem_fraction: float = 1.0
+var subsystem_marker_visible: bool = false
+var subsystem_marker_pos: Vector2 = Vector2.ZERO
 ## Lead reticle (a diamond): hidden without an intercept solution or beyond the bolt's range.
 var lead_visible: bool = false
 var lead_pos: Vector2 = Vector2.ZERO

@@ -18,7 +18,7 @@ const NAMES: Array[StringName] = [
 	InputAdapter.TARGET_AHEAD, InputAdapter.TOGGLE_CAMERA, InputAdapter.CAMERA_LOOK, InputAdapter.RESET_SHIP,
 	InputAdapter.PAUSE, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE, InputAdapter.WING_COVER,
 	InputAdapter.TOGGLE_RUNNING_LIGHTS, InputAdapter.COMMS_MENU, InputAdapter.WING_DOCK,
-	InputAdapter.WING_FORM_HOLD, InputAdapter.WING_HOLD,
+	InputAdapter.WING_FORM_HOLD, InputAdapter.WING_HOLD, InputAdapter.SUBSYSTEM_NEXT,
 ]
 
 
@@ -46,6 +46,7 @@ static func from_command(pc: PilotCommand) -> Dictionary:
 	_flag(out, c.target_next or c.target_nearest, InputAdapter.TARGET_NEXT)
 	_flag(out, c.target_prev, InputAdapter.TARGET_PREV)
 	_flag(out, c.target_ahead, InputAdapter.TARGET_AHEAD)
+	_flag(out, c.subsystem_next, InputAdapter.SUBSYSTEM_NEXT)
 	var u: UiCommand = pc.ui
 	_flag(out, u.toggle_camera, InputAdapter.TOGGLE_CAMERA)
 	_flag(out, u.look_active, InputAdapter.CAMERA_LOOK)

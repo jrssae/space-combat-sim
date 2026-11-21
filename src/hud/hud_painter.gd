@@ -285,6 +285,8 @@ func _draw_target_marks(f: HudFrame, s: float, w: float, labelled: bool) -> void
 			_text(label, Vector2(box.position.x, bottom + 20.0 * s), 15.0 * s, color)
 			if f.target_hull >= 0.0:
 				_bar(Rect2(Vector2(box.position.x, bottom + 27.0 * s), Vector2(maxf(box.size.x, 60.0 * s), 6.0 * s)), f.target_hull, color, w)
+			if not f.subsystem_line.is_empty():
+				_text(f.subsystem_line, Vector2(box.position.x, bottom + 46.0 * s), 13.0 * s, f.subsystem_color)
 			if f.cue_present:
 				_text(f.cue_text, Vector2(box.position.x, bottom + 42.0 * s), 14.0 * s, f.cue_color)
 				_cue_bar(Rect2(Vector2(box.position.x, bottom + 49.0 * s), Vector2(maxf(box.size.x, 120.0 * s), 6.0 * s)), f, w)
@@ -300,10 +302,20 @@ func _draw_target_marks(f: HudFrame, s: float, w: float, labelled: bool) -> void
 			_text(label, p + Vector2(0.0, 28.0 * s), 14.0 * s, color, HORIZONTAL_ALIGNMENT_CENTER)
 			if f.cue_present:
 				_text(f.cue_text, p + Vector2(0.0, 48.0 * s), 13.0 * s, f.cue_color, HORIZONTAL_ALIGNMENT_CENTER)
+	if f.subsystem_marker_visible:
+		_subsystem_marker(f.subsystem_marker_pos, f.subsystem_color, s, w)
 	if f.lead_visible:
 		var l: Vector2 = f.lead_pos
 		var r: float = 9.0 * s
 		_canvas.draw_polyline(PackedVector2Array([l + Vector2(0.0, -r), l + Vector2(r, 0.0), l + Vector2(0.0, r), l + Vector2(-r, 0.0), l + Vector2(0.0, -r)]), color, w)
+
+
+# A square with a cross where the picked subsystem sits on the hull (M10-T18).
+func _subsystem_marker(at: Vector2, color: Color, s: float, w: float) -> void:
+	var r: float = 7.0 * s
+	_canvas.draw_rect(Rect2(at - Vector2(r, r), Vector2(r, r) * 2.0), color, false, w)
+	_canvas.draw_line(at + Vector2(-r * 0.5, 0.0), at + Vector2(r * 0.5, 0.0), color, w)
+	_canvas.draw_line(at + Vector2(0.0, -r * 0.5), at + Vector2(0.0, r * 0.5), color, w)
 
 
 # The target's readout as a panel, for a screen: name, then range and closing speed, then its hull.
@@ -326,6 +338,9 @@ func _draw_target_panel(f: HudFrame, surface: HudSurface, s: float, w: float) ->
 			surface.target_text_width)
 	if f.target_hull >= 0.0:
 		_bar(surface.target_bar_rect, f.target_hull, f.target_color, w)
+	if not f.subsystem_line.is_empty():
+		_fitted(f.subsystem_line, Vector2(surface.target_bar_rect.position.x, surface.target_bar_rect.end.y + 18.0 * s), 14.0 * s,
+				f.subsystem_color, surface.target_text_width)
 
 
 # The approach cue's bar (M8-T18): filled to the stopping distance, a tick at the room left; braking is due when the fill meets

@@ -56,6 +56,8 @@ const RESET_SHIP := &"reset_ship"
 const PAUSE := &"pause"
 const TOGGLE_OVERLAY := &"debug_toggle_overlay"
 const TARGET_PREV := &"target_prev"
+## The next subsystem of the targeted capital (M10-T18, Q17): the left stick's click and key 9; the target menu reaches them all too.
+const SUBSYSTEM_NEXT := &"subsystem_next"
 ## The pad's tap-or-hold target button (B): tap = next, hold = previous.
 const TARGET_CYCLE := &"target_cycle"
 const AUTOTRACK := &"autotrack"
@@ -89,7 +91,7 @@ const ACTIONS: Array[StringName] = [
 	STRAFE_LEFT, STRAFE_RIGHT, STRAFE_DOWN, STRAFE_UP, ROLL_LEFT, ROLL_RIGHT, TARGET_NEXT, WEAPON_NEXT,
 	TARGET_AHEAD, FIRE, TOGGLE_ASSIST, BRAKE, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, AUTOTRACK, CAMERA_LOOK, SCREENSHOT, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TARGET_CYCLE,
-	TOGGLE_RUNNING_LIGHTS, COMMS_MENU, WING_DOCK, WING_FORM_HOLD, WING_HOLD,
+	TOGGLE_RUNNING_LIGHTS, COMMS_MENU, WING_DOCK, WING_FORM_HOLD, WING_HOLD, SUBSYSTEM_NEXT,
 ]
 
 ## A radial menu's own actions: declared in project.godot, read only while one is open, never rebound by a profile.
@@ -103,7 +105,7 @@ const RADIAL_ACTIONS: Array[StringName] = [RADIAL_UP, RADIAL_DOWN, RADIAL_LEFT, 
 const EDGE_ACTIONS: Array[StringName] = [
 	TOGGLE_ASSIST, WEAPON_NEXT, TARGET_AHEAD, TOGGLE_CAMERA, RESET_SHIP, PAUSE, TOGGLE_OVERLAY,
 	TARGET_PREV, SCREENSHOT, AUTOTRACK, WING_ATTACK, WING_FORM, WING_ENGAGE, WING_COVER, TOGGLE_RUNNING_LIGHTS,
-	COMMS_MENU, WING_DOCK, WING_FORM_HOLD, WING_HOLD,
+	COMMS_MENU, WING_DOCK, WING_FORM_HOLD, WING_HOLD, SUBSYSTEM_NEXT,
 ]
 
 const AIM_EXPO := 1.5
@@ -249,6 +251,7 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.combat.target_next = wheel > 0
 	cmd.combat.target_prev = edges[TARGET_PREV] or wheel < 0
 	cmd.combat.target_ahead = edges[TARGET_AHEAD]
+	cmd.combat.subsystem_next = edges[SUBSYSTEM_NEXT]
 
 	cmd.ui.toggle_camera = edges[TOGGLE_CAMERA]
 	cmd.ui.reset = edges[RESET_SHIP]

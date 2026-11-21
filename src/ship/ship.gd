@@ -1050,7 +1050,7 @@ func _idle_output() -> FlightOutput:
 func _take_combat_edges() -> bool:
 	var fresh: bool = _combat_fresh
 	_combat_fresh = false
-	if not fresh and (_combat.weapon_next or _combat.target_next or _combat.target_ahead):
+	if not fresh and (_combat.weapon_next or _combat.target_next or _combat.target_ahead or _combat.subsystem_next):
 		var held := CombatCommand.new()
 		held.fire = _combat.fire
 		_combat = held
@@ -1095,7 +1095,7 @@ func _lead_offset() -> Vector3:
 		for entry: Dictionary in _hardpoints.muzzles:
 			muzzle_centre += xf * (entry["transform"] as Transform3D).origin  # a marker's global position, without the marker
 		muzzle_centre /= float(_hardpoints.muzzles.size())
-	var lead: Dictionary = InterceptMath.solve(muzzle_centre, linear_velocity, readout.position, readout.velocity,
+	var lead: Dictionary = InterceptMath.solve(muzzle_centre, linear_velocity, readout.aim_position(), readout.velocity,
 			weapon.muzzle_speed_mps, weapon.lifetime_s)
 	return (lead["lead_point"] as Vector3) - global_position
 

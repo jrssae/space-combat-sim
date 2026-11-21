@@ -41,6 +41,8 @@ var keeps_candidates: bool = true
 ## broadcasts. Once identified it stays so while it is selected, so a target that opens the range does not lose its name.
 ## Kept for a controller that keeps its candidates (the player's).
 var selection_identified: bool = false
+## The selected capital's subsystem (`CapitalSubsystems` key, M10-T18, Q17): "" for the whole ship. Cleared whenever the selection changes.
+var subsystem_key: String = ""
 
 var _body: RigidBody3D = null
 # The list was not built since the last refresh (M4-T34, built on read): the next reader builds it.
@@ -86,6 +88,9 @@ func _register_console() -> void:
 		&"closing_mps": {"get": _console_closing, "unit": "m/s",
 				"doc": "Closing speed of the selected target (positive = closing)"},
 		&"candidates": {"get": _console_candidates, "doc": "Targets in sensor range, nearest first"},
+		&"subsystem": {"get": _console_subsystem, "set": _console_set_subsystem, "type": TYPE_STRING,
+				"doc": "The selected capital's aimed subsystem key (whole when the whole ship); set a key, next or whole"},
+		&"subsystems": {"get": _console_subsystems, "doc": "The selected capital's subsystems: key, state and points, nearest first"},
 	}), self)
 
 
@@ -160,6 +165,8 @@ func refresh() -> void:
 ## nose, `target_nearest` toggles between the nearest and the 2nd nearest enemy (M5-T25). All act on candidates gathered
 ## now, so it does not matter whether the caller runs before this node.
 func apply(cmd: CombatCommand) -> void:
+	if cmd != null and cmd.subsystem_next and _has_body():
+		cycle_subsystem()
 	if cmd == null or not (cmd.target_next or cmd.target_prev or cmd.target_ahead or cmd.target_nearest) or not _has_body():
 		return
 	var before: int = system.selected_id()
@@ -185,7 +192,59 @@ func selected_readout() -> TargetReadout:
 	var info: TargetInfo = _live_info(system.selected_id())
 	if info == null:
 		return null
-	return TargetingSystem.compute_readout(info, _ship_position(), _body.linear_velocity, _ship_forward())
+	var readout: TargetReadout = TargetingSystem.compute_readout(info, _ship_position(), _body.linear_velocity, _ship_forward())
+	_note_subsystem(readout)
+	return readout
+
+
+## The selected target as a capital whose subsystems the pilot may pick: identified, and with its damage model; else null.
+func selected_capital() -> CapitalShip:
+	if not system.has_selection() or not selection_identified:
+		return null
+	var marker := instance_from_id(system.selected_id()) as Targetable if is_instance_id_valid(system.selected_id()) else null
+	var cap := marker.get_parent() as CapitalShip if marker != null else null
+	return cap if cap != null and cap.damage != null else null
+
+
+## The subsystems of the selected capital, nearest the player first; empty when it is not one (or not identified).
+func subsystem_entries() -> Array[Dictionary]:
+	var cap: CapitalShip = selected_capital()
+	if cap == null or not _has_body():
+		return []
+	return CapitalSubsystems.list(cap.damage, cap.global_transform.affine_inverse() * _ship_position())
+
+
+## Aims at subsystem `key` of the selected capital ("" the whole ship). Returns whether the selection holds it.
+func select_subsystem(key: String) -> bool:
+	if key.is_empty():
+		subsystem_key = ""
+		return true
+	if CapitalSubsystems.find(subsystem_entries(), key).is_empty():
+		return false
+	subsystem_key = key
+	return true
+
+
+## The next subsystem of the selected capital (the whole ship between the last and the first); `step` -1 goes back.
+func cycle_subsystem(step: int = 1) -> void:
+	var entries: Array[Dictionary] = subsystem_entries()
+	if not entries.is_empty():
+		subsystem_key = CapitalSubsystems.cycled(entries, subsystem_key, step)
+
+
+# Names the picked subsystem on `readout` and where the guns lead: its point on the capital now. Nothing for an unidentified
+# target, whose parts the pilot cannot tell apart.
+func _note_subsystem(readout: TargetReadout) -> void:
+	if subsystem_key.is_empty():
+		return
+	var cap: CapitalShip = selected_capital()
+	if cap == null:
+		return
+	var entry: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(cap.damage), subsystem_key)
+	if entry.is_empty():
+		return
+	readout.subsystem = entry
+	readout.aim_offset = cap.global_transform * (entry["point"] as Vector3) - cap.global_position
 
 
 ## Line of sight from the ship to the selected target, World frame, m; zero when nothing is selected. Read live from
@@ -477,6 +536,7 @@ func _note_identified() -> void:
 
 func _emit_if_changed(before: int) -> void:
 	if system.selected_id() != before:
+		subsystem_key = ""
 		selection_identified = false
 		_note_identified()
 		if _body != null:
@@ -555,6 +615,28 @@ func _console_revealed() -> Variant:
 func _console_closing() -> Variant:
 	var readout: TargetReadout = selected_readout()
 	return readout.closing_mps if readout != null else null
+
+
+func _console_subsystem() -> String:
+	return subsystem_key if not subsystem_key.is_empty() else "whole"
+
+
+func _console_set_subsystem(value: Variant) -> String:
+	var wanted: String = String(value).strip_edges()
+	if wanted == "next":
+		cycle_subsystem()
+		return "" if selected_capital() != null else "the target is not an identified capital"
+	if wanted == "whole" or wanted == "none":
+		subsystem_key = ""
+		return ""
+	return "" if select_subsystem(wanted) else "no subsystem '%s' on the selected capital (targeting.subsystems lists them)" % wanted
+
+
+func _console_subsystems() -> PackedStringArray:
+	var out := PackedStringArray()
+	for entry: Dictionary in subsystem_entries():
+		out.append("%s %s" % [entry["key"], CapitalSubsystems.state_text(entry)])
+	return out
 
 
 func _console_candidates() -> PackedStringArray:

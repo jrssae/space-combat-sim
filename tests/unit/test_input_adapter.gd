@@ -198,6 +198,7 @@ func test_every_edge_maps_to_its_field() -> void:
 		InputAdapter.WING_DOCK: func(c: PilotCommand) -> bool: return c.ui.wing_dock,
 		InputAdapter.WING_FORM_HOLD: func(c: PilotCommand) -> bool: return c.ui.wing_form_hold,
 		InputAdapter.WING_HOLD: func(c: PilotCommand) -> bool: return c.ui.wing_hold,
+		InputAdapter.SUBSYSTEM_NEXT: func(c: PilotCommand) -> bool: return c.combat.subsystem_next,
 	}
 	assert_eq(fields.size(), InputAdapter.EDGE_ACTIONS.size(), "every edge action is covered")
 	for action: StringName in fields.keys():
