@@ -570,6 +570,17 @@ func _physics_process(delta: float) -> void:
 
 
 ## Drops the members that are down and briefs the others (see the class notes). Runs every tick; public for the tests.
+## The player is back after its death (M8-T17; maintainer, 2026-11-20: they fly back, no teleport): its wing drops whatever it
+## was doing for the player (a jump's break-off) and is briefed under its order again, so its wingmen fly back to their slots
+## round the respawned player as formation flies them (far off at the profile's cruise plus `FormationState`'s far extra,
+## through the leader's link while it is out of sight).
+func regroup(wing: Wing) -> void:
+	if wing == null or wing.leader == null or not wing.leader.is_player:
+		return
+	wing.leader_away = false
+	refresh(wing)
+
+
 func refresh(wing: Wing) -> void:
 	var shot_down: bool = false
 	for member: Combatant in wing.members():
@@ -633,6 +644,15 @@ func refresh(wing: Wing) -> void:
 		# An evading wingman of a flight, or of a wing told to form up, turns back at the cohesion distance (M8-T06).
 		var forming: bool = order == AiContext.Order.FORM_ON_ME or order == AiContext.Order.FORM_HOLD_FIRE
 		ctx.leash_m = flight_rules.cohesion_m if ai_flight or (alive and forming) else 0.0
+		# Far off its slot (a respawn, a gate, a recall) it closes fast and brakes in time (M8-T17).
+		ctx.catch_up_m = flight_rules.catch_up_beyond_m
+		ctx.catch_up_mps = minf(flight_rules.catch_up_mps, member.ship.spec.assist_speed_max_mps) if member.ship.spec != null \
+				else flight_rules.catch_up_mps
+		# FORM ON ME is weapons free near the player (M8-T13); not while the wing follows the player through a gate.
+		var weapons_free: bool = order == AiContext.Order.FORM_ON_ME and alive and not wing.jumping
+		ctx.form_engage_m = flight_rules.form_engage_m if weapons_free else 0.0
+		ctx.form_leash_m = flight_rules.form_leash_m if weapons_free else 0.0
+		ctx.form_off_slot_s = flight_rules.form_off_slot_s if weapons_free else 0.0
 		if alive and wing.leader.is_player:
 			member.ship.running_lights = wing.leader.ship.running_lights
 	if leader_pilot != null and wing.flight > 0:

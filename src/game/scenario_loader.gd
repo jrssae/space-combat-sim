@@ -50,10 +50,13 @@ extends RefCounted
 ##                                                  #       the New game list, lowest first (M8 D79)}; strings may be ""
 ##      "cinematics": Dictionary,                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
 ##      "belts": Array[Dictionary],                 # `asteroid_belts[]` (M5-T29, D63): each {centre: UniversePos, size: Vector3,
-##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m},
+##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m,
+##                                                  #       lane_m (a clear lane along its Z axis, M8-T26; 0: none)},
 ##                                                  #       the input `BeltLayout.place` takes; may be empty
 ##      "civilian_names": Dictionary,               # (M5-T30) civilian hull -> PackedStringArray of names; may be empty
 ##      "placeholders": Dictionary,                 # (M5-T30) filled by `resolve_random_civilian`: "{civilian}" -> name
+##      "hud": Dictionary,                          # (M8-T08) HUD options: {"capital_markers": bool} turns the far capitals' markers
+##                                                  #       on or off for this scenario (absent: `data/hud/capital_markers.json`)
 ##      "frame": Dictionary}                        # (M6-T09) the `anchor` and `epoch` blocks: where the World anchors and
 ##                                                  #       the system time at the start (`ScenarioFrame.parse`); every
 ##                                                  #       position above is measured from that anchor
@@ -229,6 +232,9 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	var station: Variant = _station(root.get("station", {}), source)
 	if station is String:
 		return _failure(station as String)
+	var hud: Variant = _hud(root.get("hud", {}), source)
+	if hud is String:
+		return _failure(hud as String)
 
 	var result: Dictionary = _empty()
 	result["ok"] = true
@@ -249,6 +255,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["cinematics"] = cinematics
 	result["belts"] = belts
 	result["station"] = station
+	result["hud"] = hud
 	result["civilian_names"] = civilian_names
 	result["frame"] = frame
 	return result
@@ -330,6 +337,18 @@ static func _civilian_names(raw: Variant, source: String) -> Variant:
 
 ## `station` (M7-T12): the station's traffic at the start, `{"cargo_ferry": n}` with n from 0 to 12 (the cargo scene's cargo pods)
 ## and `{"reserve_traffic": true}` (M7-T13: the raids' and wings' ships are built at load); or an error string.
+# The scenario's HUD options (M8-T08): a known key with a bool, or an error.
+static func _hud(raw: Variant, source: String) -> Variant:
+	if not raw is Dictionary:
+		return "%s: hud must be an object" % source
+	for key: String in (raw as Dictionary).keys():
+		if key != "capital_markers":
+			return "%s: hud.%s is not a known key (capital_markers)" % [source, key]
+		if typeof((raw as Dictionary)[key]) != TYPE_BOOL:
+			return "%s: hud.capital_markers must be true or false" % source
+	return (raw as Dictionary).duplicate()
+
+
 static func _station(raw: Variant, source: String) -> Variant:
 	if not raw is Dictionary:
 		return "%s: station must be an object" % source
@@ -381,9 +400,12 @@ static func _belts(raw: Variant, system: StringName, source: String) -> Variant:
 		var seed_value: Variant = belt.get("seed", 1)
 		if not (seed_value is float or seed_value is int):
 			return "%s: seed must be a number" % where
+		var lane: Variant = belt.get("lane_m", 0.0)
+		if not (lane is float or lane is int) or float(lane) < 0.0:
+			return "%s: lane_m must be a number of at least 0" % where
 		out.append({"centre": centre as UniversePos, "size": size as Vector3, "count": int(count),
 				"radius_m": Vector2(float((radii as Array)[0]), float((radii as Array)[1])), "seed": int(seed_value),
-				"min_gap_m": float(gap)})
+				"min_gap_m": float(gap), "lane_m": float(lane)})
 	return out
 
 
@@ -855,7 +877,7 @@ static func _empty() -> Dictionary:
 			"props": [] as Array[Dictionary], "jumpgates": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
-			"civilian_names": {}, "placeholders": {}, "station": {}}
+			"civilian_names": {}, "placeholders": {}, "station": {}, "hud": {}}
 
 
 static func _failure(message: String) -> Dictionary:

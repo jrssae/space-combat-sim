@@ -301,7 +301,7 @@ func test_a_picked_beacon_is_the_hud_waypoint_and_never_the_target() -> void:
 	var places: Array[String] = ["babylon 5 docking bay", "babylon 5 cargo bay", "jumpgate"]
 	assert_true(places.has(entries[0]) if station_placed else entries[0] == "nav alpha", "a place first: %s" % [entries])
 	assert_true(entries.has("nav alpha"), "the nearest beacon is listed: %s" % [entries])
-	assert_eq(entries[3], "none")
+	assert_eq(entries[RadialMenu.none_slice(entries.size())], "none", "none down: %s" % [entries])
 	assert_true(_run("targetmenu highlight \"nav alpha\"").ok)
 	await _press(InputAdapter.RADIAL_SELECT)
 	assert_false(main.target_menu.is_open())
@@ -466,6 +466,29 @@ func test_the_station_is_an_ally_to_pick_as_a_target() -> void:
 	await _ticks(2)
 	assert_eq(main.ship.targeting.selected_id(), main.far_props.station.targetable.get_instance_id(), "selected as the target")
 	assert_false(main.target_menu.view.visible, "the pick closed the menu")
+
+
+func test_the_launch_base_heads_allies_however_many_allies_are_nearer() -> void:
+	# Maintainer, 2026-11-20: in free flight the player launched from Babylon 5 (the scenario's `player.home`), so the station is
+	# always on the ALLIES ring, at the top, however many allies are nearer; the ring holds eight and NONE.
+	main.ships.prepare(ShipPool.ALLY_TYPE, 12)
+	for i: int in 10:
+		assert_true(_run("spawn ally idle %d %d" % [300 + 40 * i, 10 * i]).ok, "ally %d" % i)
+	await _ticks(3)
+	assert_ne(main.target_menu.launch_base_id(), 0, "free flight has a launch base")
+	_run("targetmenu open")
+	assert_gte(main.target_menu.menu.count(TargetCategories.Category.ALLIES), 11)
+	_run("targetmenu pick allies")
+	var entries: PackedStringArray = _read("target_menu.entries")
+	assert_eq(entries[0], "babylon 5", "pinned first: %s" % [entries])
+	assert_eq(entries.size(), 9, "eight ships, the base among them, and NONE")
+	_run("targetmenu close")
+
+
+func test_a_mission_with_no_launch_base_pins_nothing() -> void:
+	await _boot("res://data/scenarios/civilian_escort.json")
+	assert_eq(main.combatant.home, &"", "the escort names no launch source")
+	assert_eq(main.target_menu.launch_base_id(), 0, "so nothing is pinned")
 
 
 func test_the_console_opens_picks_and_closes_it() -> void:

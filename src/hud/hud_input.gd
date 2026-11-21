@@ -66,6 +66,9 @@ var contacts: Array[TargetInfo] = []
 ## the layout takes `contacts` instead.
 var radar_contacts: RadarContacts = null
 var selected_id: int = 0
+## Capitals the HUD may mark far out (M8-T08, `CapitalContacts.gather`), and the rules for it (null: no markers).
+var capitals: Array[Dictionary] = []
+var capital_rules: CapitalMarkerRules = null
 ## One line at the top centre (wave, raiders left, kills; on a route the instructor's `FOLLOW INSTRUCTOR — NAV 2/6 — NEXT: ROLL`);
 ## empty until something feeds it.
 var status_line: String = ""

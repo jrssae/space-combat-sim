@@ -350,6 +350,8 @@ func _handle(events: PackedStringArray) -> void:
 			GateJump.EV_START:
 				_assist_before = main.ship.assist_on
 				main.ship.assist_on = true
+				if jump_gate.collision_body != null:
+					main.ship.add_collision_exception_with(jump_gate.collision_body)  # committed: never against the gate's arms
 				wing_jump.begin(main, jump_gate)
 			GateJump.EV_RUN_IN:
 				jump_gate.send_departure(main.ship, _on_player_through, GateJump.SWALLOW_S)
@@ -427,6 +429,8 @@ func _place_player() -> void:
 
 func _finish() -> void:
 	wing_jump.finish()
+	if jump_gate != null and is_instance_valid(jump_gate) and jump_gate.collision_body != null:
+		main.ship.remove_collision_exception_with(jump_gate.collision_body)
 	_light_wingmen([])
 	var ship: Ship = main.ship
 	var plumes: ThrusterVisuals = ship.get_node_or_null(^"ThrusterVisuals") as ThrusterVisuals

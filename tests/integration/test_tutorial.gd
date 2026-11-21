@@ -1,129 +1,10 @@
-extends TestSteps
+extends TutorialSteps
 ## The tutorial mission (M8 D79, AC4): the front end offers it first and starts it; console commands drive it from the menu
 ## to the debrief on a fresh seed; only the instructor and the player fly until the alarm (M8-T33): the two launch one after
 ## the other, and the instructor takes the wing orders as the player's wingman; the tour visits its stops; the raid comes out of the jumpgate's vortex and then off the
 ## strike carrier, and the whole wing launches at the alarm, in play, with nothing more at the raiders' first hit; a pilot lost before the alarm
 ## gets the full restart only, one lost after it also the restart from the raid's start, which keeps the course result; the
 ## buoy course gives its four remarks; the qualification makes a squadron leader or a squadron pilot, saved in the career.
-
-const SCENARIO_ID: StringName = &"tutorial"
-const MISSION_PATH: String = "res://data/scenarios/tutorial.json"
-const CAREER_PATH: String = "user://test_tutorial_career.json"
-const FrontEndScene: PackedScene = preload("res://src/frontend/front_end.tscn")
-const Script_: GDScript = preload("res://data/missions/tutorial.gd")
-const BEAT_S: float = 0.25
-
-var main: Main
-var holder: Node
-var source: FakeInputSource
-var _saved: Dictionary = {}
-
-
-func before_each() -> void:
-	get_tree().paused = false
-	source = FakeInputSource.new()
-	_saved = {"flow": Game.flow, "parent": Game.scene_parent, "main_path": Game.main_scene_path, "career": Game.career,
-			"career_path": Game.career_path}
-	Game.flow = GameFlow.new()
-	Game.career = Career.new()
-	Game.career_path = CAREER_PATH
-	DirAccess.remove_absolute(CAREER_PATH)
-	holder = Node.new()
-	add_child_autofree(holder)
-	Game.scene_parent = holder
-
-
-func after_each() -> void:
-	get_tree().paused = false
-	DebugConsole.flags.invulnerable = false
-	Game.flow = _saved["flow"]
-	Game.scene_parent = _saved["parent"]
-	Game.main_scene_path = _saved["main_path"]
-	Game.career = _saved["career"]
-	Game.career_path = _saved["career_path"]
-	DirAccess.remove_absolute(CAREER_PATH)
-
-
-# --- helpers -----------------------------------------------------------------------------------------------------------
-
-
-func _run(line: String) -> ConsoleResult:
-	return DebugConsole.registry.execute(line)[0]
-
-
-func _wait_for(what: String, reached: Callable, max_ticks: int = 1500) -> void:
-	var waited: int = 0
-	while not bool(reached.call()) and waited < max_ticks:
-		await _ticks(1)
-		waited += 1
-	assert_true(bool(reached.call()), "waited %d ticks for: %s" % [waited, what])
-
-
-# The tutorial in the real Main, started as the flow starts a mission; `checkpoint` as a debrief's restart hands it over.
-func _fly(seed_value: int = 5, checkpoint: Dictionary = {}) -> void:
-	Game.flow.enter_directly(GameFlow.make_request(&"mission", SCENARIO_ID, false, seed_value))
-	main = (load("res://src/game/main.tscn") as PackedScene).instantiate() as Main
-	main.input_source = source
-	main.scenario_path = MISSION_PATH
-	main.scenario_seed = seed_value
-	main.mission_checkpoint = checkpoint
-	holder.add_child(main)
-	await _ticks(2)
-	main.mission.debrief_delay_s = BEAT_S
-
-
-func _api() -> MissionApi:
-	return main.mission.api
-
-
-func _goto(step: StringName) -> void:
-	assert_true(_run("mission goto %s" % step).ok, "mission goto %s" % step)
-	await _wait_for("step %s" % step, func() -> bool: return _api().step_name() == step and not _api().is_skipping(), 600)
-
-
-func _ship(ship_name: String) -> Combatant:
-	return main.mission.stage._actors.get(MissionWorld.key(ship_name)) as Combatant
-
-
-func _grading() -> TutorialRules:
-	return TutorialRules.load_file()["rules"]
-
-
-# The names of the AI Starfuries in play, sorted.
-func _starfuries() -> Array:
-	var names: Array = main.ships.alive(ShipPool.ALLY_TYPE).map(func(c: Combatant) -> String: return c.display_name)
-	names.sort()
-	return names
-
-
-func _check_open(id: StringName) -> bool:
-	return _api().checks.is_active() and _api().checks.current != null and _api().checks.current.id == id
-
-
-# Waits until check `id` is open and has taken its first look: an order given in its first tick would be its baseline.
-func _await_check(id: StringName, max_ticks: int) -> void:
-	await _wait_for("the %s check" % id, func() -> bool: return _check_open(id), max_ticks)
-	await _ticks(5)
-
-
-func _debrief() -> DebriefScreen:
-	return holder.get_child(0) as DebriefScreen if holder.get_child_count() == 1 else null
-
-
-func _local(at: Vector3) -> Vector3:
-	return main.world.universe_to_local(UniversePos.new(at.x, at.y, at.z, main.world.origin.system_id))
-
-
-func _put_player(at: Vector3) -> void:
-	main.mission.stage.place("player", UniversePos.new(at.x, at.y, at.z, main.world.origin.system_id))
-
-
-func _journal_has(prefix: String) -> bool:
-	for entry: String in _api().journal:
-		if entry.begins_with(prefix):
-			return true
-	return false
-
 
 # Flies the course step with the clock moved by hand: the player is put at each buoy, `leg_s` of sim time apart.
 func _fly_course(leg_s: float, lose_buoy: bool) -> void:
@@ -199,8 +80,8 @@ func test_console_commands_take_it_from_the_menu_to_the_debrief_on_a_fresh_seed(
 	assert_eq(_api().step_name(), &"launch")
 	assert_true(main.controls_locked(), "the launch has the ship")
 	assert_true(main.launches.locks_controls(), "the squadron launch runs")
-	assert_true(_run("mission goto form_up").ok)
-	await _wait_for("the hand-over", func() -> bool: return _api().step_name() == &"form_up" and not main.controls_locked(), 600)
+	assert_true(_run("mission goto flight_checks").ok)
+	await _wait_for("the hand-over", func() -> bool: return _api().step_name() == &"flight_checks" and not main.controls_locked(), 600)
 	assert_eq(_starfuries(), ["INSTRUCTOR"], "two ships until the alarm: the instructor and the player")
 	assert_eq(main.wings.player_wing().members().size(), 0, "the instructor left the flight it launched in")
 	assert_true(_journal_has("launch_squadron alpha 0"), "the two-ship launch: the instructor, then the player")
@@ -230,15 +111,13 @@ func test_console_commands_take_it_from_the_menu_to_the_debrief_on_a_fresh_seed(
 # --- the training ----------------------------------------------------------------------------------------------------------
 
 
-func test_the_instructor_leads_to_the_box_flies_a_demo_on_request_and_the_drones_are_unarmed() -> void:
+func test_the_instructor_flies_a_demo_on_request_and_the_drones_are_unarmed_and_left_alone() -> void:
 	await _fly()
-	await _goto(&"form_up")
-	await _wait_for("the instructor's route", func() -> bool: return _journal_has("fly INSTRUCTOR"), 1200)
+	await _goto(&"flight_checks")
 	var instructor: Combatant = _ship("INSTRUCTOR")
 	assert_not_null(instructor)
 	assert_true(instructor.damageable.invulnerable)
 	var pilot := instructor.driver.brain as AiPilot
-	assert_eq(pilot.context.route.pace, Route.PACE_PLAYER, "it holds its speed to the player's")
 	_api().demo_requested.emit(&"roll", &"roll")
 	assert_true(_journal_has("demo INSTRUCTOR roll"))
 	assert_eq(pilot.context.route.waypoint(0).demo, &"roll", "the instructor flies the move where it is")
@@ -248,7 +127,7 @@ func test_the_instructor_leads_to_the_box_flies_a_demo_on_request_and_the_drones
 	assert_eq(_ship("DRONE 1").faction, Factions.RAIDERS, "a hostile to practise on")
 	await _ticks(900)
 	for drone: String in Script_.GUNNERY_DRONES:
-		assert_true(_api().alive(drone), "%s is left for the pilot: the grid and the flight hold their fire out here" % drone)
+		assert_true(_api().alive(drone), "%s is left for the pilot: the grid holds its fire out here" % drone)
 		assert_almost_eq(_ship(drone).damageable.hull.fraction(), 1.0, 0.001)
 
 
@@ -272,8 +151,10 @@ func test_the_wing_orders_drill_runs_on_the_instructor_who_obeys_and_then_instru
 	await _ticks(90)
 	assert_eq(wingman.context.leader_target_id, drone_id, "the instructor attacks the player's target")
 	await _wait_for("the instructor's kill", func() -> bool: return not _api().alive("DRONE 4"), 9000)
-	_ship("DRONE 5").damageable.kill()
-	await _await_check(&"wing_cover", 600)
+	await _wait_for("the instructor's word on it", func() -> bool: return _said(&"instructor_wing_kill"), 300)
+	assert_true(_api().alive("DRONE 5"), "the beat ends on the ordered drone: the other is left to practise on")
+	assert_string_contains(_api().dialog_book.line(&"instructor_wing_kill").text, "other drone", "and the line says so")
+	await _await_check(&"wing_cover", 900)
 	assert_true(bool(main.wings.give_order(AiContext.Order.COVER_ME)["ok"]))
 	assert_eq(wingman.context.order, AiContext.Order.COVER_ME, "the instructor took the order")
 	await _wait_for("the drill's end", func() -> bool: return _journal_has("pilot INSTRUCTOR own"), 300)
@@ -283,6 +164,12 @@ func test_the_wing_orders_drill_runs_on_the_instructor_who_obeys_and_then_instru
 			and _api().dialog.current.id == &"instructor_wing_done", 900)
 	for id: StringName in [&"check_wing_form", &"check_wing_attack", &"check_wing_cover"]:
 		assert_string_contains(_api().dialog_book.line(id).text, " me ", "%s is addressed to the instructor" % id)
+	await _wait_for("the tour's brake check", func() -> bool: return _check_open(&"brake"), 1200)
+	assert_true(_api().alive("DRONE 5"), "still there to shoot at until the tour")
+	assert_true(_run("checks pass").ok)
+	await _wait_for("the first stop", func() -> bool: return main.tours.playing, 600)
+	assert_false(_api().alive("DRONE 5"), "Control recalls it while the camera is at the station")
+	assert_eq(main.waves.credit.player_kills, 0, "a recall, not a kill")
 
 
 func test_the_pause_menu_skips_the_training_block_to_the_tour() -> void:
@@ -338,6 +225,12 @@ func test_the_tour_visits_its_stops_in_order() -> void:
 	await _wait_for("the first stop", func() -> bool: return main.tours.playing, 600)
 	assert_true(main.controls_locked())
 	assert_eq(main.camera_rig.mode, CameraRig.Mode.CINEMATIC)
+	assert_false(main.tours.captions, "the tour's own captions are off for the tutorial")
+	main.tours.point_started.connect(func(_point: String, _caption: String) -> void:
+		assert_false(main.tours._caption.visible, "no caption over Control's line"))
+	assert_false(main.tours._caption.visible)
+	await _wait_for("the instructor's line, which is what reads", func() -> bool: return _line() == &"tour_cobra", 300)
+	assert_false(main.tours._caption.visible)
 	await _wait_for("the whole tour", func() -> bool: return _api().step_name() == &"jumpgate", 20000)
 	var seen: Array = main.tours.played.map(func(p: Dictionary) -> String: return p["point"])
 	assert_eq(seen, want, "the Cobra bays, the docking bay, the command section, the grid and its heavy cannons")

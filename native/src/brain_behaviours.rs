@@ -373,6 +373,18 @@ pub struct Context {
     /// The evasion's leash (M8-T06, `AiContext.leash_m`): a wingman evading farther than this from its lead breaks toward
     /// the lead instead of on away (0: none).
     pub leash_m: f64,
+    /// A long rejoin (M8-T17, `AiContext.catch_up_m`, `catch_up_mps`; data/wings/flights.json): a ship in formation farther
+    /// than `catch_up_m` from its slot closes at up to `catch_up_mps`, braking back to formation's own closing in time
+    /// (0: none).
+    pub catch_up_m: f64,
+    pub catch_up_mps: f64,
+    /// Weapons free in formation (M8-T13, `AiContext.form_engage_m`, `form_leash_m`, `form_off_slot_s`; data/wings/
+    /// flights.json): under FORM ON ME a ship in formation shoots at a hostile within `form_engage_m` of its leader from any
+    /// bearing, turning its guns on it while its thrusters keep the slot; it lets the slot slip at most `form_leash_m`, for at
+    /// most `form_off_slot_s`, then flies back before it shoots again (0: only what crosses its leader's nose).
+    pub form_engage_m: f64,
+    pub form_leash_m: f64,
+    pub form_off_slot_s: f64,
 }
 
 impl Context {
@@ -400,6 +412,11 @@ impl Context {
         self.rejoined_m = 0.0;
         self.strayed = false;
         self.leash_m = 0.0;
+        self.catch_up_m = 0.0;
+        self.catch_up_mps = 0.0;
+        self.form_engage_m = 0.0;
+        self.form_leash_m = 0.0;
+        self.form_off_slot_s = 0.0;
     }
 }
 
@@ -483,6 +500,8 @@ struct Tick<'a> {
     ctx_link: Option<[f64; 3]>,
     ctx_link_velocity: Vector3,
     ctx_leash_m: f64,
+    ctx_catch_up: (f64, f64),
+    ctx_form_fire: (f64, f64, f64),
 }
 
 impl Tick<'_> {
@@ -615,6 +634,8 @@ impl<'a> Tick<'a> {
             ctx_link: ctx.link,
             ctx_link_velocity: ctx.link_velocity,
             ctx_leash_m: ctx.leash_m,
+            ctx_catch_up: (ctx.catch_up_m, ctx.catch_up_mps),
+            ctx_form_fire: (ctx.form_engage_m, ctx.form_leash_m, ctx.form_off_slot_s),
         }
     }
 }
@@ -3588,6 +3609,39 @@ struct FormationState {
     firing: bool,
     // Stopped where it was under the order to hold position (M8-T19).
     holding: bool,
+    // On a long rejoin (M8-T17): closing faster than formation's own until it has braked back to it.
+    catching_up: bool,
+    // Weapons free in formation (M8-T13): since when the slot has slipped while shooting, and whether it flies back first.
+    off_since_s: f64,
+    returning: bool,
+}
+
+/// A long rejoin's closing cap (M8-T17): a ship in formation `distance_m` from its slot, closing at `towards_mps`, on the rejoin
+/// already (`on`) or not, with the band's `beyond_m` and `fast_mps`, formation's own far closure `base_mps` from `settle_m` in,
+/// and the braking it plans with, m/s^2. The cap follows the braking curve down to `base_mps` at `settle_m`, at most
+/// `fast_mps`; the rejoin starts beyond `beyond_m` and ends once the ship is back to formation's own closing or inside
+/// `settle_m`. Returns the cap (0 when it is off) and whether the rejoin goes on.
+#[allow(clippy::too_many_arguments)]
+pub fn catch_up_cap(
+    distance_m: f64,
+    towards_mps: f64,
+    on: bool,
+    beyond_m: f64,
+    fast_mps: f64,
+    base_mps: f64,
+    settle_m: f64,
+    brake_mps2: f64,
+) -> (f64, bool) {
+    let on = if distance_m > beyond_m && beyond_m > 0.0 {
+        true
+    } else {
+        on && distance_m > settle_m && towards_mps > base_mps
+    };
+    if !on {
+        return (0.0, false);
+    }
+    let curve = (base_mps * base_mps + 2.0 * brake_mps2.max(0.1) * (distance_m - settle_m).max(0.0)).sqrt();
+    (curve.min(fast_mps).max(base_mps), true)
 }
 
 // What a ship in formation shoots with (M8-T19): its attack's fire gate and this tick's aim error.
@@ -3635,6 +3689,8 @@ impl FormationState {
     const HOLD_MATCHED_MPS: f64 = 3.0;
     // A ship in its slot turns its guns on a hostile this far off its leader's nose at most, deg (M8-T19).
     const FIRE_ARC_DEG: f64 = 40.0;
+    // A long rejoin brakes on this share of the ship's stronger of its mains and retros, so it never overshoots (M8-T17).
+    const CATCH_UP_BRAKE_SHARE: f64 = 0.75;
 
     fn new(profile: &Profile) -> Self {
         FormationState {
@@ -3656,6 +3712,9 @@ impl FormationState {
             fire_target_id: 0,
             firing: false,
             holding: false,
+            catching_up: false,
+            off_since_s: f64::NEG_INFINITY,
+            returning: false,
         }
     }
 
@@ -3672,6 +3731,9 @@ impl FormationState {
         self.fire_target_id = 0;
         self.firing = false;
         self.holding = false;
+        self.catching_up = false;
+        self.off_since_s = f64::NEG_INFINITY;
+        self.returning = false;
     }
 
     fn enter(&mut self) {
@@ -3794,11 +3856,35 @@ impl FormationState {
             slot
         };
         let error = add(sub(aim, p.position), scale(sub(slot_velocity, p.velocity), Self::LEAD_S));
-        let cap = if self.slot_error_m <= Self::FAR_RANGE_M {
+        let mut cap = if self.slot_error_m <= Self::FAR_RANGE_M {
             Self::NEAR_CLOSURE_MPS
         } else {
             self.far_closure_mps
         };
+        // A long rejoin (M8-T17): far off the ship closes fast, and brakes back to formation's own closing in time.
+        let (catch_up_m, catch_up_mps) = tick.ctx_catch_up;
+        if catch_up_mps > self.far_closure_mps {
+            let towards = if self.slot_error_m > 1e-3 {
+                f64::from(dot(sub(p.velocity, slot_velocity), to_slot)) / self.slot_error_m
+            } else {
+                0.0
+            };
+            let brake = Self::CATCH_UP_BRAKE_SHARE * ship.capability.a_retro.max(ship.capability.a_main);
+            let (fast_cap, on) = catch_up_cap(
+                self.slot_error_m,
+                towards,
+                self.catching_up,
+                catch_up_m,
+                catch_up_mps,
+                self.far_closure_mps,
+                Self::FAR_RANGE_M,
+                brake,
+            );
+            self.catching_up = on;
+            cap = cap.max(fast_cap);
+        } else {
+            self.catching_up = false;
+        }
         let mut v_des = add(
             add(
                 slot_velocity,
@@ -3811,7 +3897,8 @@ impl FormationState {
         v_des = Self::kept_apart(tick, ship, v_des);
         v_des = Self::held_off(tick, ship, v_des);
         let rate = ship.capability.rate_max;
-        if leader >= 0 && self.slot_error_m <= Self::ALIGN_RANGE_M {
+        let free = self.weapons_free(tick, gunner.is_some(), leader);
+        if leader >= 0 && (self.slot_error_m <= Self::ALIGN_RANGE_M || free.is_some()) {
             let l = leader as usize;
             let a_need = div_s(sub(v_des, p.velocity), brain_maths::HORIZON_S as f32);
             let nose = brain_maths::lean_toward(
@@ -3821,7 +3908,7 @@ impl FormationState {
                 self.max_lean_rad,
             );
             // In its slot the ship turns its guns on a hostile in reach, and the thrusters keep the slot (M8-T19).
-            let shot = gunner.and_then(|g| self.shot(tick, ship, &g, tick.forward_of(l)));
+            let shot = gunner.and_then(|g| self.shot(tick, ship, &g, tick.forward_of(l), free));
             let mut rot = brain_maths::face(
                 &p.basis,
                 shot.map_or(nose, |s| s.0),
@@ -3854,7 +3941,15 @@ impl FormationState {
     // ship inside the guns' range and within `FIRE_ARC_DEG` of the leader's nose (`forward`) is led as an attack leads it;
     // the trigger is held on the attack's own gate (the lead inside the cone, no friend in the lane). None with no such
     // hostile. A big hull is left to an attack run on its mounts.
-    fn shot(&mut self, tick: &Tick, ship: &Ship, gunner: &Gunner, forward: Vector3) -> Option<(Vector3, bool)> {
+    /// `free`, weapons free (M8-T13): also any hostile within that radius of this point (the leader), from any bearing.
+    fn shot(
+        &mut self,
+        tick: &Tick,
+        ship: &Ship,
+        gunner: &Gunner,
+        forward: Vector3,
+        free: Option<(Vector3, f64)>,
+    ) -> Option<(Vector3, bool)> {
         let p = &tick.p;
         let t = &gunner.tactics;
         let cos_arc = deg_to_rad(Self::FIRE_ARC_DEG).cos();
@@ -3867,7 +3962,11 @@ impl FormationState {
             if tick.rows.surface(tick.hostile_row(h)).is_some() {
                 continue;
             }
-            if f64::from(dot(tick.lists.offsets[h], forward)) < range_m * cos_arc {
+            let in_arc = f64::from(dot(tick.lists.offsets[h], forward)) >= range_m * cos_arc;
+            let near_lead = free.is_some_and(|(at, radius)| {
+                f64::from(dist_sq(tick.rows.positions[tick.hostile_row(h)], at)) <= radius * radius
+            });
+            if !in_arc && !near_lead {
                 continue;
             }
             best = Some((h, range_m));
@@ -3895,6 +3994,36 @@ impl FormationState {
         let cone_deg = minf(t.fire_cone_deg, rad_to_deg((t.fire_miss_m / range_m).atan()));
         self.fire_target_id = id;
         Some((lead_dir, lead_error_deg < cone_deg && lane_clear(tick, range_m, id)))
+    }
+
+    // Weapons free in formation (M8-T13): under FORM ON ME with a gunner, the leader's place and the engage radius, while the
+    // slot has slipped no more than the leash for no longer than the limit; once past either the ship flies back to its slot
+    // (within `IN_SLOT_M`) before it may shoot off the leader's nose again. Never on a long rejoin. None otherwise.
+    fn weapons_free(&mut self, tick: &Tick, gunner: bool, leader: i32) -> Option<(Vector3, f64)> {
+        let (engage_m, leash_m, off_slot_s) = tick.ctx_form_fire;
+        let now = tick.p.now_s;
+        if !gunner || leader < 0 || engage_m <= 0.0 || self.catching_up {
+            self.off_since_s = f64::NEG_INFINITY;
+            self.returning = false;
+            return None;
+        }
+        if self.returning {
+            if self.slot_error_m > Self::IN_SLOT_M {
+                return None;
+            }
+            self.returning = false;
+            self.off_since_s = f64::NEG_INFINITY;
+        }
+        if self.slot_error_m <= Self::IN_SLOT_M {
+            self.off_since_s = f64::NEG_INFINITY;
+        } else if self.off_since_s == f64::NEG_INFINITY {
+            self.off_since_s = now;
+        }
+        if self.slot_error_m > leash_m || (self.off_since_s.is_finite() && now - self.off_since_s > off_slot_s) {
+            self.returning = true;
+            return None;
+        }
+        Some((tick.rows.positions[leader as usize], engage_m))
     }
 
     // The hostile the ship's guns follow from its slot, for its targeting computer.

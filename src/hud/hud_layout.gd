@@ -82,6 +82,7 @@ static func compute(input: HudInput) -> HudFrame:
 	_grid(input, f)
 	_radar(input, f)
 	_waypoint(input, f)
+	CapitalMarksLayout.compute(input, f)
 	_wing(input, f)
 	_objectives(input, f)
 	_escorts(input, f)
@@ -96,6 +97,8 @@ static func compute(input: HudInput) -> HudFrame:
 		f.items.append(HudSurface.OBJECTIVES)  # on the window in both views
 	if not f.escort_rows.is_empty():
 		f.items.append(HudSurface.ESCORT)
+	if not f.capital_marks.is_empty():
+		f.items.append(HudSurface.CAPITALS)  # on the window in both views: they line up with the world
 	_interact(input, f)
 	return f
 
@@ -235,7 +238,7 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 		f.target_on_screen = true
 		f.target_box = _box_around(input, f, t, shown["pos"])
 	else:
-		var edge: Dictionary = _edge_arrow(input, f, t.position)
+		var edge: Dictionary = edge_arrow(input, f, t.position)
 		f.edge_arrow_pos = edge["pos"]
 		f.edge_arrow_angle = edge["angle"]
 		f.edge_arrow_visible = true
@@ -263,8 +266,8 @@ static func _box_around(input: HudInput, f: HudFrame, t: TargetReadout, centre: 
 	return Rect2(centre - Vector2(half, half), Vector2(half, half) * 2.0)
 
 
-# On the screen border, pointing the way to a point that is off screen or behind the camera: `{"pos": Vector2, "angle": float}`.
-static func _edge_arrow(input: HudInput, f: HudFrame, point: Vector3) -> Dictionary:
+## On the screen border, pointing the way to a point that is off screen or behind the camera: `{"pos": Vector2, "angle": float}`.
+static func edge_arrow(input: HudInput, f: HudFrame, point: Vector3) -> Dictionary:
 	var p_view: Vector3 = input.camera_transform.affine_inverse() * point
 	var dir := Vector2(p_view.x, -p_view.y)  # screen frame: x right, y down; the side the target is on
 	if dir.length() < 1e-4:
@@ -279,20 +282,24 @@ static func _edge_arrow(input: HudInput, f: HudFrame, point: Vector3) -> Diction
 # --- route waypoint (M3-T09) -------------------------------------------------------------------------------------------
 
 
-# The route's next waypoint: a marker where it projects, or an edge arrow, with its label and range.
+# The route's next waypoint: a marker where it projects, or an edge arrow, with its label and range. A waypoint that sits
+# on the selected target shows no marker of its own: the target's mark already names it and gives its range, and two labels
+# on one spot ran into each other (M8-T33's play-test). Its diamond on the radar stays.
 static func _waypoint(input: HudInput, f: HudFrame) -> void:
 	if not input.has_waypoint:
+		return
+	f.waypoint_radar_index = f.radar_plot.ids.find(input.waypoint_id) if input.waypoint_id != 0 else -1
+	if input.waypoint_id != 0 and input.target != null and input.selected_id == input.waypoint_id:
 		return
 	f.waypoint_present = true
 	f.waypoint_label = input.waypoint_label
 	f.waypoint_range_m = input.own_position.distance_to(input.waypoint_position)
-	f.waypoint_radar_index = f.radar_plot.ids.find(input.waypoint_id) if input.waypoint_id != 0 else -1
 	var shown: Dictionary = project(input, input.waypoint_position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.waypoint_on_screen = true
 		f.waypoint_pos = shown["pos"]
 		return
-	var edge: Dictionary = _edge_arrow(input, f, input.waypoint_position)
+	var edge: Dictionary = edge_arrow(input, f, input.waypoint_position)
 	f.waypoint_edge_visible = true
 	f.waypoint_edge_pos = edge["pos"]
 	f.waypoint_edge_angle = edge["angle"]

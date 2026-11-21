@@ -239,6 +239,8 @@ func _stand_in(check: ControlCheck) -> StandIn:
 				ship.menu_order = str(value)
 			&"fire_mode":
 				ship.state["fire_mode"] = "alternating" if str(value) == "linked" else "linked"
+			&"camera":
+				ship.state["camera"] = "chase" if str(value) == "cockpit" else "cockpit"
 			_:
 				if value is bool:
 					ship.state[condition["field"]] = not bool(value)
@@ -252,6 +254,7 @@ func _run(check: ControlCheck, pad: bool, press: bool = true) -> String:
 	var adapter := InputAdapter.new()
 	adapter.interaction_offered = check.events.has(ControlCheckSample.INTERACT)
 	var ship: StandIn = _stand_in(check)
+	adapter.autotrack_on = bool(ship.state["tracking"])  # a check that asks for auto-track off opens with it on
 	var tap_ticks: int = 3 if check.press == &"tap" else MAX_TICKS
 	var did_something: bool = not extra_only
 	check.begin(ship.sample(adapter.sample(source, DT)))  # the check opens with the hands off, as the instructor asks
@@ -289,6 +292,22 @@ func test_every_check_passes_on_the_keyboard_and_mouse() -> void:
 		var outcome: String = _run(book.make(id), false)
 		_release_everything()
 		assert_eq(outcome, "no way" if NO_KEYS_WAY.has(id) else "passed", "%s on the keyboard and mouse" % id)
+
+
+## M8-T33: the source knows which device the pilot used last, so a comms line names a control as that device binds it.
+func test_the_source_notes_the_device_last_used() -> void:
+	for event: InputEvent in InputMap.action_get_events(InputAdapter.AUTOTRACK):
+		_release_everything()
+		source.device = InputSource.Device.KEYS if _on_device(event, true) else InputSource.Device.PAD
+		_set_binding(event, true)
+		assert_true(source.is_pressed(InputAdapter.AUTOTRACK))
+		assert_eq(source.device, InputSource.Device.PAD if _on_device(event, true) else InputSource.Device.KEYS,
+				"%s is the %s" % [event.as_text(), "pad" if _on_device(event, true) else "keyboard and mouse"])
+	_release_everything()
+	assert_true(source.is_pressed(InputAdapter.AUTOTRACK) == false)
+	var before: InputSource.Device = source.device
+	source.is_pressed(InputAdapter.AUTOTRACK)
+	assert_eq(source.device, before, "hands off, it stays what it was")
 
 
 func test_whatever_the_pad_can_do_the_keyboard_can() -> void:

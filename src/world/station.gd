@@ -170,6 +170,7 @@ func far_visuals() -> Array[Node3D]:
 
 
 func _ready() -> void:
+	add_to_group(TargetCategories.LAUNCH_BASES)  # the fighters it launches name it home; the target menu pins it in ALLIES
 	_register_surfaces()
 	_register_console()
 	_world = WorldFrame.of(self)

@@ -489,6 +489,28 @@ impl ScsBrains {
         }
     }
 
+    /// A long rejoin's band for the pilot (M8-T17; `AiContext.catch_up_m`, `catch_up_mps`): in formation farther than
+    /// `beyond_m` from its slot it closes at up to `fast_mps`, braking back to formation's own closing in time (0: none).
+    #[func]
+    fn set_catch_up(&mut self, slot: i64, beyond_m: f64, fast_mps: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.catch_up_m = beyond_m;
+            b.ctx.catch_up_mps = fast_mps;
+        }
+    }
+
+    /// Weapons free in formation for the pilot (M8-T13; `AiContext.form_engage_m`, `form_leash_m`, `form_off_slot_s`): under
+    /// FORM ON ME it shoots at hostiles within `engage_m` of its leader from any bearing, its slot slipping at most `leash_m`
+    /// for at most `off_slot_s` (0: only what crosses its leader's nose).
+    #[func]
+    fn set_form_fire(&mut self, slot: i64, engage_m: f64, leash_m: f64, off_slot_s: f64) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.form_engage_m = engage_m;
+            b.ctx.form_leash_m = leash_m;
+            b.ctx.form_off_slot_s = off_slot_s;
+        }
+    }
+
     /// The evasion's leash for the pilot (M8-T06; `AiContext.leash_m`): evading farther than this from its lead it breaks
     /// toward the lead (0: none).
     #[func]

@@ -13,10 +13,10 @@ fn ship(at: Vector3, v: Vector3, id: i64) -> Ship {
 
 #[test]
 fn a_ship_inside_leaves() {
-    let s = ship(Vector3::new(100.0, 0.0, 600.0), Vector3::ZERO, 1);
+    let s = ship(Vector3::new(100.0, 0.0, 1100.0), Vector3::ZERO, 1);
     let (v, urgent) = steer(&[gate()], [0.0; 3], &s, Vector3::ZERO).expect("asked to leave");
     assert!(urgent);
-    assert!(v.x > 70.0, "out, away from the axis: {v:?}");
+    assert!(v.x > 140.0, "out, away from the axis: {v:?}");
 }
 
 #[test]
@@ -48,4 +48,12 @@ fn unpack_reads_the_flat_arrays() {
     let outs = unpack(&floats, &[9, 4]);
     assert_eq!(outs.len(), 1);
     assert_eq!(outs[0].exempt, vec![4, 9]);
+}
+
+#[test]
+fn a_ship_inside_near_the_mouth_leaves_through_it() {
+    let s = ship(Vector3::new(60.0, 0.0, 150.0), Vector3::ZERO, 1);
+    let (v, urgent) = steer(&[gate()], [0.0; 3], &s, Vector3::ZERO).expect("asked to leave");
+    assert!(urgent);
+    assert!(v.z < -140.0, "out of the front, the short way: {v:?}");
 }

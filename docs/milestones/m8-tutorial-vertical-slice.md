@@ -2,7 +2,7 @@
 
 > "The first mission." (`docs/roadmap.md`)
 
-**Status:** **built, awaiting the maintainer's play-test** (2026-11-19; started 2026-11-18 with T07). Every task but T17 is `done`
+**Status:** **accepted 2026-11-21 by the maintainer** and merged into `main` (built 2026-11-19; started 2026-11-18 with T07). Every task is `done`
 (T09's Battle Wagon removed again by T27). T17 ran the standard suite once on `dd72d616`: Python 1 261 tests OK (2 skipped), Rust 257
 passed, import and compile check clean (1 003 scripts), the console smokes passed, and GUT green in six shards (491 scripts, 4 734
 tests: 4 696 passed, 38 pending, 0 failed; about 115 minutes, so the unsharded cap was raised, `a5284588`). The (H) list is
@@ -83,10 +83,13 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
   1. Hangar: New game, Tutorial; the briefing over the hangar backdrop.
   2. A **two-ship launch** with D81's exterior shots: the instructor, then the player; skippable. **Only the instructor and
      the player fly until the alarm** (M8-T33, maintainer 2026-11-19; the squadron launch moved to beat 12).
-  3. Form up on the instructor and fly to a training box about 8 km off the station, away from traffic.
-  4. Flight checks: main pods, retros, pitch and yaw, roll, strafe on all four axes, flight assist off (a drift demo) and on, the
-     brake.
-  5. Camera and lights: the cockpit and chase views, free look, running lights.
+  3. **The lessons start in space** (maintainer's play-test, 2026-11-21): the launch is the opening cinematic and cuts to the
+     two ships at rest in clear space about 8 km off the station, away from traffic. Nothing is flown behind the instructor
+     before the controls are taught (the leg to a training box is gone).
+  4. Flight checks, from rest: pitch, yaw and roll first (with auto-track on, the instructor has it switched off before each,
+     and says nothing when it is off), then main pods, retros, strafe on all four axes, flight assist off (a drift demo) and on,
+     the brake.
+  5. Camera and lights: the view the pilot is not in (cockpit or chase), then the way back, free look, running lights.
   6. **The X button**: tap is auto-track; hold runs the selected target's interaction (the gate's jump, a bay's docking, later
      cargo and more), offered only within its reach, with the prompt naming the live binding; the instructor says X will do more
      as the player meets new places.
@@ -99,10 +102,13 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
      target menu (B held); target-previous and target-ahead are not taught (maintainer, 2026-11-18: keyboard and mouse only, and
      target-ahead has no default binding); shoot unarmed training drones with the lead reticle, switch fire modes.
   9. Wing orders: form, attack and cover from the comms menu, **given to the instructor**, who flies as the player's wingman
-     for the drill (a pilot that fights, in the player's flight) and then instructs again (M8-T33).
+     for the drill (a pilot that fights, in the player's flight) and then instructs again (M8-T33). Two drones come for the
+     attack order; the beat ends when the one the pilot ordered the wingman at is destroyed, and the other is left to
+     practise on until Control recalls it as the tour starts.
   10. The exterior tour: the Cobra bays, the main docking bay, the command section, the defense grid (heavy cannons, interceptors),
       the jumpgate.
-  11. **Jumpgate use**: at the gate the player targets it, closes on the approach cue and holds X; the jump and its cinematic run
+  11. **Jumpgate use**: the instructor tells the player to target the gate and waits for it; the player closes on the approach
+      cue; the hold of X is called only once the gate takes the request (its own range check); the jump and its cinematic run
       (the round trip of M6 until hyperspace exists) and the player comes back out through the blue vortex.
   12. The raid: a first group of raiders through the jumpgate vortex, then **the raider strike carrier** jumps in on its own point
       and launches more (M12-T19, via T07); alarms, more wings launch, the grid engages, the player defends with the wing (orders
@@ -376,7 +382,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | done |
 | T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | done |
 | T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | done |
-| T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
+| T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | done |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
 
@@ -1299,6 +1305,33 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     138 passed, 0 failed, 6 pending (the AI runs, behind `GUT_BALANCE`): `test_civilian_escort` 28 of 34, `test_scenario_loader`
     40, `test_belt_layout` 7, `test_asteroid_belt` 4, `test_dialog_ids` 5, `test_dialog_book` 15, the mission catalog, front
     end and mission skip files.
+- **Fix (2026-11-21, the maintainer's play-test: "the civilian reaches NAV BETA before the second carrier is done"):** measured
+  first (the scripted fought run, seed 3: each wave shot down to three 10 s a raider after contact, the three fly home).
+  - **Before (45 km):** waves at 101, 325 and 631 s, beaten at 265, 540 and 808 s; the civilian passed NAV BETA's place at
+    about 525 s, during the second wave and 100 s before the third came; the run ended at 968 s.
+  - **Now (60 km):** waves at 132, 396 and 660 s, beaten at 318, 629 and 842 s; **the civilian is at NAV BETA at 944 s, 102 s
+    after the third wave is beaten**; the run ends at 1 052 s (17.5 minutes). It never waited on the way in this run.
+  - **Why not further.** Tried 104 km and 65 km first: the civilian arrived 253 s and 177 s after the third wave was beaten
+    (the run 25 and 18 minutes), because it flees sideways in each fight and has to come back. What sets the arrival is the
+    last leg, not the whole distance, so the rule is structural: the civilian's route ends 2 km past the 75 % mark
+    (`HOLD_AT`), where it waits if the player is slow, and `m.fly_route` sends it on the last 12 km (`ESCORT LAST LEG`) only
+    when the third wave has jumped in. It cannot be at NAV BETA before that wave is fought, whatever the player's pace or
+    its own. The marks stay at 25, 50 and 75 % (15, 30 and 45 km).
+  - **Rocks:** four fields instead of one, 1 020 rocks (600 before): a pocket after the 25 % mark (14 by 3 by 6 km, 150), the
+    belt across the middle (24 by 3 by 12 km, 600), a pocket where it waits (14 by 3 by 7 km, 170) and one on the last leg
+    where the third wave is fought (12 by 3 by 4 km, 100). Belts take a `lane_m` now (`BeltLayout`): no rock within it of
+    the belt's own axis, whatever the seed; all four have a 250 m lane along the route. The Saturn 8 crosses all four with
+    no rock hit. On the GPU: 144 fps before and after (capped), 85 and 105 draw calls.
+  - **Also:** the hold point is past the mark because a civilian stopping just short of a mark that is its route's end
+    would never bring the wave (seen in a test before it shipped).
+  - **Tests** (scratch copy of HEAD plus the staged change, `GUT_SLOW=1`): compile check 1 017 scripts; GUT 9 files, 150
+    tests, 144 passed, 0 failed, 6 pending (the AI runs, behind `GUT_BALANCE`): `test_civilian_escort` 28 of 34 (new: it
+    waits in the third field until the last wave comes; the fought run now asserts the timeline: at NAV BETA after every
+    wave has come and closed, within -60 to +240 s of the third being beaten), `test_scenario_loader` 40 (the four fields,
+    their lanes, the two routes), `test_belt_layout` 8 (1 new: the lane), the asteroid belt, dialog, mission catalog,
+    mission runner, mission skip and front-end files. One AI-flown run (the wing and an AI for the player, seed 2, on
+    the 104 km try) lost the civilian in the first wave at 649 s, as those runs do; it gave no timeline.
+  - **(H):** fly it; `docs/playtest.md`, "The crossing".
 
 ### M8-T27 Remove the Raider Battle Wagon
 
@@ -1402,6 +1435,49 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     the alarm all twelve Starfuries (ALPHA 2 to 12 and the instructor) are in play in four flights, launched in play, and
     a raider's hit after the launch asks for no further one. The fought raid (`GUT_BALANCE=1`) ends by itself at 392 s,
     on that seed with two Starfuries lost and the carrier escaped (341 s, none lost, carrier destroyed with two launches).
+  - **Play-test fix round (2026-11-21, the maintainer's flight):** ten findings, all in the mission's data, its script and
+    small seams of the mission framework.
+    1. **Lessons start in space.** Of the two ways offered, the launch stays as the **opening cinematic** and cuts (`m.put`)
+       to the player and the instructor at rest 8 km off the station. The `form_up` step is gone; the order is launch,
+       turns (pitch, yaw, roll), thrust (main pods, retros), strafes, assist off and on, brake, views, free look, lights,
+       the X button, the course, gunnery, wing orders, tour, gate.
+    2. **Auto-track.** New check `autotrack_off`, run before each turn lesson only when the new fact `auto_track` is 1; its
+       hint names the live button and key.
+    3. **Tour captions** off for the tutorial (`m.tour(stop, false)`, `TourDirector.captions`).
+    4. **One label.** `HudLayout` leaves the waypoint's marker and label out when the waypoint sits on the selected target
+       (the target's mark has the name and the range); the radar's diamond stays. Everywhere, not only here.
+    5. **Hold X.** The gate beat no longer runs the `interact` check (its hint came at 9 km and repeated every 20 s); it waits
+       on the new fact `gate_offer` (`JumpgateHost.can_request_jump`, the gate's own rule) and then says one line. The game's
+       own prompt names the binding.
+    6. **Target the gate.** A line, then `TriggerSpec.targeted("JUMPGATE")` (new trigger kind `targeted`).
+    7. **Views.** Checks `camera_to_chase` and `camera_to_cockpit` replace `camera_switch` and `camera_back`; the script asks
+       for the other view than the one on (fact `cockpit_view`) and each passes only in the view it names.
+    8. **Drones.** The attack beat ends when the ordered drone (`m.player_target()` as the order passes) is destroyed; the
+       instructor says the other is the pilot's to practise on, and `m.dismiss` recalls what is left as the tour's first
+       shot starts.
+    9. **Lines.** The debrief and the instructor's closing remarks rewritten, each said one way.
+    10. **Course.** `instructor_time_s` 75 to 93.75: exemplary up to 103.1 s (was 82.5), par up to 131.3 s.
+    Tests (staged scratch copy, HEAD `5cacba95` plus these fixes): compile check 1020 scripts clean; 16 unit and neighbour files
+    (rules, mission seams, HUD layout, the check book, devices and live checks, triggers, dialog, quick suite, keyboard
+    parity, HUD, station tour), 213 of 213; `test_tutorial` and the new `test_tutorial_lessons` (shared fixture
+    `tests/fixtures/tutorial_steps.gd`), 18 passed, 1 pending (the balance gate), 0 failed. New in them: the cut to rest
+    after a skipped and after a played launch and the lesson order; auto-track on (the call, the named control, the wait)
+    and off (nothing said); the view lesson from each view; the gate's target instruction and the hold-X call only inside
+    the request range; no tour caption; the drone beat ending on the ordered kill with the other recalled at the tour;
+    the new course time; one label for a targeted objective; the `targeted` trigger. The fought raid (`GUT_BALANCE=1`)
+    ends by itself at 392 s.
+  - **Fix (2026-11-21, the maintainer: "we must always show the button or control that it is currently mapped to, not the
+    default"):** no mission text names a control. Eight tutorial lines write `{action:autotrack}` or
+    `{action:target_cycle,target_next}` where they said "X" or "the target control"; the escort's dialog and the scenarios
+    named none. `ControlText` resolves a placeholder as the comms panel draws the line, for the device used last
+    (`InputSource.device`, new: the pad's glyph, or key and mouse button), from the live `InputMap`; the panel redraws when
+    the words change, so a rebind or a change of device shows on the line that is up. Guard:
+    `test_text_names_no_control` (table-driven, every dialog file, mission script string and scenario text; architecture
+    §18.5 has the rule). Tests (staged scratch copy, HEAD `c15b705e` plus this fix; `f02a6760`, a native tier fix in other files, landed before the commit): compile check 1024 scripts clean; 12
+    unit and neighbour files, 146 of 146 (new: `test_control_text` 7, `test_text_names_no_control` 3; the device noted by
+    the real input source in `test_control_check_devices`); `test_tutorial` and `test_tutorial_lessons`, 19 passed, 1
+    pending (the balance gate), 0 failed, with one new: the target-menu line on the pad, on the keyboard, after a rebind
+    of each, the line still up.
 
 ### M8-T30 Cobra-bay launch: camera variety and a quicker hand-off
 
@@ -1524,3 +1600,17 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   page's M8 items collected into one "M8 acceptance checklist" with new items for the launch shots, the radial fit, Gamma
   Leporis, the interceptor muzzle and the release build; the roadmap row; `gate shots` in `info.md`'s usage. Suite counts in the
   status line. Open: AC13, the maintainer's play-test.
+- **Done (2026-11-21):** AC13 met: the maintainer accepted M8 after the play-tests of 2026-11-19 to 11-21. Their findings were
+  fixed on `m8` under T06, T08, T13, T17, T24, T26 and T33. The fixes covered:
+  - a second dock with traffic, and wingmen breaking off while the player docks;
+  - jump points that kill on opening and closing, the vortex keep-out, arrivals that survive, the departure vortex held open for
+    following wingmen with the camera on the gate, and back-to-back jumps;
+  - wingmen flying back after a respawn and catching up fast from far away, and FORM ON ME firing while HOLD FIRE never shoots;
+  - the raider carrier's launches and stand-off, an encounter schedule that no longer stalls at the cap, and patrol routes that
+    finish in the low-attention tier;
+  - the escort's Nav Beta at 60 km with four rock fields, the launch base pinned in Allies and eight ships per target list;
+  - the tutorial's lessons starting at rest in space, with nine more findings, and dialog that names the control as bound;
+  - capital markers off unless a scenario enables them.
+
+  CI was green on every push through `7317e55a`, after GUT went to seven shards (`615440a0`). Two known limits stay in the
+  checklist: a fighter docking onto a braking carrier can die, and a civilian standing aside at the bay adds a few minutes.

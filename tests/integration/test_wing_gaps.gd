@@ -8,7 +8,8 @@ extends TestSteps
 ## slots under FORM ON ME, so the wingmen hold the formation while they are shot at.
 ## - The fights: raiders with seeded brains attack the wing from astern until it has lost `FIGHT_LOSSES` ships (or the time
 ##   is up), then are taken away and the wing flies on. The wingmen shoot back from their slots at raiders that come into
-##   their guns' reach ahead (M8-T19).
+##   their guns' reach ahead (M8-T19); FORM ON ME's weapons-free radius (M8-T13) is off here, or they shoot the attackers down
+##   before any loss.
 ## - The schedules: named wingmen are shot down at set times with nobody else about.
 ## Every tick the slots flown must be a shape without a hole; no ram between two ships of the wing may happen; at the end
 ## every survivor sits on its slot.
@@ -208,6 +209,11 @@ func _launch(size: int, raiders: int, seed_value: int) -> void:
 		var ally: Combatant = main.ships.acquire(callsign, at, basis, HEADING * SPEED_MPS, made["brain"] as PilotBrain, ALLY)
 		assert_eq(main.wings.add_member(wing, ally, slot), slot)
 		_watch(ally)
+	# The fights need losses: FORM ON ME's weapons-free radius (M8-T13) would have the wing shoot its attackers astern down first,
+	# so this file keeps only the shot off the leader's nose, on its own copy of the rules.
+	var rules: FlightRules = FlightRules.from_file()
+	rules.form_engage_m = 0.0
+	main.wings.flight_rules = rules
 	assert_true(bool(main.wings.give_order(AiContext.Order.FORM_ON_ME)["ok"]))
 	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
 	Engine.time_scale = SPEED_UP

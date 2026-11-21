@@ -10,25 +10,13 @@
    "id": "instructor_welcome",
    "speaker": "instructor",
    "voice": "tu_instructor_welcome",
-   "text": "Alpha One, {instructor}. I am your check pilot today. Two ships, you and me. Form up on me off the Cobra bays."
-  },
-  {
-   "id": "instructor_form_up",
-   "speaker": "instructor",
-   "voice": "tu_instructor_form_up",
-   "text": "Alpha One, {instructor}. Good launch. I am the Starfury off your nose. Form up on me."
-  },
-  {
-   "id": "instructor_to_box",
-   "speaker": "instructor",
-   "voice": "tu_instructor_to_box",
-   "text": "We fly to the training box, eight kilometres out, clear of traffic. Stay with me. I will hold my speed to yours."
+   "text": "Alpha One, {instructor}. I am your check pilot today. Two ships, you and me. See you outside."
   },
   {
    "id": "instructor_box",
    "speaker": "instructor",
    "voice": "tu_instructor_box",
-   "text": "This is the box. Nothing out here to hit. We start with flight checks."
+   "text": "We hold here, eight kilometres off the station, clear of traffic. You are at rest. Handling first."
   },
   {
    "id": "instructor_flight_intro",
@@ -37,16 +25,10 @@
    "text": "Do each check as I call it. There is no fail. If you miss one I call it again, then I show you."
   },
   {
-   "id": "check_main_pods",
+   "id": "check_autotrack_off",
    "speaker": "instructor",
-   "voice": "tu_check_main_pods",
-   "text": "Main pods. Fire both and build forward speed."
-  },
-  {
-   "id": "check_retros",
-   "speaker": "instructor",
-   "voice": "tu_check_retros",
-   "text": "Retros. Fire both and take that speed off."
+   "voice": "tu_check_autotrack_off",
+   "text": "Auto-track is on. It holds your nose on your target, so you cannot turn. Tap {action:autotrack} to switch it off."
   },
   {
    "id": "check_pitch",
@@ -65,6 +47,18 @@
    "speaker": "instructor",
    "voice": "tu_check_roll",
    "text": "Roll. Half a turn, either way."
+  },
+  {
+   "id": "check_main_pods",
+   "speaker": "instructor",
+   "voice": "tu_check_main_pods",
+   "text": "Now thrust. Main pods: fire both and build forward speed."
+  },
+  {
+   "id": "check_retros",
+   "speaker": "instructor",
+   "voice": "tu_check_retros",
+   "text": "Retros. Fire both and take that speed off."
   },
   {
    "id": "check_strafe_left",
@@ -118,25 +112,25 @@
    "id": "instructor_flight_done",
    "speaker": "instructor",
    "voice": "tu_instructor_flight_done",
-   "text": "Flight checks complete. Good hands."
+   "text": "That is handling. You fly her clean."
   },
   {
    "id": "instructor_camera_intro",
    "speaker": "instructor",
    "voice": "tu_instructor_camera_intro",
-   "text": "Now your views and your lights."
+   "text": "Now your views and your lights. You have two views, cockpit and chase."
   },
   {
-   "id": "check_camera_switch",
+   "id": "check_camera_to_chase",
    "speaker": "instructor",
-   "voice": "tu_check_camera_switch",
-   "text": "Switch your view. Cockpit to chase."
+   "voice": "tu_check_camera_to_chase",
+   "text": "Switch to the chase view. You see your ship from outside."
   },
   {
-   "id": "check_camera_back",
+   "id": "check_camera_to_cockpit",
    "speaker": "instructor",
-   "voice": "tu_check_camera_back",
-   "text": "And back to the cockpit."
+   "voice": "tu_check_camera_to_cockpit",
+   "text": "Switch to the cockpit view. You fight from in here."
   },
   {
    "id": "check_free_look",
@@ -154,25 +148,25 @@
    "id": "instructor_x_intro",
    "speaker": "instructor",
    "voice": "tu_instructor_x_intro",
-   "text": "Your X control. A tap tracks your target: the ship turns to follow it. A hold runs what the target offers, when you are in reach."
+   "text": "Your {action:autotrack} control. A tap tracks your target: the ship turns to follow it. A hold runs what the target offers, when you are in reach."
   },
   {
    "id": "instructor_x_more",
    "speaker": "instructor",
    "voice": "tu_instructor_x_more",
-   "text": "A jumpgate offers a jump. A docking bay offers docking. X will do more as you meet new places."
+   "text": "A jumpgate offers a jump. A docking bay offers docking. {action:autotrack} will do more as you meet new places."
   },
   {
    "id": "check_target_menu",
    "speaker": "instructor",
    "voice": "tu_check_target_menu",
-   "text": "Open the target menu. Hold the target control and pick NAV ONE."
+   "text": "Open the target menu: hold {action:target_cycle,target_next} and pick NAV ONE."
   },
   {
    "id": "check_autotrack",
    "speaker": "instructor",
    "voice": "tu_check_autotrack",
-   "text": "Tap X. Auto-track the buoy."
+   "text": "Tap {action:autotrack}. Auto-track the buoy."
   },
   {
    "id": "instructor_course_intro",
@@ -232,7 +226,7 @@
    "id": "check_target_next",
    "speaker": "instructor",
    "voice": "tu_check_target_next",
-   "text": "Tap the target control. Take the nearest drone, then the next."
+   "text": "Tap {action:target_cycle,target_next}. Take the nearest drone, then the next."
   },
   {
    "id": "instructor_lead",
@@ -262,7 +256,7 @@
    "id": "instructor_drones_down",
    "speaker": "instructor",
    "voice": "tu_instructor_drones_down",
-   "text": "Drones are down. Good shooting."
+   "text": "All three down. Nice gunnery."
   },
   {
    "id": "instructor_wing_intro",
@@ -280,7 +274,13 @@
    "id": "check_wing_attack",
    "speaker": "instructor",
    "voice": "tu_check_wing_attack",
-   "text": "Two more drones. Target one and order me to attack your target."
+   "text": "Two more drones. Target one, then order me to attack your target. I take that one only."
+  },
+  {
+   "id": "instructor_wing_kill",
+   "speaker": "instructor",
+   "voice": "tu_instructor_wing_kill",
+   "text": "Your target is down. The other drone is yours if you want the practice. Control recalls it when we move on."
   },
   {
    "id": "check_wing_cover",
@@ -292,7 +292,7 @@
    "id": "instructor_wing_done",
    "speaker": "instructor",
    "voice": "tu_instructor_wing_done",
-   "text": "Drill complete. I am your instructor again. Now the station. You should know what you defend."
+   "text": "Drill over. I am your instructor again. Next, the station: know what you defend."
   },
   {
    "id": "instructor_tour_intro",
@@ -334,25 +334,37 @@
    "id": "instructor_gate_intro",
    "speaker": "instructor",
    "voice": "tu_instructor_gate_intro",
-   "text": "Last stop, the jumpgate, fifty kilometres out. Target it from the target menu. I will lead."
+   "text": "Last stop, the jumpgate, fifty kilometres out. I will lead."
+  },
+  {
+   "id": "instructor_gate_target",
+   "speaker": "instructor",
+   "voice": "tu_instructor_gate_target",
+   "text": "Target the jumpgate first. Open the target menu and pick it."
   },
   {
    "id": "instructor_gate_cue",
    "speaker": "instructor",
    "voice": "tu_instructor_gate_cue",
-   "text": "Fly the approach cue. Build speed, then brake when it calls. The gate takes you from inside its reach."
+   "text": "Good, you have it. Fly the approach cue: build speed, then brake when it calls. The gate takes you from inside its reach."
   },
   {
    "id": "check_interact",
    "speaker": "instructor",
    "voice": "tu_check_interact",
-   "text": "You are in reach. Hold X to request the jump. The autopilot flies you in."
+   "text": "Hold {action:autotrack} to run what your target offers."
+  },
+  {
+   "id": "instructor_gate_hold",
+   "speaker": "instructor",
+   "voice": "tu_instructor_gate_hold",
+   "text": "The gate is offering the jump. Hold {action:autotrack} now. The autopilot flies you in."
   },
   {
    "id": "instructor_gate_back",
    "speaker": "instructor",
    "voice": "tu_instructor_gate_back",
-   "text": "Out through the blue vortex. That is a jump. Checks complete, Alpha One. Let us go home."
+   "text": "And out through the blue vortex. That was your first jump here. Nothing left on my list, Alpha One. Home."
   },
   {
    "id": "control_alarm",
@@ -424,61 +436,61 @@
    "id": "control_stand_down",
    "speaker": "control",
    "voice": "tu_control_stand_down",
-   "text": "All ships, Babylon Control. Raiders are down or gone. Stand down from alert. Traffic resumes."
+   "text": "All ships, Babylon Control. The raid is over. Stand down from alert. Traffic may resume."
   },
   {
    "id": "instructor_debrief_open",
    "speaker": "instructor",
    "voice": "tu_instructor_debrief_open",
-   "text": "Alpha One, {instructor}. Nobody planned that. Control did not, and I did not. Here is how I saw it."
+   "text": "Alpha One, {instructor}. That was no part of today's check. Here is my read on it."
   },
   {
    "id": "instructor_debrief_perfect",
    "speaker": "instructor",
    "voice": "tu_instructor_debrief_perfect",
-   "text": "No Starfury lost. That is a perfect score, whatever else happened out there."
+   "text": "Every Starfury came home. A perfect score, in my book."
   },
   {
    "id": "instructor_debrief_one_lost",
    "speaker": "instructor",
    "voice": "tu_instructor_debrief_one_lost",
-   "text": "We lost one Starfury. One is one too many, but you held the squadron together."
+   "text": "One Starfury did not come back. You kept the rest together under fire."
   },
   {
    "id": "instructor_debrief_losses",
    "speaker": "instructor",
    "voice": "tu_instructor_debrief_losses",
-   "text": "We lost Starfuries today. Use your flight. Order them early and keep them close."
+   "text": "We lost pilots out there. Give your orders sooner and hold your flight close."
   },
   {
    "id": "instructor_debrief_civilians",
    "speaker": "instructor",
    "voice": "tu_instructor_debrief_civilians",
-   "text": "Civilian ships were lost on the gate run. They were ours to protect."
+   "text": "Transports died on the gate run. Guarding them was our job."
   },
   {
    "id": "instructor_debrief_carrier_down",
    "speaker": "instructor",
    "voice": "tu_instructor_debrief_carrier_down",
-   "text": "And you killed the carrier inside its recharge window. That goes on your record."
+   "text": "The carrier is scrap, caught before its drive came back. That goes on your record."
   },
   {
    "id": "instructor_debrief_carrier_away",
    "speaker": "instructor",
    "voice": "tu_instructor_debrief_carrier_away",
-   "text": "The carrier got away. It does not count against you. The squadron comes first."
+   "text": "The carrier slipped out. No mark against you: the squadron matters more."
   },
   {
    "id": "instructor_verdict_leader",
    "speaker": "instructor",
    "voice": "tu_instructor_verdict_leader",
-   "text": "An exemplary course and a raid fought like that. I am signing you off as squadron leader, effective now."
+   "text": "An exemplary course, then a real fight handled like that. You are squadron leader, as of now."
   },
   {
    "id": "instructor_verdict_squadron",
    "speaker": "instructor",
    "voice": "tu_instructor_verdict_squadron",
-   "text": "You are assigned to the squadron. Fly like today and the lead is yours on a later mission."
+   "text": "You are on the squadron roster. Keep this up and you will lead it before long."
   },
   {
    "id": "control_welcome",

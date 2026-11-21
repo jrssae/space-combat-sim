@@ -65,6 +65,18 @@ func test_shapes_and_turns_vary() -> void:
 	assert_eq(shapes.size(), 16, "every shape is used")
 
 
+func test_a_lane_keeps_the_belts_own_axis_clear_whatever_the_seed() -> void:
+	# M8-T26: a ship whose route runs straight through a field of rock needs no lucky seed.
+	for seed_value: int in [1, 7, 38, 400]:
+		var layout: BeltLayout = BeltLayout.place(_belt({"seed": seed_value, "lane_m": 250.0}), 16)
+		assert_gt(layout.rocks.size(), 250, "seed %d: the rocks still fit beside the lane" % seed_value)
+		for rock: Dictionary in layout.rocks:
+			var o: Vector3 = rock["offset"]
+			assert_gte(Vector2(o.x, o.y).length() - float(rock["radius"]), 250.0 - 1e-3, "seed %d: clear of the lane" % seed_value)
+	assert_eq(var_to_bytes(BeltLayout.place(_belt({"lane_m": 0.0}), 16).rocks), var_to_bytes(BeltLayout.place(_belt(), 16).rocks),
+			"no lane: the layout it always had")
+
+
 func test_a_count_that_cannot_fit_places_what_fits_and_says_so() -> void:
 	var layout: BeltLayout = BeltLayout.place(_belt({"size": Vector3(600.0, 300.0, 600.0), "count": 500}), 16)
 	assert_lt(layout.rocks.size(), 500)

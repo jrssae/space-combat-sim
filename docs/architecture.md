@@ -3427,7 +3427,9 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
   at once when it is handed over). A tier think is lean (fix round 2, Q65): it skips the rocks and mines, the incoming fire
   and the avoidance, which a tier row cannot use (it collides with nothing and dodges no bolt), and its nearest-contacts
   query walks the ships' rows in scan order (`contact::nearest_among`), the same contacts as the grid's gather for fewer rows
-  and no sort. A think went from 10.65 to about 2.5 us. 2 Hz was tried and failed the loose fairness checks (the raiders
+  and no sort. A think went from 10.65 to about 2.5 us. A tier think whose follow path is in control raises the settle event a
+  near one raises (`brain_step::tier_events`; M8-T17), and the parked driver settles its pilot's mirror: a route's progress
+  and end are seen while the ship is a tier row (before, an encounter patrol that ended its route out there was never released). 2 Hz was tried and failed the loose fairness checks (the raiders
   lost half their hits). A hit does not wake a tier think (fix round 1): it waits for its beat, so the thinks stay staggered
   however the far hits fall (every landed hit used to wake one, and a ship hit every tick thought every tick). The job counts
   and times the tier thinks (`ScsBrains.tier_thinks`, `tier_think_us`, on the job's own clock: the worker thread when threaded,
@@ -4222,6 +4224,14 @@ as the menu does; seed 0 by default, encounters off). Setting: `skip_front_end` 
 
 ### 18.5 Missions as built (T05)
 
+- **Rule for mission text: never write a control's name** (M8-T33, the maintainer: a line shows the control an action is
+  mapped to now, not the default). A dialog line, a briefing, an objective or a script's string that means a control writes
+  an action placeholder, `{action:<name>}` (`Tap {action:autotrack}.`), or `{action:a,b}` where the pad and the keyboard use
+  different actions for one thing (`{action:target_cycle,target_next}`). `ControlText` resolves it as the comms panel shows the
+  line, for the device the pilot used last (`InputSource.device`: the pad's glyph, or the key and the mouse button), from the
+  live `InputMap`, so a rebind or a change of device shows while the line is still up. `tests/unit/
+  test_text_names_no_control.gd` reads every file in `data/dialog/`, `data/missions/` and `data/scenarios/` and fails on a
+  control named in prose (its table `CONTROL_NAMES`) or a placeholder that names no action.
 - **Tick.** `MissionRunner` (400) runs after `WaveDirector` (300) and before the `RebaseSettler`: time, the player's actions, the
   snapshot for the watched names, the objectives (and the result rules), then `wake`, where the waiting step tests its trigger.
   The first step starts in a call deferred from the runner's `_ready`, so it runs before the first tick and before any console
@@ -4577,10 +4587,15 @@ tests/unit/test_encounter_plan.gd, tests/integration/test_encounters.gd, tests/f
   objective; `ally_starfury` engaging; `civilian`), a `Route` (`pace` none, no loop; a patrol's yields to attacks) through
   `BehaviourFollowPath`, raiders through the director's own `JumpPointPool` (4 points, built with the director; M6-T19 replaced `JumpArrivalPool`). Encounter
   civilians broadcast 15 km (a transponder) so a raid sent from 6-12 km finds them; the range is cleared when they leave.
-- **Cap.** `encounter_max_ships` (24, live) counts the director's ships in play. A due event that would pass it, or whose pool
-  is spent (raids and patrols need their own type free), gives way to the same index drawn as another kind, gentlest first
+- **Cap.** `encounter_max_ships` (24, live) counts the director's ships in play near the player and those waiting for the gate.
+  A ship in the low-attention tier (a cheap native row), a raider docked aboard its carrier, or one flown off beyond 20 km
+  (`FLOWN_OFF_M`, going home before its release at 40 km) holds no slot, and civilians that joined the station's run do not count (they are bounded by their
+  pools, 27 in free flight; maintainer, 2026-11-21: the schedule stalled behind them). A due event that would pass the cap starts
+  with the ships that still fit when that is at least `EncounterPlan.MIN_PARTIAL` (3); otherwise, or when its pool is spent
+  (raids and patrols need their own type free), it gives way to the same index drawn as another kind, gentlest first
   (`EncounterPlan.substitutes`: traffic, then patrol, then raid), and waits only when none fits; one bigger than the whole cap is
-  trimmed to it once nothing else is in play. A traffic hull whose pool is spent gives way to the next civilian hull with a free ship.
+  trimmed to it once nothing else is in play. Worst case in free flight: 24 flying encounter ships, 27 run civilians, 3
+  carriers, the station's 12 raiders and 48 wing fighters, and the player's wing, about 117 ships (the M4 benchmark holds 300). A traffic hull whose pool is spent gives way to the next civilian hull with a free ship.
 - **The station's run (M7-T56, m5-056).** A pools file with `station_run` (free flight) sends traffic events along the run
   between the jumpgate and Babylon 5 (`StationTraffic.lane_event`: an arriving convoy, 800 m apart, joining the run 22-40 km
   from the station and moved toward the gate until it is past the player's radar; a Saturn to the cargo bay when it is free,
@@ -4727,7 +4742,10 @@ a radial menu is open (maintainer, 2026-11-19): `sample_radial` reads the comms 
 index in page order.
 
 **The target menu.** `TargetMenu` (pure) builds the pages from one candidate list: the six categories with counts, then
-the nearest five of one and NONE. `select` returns `{action: target | waypoint | clear_target | clear_waypoint, id, label,
+the nearest eight of one and NONE (maintainer, 2026-11-20). The launch base heads ALLIES while it is a candidate: the node in
+`TargetCategories.LAUNCH_BASES` (a station; later a carrier) whose `home_id` is the player's home (the scenario's `player.home`,
+or the station whose Cobra bay launched it) is pinned first (`summarise`'s `pinned_id`), counting toward the eight; a mission
+with no launch source pins nothing. Keys 1-9 pick a ring of eight and NONE by place. `select` returns `{action: target | waypoint | clear_target | clear_waypoint, id, label,
 point}` and closes. `TargetMenuDirector` (a node under `Main`) reads `TargetingController.candidates()` before it pauses
 the tree, since a paused marker is not in play, then carries the pick out after it resumes. `Main` calls its `step` only
 while it is open, with `InputAdapter.sample_radial`'s command.
@@ -5525,7 +5543,29 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   behind the last as it enters, the close takes only on a ship still closing), until the last is through; the vortex folds behind it and its closing sweep comes
   before the arrival opens; then the black and the arrival as before (about 4.5 s of hold for two wingmen in formation).
   The wingmen a hold take watches carry the cinematic key light (its `wing` section, from the camera's side) and their mains
-  glow (`HOLD_ENGINE_GLOW`). A
+  glow (`HOLD_ENGINE_GLOW`).
+  Maintainer's play-test, 2026-11-20 (jumps back to back): followers are flown in on their own lanes across the mouth (70 m
+  apart, handed out in the order they lie across the axis, each at its own height) and do not collide with each other while
+  the gate flies them (two met on the axis, and a lost follower called the hold off); a follower at or inside the mouth when a
+  hold is called off goes through with the player instead of being left in the arrival's way.
+- **Every AI pilot clears an opening jump point (M8-T17, maintainer 2026-11-20).** The keep-out is in force from `open()`; an
+  opening does not form while an AI pilot it does not spare is still in its funnel (`VortexHazard.strays`): its lead-in waits
+  (`VortexTiming.delay`) up to `clear_wait_s` (6 s, data/jump/vortex_look.json), gates and ship-opened points alike; a ship
+  inside leaves at 150 m/s, out of the mouth when it is near it (`keep_out.rs`). Pilotless ships, ships in a passage and the
+  player are not waited for.
+- **The gate's arbitration and a committed jump (M8-T17, maintainer 2026-11-20).** Arrival wins: while an arrival is asked for
+  or running (`Jumpgate.arrival_first`) the gate flies no departing ship in, lets go of any it was flying (its own pilot and the
+  keep-out keep it clear of the mouth and the way out) and flies it in again once the arrival is through. A ship the gate
+  flies in, and the player from its jump's start to its end, does not collide with the gate's own arms (a jump asked at speed
+  from the side flew the player into the far arm). A follower that cannot stop short of the mouth when its hold is called off
+  goes through with the player. On respawn the player's wing drops any jump state and flies back to its slots round the player
+  (`WingDirector.regroup`: no teleport).
+- **A long rejoin (M8-T17, maintainer 2026-11-20).** A ship in formation (the player's wing or a flight) farther than
+  `catch_up_beyond_m` (5 km) from its slot closes at up to `catch_up_mps` (1 000 m/s, never past its ShipSpec), braking on a
+  curve back to formation's own far closure (cruise plus 100 m/s) at 1.5 km, on three quarters of its stronger engines, so it
+  does not overshoot (data/wings/flights.json; `catch_up_cap` in the native formation, `AiContext.catch_up_m`, `catch_up_mps`
+  set by `WingDirector` for every slot). From the gate to the home spawn, 54 km, a Starfury (30 m/s^2) takes about 100 s;
+  accelerating to 1 000 m/s and braking back already take some 60 s of that. A
   follower dying or the order changing calls the hold off at once and the vortex folds. Gate only: the player opens no point of
   its own.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
@@ -6774,6 +6814,13 @@ native/src/brain.rs              + ScsBrains.set_flight
     let a ship in formation fire: FORM ON ME gated every attack and the formation behaviour never pulled the trigger. A
     passive pilot does not shoot from its slot, a big hull is left to an attack run on its mounts, and avoidance still
     filters the wish.
+  - **Weapons free under FORM ON ME (M8-T13, maintainer 2026-11-21).** The arc rule alone left a formation silent at anything
+    off the player's nose. Under FORM ON ME (`WingDirector` sets `AiContext.form_engage_m`, `form_leash_m`, `form_off_slot_s`
+    from data/wings/flights.json: 1 500 m, 400 m, 6 s; 0 under any other order and while the wing follows the player through a
+    gate, `Wing.jumping`) a ship in formation also takes the nearest hostile within `form_engage_m` of its leader, from any
+    bearing, turning its guns on it while its thrusters keep the slot. Once the slot slips past the leash or stays off longer
+    than the limit it flies back to it first (`FormationState::weapons_free`). Never during a long catch-up. HOLD FIRE never
+    shoots: no gunner, and attack stands down under both form orders.
   - **The hold-fire orders.** `ORDER_FORM_HOLD_FIRE` is FORM ON ME without the shot from the slot. `ORDER_HOLD_POSITION` makes
     the formation behaviour score with or without a leader and command the brake, so the flight model stops the ship against
     the reference (§19.5) and keeps it there; rally stands down. Both gate attack and retreat as FORM ON ME does. Any other
@@ -6806,10 +6853,11 @@ src/mission/mission_facts.gd          MissionFacts: numbers counted from the sce
 src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind "fact"): a fact reached a number, or fell below it
 ```
 
-- **Steps.** `launch` (two ships with the exterior shots: the instructor, then the player; M8-T33), `form_up` (the instructor leads, paced on
-  the player, to a box 8 km off the station), `flight_checks`, `camera_lights`, `x_button`, `course`, `combat`, `wing_orders`,
+- **Steps.** `launch` (the opening cinematic: two ships with the exterior shots, the instructor, then the player; it cuts to
+  both at rest 8 km off the station, M8-T33's play-test), `flight_checks` (turns, thrust, strafes, assist, brake),
+  `camera_lights`, `x_button`, `course`, `combat`, `wing_orders`,
   `tour`, `jumpgate`, `raid` (six raiders out of the gate; the checkpoint; the whole wing launches in play), `defense` (the strike carrier with eight more),
-  `debrief`. The opening ends at `form_up`; the pause menu's **Skip training** goes from any step of `flight_checks` to
+  `debrief`. The opening ends at `flight_checks`; the pause menu's **Skip training** goes from any step of `flight_checks` to
   `wing_orders` straight to `tour` (`MissionScript.skip_block`, `MissionApi.skip_offered` / `take_skip`, `PauseMenu.entries`).
 - **What a mission script gained** (all on `MissionApi`, world changes journaled, a skipped step still makes them):
   `launch_squadron(wing, door, flights)`; `tour(stop)` (one stop of `TourDirector`, awaited); `traffic(on)` (the station's run);
@@ -6824,6 +6872,13 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   flight and take it out. The instructor joins the flight for the launch (the squadron launch with one flight carries the
   player's flight, then the player) and for the wing-orders drill, there under a pilot that fights. At the alarm
   `m.scramble("alpha", 11)` launches the whole wing at once: the player's two slots first (ALPHA 2 and 3), then three flights of their own.
+- **Controls in lines.** The tutorial's lines name controls by action placeholder only (§18.5's rule, `ControlText`).
+- **After the play-test (2026-11-21).** `m.put(ship, at, facing)` places a ship at rest (a cut between scenes: it ends a shot
+  on the player and a launch's burn); `m.dismiss(names)` takes ships out with no explosion; `m.tour(stop, captions)`;
+  `m.player_target()` and the trigger `targeted` (`TriggerSpec.targeted(actor)`, forced: the actor is selected for the
+  pilot); the facts `auto_track`, `cockpit_view` and `gate_offer` read the player's state each tick, so a script can ask
+  for what fits it (auto-track off before a turn lesson, the other view, the hold of X once the gate takes the request)
+  without reading input. `HudLayout` shows one label when the waypoint is the selected target.
 - **Facts** (`MissionFacts.NAMES`): gate jumps flown, bolts raiders landed (`hostile_hits`), Starfuries, civilians and buoys
   lost, raider capitals destroyed and in play, docking offers, repairs, tour stops shown, the player's hull. A step waits on
   one with `m.until(TriggerSpec.fact(...))`; a forced fact trigger only latches, so the script places what the step would

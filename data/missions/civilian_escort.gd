@@ -1,8 +1,10 @@
 extends MissionScript
 ## Civilian escort (M5-T30, D62): Alpha 1 with ALPHA 2 and ALPHA 3 (two wingmen since M8-T08) sees a civilian ship, drawn
-## from the nine hulls by the seed, from NAV ALPHA through the asteroid belt to NAV BETA, 45 km out (M8-T26; it was 30). Three
-## raider waves jump in as it passes 25, 50 and 75 % of the route; a later wave also waits until the one before it is down
-## and a breather has passed (M7-T54), a longer one before the second (M8-T26). The waves are six, eight and ten raiders (M8-T08), so a fought run now takes longer than Q40's
+## from the nine hulls by the seed, from NAV ALPHA through four fields of rock to NAV BETA, 60 km out (M8-T26, the
+## maintainer's play-test of 2026-11-21: it was at NAV BETA before the second wave was beaten). Three raider waves jump in
+## as it passes 25, 50 and 75 % of the route; a later wave also waits until the one before it is down and a breather has
+## passed (M7-T54), a longer one before the second (M8-T26). Its route ends just past the 75 % mark, in the third field: it
+## flies the last leg to NAV BETA only once the third wave has jumped in, so it cannot be there before that wave is fought. The waves are six, eight and ten raiders (M8-T08), so a fought run now takes longer than Q40's
 ## 6 to 8 minutes (Q40). Each wave rides in docked on a raider strike carrier and is launched once it is clear of its point
 ## (M8-T08, Q6); the carrier hangs back, takes its survivors home and flees, and destroying one is an optional objective.
 ## `data/scenarios/civilian_escort.json` holds the buoys, the belt, the route, the wing, the objectives and the shots;
@@ -14,14 +16,20 @@ const RAIDER: Dictionary = {"type": "raider_fighter", "anchor": "origin", "behav
 const CARRIER_OBJECTIVE: StringName = &"carrier"
 ## The route's progress points (25, 50 and 75 %), metres from the scenario origin. The route flies through the first; the later
 ## two are marks on the way to NAV BETA (`_passed`), so a civilian back from fleeing never turns back for them (M7-T54).
-const POINT_25: Vector3 = Vector3(0.0, 0.0, -11250.0)
-const POINT_50: Vector3 = Vector3(0.0, 0.0, -22500.0)
-const POINT_75: Vector3 = Vector3(0.0, 0.0, -33750.0)
+const POINT_25: Vector3 = Vector3(0.0, 0.0, -15000.0)
+const POINT_50: Vector3 = Vector3(0.0, 0.0, -30000.0)
+const POINT_75: Vector3 = Vector3(0.0, 0.0, -45000.0)
 const POINT_RADIUS_M: float = 1000.0
 ## The civilian's route ends within this of NAV BETA (D62): there it has arrived.
 const ARRIVAL_M: float = 1500.0
 ## NAV BETA, metres from the scenario origin.
-const BETA_AT: Vector3 = Vector3(0.0, 0.0, -45000.0)
+const BETA_AT: Vector3 = Vector3(0.0, 0.0, -60000.0)
+## Where the civilian's own route ends and it waits for the last wave: 2 km past the 75 % mark, so it has passed that mark
+## (which brings the wave) wherever within its holding distance it stops. The scenario's `ESCORT` route ends here. The
+## last leg from here is about as long as the third wave takes to fight, so it arrives about when that wave is beaten.
+const HOLD_AT: Vector3 = Vector3(0.0, 0.0, -47000.0)
+## The scenario's route from there to NAV BETA.
+const LAST_LEG: String = "ESCORT LAST LEG"
 ## The quiet after a wave is down before the next may jump in, s (M7-T54: the last wave came too soon), and the longer one
 ## between the first wave and the second (M8-T26, the maintainer: 30 s more).
 const BREATHER_S: float = 30.0
@@ -97,6 +105,7 @@ func step_wave_two(m: MissionApi) -> void:
 
 func step_wave_three(m: MissionApi) -> void:
 	_send_wave(m, 2)
+	m.fly_route(_civilian(m), LAST_LEG)  # the last wave is here: now it may run for NAV BETA
 	await m.say(&"control_wave_three")
 	await m.say(&"civilian_nearly_there")
 	# Arrived once it has flown its route to the end, wherever a later raid has chased it since (M8-T08: with the longer

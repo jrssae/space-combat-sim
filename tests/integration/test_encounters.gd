@@ -379,6 +379,64 @@ func test_free_flight_keeps_the_pace_with_the_station_run() -> void:
 	assert_gt(main.traffic.alive_count(), 0, "the run is going")
 
 
+func test_the_schedule_does_not_stall_at_the_cap_with_patrols_and_civilians_about() -> void:
+	# Maintainer, 2026-11-21: seed 5 with the shipped pools filled the cap with two patrols, a raid's fighters and the station
+	# run's civilians, and the next raid waited for minutes. Civilians on the run no longer count, and a held event starts with
+	# what fits (three at least), so no event waits long once it is due.
+	DebugConsole.flags.invulnerable = true
+	Settings.set_value(&"encounter_interval_s", 20.0)
+	main = await _make_main(true, EncounterDirector.pools_file(&"free_flight"))
+	var director: EncounterDirector = _director()
+	var waited: Array[float] = [0.0, 0.0]  # this wait, the longest
+	var raids: Array[int] = [0]
+	director.event_started.connect(func(e: EncounterEvent) -> void:
+		raids[0] += 1 if e.kind == &"raid" else 0)
+	var last_s: Array[float] = [director.elapsed_s]
+	await _fly(240.0, func() -> bool:
+		var dt: float = director.elapsed_s - last_s[0]
+		last_s[0] = director.elapsed_s
+		waited[0] = waited[0] + dt if director.waiting != null else 0.0
+		waited[1] = maxf(waited[1], waited[0])
+		return false)
+	assert_lt(waited[1], 40.0, "no event waits long once due (longest %.1f s)" % waited[1])
+	assert_gte(director.events_started, 9, "an event every 10 to 30 s, never held behind the cap")
+	assert_gte(raids[0], 3, "raids among them, the patrols and the run's civilians notwithstanding")
+	assert_gt(main.traffic.encounter_count(), 0, "the run's civilians were about")
+
+
+func test_a_patrol_demoted_mid_route_finishes_it_in_the_tier_and_is_released() -> void:
+	# The maintainer's play-test (2026-11-21): seed 5's patrols passed the player, left the tier's radius and were never
+	# released: a tier row's route mirror never moved, so its end (26 to 30 km out, inside the 40 km release) was never seen.
+	DebugConsole.flags.invulnerable = true
+	Settings.set_value(&"encounter_interval_s", 20.0)
+	main = await _make_main(true, EncounterDirector.pools_file(&"free_flight"))
+	var director: EncounterDirector = _director()
+	var seen_near: Dictionary = {}  # a patrol ship flown in Jolt near the player at some point
+	var last: Array[Dictionary] = [{}]  # each patrol ship's last look: [tier row, its row's range from the player]
+	var released_in_tier: Array[String] = []
+	var released: Array[int] = [director.ships_released]
+	await _fly(360.0, func() -> bool:
+		var now: Dictionary = {}
+		for entry: Dictionary in director._own:
+			if entry["kind"] != &"patrol" or not is_instance_valid(entry["combatant"]):
+				continue
+			var c: Combatant = entry["combatant"]
+			now[c] = [c.ship.is_tier_parked(), director._local_position(c).distance_to(main.ship.global_position)]
+			if not c.ship.is_tier_parked():
+				seen_near[c] = true
+		var more_released: bool = director.ships_released > released[0]
+		released[0] = director.ships_released
+		for c: Combatant in last[0]:
+			var look: Array = last[0][c]
+			# Gone back to its pool (not destroyed) from the tier inside the 40 km release: for its route's end.
+			if not now.has(c) and more_released and bool(look[0]) and seen_near.has(c) \
+					and float(look[1]) < EncounterDirector.RELEASE_M:
+				released_in_tier.append(c.display_name)
+		last[0] = now
+		return not released_in_tier.is_empty())
+	assert_false(released_in_tier.is_empty(), "a patrol that passed the player, was demoted mid-route, ended its route as a tier row and went back to its pool")
+
+
 # Flies a fifth of the default interval until 11 events have started (the player shooting down raiders older than 15 s) and
 # checks every gap; returns how many events another kind stood in for.
 func _pace(pools_path: String) -> int:

@@ -288,7 +288,8 @@ func test_an_encounter_raid_drawn_for_the_station_goes_for_it_and_scrambles_its_
 
 # Council round 1 (O6): an encounter's convoy on the run counts against the encounters' cap, as their other ships do: one
 # that would pass it waits, as a raid does.
-func test_an_encounter_convoy_counts_against_the_cap() -> void:
+func test_an_encounter_convoy_on_the_run_holds_no_slot_under_the_cap() -> void:
+	# Maintainer, 2026-11-21: the run's civilians are bounded by their pools; counting them stalled the encounter schedule.
 	var cap_backup: Variant = Settings.get_value(&"encounter_max_ships")
 	Settings.set_value(&"encounter_max_ships", 4)
 	if not await _start(true):
@@ -307,12 +308,11 @@ func test_an_encounter_convoy_counts_against_the_cap() -> void:
 	second.index = 4
 	second.kind = &"traffic"
 	second.types.assign([&"skylark_transport", &"brakiri_bokmai"])
-	assert_false(director.start(second), "two more would pass the cap: the convoy waits")
-	second.trim(1)
-	assert_true(director.start(second), "one fits")
-	assert_eq(traffic.encounter_count(), 4)
+	assert_true(director.start(second), "the first convoy holds no slot: the second joins too")
+	assert_eq(traffic.encounter_count(), 5)
 	var raid: EncounterEvent = director.plan.event(EncounterDirector.FORCED_INDEX + 700, &"raid")
-	assert_false(director.start(raid), "a raid waits while the convoys fill the cap")
+	assert_true(director.start(raid), "and a raid is not held back by the convoys")
+	assert_lte(director.alive_count(), 4, "the raid itself keeps to the cap")
 	Settings.set_value(&"encounter_max_ships", cap_backup)
 
 

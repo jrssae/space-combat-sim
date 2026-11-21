@@ -130,6 +130,8 @@ var _active: bool = false
 var _formed: bool = false  # this opening has formed (its ships swept)
 var _close_swept: bool = false  # and closed (swept again)
 var _spared: Dictionary = {}  # instance id -> true: the ships this opening brings through or takes away
+## How long this opening held its lead-in for AI pilots leaving its funnel (M8-T17; at most `VortexTiming.CLEAR_WAIT_S`).
+var clear_waited_s: float = 0.0
 ## Bumped whenever the spared ships change, so `VortexKeepOuts` sends its volumes again.
 var spared_version: int = 0
 var _materials: Array[ShaderMaterial] = []  # by direction, shared with every vortex of these colours
@@ -324,6 +326,7 @@ func open(p_direction: Direction, hold_s: float = VortexTiming.DEFAULT_HOLD_S, l
 	_active = true
 	_formed = false
 	_close_swept = false
+	clear_waited_s = 0.0
 	_spared.clear()
 	spared_version += 1
 	_sounded = false
@@ -472,6 +475,12 @@ func _process(_delta: float) -> void:
 func advance(delta: float) -> void:
 	if not _active:
 		return
+	# Every AI pilot clears an opening point's mouth (M8-T17, maintainer 2026-11-20): it does not form on one still leaving.
+	if not _formed and age_s + delta >= timing.lead_s and clear_waited_s < VortexTiming.CLEAR_WAIT_S \
+			and VortexHazard.strays(self) > 0:
+		var wait: float = minf(age_s + delta - timing.lead_s + 1e-4, VortexTiming.CLEAR_WAIT_S - clear_waited_s)
+		timing.delay(wait)
+		clear_waited_s += wait
 	age_s += delta
 	var now: VortexTiming.Phase = timing.phase(age_s)
 	# Jump points kill (M8-T17): the ships where it forms as it flashes, and those still in it as its funnel folds away.

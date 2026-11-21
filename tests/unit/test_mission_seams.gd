@@ -144,3 +144,29 @@ func test_releasing_drops_a_scripts_listeners_and_pending_actions() -> void:
 	api.release()
 	assert_eq(api.demo_requested.get_connections().size(), 0, "a script's lambda that holds the API is let go")
 	assert_true(api._reactions.is_empty(), "and so are its pending actions")
+
+
+func test_a_targeted_trigger_waits_for_the_players_selection_and_builds_from_json() -> void:
+	var on_gate: TriggerTargeted = TriggerSpec.targeted("JUMPGATE")
+	assert_eq(on_gate.actors(), PackedStringArray(["JUMPGATE"]), "the stage watches the actor")
+	assert_false(on_gate.check(world))
+	world.set_targeted("jumpgate", true)
+	assert_true(on_gate.check(world), "any case")
+	world.set_targeted("JUMPGATE", false)
+	assert_false(on_gate.check(world), "the selection moved on")
+	on_gate.make_true(world)
+	assert_true(world.is_targeted("JUMPGATE"), "a skip selects it for the pilot")
+	var made: Dictionary = TriggerSpec.from_dict({"kind": "targeted", "actor": "NAV 1"})
+	assert_true(bool(made["ok"]) and made["trigger"] is TriggerTargeted)
+	assert_false(bool(TriggerSpec.from_dict({"kind": "targeted"})["ok"]))
+
+
+func test_without_a_stage_the_players_state_reads_as_nothing_selected_and_no_fact_set() -> void:
+	assert_eq(api.player_target(), "")
+	assert_almost_eq(api.fact(&"auto_track"), 0.0, 1e-9)
+	for fact: StringName in [&"auto_track", &"cockpit_view", &"gate_offer"]:
+		assert_has(MissionFacts.NAMES, fact)
+	api.put("PLAYER", Vector3.ZERO)
+	api.dismiss(["DRONE 1"])
+	assert_eq(api.journal[-2], "put PLAYER at (0.0, 0.0, 0.0)")
+	assert_eq(api.journal[-1], "dismiss DRONE 1", "world changes are journaled")

@@ -34,6 +34,8 @@ const POOLS_DIR: String = "res://data/encounters/"
 const NODE_NAME: StringName = &"EncounterDirector"
 ## A ship this far from the player goes back to its pool.
 const RELEASE_M: float = 40000.0
+## A raider farther than this from the player has flown off (raids arrive 6 to 12 km out): it holds no slot under the cap.
+const FLOWN_OFF_M: float = 20000.0
 const CHECK_S: float = 1.0
 ## A raid goes for a civilian at most this far from the player.
 const CIVILIAN_REACH_M: float = 20000.0
@@ -444,9 +446,24 @@ func _free_civilian(wanted: StringName, taken: Dictionary) -> StringName:
 
 # The station's traffic, when the scene has the station and its lanes: traffic events fly its run (M7-T56).
 # The encounters' ships against the cap: their own, those asked of a gate, and the convoys they sent onto the station's run.
+# What counts against the cap (its budget is ships in Jolt near the player): the encounters' own ships in the fight and those
+# waiting for the gate. A ship in the low-attention tier (a cheap native row far out), a raider docked aboard its carrier, or one
+# that has flown off beyond `FLOWN_OFF_M` (going home before its release at 40 km) holds no slot; nor do civilians that joined
+# the station's run (bounded by their pools). Maintainer, 2026-11-21: the schedule stalled behind them.
 func _in_play() -> int:
-	var traffic: StationTraffic = main.traffic if main != null else null
-	return _own.size() + in_transit + (traffic.encounter_count() if traffic != null else 0)
+	var n: int = in_transit
+	var player_at: Vector3 = main.ship.global_position if main != null and main.ship != null else Vector3.ZERO
+	for entry: Dictionary in _own:
+		var c: Combatant = entry["combatant"]
+		if not is_instance_valid(c.ship):
+			n += 1
+		elif c.ship.has_meta(CarrierDock.DOCKED_META) or c.ship.has_meta(TierDirector.TIER_META):
+			continue
+		elif entry["kind"] == &"raid" and _local_position(c).distance_to(player_at) > FLOWN_OFF_M:
+			continue
+		else:
+			n += 1
+	return n
 
 
 func _lane() -> StationTraffic:

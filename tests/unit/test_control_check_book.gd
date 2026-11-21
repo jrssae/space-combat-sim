@@ -5,9 +5,9 @@ extends GutTest
 
 ## Every control D79 has the instructor check (beats 4 to 9), by the check that covers it.
 const D79_CHECKS: Array[StringName] = [
-	&"main_pods", &"retros", &"pitch", &"yaw", &"roll", &"strafe_left", &"strafe_right", &"strafe_up", &"strafe_down",
-	&"assist_off", &"assist_on", &"brake",
-	&"camera_switch", &"camera_back", &"free_look", &"running_lights",
+	&"autotrack_off", &"pitch", &"yaw", &"roll", &"main_pods", &"retros", &"strafe_left", &"strafe_right", &"strafe_up",
+	&"strafe_down", &"assist_off", &"assist_on", &"brake",
+	&"camera_to_chase", &"camera_to_cockpit", &"free_look", &"running_lights",
 	&"autotrack", &"interact",
 	&"target_menu",
 	&"target_next", &"fire_linked", &"fire_alternating",

@@ -45,6 +45,24 @@ static func sweep(vortex: JumpVortex) -> int:
 	return killed
 
 
+## How many AI pilots are in `vortex`'s funnel and not spared by it: ships that can still fly clear before it forms (pilotless
+## ships, ships in a passage and the player are not waited for).
+static func strays(vortex: JumpVortex) -> int:
+	if vortex == null or not vortex.is_inside_tree():
+		return 0
+	var n: int = 0
+	var transits: VortexTransits = VortexTransits.for_node(vortex)
+	for body: RigidBody3D in caught(vortex):
+		if vortex.spares(body) or (transits != null and transits.is_passing(body)):
+			continue
+		for child: Node in body.get_children():
+			var driver := child as AiPilotDriver
+			if driver != null and driver.brain != null and not driver.in_passage:
+				n += 1
+				break
+	return n
+
+
 ## The ships in `vortex`'s funnel now, spared or not.
 static func caught(vortex: JumpVortex) -> Array[RigidBody3D]:
 	var out: Array[RigidBody3D] = []

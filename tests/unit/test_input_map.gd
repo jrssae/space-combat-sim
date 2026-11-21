@@ -282,10 +282,11 @@ func test_the_radial_menus_actions_are_fixed_and_outside_the_profiles() -> void:
 
 
 func test_the_radial_entry_picks_are_the_dpad_and_the_numbered_keys() -> void:
-	# M8-T24 (D90): keys 1-8 are entries 1-8, the keyboard only (the D-pad does nothing in a radial menu, maintainer
-	# 2026-11-19). Fixed, outside the profiles, read only while a radial menu is open.
-	assert_eq(InputAdapter.RADIAL_ENTRIES.size(), 8)
-	for i: int in 8:
+	# M8-T24 (D90): keys 1-9 are entries 1-9, the keyboard only (the D-pad does nothing in a radial menu, maintainer
+	# 2026-11-19; key 9 for a target ring of eight ships and NONE, 2026-11-20). Fixed, outside the profiles, read only while a
+	# radial menu is open.
+	assert_eq(InputAdapter.RADIAL_ENTRIES.size(), 9)
+	for i: int in 9:
 		var action: StringName = InputAdapter.RADIAL_ENTRIES[i]
 		assert_true(InputAdapter.RADIAL_ACTIONS.has(action), String(action))
 		assert_false(InputAdapter.ACTIONS.has(action), "%s is not a profile action" % action)

@@ -215,7 +215,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `belts` | The scenario's asteroid belts: belts, rocks, collision spheres and the multimeshes drawing them | in flight |
 | `waves` | The raider waves: wave number, name, state, countdown, raiders alive and the kill tally | in flight |
 | `wing` | The player's wing: name, order, formation, members and the last acknowledgement; `flights` lists its squadron's flights of three (M8-T19: number, lead, wingmen) | in flight |
-| `hud` | Whether the HUD shows, and where the lead, prograde and target marks are; `radar_plot_us` and `radar_paint_us`, the radar's frame cost (T34) | in flight |
+| `hud` | Whether the HUD shows, and where the lead, prograde and target marks are; `radar_plot_us` and `radar_paint_us`, the radar's frame cost (T34); `capital_marks`, the far capitals' markers (M8-T08: class, range, on screen or at the edge; `off` unless the scenario's `hud.capital_markers` turns them on, none shipped does; rules in `data/hud/capital_markers.json`) | in flight |
 | `screens` | The cockpit screens: shown, powered, paint counts and the lamps lit | in flight |
 | `pause_menu` | Whether the pause menu is open, the page on top and how many pages are open | in flight |
 | `comms_menu` | The comms menu (D-pad Right): whether it is open, the page, the highlighted entry, the ring's entries, orders picked, the last order, why it last closed and the focus pull | in flight |
@@ -255,6 +255,6 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `audio` | Sounds loaded, voices playing, engine voices (granted, sounding, the frame's work and the re-rank's work, `engine_rank_work`), `shots_culled` (gun shots skipped beyond earshot), the bus peaks now (`master_peak_db`, `sfx_peak_db`, dBFS; M8-T12) and the SFX volume (writable) | front end, flight |
 | `ai` | The AI ships and their behaviours, a count per behaviour and the AI's cost per tick | AI ships |
 | `mission` | The running mission: id, title, state, result, step, objectives, time, trigger counts, waypoint, controls locked, jump points, whether holding X skips the opening now (`opening_skip`) and the HUD's hull bars (`hull_bars`: name and hull %, M7-T54) | mission |
-| `dialog` | The comms panel: whether a line shows, its id, speaker callsign and text, lines queued, time left and lines shown | mission |
+| `dialog` | The comms panel: whether a line shows, its id, speaker callsign and text (controls named as bound now on the device in use, M8-T33), lines queued, time left and lines shown | mission |
 | `checks` | The control checks (M8-T04): whether one is open (`active`), its id (`current`), the HUD's hint with the live bindings (`hint`), what it has measured (`measured`) and how far it is 0..1 (`progress`), what it waits for (`phase`: hint, repeat, demo, waiting or idle), delays run out (`misses`) and seconds since the last hint or demo (`waited_s`), the checks still to come (`remaining`) and passed (`passed`), hints said and demos asked for (`hints`, `demos`) and how many checks the data file holds (`count`) | mission |
 | `route` | The instructor's route: waypoint, count, lag, state and demo | route |

@@ -29,7 +29,7 @@ var target_menu_open: bool = false
 var radial_point: Vector2 = Vector2.ZERO
 var radial_select: bool = false
 var radial_back: bool = false
-## A numbered key (1-8: 0-7) pressed while a radial menu is open: the entry in that place of the ring's page order to pick
+## A numbered key (1-9: 0-8) pressed while a radial menu is open: the entry in that place of the ring's page order to pick
 ## (M8-T24); -1 when none was pressed.
 var radial_entry: int = -1
 ## X (the auto-track action) held `InputAdapter.interact_hold_s` while the selected target offers an interaction (M7-T27): run it

@@ -380,36 +380,31 @@ func test_nav_beta_is_listed_with_the_escort_objective() -> void:
 	assert_ne(int((listed.get("NAV BETA", {}) as Dictionary).get("target_id", 0)), 0, "as the buoy itself, to pick for a waypoint")
 
 
-func test_a_civilian_taken_from_nav_beta_after_arriving_flies_back_and_stops_there() -> void:
-	# It arrived early, a raid chased it off, and it idled where the chase ended, kilometres short, for the rest of the run.
+func test_a_civilian_taken_from_its_routes_end_flies_back_and_stops_there() -> void:
+	# It arrived, a raid chased it off, and it idled where the chase ended, kilometres short, for the rest of the run. Its
+	# route ends just past the 75 % mark until the last wave comes (M8-T26), so that is where it holds here.
 	DebugConsole.flags.invulnerable = true
 	await _fly()
 	var civilian: Combatant = _civilian()
 	civilian.damageable.invulnerable = true
 	assert_true(_run("mission goto wave_one").ok)
 	await _ticks(2)
-	assert_true(_journal_has("hold_route_end %s" % _civilian_name()), "the script asks it to hold NAV BETA")
+	assert_true(_journal_has("hold_route_end %s" % _civilian_name()), "the script asks it to hold its route's end")
 	# The wave stays up, out of the way, so no later one comes while this watches the civilian: one raider is left, far off
 	# and pilotless, and its carrier does not call it home.
 	var run: CarrierRun = _carriers().runs()[0]
-	run.options["recall_left"] = 0
 	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
-	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
-		if c.display_name != WAVE_ONE[0]:
-			c.damageable.kill()
-			continue
-		c.driver.brain = null
-		c.damageable.invulnerable = true
-		c.ship.global_position += Vector3(0.0, 90000.0, 0.0)
+	_park_the_wave(run, WAVE_ONE[0])
 	var path := (civilian.driver.brain as AiPilot).behaviour(&"follow_path") as BehaviourFollowPath
 	assert_eq(path.index, 1, "past the 25 % point, bound for the end of its route")
 	var system: StringName = _api().world.system_id
-	var end := UniversePos.new(0.0, 0.0, -44000.0, system)
-	main.mission.stage.place(_civilian_name(), UniversePos.new(0.0, 0.0, -43700.0, system))
+	var mark: Vector3 = MissionScriptClass.HOLD_AT
+	var end := UniversePos.new(mark.x, mark.y, mark.z, system)
+	main.mission.stage.place(_civilian_name(), UniversePos.new(mark.x, mark.y, mark.z + 300.0, system))
 	await _run_on(120.0, func() -> bool: return _api().world.route_done(_civilian_name()))
 	assert_true(_api().world.route_done(_civilian_name()), "it flies its route to the end")
-	for away: Vector3 in [Vector3(300.0, 0.0, -40000.0), Vector3(-200.0, 100.0, -46500.0)]:
-		main.mission.stage.place(_civilian_name(), UniversePos.new(away.x, away.y, away.z, system))
+	for away: Vector3 in [Vector3(300.0, 0.0, 4000.0), Vector3(-200.0, 100.0, -2500.0)]:
+		main.mission.stage.place(_civilian_name(), UniversePos.new(mark.x + away.x, mark.y + away.y, mark.z + away.z, system))
 		civilian.ship.linear_velocity = main.world.rest_velocity()
 		var from_m: float = _at(civilian).distance_to(end)
 		await _run_on(25.0, func() -> bool: return false)
@@ -418,10 +413,65 @@ func test_a_civilian_taken_from_nav_beta_after_arriving_flies_back_and_stops_the
 		await _run_on(400.0, func() -> bool: return _at(civilian).distance_to(end) < MissionStage.HOLD_END_M \
 				and (civilian.ship.linear_velocity - main.world.rest_velocity()).length() < 2.0)
 		assert_lt(_at(civilian).distance_to(end), MissionStage.HOLD_END_M, "and it stops at its route's end")
-		assert_lt(_at(civilian).distance_to(_buoy_at("NAV BETA")), MissionScriptClass.ARRIVAL_M, "by NAV BETA")
 		await _run_on(30.0, func() -> bool: return false)
 		assert_lt(_at(civilian).distance_to(end), MissionStage.HOLD_END_M, "where it stays")
 	assert_eq(_api().step_name(), &"wave_one", "the wave was up all the while")
+
+
+# Leaves one raider of the wave `run` brought, far off and pilotless, and its carrier not calling it home: the wave stays up
+# and out of the way, so no later wave comes while a test watches the civilian. Returns that raider.
+func _park_the_wave(run: CarrierRun, keep: String) -> Combatant:
+	run.options["recall_left"] = 0
+	var kept: Combatant = null
+	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+		if c.display_name != keep:
+			c.damageable.kill()
+			continue
+		c.driver.brain = null
+		c.damageable.invulnerable = true
+		c.ship.global_position += Vector3(0.0, 90000.0, 0.0)
+		kept = c
+	return kept
+
+
+func test_the_civilian_waits_in_the_third_field_until_the_last_wave_comes() -> void:
+	# M8-T26 (the play-test of 2026-11-21): it was at NAV BETA before the second wave was beaten. Its route now ends at the
+	# 75 % mark; the last leg is flown only once the third wave has jumped in, however slow the player or fast the civilian.
+	DebugConsole.flags.invulnerable = true
+	await _fly()
+	var civilian: Combatant = _civilian()
+	civilian.damageable.invulnerable = true
+	assert_true(_run("mission goto wave_one").ok)
+	var path := (civilian.driver.brain as AiPilot).behaviour(&"follow_path") as BehaviourFollowPath
+	await _run_on(20.0, func() -> bool: return path.index >= 1)  # past its route's first point before the next skip moves it
+	assert_true(_run("mission goto wave_two").ok)
+	await _ticks(2)
+	var run: CarrierRun = _carriers().runs()[-1]
+	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
+	var last: Combatant = _park_the_wave(run, WAVE_TWO[0])
+	var system: StringName = _api().world.system_id
+	var mark: Vector3 = MissionScriptClass.HOLD_AT
+	var hold := UniversePos.new(mark.x, mark.y, mark.z, system)
+	main.mission.stage.place(_civilian_name(), UniversePos.new(mark.x, mark.y, mark.z + 400.0, system))
+	await _run_on(60.0, func() -> bool: return _api().world.route_done(_civilian_name()))
+	await _run_on(240.0, func() -> bool: return _at(civilian).distance_to(hold) < MissionStage.HOLD_END_M \
+			and (civilian.ship.linear_velocity - main.world.rest_velocity()).length() < 2.0)
+	await _run_on(30.0, func() -> bool: return false)
+	assert_eq(_api().step_name(), &"wave_two", "the second wave is still up")
+	assert_lt(_at(civilian).distance_to(hold), MissionStage.HOLD_END_M, "it waits just past the 75 % mark, in the third field")
+	assert_gt(_at(civilian).distance_to(_buoy_at("NAV BETA")), 10000.0, "a long way short of NAV BETA")
+	assert_false(_journal_has("fly_route %s %s" % [_civilian_name(), MissionScriptClass.LAST_LEG]))
+	last.damageable.invulnerable = false
+	last.damageable.kill()
+	await _run_on(MissionScriptClass.BREATHER_S + 20.0, func() -> bool: return _api().step_name() == &"wave_three")
+	assert_eq(_api().step_name(), &"wave_three", "the second wave down, the third jumps in")
+	assert_true(_journal_has("fly_route %s %s" % [_civilian_name(), MissionScriptClass.LAST_LEG]), "and only now it is sent on")
+	await _ticks(2)
+	assert_true(_run("kill all").ok)
+	var from_m: float = _at(civilian).distance_to(_buoy_at("NAV BETA"))
+	await _run_on(60.0, func() -> bool: return false)
+	assert_lt(_at(civilian).distance_to(_buoy_at("NAV BETA")), from_m - 1500.0, "it runs the last leg for NAV BETA")
+	assert_false(_api().has_ended(), "not there yet")
 
 
 func test_every_actor_a_shot_names_is_in_play_from_the_start() -> void:
@@ -672,10 +722,11 @@ func test_a_saturn_8_crosses_the_belt_without_hitting_a_rock() -> void:
 	var hull: float = civilian.damageable.hull.hp
 	assert_true(_run("mission goto depart").ok)
 	# No raiders: the waves are skipped as they come, so only the rocks stand in the way.
-	await _wait_for("the crossing", func() -> bool:
-		if _api().step_name() in [&"wave_one", &"wave_two", &"wave_three"]:
+	await _run_on(1800.0, func() -> bool:
+		if _api().step_name() in [&"wave_one", &"wave_two", &"wave_three"] and not main.ships.alive(ShipPool.DEFAULT_TYPE).is_empty():
 			_run("kill all")
-		return _at(civilian).distance_to(_buoy_at("NAV BETA")) < MissionScriptClass.ARRIVAL_M, 60 * 600)
+		return _at(civilian).distance_to(_buoy_at("NAV BETA")) < MissionScriptClass.ARRIVAL_M)
+	assert_lt(_at(civilian).distance_to(_buoy_at("NAV BETA")), MissionScriptClass.ARRIVAL_M, "it crosses all four fields to NAV BETA")
 	assert_eq(civilian.damageable.hull.hp, hull, "no rock hit on the way")
 
 
@@ -706,12 +757,18 @@ func test_a_fought_run_ends_each_wave_at_three_left_before_the_next_comes() -> v
 	var contact: Array[float] = [-1.0, -1.0, -1.0]
 	var fought: Array[float] = [-1.0, -1.0, -1.0]
 	var cleared: Array[float] = [-1.0, -1.0, -1.0]
+	var arrived_s: float = -1.0  # when the civilian first comes within 3 km of NAV BETA
+	var held_s: float = 0.0  # how long it sat still short of NAV BETA, waiting for the last wave
 	var ticks: int = 0
-	while not _api().has_ended() and _api().time_s() < 1500.0:
+	while not _api().has_ended() and _api().time_s() < 2400.0:
 		await _ticks(1)
 		ticks += 1
 		_ride_over(_civilian())
 		var now: float = _api().time_s()
+		if arrived_s < 0.0 and _at(_civilian()).distance_to(_buoy_at("NAV BETA")) < 2.0 * MissionScriptClass.ARRIVAL_M:
+			arrived_s = now
+		if arrived_s < 0.0 and spawned[2] < 0.0 and _behaviour(_civilian()) == "idle":
+			held_s += 1.0 / 60.0
 		if ticks % (60 * 15) == 0:
 			var civ: Combatant = _civilian()
 			gut.p("  t %4.0f s  %-10s  civilian at %5.1f km, %3.0f m/s, %s" % [now, _api().step_name(),
@@ -736,13 +793,20 @@ func test_a_fought_run_ends_each_wave_at_three_left_before_the_next_comes() -> v
 	Engine.time_scale = scale_backup
 	Engine.physics_ticks_per_second = rate_backup
 	var end_s: float = _api().time_s()
-	gut.p("fought run (seed 3, %s): waves at %s, contact %s, down to three at %s, home or dead at %s, end %.0f s" % [
-			_civilian_name(), spawned, contact, fought, cleared, end_s])
+	gut.p("fought run (seed 3, %s): waves at %s, contact %s, down to three at %s, home or dead at %s, the civilian at NAV BETA at %.0f s (held %.0f s on the way), end %.0f s, its hull %.0f %%" % [
+			_civilian_name(), spawned, contact, fought, cleared, arrived_s, held_s, end_s, 100.0 * _civilian().damageable.hull.fraction()])
 	assert_true(_api().has_ended() and bool(_api().result.get("success", false)), str(_api().result))
 	for w: int in [1, 2]:
 		assert_gt(spawned[w] - cleared[w - 1], [MissionScriptClass.WAVE_TWO_BREATHER_S, MissionScriptClass.BREATHER_S][w - 1] - 0.1,
 				"wave %d comes a breather after wave %d is down" % [w + 1, w])
-	assert_between(end_s, 600.0, 1100.0, "about fifteen minutes on the 45 km route with waves of six, eight and ten, the civilian back at NAV BETA at the end (M8-T26; 6 to 8 in Q40's day)")
+	# The timeline the maintainer asked for (2026-11-21): the civilian is not at NAV BETA until the third wave has come and
+	# been fought, and gets there about when that wave is beaten.
+	for w: int in 3:
+		assert_gt(arrived_s, spawned[w], "it reaches NAV BETA after wave %d has jumped in" % (w + 1))
+		assert_gt(arrived_s, contact[w], "and after wave %d has closed on it" % (w + 1))
+	assert_between(arrived_s - cleared[2], -60.0, 240.0, "about when the third wave is beaten (%.0f s after)" % (arrived_s - cleared[2]))
+	assert_lt(held_s, 120.0, "without a long wait on the way in a run fought at this pace (%.0f s)" % held_s)
+	assert_between(end_s, 780.0, 1260.0, "13 to 21 minutes on the 60 km route with waves of six, eight and ten")
 
 
 # --- the wing flies it with an AI in the player's place (M8-T08): a balance judgement --------------------------------------

@@ -103,6 +103,8 @@ func _ready() -> void:
 	comms = CommsPanel.new()
 	add_child(comms)
 	comms.bind(api.dialog, api.dialog_book, main.audio)
+	comms.device_source = func() -> InputSource.Device: return main.input_source.device if main.input_source != null \
+			else InputSource.Device.PAD
 	skip_prompt = SkipPrompt.new()
 	add_child(skip_prompt)
 	_load_checks()
