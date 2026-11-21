@@ -12,6 +12,10 @@ func test_the_data_file_loads_with_the_settled_numbers() -> void:
 	var made: Dictionary = TutorialRules.load_file()
 	assert_true(bool(made["ok"]), str(made.get("error", "")))
 	var rules: TutorialRules = made["rules"]
+	assert_almost_eq(rules.instructor_time_s, 93.75, 1e-6, "25 % slower than the 75 s it was (the play-test of 2026-11-21)")
+	assert_almost_eq(rules.exemplary_time_s(), 1.25 * 82.5, 1e-6, "so the exemplary time is 1.25 times the old one")
+	assert_almost_eq(rules.par_time_s(), 1.25 * 105.0, 1e-6)
+	assert_eq(rules.rating(100.0, false), TutorialRules.EXEMPLARY, "a time that was only par")
 	assert_almost_eq(rules.exemplary_within, 0.10, 1e-6)
 	assert_almost_eq(rules.par_within, 0.40, 1e-6)
 	assert_eq(rules.gate_raiders, 6)

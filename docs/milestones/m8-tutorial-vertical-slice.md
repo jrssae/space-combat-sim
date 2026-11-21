@@ -83,10 +83,13 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
   1. Hangar: New game, Tutorial; the briefing over the hangar backdrop.
   2. A **two-ship launch** with D81's exterior shots: the instructor, then the player; skippable. **Only the instructor and
      the player fly until the alarm** (M8-T33, maintainer 2026-11-19; the squadron launch moved to beat 12).
-  3. Form up on the instructor and fly to a training box about 8 km off the station, away from traffic.
-  4. Flight checks: main pods, retros, pitch and yaw, roll, strafe on all four axes, flight assist off (a drift demo) and on, the
-     brake.
-  5. Camera and lights: the cockpit and chase views, free look, running lights.
+  3. **The lessons start in space** (maintainer's play-test, 2026-11-21): the launch is the opening cinematic and cuts to the
+     two ships at rest in clear space about 8 km off the station, away from traffic. Nothing is flown behind the instructor
+     before the controls are taught (the leg to a training box is gone).
+  4. Flight checks, from rest: pitch, yaw and roll first (with auto-track on, the instructor has it switched off before each,
+     and says nothing when it is off), then main pods, retros, strafe on all four axes, flight assist off (a drift demo) and on,
+     the brake.
+  5. Camera and lights: the view the pilot is not in (cockpit or chase), then the way back, free look, running lights.
   6. **The X button**: tap is auto-track; hold runs the selected target's interaction (the gate's jump, a bay's docking, later
      cargo and more), offered only within its reach, with the prompt naming the live binding; the instructor says X will do more
      as the player meets new places.
@@ -99,10 +102,13 @@ A `MissionScript` (`data/missions/tutorial.gd`) with `data/scenarios/tutorial.js
      target menu (B held); target-previous and target-ahead are not taught (maintainer, 2026-11-18: keyboard and mouse only, and
      target-ahead has no default binding); shoot unarmed training drones with the lead reticle, switch fire modes.
   9. Wing orders: form, attack and cover from the comms menu, **given to the instructor**, who flies as the player's wingman
-     for the drill (a pilot that fights, in the player's flight) and then instructs again (M8-T33).
+     for the drill (a pilot that fights, in the player's flight) and then instructs again (M8-T33). Two drones come for the
+     attack order; the beat ends when the one the pilot ordered the wingman at is destroyed, and the other is left to
+     practise on until Control recalls it as the tour starts.
   10. The exterior tour: the Cobra bays, the main docking bay, the command section, the defense grid (heavy cannons, interceptors),
       the jumpgate.
-  11. **Jumpgate use**: at the gate the player targets it, closes on the approach cue and holds X; the jump and its cinematic run
+  11. **Jumpgate use**: the instructor tells the player to target the gate and waits for it; the player closes on the approach
+      cue; the hold of X is called only once the gate takes the request (its own range check); the jump and its cinematic run
       (the round trip of M6 until hyperspace exists) and the player comes back out through the blue vortex.
   12. The raid: a first group of raiders through the jumpgate vortex, then **the raider strike carrier** jumps in on its own point
       and launches more (M12-T19, via T07); alarms, more wings launch, the grid engages, the player defends with the wing (orders
@@ -1429,6 +1435,37 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     the alarm all twelve Starfuries (ALPHA 2 to 12 and the instructor) are in play in four flights, launched in play, and
     a raider's hit after the launch asks for no further one. The fought raid (`GUT_BALANCE=1`) ends by itself at 392 s,
     on that seed with two Starfuries lost and the carrier escaped (341 s, none lost, carrier destroyed with two launches).
+  - **Play-test fix round (2026-11-21, the maintainer's flight):** ten findings, all in the mission's data, its script and
+    small seams of the mission framework.
+    1. **Lessons start in space.** Of the two ways offered, the launch stays as the **opening cinematic** and cuts (`m.put`)
+       to the player and the instructor at rest 8 km off the station. The `form_up` step is gone; the order is launch,
+       turns (pitch, yaw, roll), thrust (main pods, retros), strafes, assist off and on, brake, views, free look, lights,
+       the X button, the course, gunnery, wing orders, tour, gate.
+    2. **Auto-track.** New check `autotrack_off`, run before each turn lesson only when the new fact `auto_track` is 1; its
+       hint names the live button and key.
+    3. **Tour captions** off for the tutorial (`m.tour(stop, false)`, `TourDirector.captions`).
+    4. **One label.** `HudLayout` leaves the waypoint's marker and label out when the waypoint sits on the selected target
+       (the target's mark has the name and the range); the radar's diamond stays. Everywhere, not only here.
+    5. **Hold X.** The gate beat no longer runs the `interact` check (its hint came at 9 km and repeated every 20 s); it waits
+       on the new fact `gate_offer` (`JumpgateHost.can_request_jump`, the gate's own rule) and then says one line. The game's
+       own prompt names the binding.
+    6. **Target the gate.** A line, then `TriggerSpec.targeted("JUMPGATE")` (new trigger kind `targeted`).
+    7. **Views.** Checks `camera_to_chase` and `camera_to_cockpit` replace `camera_switch` and `camera_back`; the script asks
+       for the other view than the one on (fact `cockpit_view`) and each passes only in the view it names.
+    8. **Drones.** The attack beat ends when the ordered drone (`m.player_target()` as the order passes) is destroyed; the
+       instructor says the other is the pilot's to practise on, and `m.dismiss` recalls what is left as the tour's first
+       shot starts.
+    9. **Lines.** The debrief and the instructor's closing remarks rewritten, each said one way.
+    10. **Course.** `instructor_time_s` 75 to 93.75: exemplary up to 103.1 s (was 82.5), par up to 131.3 s.
+    Tests (staged scratch copy, HEAD `5cacba95` plus these fixes): compile check 1020 scripts clean; 16 unit and neighbour files
+    (rules, mission seams, HUD layout, the check book, devices and live checks, triggers, dialog, quick suite, keyboard
+    parity, HUD, station tour), 213 of 213; `test_tutorial` and the new `test_tutorial_lessons` (shared fixture
+    `tests/fixtures/tutorial_steps.gd`), 18 passed, 1 pending (the balance gate), 0 failed. New in them: the cut to rest
+    after a skipped and after a played launch and the lesson order; auto-track on (the call, the named control, the wait)
+    and off (nothing said); the view lesson from each view; the gate's target instruction and the hold-X call only inside
+    the request range; no tour caption; the drone beat ending on the ordered kill with the other recalled at the tour;
+    the new course time; one label for a targeted objective; the `targeted` trigger. The fought raid (`GUT_BALANCE=1`)
+    ends by itself at 392 s.
 
 ### M8-T30 Cobra-bay launch: camera variety and a quicker hand-off
 

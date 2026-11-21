@@ -239,6 +239,8 @@ func _stand_in(check: ControlCheck) -> StandIn:
 				ship.menu_order = str(value)
 			&"fire_mode":
 				ship.state["fire_mode"] = "alternating" if str(value) == "linked" else "linked"
+			&"camera":
+				ship.state["camera"] = "chase" if str(value) == "cockpit" else "cockpit"
 			_:
 				if value is bool:
 					ship.state[condition["field"]] = not bool(value)
@@ -252,6 +254,7 @@ func _run(check: ControlCheck, pad: bool, press: bool = true) -> String:
 	var adapter := InputAdapter.new()
 	adapter.interaction_offered = check.events.has(ControlCheckSample.INTERACT)
 	var ship: StandIn = _stand_in(check)
+	adapter.autotrack_on = bool(ship.state["tracking"])  # a check that asks for auto-track off opens with it on
 	var tap_ticks: int = 3 if check.press == &"tap" else MAX_TICKS
 	var did_something: bool = not extra_only
 	check.begin(ship.sample(adapter.sample(source, DT)))  # the check opens with the hands off, as the instructor asks

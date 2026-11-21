@@ -6836,10 +6836,11 @@ src/mission/mission_facts.gd          MissionFacts: numbers counted from the sce
 src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind "fact"): a fact reached a number, or fell below it
 ```
 
-- **Steps.** `launch` (two ships with the exterior shots: the instructor, then the player; M8-T33), `form_up` (the instructor leads, paced on
-  the player, to a box 8 km off the station), `flight_checks`, `camera_lights`, `x_button`, `course`, `combat`, `wing_orders`,
+- **Steps.** `launch` (the opening cinematic: two ships with the exterior shots, the instructor, then the player; it cuts to
+  both at rest 8 km off the station, M8-T33's play-test), `flight_checks` (turns, thrust, strafes, assist, brake),
+  `camera_lights`, `x_button`, `course`, `combat`, `wing_orders`,
   `tour`, `jumpgate`, `raid` (six raiders out of the gate; the checkpoint; the whole wing launches in play), `defense` (the strike carrier with eight more),
-  `debrief`. The opening ends at `form_up`; the pause menu's **Skip training** goes from any step of `flight_checks` to
+  `debrief`. The opening ends at `flight_checks`; the pause menu's **Skip training** goes from any step of `flight_checks` to
   `wing_orders` straight to `tour` (`MissionScript.skip_block`, `MissionApi.skip_offered` / `take_skip`, `PauseMenu.entries`).
 - **What a mission script gained** (all on `MissionApi`, world changes journaled, a skipped step still makes them):
   `launch_squadron(wing, door, flights)`; `tour(stop)` (one stop of `TourDirector`, awaited); `traffic(on)` (the station's run);
@@ -6854,6 +6855,12 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   flight and take it out. The instructor joins the flight for the launch (the squadron launch with one flight carries the
   player's flight, then the player) and for the wing-orders drill, there under a pilot that fights. At the alarm
   `m.scramble("alpha", 11)` launches the whole wing at once: the player's two slots first (ALPHA 2 and 3), then three flights of their own.
+- **After the play-test (2026-11-21).** `m.put(ship, at, facing)` places a ship at rest (a cut between scenes: it ends a shot
+  on the player and a launch's burn); `m.dismiss(names)` takes ships out with no explosion; `m.tour(stop, captions)`;
+  `m.player_target()` and the trigger `targeted` (`TriggerSpec.targeted(actor)`, forced: the actor is selected for the
+  pilot); the facts `auto_track`, `cockpit_view` and `gate_offer` read the player's state each tick, so a script can ask
+  for what fits it (auto-track off before a turn lesson, the other view, the hold of X once the gate takes the request)
+  without reading input. `HudLayout` shows one label when the waypoint is the selected target.
 - **Facts** (`MissionFacts.NAMES`): gate jumps flown, bolts raiders landed (`hostile_hits`), Starfuries, civilians and buoys
   lost, raider capitals destroyed and in play, docking offers, repairs, tour stops shown, the player's hull. A step waits on
   one with `m.until(TriggerSpec.fact(...))`; a forced fact trigger only latches, so the script places what the step would

@@ -1,8 +1,10 @@
 extends MissionScript
 ## The tutorial (M8 D79): a pilot new to Babylon 5 flies the check that qualifies a squadron leader. Until the alarm there
-## are two ships, the instructor and the player (M8-T33): they launch one after the other, the instructor leads to a training
-## box for the control checks, a timed buoy course (its rating is the career remark), gunnery on unarmed drones and wing
-## orders, which the instructor takes as the player's wingman; then the station tour and a jump through the gate. As the
+## are two ships, the instructor and the player (M8-T33): their launch is the opening cinematic, and it cuts to the two at
+## rest in clear space 8 km off the station, where the lessons start: handling first (attitude, thrust, strafe, assist,
+## brake), the views and lights, the X button, a timed buoy course (its rating is the career remark), gunnery on unarmed
+## drones and wing orders, which the instructor takes as the player's wingman; then the station tour and a jump through
+## the gate. Nothing is flown behind the instructor before the controls are taught (the maintainer's play-test, 2026-11-21). As the
 ## player comes back out the raid begins, a surprise to everyone: six raiders through the gate, then a strike carrier with
 ## eight more. The whole wing launches at the alarm, in play: the player's two wingmen and nine more in flights of their
 ## own. The debrief is the first time the raid is discussed, and it gives the rank.
@@ -21,11 +23,22 @@ const FIGHTING_PILOT: String = "ally_starfury"
 ## Starfuries launched at the alarm, all together: the player's two wingmen and nine more in three flights (the wing of
 ## twelve less the player; the maintainer, 2026-11-19).
 const ALARM_LAUNCH: int = 11
-## The training box, metres from the station, and how near counts as there.
-const BOX_AT: Vector3 = Vector3(-8000.0, 1500.0, 0.0)
-const BOX_RADIUS_M: float = 1500.0
-const BOX_ROUTE: Array[Vector3] = [Vector3(-5000.0, 1100.0, -600.0), Vector3(-8300.0, 1500.0, 200.0)]
+## Where the lessons start, metres from the station: the player at rest in clear space, nose on the course's first buoy,
+## the instructor ahead and to the side where the cockpit shows it.
+const LESSON_AT: Vector3 = Vector3(-8000.0, 1500.0, 0.0)
+const LESSON_FACING: Vector3 = Vector3(0.0, 0.0, -1.0)
+const INSTRUCTOR_OFF: Vector3 = Vector3(90.0, 25.0, -260.0)
 const LEAD_MPS: float = 150.0
+## The handling lessons in order: turning in place first, then thrust, the strafes and the assist. Auto-track holds the nose
+## on a target and so blocks a turn: before each of the first it is switched off, if it is on.
+const ATTITUDE_CHECKS: Array[StringName] = [&"pitch", &"yaw", &"roll"]
+const THRUST_CHECKS: Array[StringName] = [&"main_pods", &"retros", &"strafe_left", &"strafe_right", &"strafe_up", &"strafe_down",
+		&"assist_off"]
+const ASSIST_CHECKS: Array[StringName] = [&"assist_on", &"brake"]
+## The view lesson asks for the view the pilot is not in, then for the way back.
+const VIEW_FROM_COCKPIT: Array[StringName] = [&"camera_to_chase", &"camera_to_cockpit"]
+const VIEW_FROM_CHASE: Array[StringName] = [&"camera_to_cockpit", &"camera_to_chase"]
+const LOOK_CHECKS: Array[StringName] = [&"free_look", &"running_lights"]
 ## The buoy course: the buoys in order (the scenario places them), and how near a pass counts.
 const COURSE: Array[String] = ["NAV 1", "NAV 2", "NAV 3", "NAV 4", "NAV 5"]
 const COURSE_AT: Array[Vector3] = [Vector3(-8000.0, 1500.0, -1500.0), Vector3(-9500.0, 1900.0, -3000.0),
@@ -51,6 +64,8 @@ const TOUR: Array[Dictionary] = [
 	{"stop": "defense_grid", "line": &"tour_grid"},
 	{"stop": "heavy_cannons", "line": &"tour_cannons"},
 ]
+## The tour's own captions stay off: Control and the instructor talk over each stop, and the caption lay over their lines.
+const TOUR_CAPTIONS: bool = false
 ## The instructor waits this far in front of the gate; the jump is taught from inside `GATE_NEAR_M`.
 const GATE_HOLD_M: float = 7000.0
 const GATE_NEAR_M: float = 9000.0
@@ -73,13 +88,13 @@ var _rules: TutorialRules = null
 
 
 func steps() -> Array[StringName]:
-	return [&"launch", &"form_up", &"flight_checks", &"camera_lights", &"x_button", &"course", &"combat", &"wing_orders",
+	return [&"launch", &"flight_checks", &"camera_lights", &"x_button", &"course", &"combat", &"wing_orders",
 			&"tour", &"jumpgate", &"raid", &"defense", &"debrief"]
 
 
 # Holding X through the launch hands the flight over at once.
 func opening_until() -> StringName:
-	return &"form_up"
+	return &"flight_checks"
 
 
 # The pause menu's "Skip training": from any of the training steps straight to the tour.
@@ -87,7 +102,8 @@ func skip_block() -> Dictionary:
 	return {"from": &"flight_checks", "to": &"tour", "label": "Skip training"}
 
 
-# Two ships launch from the Cobra bays: the instructor, as the player's flight for the launch, then the player.
+# The opening cinematic: two ships launch from the Cobra bays, the instructor (as the player's flight for the launch) and
+# then the player. It cuts to both at rest where the lessons start.
 func step_launch(m: MissionApi) -> void:
 	m.lock_controls(true)
 	m.own_dock_offer()
@@ -97,34 +113,31 @@ func step_launch(m: MissionApi) -> void:
 	m.join_flight(INSTRUCTOR)
 	await m.launch_squadron(WING, 0, 1)
 	m.leave_flight(INSTRUCTOR)
+	m.put("player", LESSON_AT, LESSON_FACING)
+	m.put(INSTRUCTOR, LESSON_AT + INSTRUCTOR_OFF, LESSON_FACING)
 	m.traffic(true)
 	m.lock_controls(false)
 	m.objective_add(&"qualify")
 
 
-# Form up on the instructor and follow to the training box, away from the traffic.
-func step_form_up(m: MissionApi) -> void:
-	await m.say(&"instructor_form_up")
-	m.waypoint(INSTRUCTOR)
-	m.fly(INSTRUCTOR, BOX_ROUTE, LEAD_MPS, true)
-	await m.say(&"instructor_to_box")
-	await m.until(TriggerSpec.near_point("player", _at(m, BOX_AT), BOX_RADIUS_M))
-	m.waypoint(null)
-	await m.say(&"instructor_box")
-
-
+# Handling, from rest: the turns, then thrust and the strafes, the assist off and on, the brake.
 func step_flight_checks(m: MissionApi) -> void:
+	await m.say(&"instructor_box")
 	await m.say(&"instructor_flight_intro")
-	await m.run_checks([&"main_pods", &"retros", &"pitch", &"yaw", &"roll", &"strafe_left", &"strafe_right", &"strafe_up",
-			&"strafe_down", &"assist_off"])
+	for check: StringName in ATTITUDE_CHECKS:
+		await _auto_track_off(m)
+		await m.check(check)
+	await m.run_checks(THRUST_CHECKS)
 	await m.say(&"instructor_assist_drift")
-	await m.run_checks([&"assist_on", &"brake"])
+	await m.run_checks(ASSIST_CHECKS)
 	await m.say(&"instructor_flight_done")
 
 
+# The two views, asked for from the one the pilot is in, then free look and the lights.
 func step_camera_lights(m: MissionApi) -> void:
 	await m.say(&"instructor_camera_intro")
-	await m.run_checks([&"camera_switch", &"camera_back", &"free_look", &"running_lights"])
+	await m.run_checks(VIEW_FROM_COCKPIT if m.fact(&"cockpit_view") >= 1.0 else VIEW_FROM_CHASE)
+	await m.run_checks(LOOK_CHECKS)
 
 
 # What X does: a tap tracks, a hold runs the target's interaction (flown for real at the gate).
@@ -175,7 +188,8 @@ func step_combat(m: MissionApi) -> void:
 	await m.say(&"instructor_drones_down")
 
 
-# The instructor flies as the player's wingman and takes the orders: form, attack and cover. Then it instructs again.
+# The instructor flies as the player's wingman and takes the orders: form, attack and cover. Then it instructs again. The
+# attack is over when the drone the pilot ordered it at is down; the other is left to practise on until the tour recalls it.
 func step_wing_orders(m: MissionApi) -> void:
 	await m.say(&"instructor_wing_intro")
 	m.pilot(INSTRUCTOR, FIGHTING_PILOT)
@@ -183,7 +197,12 @@ func step_wing_orders(m: MissionApi) -> void:
 	await m.run_checks([&"wing_form"])
 	_release_drones(m, ORDER_DRONES, GUNNERY_DRONES.size())
 	await m.run_checks([&"wing_attack"])
-	await m.until(TriggerSpec.destroyed(ORDER_DRONES))
+	var ordered: String = m.player_target()  # ATTACK MY TARGET sent the wingman at the pilot's selection
+	if ORDER_DRONES.has(ordered):
+		await m.until(TriggerSpec.destroyed([ordered]))
+	else:
+		await m.until(TriggerSpec.destroyed(ORDER_DRONES, false))
+	await m.say(&"instructor_wing_kill")
 	await m.run_checks([&"wing_cover"])
 	m.leave_flight(INSTRUCTOR)
 	m.pilot(INSTRUCTOR)
@@ -196,25 +215,30 @@ func step_tour(m: MissionApi) -> void:
 	await m.say(&"instructor_tour_intro")
 	await m.check(&"brake")
 	m.lock_controls(true)
+	m.dismiss(GUNNERY_DRONES + ORDER_DRONES)  # Control recalls what is left of the drones while the camera is at the station
 	for stop: Dictionary in TOUR:
 		m.say(stop["line"])  # not awaited: it plays over the shot
-		await m.tour(String(stop["stop"]))
+		await m.tour(String(stop["stop"]), TOUR_CAPTIONS)
 		await m.until(TriggerSpec.dialog_finished(stop["line"]))
 	m.lock_controls(false)
 
 
-# Out to the gate behind the instructor, in on the approach cue, and through: the round trip ends back out of the blue vortex.
+# Out to the gate behind the instructor: the gate targeted, in on the approach cue, and through once the gate offers the
+# jump. The hold of X is called only then, by the gate's own range check. The round trip ends back out of the blue vortex.
 func step_jumpgate(m: MissionApi) -> void:
 	m.waypoint(GATE)
 	await m.say(&"instructor_gate_intro")
 	var hold: UniversePos = m.gate_point(GATE_HOLD_M)
 	if hold != null:
 		m.fly(INSTRUCTOR, [_at(m, Vector3.ZERO).offset_to(hold)], LEAD_MPS * 4.0, true)
+	await m.say(&"instructor_gate_target")
+	await m.until(TriggerSpec.targeted(GATE))
 	await m.say(&"instructor_gate_cue")
 	var near: TriggerProximity = TriggerSpec.proximity("player", GATE, GATE_NEAR_M)
 	near.place_at = m.gate_point(GATE_NEAR_M - 1000.0)
 	await m.until(near)
-	await m.check(&"interact")
+	await m.until(TriggerSpec.fact(&"gate_offer", 1.0))
+	m.say(&"instructor_gate_hold")  # not awaited: the pilot may hold X before the line is out
 	await m.until(TriggerSpec.fact(&"gate_jumps", 1.0))
 	var out: UniversePos = m.gate_point(GATE_OUT_M)
 	m.gather(["player", INSTRUCTOR], out)
@@ -307,6 +331,13 @@ func _owed_remark(m: MissionApi) -> void:
 		return
 	m.note(&"course_remark", &"said")
 	await m.say(&"course_par")
+
+
+# Auto-track holds the nose on its target, so no turn can be shown with it on: the pilot switches it off first. Off already,
+# nothing is said.
+func _auto_track_off(m: MissionApi) -> void:
+	if m.fact(&"auto_track") >= 1.0:
+		await m.check(&"autotrack_off")
 
 
 # Launches up to `count` more of the wing from its Cobra arm, in play, and says `line` as they go; an arm still busy with a

@@ -77,7 +77,8 @@ func test_state_checks_read_the_real_ship() -> void:
 	source.release_all()
 	assert_ne(main.ship.running_lights, lit)
 	assert_false(_checks().is_active(), "the lights changed: passed")
-	assert_true(_console("checks start camera_switch").ok)
+	var view_check: String = "camera_to_chase" if main.camera_rig.mode == CameraRig.Mode.COCKPIT else "camera_to_cockpit"
+	assert_true(_console("checks start %s" % view_check).ok)
 	await _ticks(2)
 	source.hold(InputAdapter.TOGGLE_CAMERA)
 	await _ticks(3)
@@ -90,7 +91,7 @@ func test_state_checks_read_the_real_ship() -> void:
 	await _ticks(3)
 	source.release_all()
 	assert_false(main.ship.assist_on)
-	assert_eq(_checks().passed_ids, [&"running_lights", &"camera_switch", &"assist_off"] as Array[StringName])
+	assert_eq(_checks().passed_ids, [&"running_lights", StringName(view_check), &"assist_off"] as Array[StringName])
 
 
 func test_the_probe_fills_every_field_a_check_can_read() -> void:
@@ -122,7 +123,8 @@ func test_the_console_lists_starts_and_passes_checks() -> void:
 	var listed: ConsoleResult = _console("checks list")
 	assert_true(listed.ok)
 	assert_eq(listed.lines.size(), main.mission.api.check_book.ids().size())
-	assert_string_contains(listed.lines[0], "main_pods  LT + RT / W: FIRE BOTH MAIN PODS")
+	assert_string_contains(listed.lines[0], "autotrack_off  TAP X / SHIFT / MOUSE 4: SWITCH AUTO-TRACK OFF")
+	assert_string_contains(listed.lines[4], "main_pods  LT + RT / W: FIRE BOTH MAIN PODS", "the turns are taught before thrust")
 	assert_string_contains(_console("checks").lines[0], "no check open")
 	assert_false(_console("checks pass").ok, "nothing open")
 	assert_false(_console("checks start").ok)

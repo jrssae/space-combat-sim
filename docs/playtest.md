@@ -1219,7 +1219,7 @@ flight page or `set settings.encounters_civilian|_allied|_enemy false`.
 ## Console for M8 (all in `info.md`)
 
 ```
-play tutorial              the tutorial; mission goto <step> (launch, form_up, flight_checks, camera_lights, x_button, course,
+play tutorial              the tutorial; mission goto <step> (launch, flight_checks, camera_lights, x_button, course,
                            combat, wing_orders, tour, jumpgate, raid, defense, debrief); retry checkpoint from a lost debrief
 checks status|list|pass    the control checks; checks start roll shows a hint in any mission
 career                     the saved rank and best course rating; career set <rank>
@@ -1243,28 +1243,40 @@ the cargo-bay flicker fix and the raider strike carrier.
 ### The tutorial (M8-T05, T33)
 
 New game, then **Tutorial: qualification flight** (first in the list). Console: `play tutorial`, `mission goto <step>` (steps:
-launch, form_up, flight_checks, camera_lights, x_button, course, combat, wing_orders, tour, jumpgate, raid, defense, debrief),
+launch, flight_checks, camera_lights, x_button, course, combat, wing_orders, tour, jumpgate, raid, defense, debrief),
 `checks pass`, `career`, `retry checkpoint` from a lost debrief. Nothing below can be judged headless.
 
 - [ ] **(H) The launch:** two ships (M8-T33): the instructor launches, then you, filmed from outside; holding X skips it.
       Nobody else flies until the alarm.
-- [ ] **(H) Form up and the box:** the instructor (callsign SEXTANT, ship `INSTRUCTOR`) waits off the Cobra arm, leads at
-      your pace to the box 8 km out. Say if the route, its speed (150 m/s) or the distance feel wrong.
-- [ ] **(H) The checks:** each hint reads right and passes on the move; a missed check repeats after 20 s, then the
-      instructor flies the roll, the strafe box or the stop where it is. The lines read as plain radio.
+- [ ] **(H) The start in space (play-test of 2026-11-21):** the launch cuts to you at rest 8 km off the station, the
+      instructor (callsign SEXTANT, ship `INSTRUCTOR`) ahead of your nose. Say if the cut jars, and if the spot is clear.
+- [ ] **(H) The lesson order:** pitch, yaw, roll, then main pods, retros, the four strafes, assist off and on, the brake,
+      all before anything is flown behind the instructor. Each hint reads right; a missed check repeats after 20 s, then
+      the instructor flies the roll, the strafe box or the stop where it is.
+- [ ] **(H) Auto-track before the turns:** target the instructor and tap X before the pitch lesson: the instructor has you
+      switch auto-track off, the hint naming the button and key, and waits. With it off, nothing is said.
+- [ ] **(H) The views:** start the view lesson in chase: it asks for the cockpit, then chase. Start in the cockpit: the
+      other way round.
 - [ ] **(H) The buoy course:** five buoys (8.8 km of legs), a pass inside 200 m each, the clock from NAV 1. Fly it and
-      report your time: `instructor_time_s` in `data/missions/tutorial_rules.json` is a guess (75 s) until you have.
+      report your time: `instructor_time_s` in `data/missions/tutorial_rules.json` is 93.75 s since the play-test (25 %
+      slower), so exemplary is up to 103 s and par up to 131 s.
       The four remarks: fast, on par, slow, and one with a buoy shot or rammed.
 - [ ] **(H) The drones:** three unarmed raider hulls on a slow track 1.7 km beyond the last buoy. Nobody but you shoots them.
 - [ ] **(H) Wing orders on the instructor:** the instructor says it is your wingman for the drill; FORM ON ME brings it to
-      your wing, ATTACK MY TARGET sends it at the drone you selected (two more drones come for this), COVER ME ends the
-      drill and it says it instructs again.
+      your wing, ATTACK MY TARGET sends it at the drone you selected (two more drones come for this). The beat goes on
+      when that drone is down; the instructor says the other is yours to practise on, and it is gone when the tour's
+      first shot starts. COVER ME ends the drill and it says it instructs again.
 - [ ] **(H) Skip training:** the pause menu's second entry during the training steps goes straight to the tour. A skipped
       course counts as a par time: the instructor gives the par remark as the tour step begins, and the debrief assigns
       you to the squadron (never squadron leader at once).
 - [ ] **(H) The tour:** all stop first (the brake check), then five stops with a line each: Cobra bays, docking bay, command
-      section, grid, heavy cannons. A or Start cuts a stop.
-- [ ] **(H) The gate:** 50 km out behind the instructor; the approach cue calls the brake; hold X inside the reach.
+      section, grid, heavy cannons. A or Start cuts a stop. No caption in the lower bar: only the spoken line reads.
+- [ ] **(H) The gate:** the instructor tells you to target the jumpgate and waits until you have; then 50 km out behind
+      it, the approach cue calling the brake. "Hold X" is said only when the gate's own prompt is on the status line.
+- [ ] **(H) One label:** with the jumpgate (or a course buoy) both the objective and your target, one mark with one name
+      and one range shows, the target's. Select something else and the objective's marker is back.
+- [ ] **(H) The closing lines:** the instructor's remarks at the end of each block and the debrief read naturally, none
+      saying a thing twice.
 - [ ] **(H) The wing at the alarm:** ALPHA 2 and ALPHA 3 call their launch and nine more follow (all eleven together), with
       no camera cut: you keep flying. Nothing more launches when the raiders start shooting. They launch at the station, 50 km away; say how long you fight with only the
       instructor (who shoots now) before they reach you, and whether that is too long.
