@@ -6,7 +6,8 @@ extends Node
 ## Arguments after `--`: out=<dir> settle=<frames> shots=<shot>,<shot>,... where a shot is
 ## `name|asset[:option]|distance_m|view|low or high|lit or dark|aim|livery`: `view` one of VIEWS; `aim` the model point
 ## (`x;y;z`, its own frame) held `distance_m` ahead of the camera (empty: its centre); `livery` a `wing:number` (empty: plain).
-## An option is read from `<asset>_options/<option>/<asset>/`, as the hull sheets'.
+## An option is read from `<asset>_options/<option>/<asset>/`, as the hull sheets'. An asset of `-` is a shot of the empty
+## scene, whose video memory is the baseline for the model's.
 
 const VIEWS: PackedStringArray = ["three_quarter", "rear_quarter", "top", "bottom", "side", "front"]
 const YAW_DEG: float = 38.0
@@ -74,6 +75,8 @@ func _next() -> void:
 		return
 	var shot: PackedStringArray = shots[_index]
 	Settings.set_value(&"texture_detail", StringName(shot[4]))
+	if shot[1] == "-":
+		return
 	var error: String = _park(shot)
 	if not error.is_empty():
 		print("[model sheet] %s: %s" % [shot[0], error])
@@ -137,7 +140,7 @@ func _basis(camera: Camera3D, view: String) -> Basis:
 
 
 func _on_frame() -> void:
-	if _index < 0 or _index >= shots.size() or _model == null:
+	if _index < 0 or _index >= shots.size() or (_model == null and shots[_index][1] != "-"):
 		return
 	_frame += 1
 	if _frame < int(options["settle"]):

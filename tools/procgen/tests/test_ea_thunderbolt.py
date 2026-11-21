@@ -1,5 +1,5 @@
-"""``ea_thunderbolt`` (M10-T50, stage 1): files, frames, chunks, the hardpoints contract, the class budget with the low
-texture set a mip level down, the looks, determinism; the shape against its reference model (the 90 % rule)."""
+"""``ea_thunderbolt`` (M10-T50): files, frames, chunks, the hardpoints contract, collision coverage, the class budget with
+the low texture set a mip level down, the look, determinism; the shape against its reference model (the 90 % rule)."""
 
 from __future__ import annotations
 
@@ -20,7 +20,8 @@ from tools.procgen.core.geometry import Mesh
 from tools.procgen.core.image import read_png
 from tools.procgen.core.livery import ZONES
 from tools.procgen.core.obj import read_obj
-from tools.procgen.styles.ea_thunderbolt import DEFAULT_LOOK, LOOKS
+from tools.procgen.core.textures import Marking
+from tools.procgen.styles.earthforce import EARTHFORCE_FIGHTER
 
 REPO = Path(__file__).resolve().parents[3]
 REFERENCE_STL = REPO / "references" / "EA_Thunderbolt_fighter.stl"  # gitignored: the score test runs where the maintainer keeps it
@@ -36,6 +37,17 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
+    basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
+    local = (points - np.array(c["position"])) @ basis
+    if c["type"] == "box":
+        return np.all(np.abs(local) <= 0.5 * np.array(c["size"]) + inflate, axis=1)
+    half = 0.5 * c["height"] - c["radius"]
+    along = np.clip(local[:, 2], -half, half)
+    axis_point = np.column_stack([np.zeros_like(along), np.zeros_like(along), along])
+    return np.linalg.norm(local - axis_point, axis=1) <= c["radius"] + inflate
+
+
 class ThunderboltTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls) -> None:
@@ -45,8 +57,7 @@ class ThunderboltTests(unittest.TestCase):
         cls.out_a = bolt.build(BuildContext(cls.dir_a, seed=42, options=SMALL))
         cls.out_b = bolt.build(BuildContext(cls.dir_b, seed=42, options=SMALL))
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
-        look = LOOKS[DEFAULT_LOOK]
-        cls.placed, cls.offset = bolt.centre(bolt.build_parts(bolt.DEFAULT_SPEC, look.style, BuildContext(cls.dir_a, seed=42), SMALL["spacing"]))
+        cls.placed, cls.offset = bolt.centre(bolt.build_parts(bolt.DEFAULT_SPEC, bolt.STYLE, BuildContext(cls.dir_a, seed=42), SMALL["spacing"]))
         cls.samples = np.concatenate([p.samples.positions for p in cls.placed if p.samples is not None])
         cls.hp = json.loads((cls.dir_a / bolt.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.obj = read_obj(cls.dir_a / bolt.OBJ_NAME)
@@ -75,14 +86,6 @@ class ThunderboltTests(unittest.TestCase):
             for key, file in low.items():
                 self.assertEqual(read_png(self.dir_a / file).shape[0], mesh["map_px"][key] // 2, file)
 
-    def test_low_shrink_one_writes_the_low_set_at_full_size(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            bolt.build(BuildContext(Path(tmp), seed=42, options={**SMALL, "low_shrink": 1}))
-            manifest = manifest_io.read_manifest(Path(tmp))
-            self.assertEqual(read_png(Path(tmp) / "ea_thunderbolt_albedo_low.png").shape[0], 512)
-            self.assertEqual(manifest["budget"]["low_shrink"], 1)
-            self.assertEqual(manifest["budget"]["texture_mb_low"], manifest["budget"]["texture_mb"])
-
     def test_the_default_build_is_inside_the_fighter_budget(self) -> None:
         from tools.procgen.core.budgets import over_budget, texture_mb
         from tools.procgen.core.textures import NORMAL_SCALE
@@ -90,6 +93,7 @@ class ThunderboltTests(unittest.TestCase):
         budget = CLASS_BUDGETS[bolt.SHIP_CLASS]
         self.assertEqual(self.manifest["budget"]["class"], "fighter")
         self.assertEqual(self.manifest["budget"]["over"], [])
+        self.assertEqual(self.manifest["budget"]["low_shrink"], 2)
         self.assertLess(self.manifest["mesh"]["triangles"], budget.triangles)
         self.assertEqual(bolt.ATLAS_PX, budget.atlas_px)
         high = texture_mb([bolt.ATLAS_PX], normal_px=bolt.ATLAS_PX * NORMAL_SCALE)
@@ -108,15 +112,36 @@ class ThunderboltTests(unittest.TestCase):
         self.assertEqual(zones["gun_mount"], ZONES["gun_mount"])
         self.assertTrue(all(z > 0 for z in zones.values()))
 
-    def test_every_look_builds_its_parts_and_an_unknown_one_is_refused(self) -> None:
-        self.assertEqual(set(LOOKS), {"a", "b", "c"})
-        for key, look in LOOKS.items():
-            self.assertEqual(look.key, key)
-            self.assertEqual(look.style.material("hull").name, "ef_hull", "the paint keeps its name, so a livery may paint over it")
-            marks = bolt.markings_for(self.placed, look, self.offset)
-            self.assertTrue(all(any(m.kind == "soot" for m in marks[f"{kind}_{pod}"]) for kind in ("pod", "tail") for pod in PODS), key)
-        with self.assertRaisesRegex(ValueError, "look"):
-            bolt.build(BuildContext(self.dir_a / "bad", seed=42, options={**SMALL, "look": "z"}))
+    def test_the_look_is_the_shows_white_with_red_bands_and_an_anti_glare_strip(self) -> None:
+        style = bolt.STYLE
+        self.assertEqual(style.material("hull").name, "ef_hull", "the paint keeps its name, so a livery may paint over it")
+        hull, fleet = np.array(style.material("hull").albedo), np.array(EARTHFORCE_FIGHTER.material("hull").albedo)
+        self.assertGreater(float(hull.mean()), 1.15 * float(fleet.mean()), "lighter than the Starfury's fleet grey")
+        self.assertLess(float(np.ptp(hull)) / float(hull.mean()), 0.2, "a neutral white-grey, where the fleet's grey is blue")
+        self.assertGreater(float(np.ptp(fleet)) / float(fleet.mean()), 0.3)
+        self.assertLess(style.material("canopy_glass").emissive_strength, EARTHFORCE_FIGHTER.material("canopy_glass").emissive_strength)
+        marks = bolt.markings_for(self.placed, self.offset)
+        offset = np.asarray(self.offset)
+        for pod in PODS:
+            self.assertTrue(any(m.kind == "soot" for m in marks[f"pod_{pod}"]) and any(m.kind == "soot" for m in marks[f"tail_{pod}"]), pod)
+            for kind in ("wing", "pod", "tail"):
+                self.assertTrue(any(m.kind == "paint" for m in marks[f"{kind}_{pod}"]), f"{kind}_{pod} carries a red band")
+        self.assertEqual([m.kind for m in marks["fuselage"]].count("text"), 2, "EA on both flanks")
+        band = next(m for m in marks["wing_ur"] if m.kind == "paint")
+        self.assertGreater(band.colour[0], 3.0 * band.colour[2], "red")
+        at = lambda x: np.array([[x, 1.5, 0.0]])  # noqa: E731
+        up = np.array([[0.0, 1.0, 0.0]])
+        self.assertEqual(float(band.params["cover"](at(2.5), up)[0]), 1.0)
+        self.assertEqual(float(band.params["cover"](at(3.2), up)[0]), 0.0)
+        glare = next(m for m in marks["canopy"] if m.kind == "paint")
+        ahead = np.array([[0.0, 0.2, 1.4]]) - offset  # on the spine ahead of the windscreen
+        glass = np.array([[0.0, 0.5, 3.0]]) - offset
+        self.assertEqual(float(glare.params["cover"](ahead, up)[0]), 1.0)
+        self.assertEqual(float(glare.params["cover"](glass, up)[0]), 0.0)
+        self.assertLess(max(glare.colour), 0.02, "black")
+        self.assertIsInstance(glare, Marking)
+
+    def test_invalid_options_are_refused(self) -> None:
         with self.assertRaisesRegex(ValueError, "spacing"):
             bolt.build(BuildContext(self.dir_a / "bad", seed=42, options={**SMALL, "spacing": 0.0}))
 
@@ -246,13 +271,53 @@ class ThunderboltTests(unittest.TestCase):
         hull_top = float(max(p.part.mesh.bounds()[1][1] for p in self.placed if p.part.name in ("pod_ur", "pod_ul")))
         self.assertGreater(lights["port"][1], hull_top)
 
-    def test_collision_primitives_are_named_and_reach_the_pods(self) -> None:
-        collision = self.hp["collision"]
-        self.assertGreater(len(collision), 20)
-        self.assertTrue(all(c["type"] in ("box", "capsule") and c["name"] for c in collision))
-        self.assertEqual(sum(c["name"].startswith("pod_") for c in collision), 4)
-        xs = [abs(c["position"][0]) for c in collision]
-        self.assertGreater(max(xs), 5.0)
+    def test_collision_primitives_cover_the_surface_and_stay_close(self) -> None:
+        shapes = self.hp["collision"]
+        names = [c["name"] for c in shapes]
+        self.assertEqual(len(names), len(set(names)), "unique names")
+        self.assertLessEqual(len(shapes), 48, "a fighter's worth of primitives: it flies in numbers")
+        for pod in PODS:
+            self.assertTrue({f"pod_{pod}", f"pod_{pod}_nose", f"tail_{pod}_engine", f"tail_{pod}_fin", f"wing_{pod}_panel_0"} <= set(names), pod)
+        self.assertEqual(sum(n.endswith("_r") or "_ur" in n or "_lr" in n for n in names), sum(n.endswith("_l") or "_ul" in n or "_ll" in n for n in names))
+        inside = np.zeros(len(self.samples), dtype=bool)
+        for c in shapes:
+            inside |= inside_primitive(self.samples, c, inflate=0.15)
+        self.assertGreaterEqual(float(inside.mean()), 0.97, "at least 97 % of the surface samples")
+        lo, hi = self.samples.min(axis=0), self.samples.max(axis=0)
+        for c in shapes:
+            basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
+            np.testing.assert_allclose(basis.T @ basis, np.eye(3), atol=1e-4)
+            self.assertAlmostEqual(float(np.linalg.det(basis)), 1.0, places=3)
+            if c["type"] == "box":
+                self.assertTrue(all(v > 0.0 for v in c["size"]), c["name"])
+                corners = np.array([[sx, sy, sz] for sx in (-1, 1) for sy in (-1, 1) for sz in (-1, 1)]) * 0.5 * np.array(c["size"])
+                extent = corners @ basis.T + np.array(c["position"])
+            else:
+                half = 0.5 * c["height"] - c["radius"]  # `height` includes both caps
+                ends = np.array([[0, 0, -half], [0, 0, half]]) @ basis.T + np.array(c["position"])
+                extent = np.concatenate([ends - c["radius"], ends + c["radius"]])
+            self.assertTrue(np.all(extent.min(axis=0) >= lo - 0.5) and np.all(extent.max(axis=0) <= hi + 0.5), c["name"])
+
+    def test_the_hit_volume_follows_the_shape_not_its_box(self) -> None:
+        offset = np.asarray(self.offset)
+
+        def hit(authored: tuple[float, float, float], inflate: float = 0.0) -> bool:
+            point = np.array([authored]) - offset
+            return any(inside_primitive(point, c, inflate).any() for c in self.hp["collision"])
+
+        self.assertTrue(hit((2.5, 1.45, 10.6)), "on the upper wing")
+        self.assertTrue(hit((-4.3, -1.9, 11.0)), "on the lower port wing by its pod")
+        self.assertTrue(hit((5.22, 1.82, 10.0)), "in a pod")
+        self.assertTrue(hit((-2.6, 2.80, 15.0)), "on a fin near its tip")
+        self.assertTrue(hit((4.5, 1.95, 16.0)), "on a prong behind the engine")
+        self.assertTrue(hit((0.0, 0.5, 3.0)), "in the canopy")
+        self.assertFalse(hit((3.0, 1.5, 8.5)), "ahead of the swept wing there is nothing")
+        self.assertFalse(hit((3.0, 0.0, 10.5)), "between the upper and the lower wing")
+        self.assertFalse(hit((1.5, 0.3, 4.0)), "beside the forward fuselage")
+        self.assertFalse(hit((3.0, 2.6, 13.0)), "ahead of a fin's leading edge")
+        for p in self.hp["pods"]:  # the bells' exits are inside the engines' hit volumes
+            exit_point = np.array([p["main"]["position"]]) - np.array([0.0, 0.0, 0.02])
+            self.assertTrue(any(inside_primitive(exit_point, c, 0.0).any() for c in self.hp["collision"]), p["name"])
 
     # --- determinism -----------------------------------------------------------------------------------------
     def test_same_seed_gives_byte_identical_output(self) -> None:

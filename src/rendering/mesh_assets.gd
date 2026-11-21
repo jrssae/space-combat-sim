@@ -20,6 +20,8 @@ const MAP_KEYS: Array[String] = ["albedo", "normal", "orm", "emissive"]
 const DETAIL_KEYS: Array[String] = ["albedo", "normal", "orm"]
 ## The same for a glass surface, which has no normal map.
 const GLASS_DETAIL_KEYS: Array[String] = ["albedo", "orm"]
+## Every map a glass surface draws: a set written smaller names its own glow map too (M10-T50).
+const GLASS_KEYS: Array[String] = ["albedo", "orm", "emissive"]
 
 static var _cache: Dictionary = {}
 ## The textured meshes' glass materials and their manifest strengths, for `settings.cabin_glow_level` (Q36).
@@ -288,13 +290,9 @@ static func livery_material(dir: String, surface: Dictionary, section: Dictionar
 	var material := ShaderMaterial.new()
 	material.shader = LIVERY_SHADER
 	material.resource_name = String(surface.get("name", ""))
-	_apply_surface_maps(material, dir, surface, DETAIL_KEYS)
-	_watch_detail(material, dir, surface, DETAIL_KEYS)
-	var glow_file: String = String(surface.get("emissive", ""))
-	var glow: Texture2D = _texture(dir.path_join(glow_file)) if not glow_file.is_empty() else null
-	if glow == null and not glow_file.is_empty():
-		push_warning("MeshAssets: %s is missing or not imported" % dir.path_join(glow_file))
-	material.set_shader_parameter(&"emissive_map", glow)
+	# The glow map follows the texture set as the paint does: a fighter's low set written smaller names its own (M10-T50).
+	_apply_surface_maps(material, dir, surface, MAP_KEYS)
+	_watch_detail(material, dir, surface, MAP_KEYS)
 	material.set_shader_parameter(&"emission_energy", float(surface.get("emissive_strength", 1.0)))
 	var paint: Array = section.get("hull_paint", [0.35, 0.35, 0.35])
 	material.set_shader_parameter(&"hull_paint", Vector3(float(paint[0]), float(paint[1]), float(paint[2])))
@@ -373,10 +371,8 @@ static func glass_material(dir: String, surface: Dictionary) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = HULL_GLASS_SHADER
 	material.resource_name = String(surface.get("name", ""))
-	_apply_surface_maps(material, dir, surface, GLASS_DETAIL_KEYS)
-	_watch_detail(material, dir, surface, GLASS_DETAIL_KEYS)
-	var glow_file: String = String(surface.get("emissive", ""))
-	material.set_shader_parameter(&"emissive_map", _texture(dir.path_join(glow_file)) if not glow_file.is_empty() else null)
+	_apply_surface_maps(material, dir, surface, GLASS_KEYS)
+	_watch_detail(material, dir, surface, GLASS_KEYS)
 	material.set_shader_parameter(&"glass_alpha", 1.0 - float(surface.get("transmittance", 0.0)))
 	_glass.append(material)
 	_glass_strength.append(float(surface.get("emissive_strength", 0.0)))

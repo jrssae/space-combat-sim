@@ -10,7 +10,6 @@ side where a part has two.
 
 from __future__ import annotations
 
-import math
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from itertools import pairwise
@@ -102,14 +101,40 @@ def _mirror_x(mesh: Mesh) -> Mesh:
     return Mesh.concatenate([mesh, mesh.mirrored("x")])
 
 
-def _oriented_box(mesh: Mesh, root: np.ndarray, tip: np.ndarray, name: str) -> Collision:
-    """One box round ``mesh`` lying along root to tip."""
-    x_axis = unit(tip - root)
-    y_axis = unit(np.cross([0.0, 0.0, 1.0], x_axis))
+def _box(points: Sequence[np.ndarray] | np.ndarray, name: str, along: Sequence[float] = (0.0, 0.0, 1.0),
+         normal: Sequence[float] = (0.0, 1.0, 0.0)) -> Collision:
+    """The tightest box round ``points`` whose length lies ``along`` and whose thickness is as near ``normal`` as that
+    allows: a plate's box follows the plate, not the ship's axes."""
+    pts = np.asarray(points, dtype=float).reshape(-1, 3)
+    x_axis = unit(np.asarray(along, dtype=float))
+    hint = np.asarray(normal, dtype=float)
+    y_axis = unit(hint - float(hint @ x_axis) * x_axis)
     basis = np.column_stack([x_axis, y_axis, np.cross(x_axis, y_axis)])
-    local = (mesh.vertices - root) @ basis
+    local = pts @ basis
     lo, hi = local.min(axis=0), local.max(axis=0)
-    return Collision("box", root + basis @ (0.5 * (lo + hi)), basis, size=hi - lo, name=name)
+    return Collision("box", basis @ (0.5 * (lo + hi)), basis, size=np.maximum(hi - lo, 0.02), name=name)
+
+
+def _bands(rings: Sequence[np.ndarray], cuts: Sequence[float], name: str, axis: int = 2) -> list[Collision]:
+    """A loft's rings boxed in bands along ``axis``: one box from each cut to the next, so a body that widens or drops along
+    its length is followed in steps."""
+    out = []
+    for k, (a, b) in enumerate(pairwise(cuts)):
+        inside = [r for r in rings if a - 1e-6 <= float(r[0, axis]) <= b + 1e-6]
+        if len(inside) >= 2:
+            out.append(_box(np.concatenate(inside), f"{name}_{k}"))
+    return out
+
+
+def _mirrored_boxes(boxes: Sequence[Collision]) -> list[Collision]:
+    """Starboard boxes and their port twins, named ``..._r`` and ``..._l``."""
+    flip = np.diag([-1.0, 1.0, 1.0])
+    out = []
+    for box_ in boxes:
+        twin = box_.transformed(flip)
+        out += [Collision(box_.kind, box_.center, box_.basis, box_.size, name=f"{box_.name}_r"),
+                Collision(twin.kind, twin.center, twin.basis, twin.size, name=f"{box_.name}_l")]
+    return out
 
 
 # --- the fuselage -----------------------------------------------------------------------------------------------------
@@ -137,6 +162,7 @@ class BoltFuselageSpec:
 
     stations: tuple[BoltStation, ...]
     cabin_z: tuple[float, float]
+    collision_cuts: tuple[float, ...] = (2.0, 5.2)  # where its collision boxes step, between the nose and the tail
     mass_kg: float = 9_000.0
 
     def station_at(self, z: float) -> BoltStation:
@@ -163,14 +189,13 @@ def bolt_fuselage(spec: BoltFuselageSpec, style: Style) -> Part:
         return floor if edge == 2 and in_cabin else hull
 
     mesh = faceted(rings, material, dark, dark)
-    lo, hi = mesh.bounds()
     first, last = spec.stations[0], spec.stations[-1]
     anchors = {
         "nose": Anchor([0.0, 0.5 * (first.keel_y + first.deck_y), first.z], [0.0, 0.0, -1.0]),
         "tail": Anchor([0.0, 0.5 * (last.keel_y + last.deck_y), last.z], [0.0, 0.0, 1.0]),
     }
-    collision = [Collision("box", 0.5 * (lo + hi), size=hi - lo, name="fuselage")]
-    return Part("fuselage", mesh, anchors, collision, spec.mass_kg)
+    dense = [np.column_stack([spec.station_at(z).ring(), np.full(6, z)]) for z in sorted(set(zs) | set(spec.collision_cuts))]
+    return Part("fuselage", mesh, anchors, _bands(dense, (first.z, *spec.collision_cuts, last.z), "band"), spec.mass_kg)
 
 
 @dataclass(frozen=True)
@@ -219,7 +244,8 @@ def bolt_canopy(spec: BoltCanopySpec, style: Style) -> Part:
         return frame if any(a <= z <= b for a, b in spec.frames) else hull
 
     mesh = faceted(rings, material, dark, dark)
-    return Part("canopy", mesh, {"eye": Anchor(spec.eye, [0.0, 0.0, -1.0])})
+    collision = [_box(np.concatenate([r for r in rings if r[0, 2] >= spec.panes[0][0] - 0.2]), "")]  # ahead of the glass it is a low ridge
+    return Part("canopy", mesh, {"eye": Anchor(spec.eye, [0.0, 0.0, -1.0])}, collision)
 
 
 @dataclass(frozen=True)
@@ -246,7 +272,7 @@ def bolt_chin(spec: ChinSpec, style: Style) -> Part:
     rings = [np.column_stack([spec.ring(*s[1:]), np.full(8, s[0])]) for s in spec.stations]
     mesh = faceted(rings, [style.material("hull")] * 8, style.material("hull_panel"), style.material("hull_panel"))
     lo, hi = mesh.bounds()
-    return Part("chin", mesh, collision=[Collision("box", 0.5 * (lo + hi), size=hi - lo, name="chin")], mass_kg=spec.mass_kg)
+    return Part("chin", mesh, collision=[Collision("box", 0.5 * (lo + hi), size=hi - lo)], mass_kg=spec.mass_kg)
 
 
 # --- guns and stores --------------------------------------------------------------------------------------------------
@@ -286,7 +312,8 @@ def bolt_guns(spec: BoltGunSpec, style: Style) -> Part:
     meshes.append(_mirror_x(Mesh.concatenate([side, store])))
     for name, sx in (("right", 1.0), ("left", -1.0)):
         anchors[f"muzzle_{name}"] = Anchor([sx * spec.side_at[0], spec.side_at[1], spec.side[0][0]], [0.0, 0.0, -1.0])
-    return Part("gun_mount", Mesh.concatenate(meshes), anchors, mass_kg=spec.mass_kg)
+    mesh = Mesh.concatenate(meshes)
+    return Part("gun_mount", mesh, anchors, [_box(mesh.vertices, "")], spec.mass_kg)
 
 
 @dataclass(frozen=True)
@@ -327,12 +354,13 @@ def bolt_fittings(spec: BoltFittingsSpec, style: Style) -> Part:
     top = spec.rail_top_y
     bottom = spec.store_at[1] + 0.9 * max(r for _, r in spec.store)
     meshes += [store, box((width, top - bottom, z1 - z0), dark, center=(spec.store_at[0], 0.5 * (top + bottom), 0.5 * (z0 + z1)))]
+    collision = _mirrored_boxes([_box(np.concatenate(rings), "housing"), _box(store.vertices, "store")])
     muzzle = gun.anchor("muzzle").position
     anchors = {
         "muzzle_root_right": Anchor(muzzle, [0.0, 0.0, -1.0]),
         "muzzle_root_left": Anchor(muzzle * np.array([-1.0, 1.0, 1.0]), [0.0, 0.0, -1.0]),
     }
-    return Part("fittings", _mirror_x(Mesh.concatenate(meshes)), anchors, mass_kg=spec.mass_kg)
+    return Part("fittings", _mirror_x(Mesh.concatenate(meshes)), anchors, collision, spec.mass_kg)
 
 
 # --- wings ------------------------------------------------------------------------------------------------------------
@@ -389,6 +417,18 @@ class BoltWingSpec:
         return _inside_convex(rings, p[:, [2, 1]], margin) & (np.abs(p[:, 0]) <= xs[-1])
 
 
+DECK_STEPS = 2  # collision boxes along the centre body's deck: the narrow delta, then the full width
+WING_PANELS = ((0, 4), (4, 8))  # the wing's stations (outboard of the split) boxed together, panel by panel
+
+
+def _dense_ring(station: ChordStation, steps: int = 12) -> np.ndarray:
+    """A station's outline with points all along its chord, for boxing the plate in bands."""
+    z = np.linspace(station.z_le, station.z_te, steps)
+    top = np.interp(z, [p[0] for p in station.ridge], [p[1] for p in station.ridge])
+    x = np.full(steps, station.x)
+    return np.concatenate([np.column_stack([x, top, z]), np.column_stack([x, np.full(steps, station.flat_y), z])])
+
+
 def _plate(stations: Sequence[ChordStation], style: Style, root_cap: bool, tip_cap: bool) -> Mesh:
     hull, panel, dark = style.material("hull"), style.material("hull_panel"), style.material("hull_dark")
     n = len(stations[0].ridge)
@@ -401,14 +441,29 @@ def bolt_deck(spec: BoltWingSpec, style: Style) -> Part:
     """The plate's centre part, both sides of the centre line as one mesh."""
     inboard = [s for s in spec.stations if s.x < spec.split_x] + [spec.at(spec.split_x)]
     mesh = _mirror_x(_plate(inboard, style, False, True))
-    lo, hi = mesh.bounds()
-    return Part("deck", mesh, collision=[Collision("box", 0.5 * (lo + hi), size=hi - lo, name="deck")], mass_kg=spec.mass_kg)
+    # Boxes across both sides in steps along the length: the delta widens aft, so each step is as wide as the plate is there.
+    xs = np.linspace(0.0, spec.split_x, 19)
+    surface = np.concatenate([_dense_ring(spec.at(float(x))) for x in xs])
+    z0, z1 = float(surface[:, 2].min()), float(surface[:, 2].max())
+    collision = []
+    for k, (a, b) in enumerate(pairwise(np.linspace(z0, z1, DECK_STEPS + 1))):
+        band = surface[(surface[:, 2] >= a - 1e-9) & (surface[:, 2] <= b + 1e-9)]
+        if len(band):
+            collision.append(_box(np.concatenate([band, band * np.array([-1.0, 1.0, 1.0])]), f"step_{k}"))
+    return Part("deck", mesh, collision=collision, mass_kg=spec.mass_kg)
 
 
 def bolt_wing(spec: BoltWingSpec, style: Style) -> Part:
     """The plate from ``split_x`` out to the pod, with its blister. Anchors ``root`` and ``tip``; one box along it."""
     outboard = [spec.at(spec.split_x)] + [s for s in spec.stations if s.x > spec.split_x]
     meshes = [_plate(outboard, style, True, True)]
+    collision = []
+    for k, (a, b) in enumerate(WING_PANELS):
+        panel_stations = outboard[a : b + 1]
+        first_s, last_s = panel_stations[0], panel_stations[-1]
+        # Along the panel's mid-chord line, so the box sweeps with the plate instead of squaring off the space ahead of it.
+        along = np.array([last_s.x - first_s.x, last_s.mid_y() - first_s.mid_y(), 0.5 * (last_s.z_le + last_s.z_te - first_s.z_le - first_s.z_te)])
+        collision.append(_box(np.concatenate([s.ring() for s in panel_stations]), f"panel_{k}", along))
     if spec.blister:
         panel, dark = style.material("hull_panel"), style.material("hull_dark")
         rings = []
@@ -423,7 +478,7 @@ def bolt_wing(spec: BoltWingSpec, style: Style) -> Part:
     first, last = outboard[0], outboard[-1]
     root = np.array([first.x, first.mid_y(), 0.5 * (first.z_le + first.z_te)])
     tip = np.array([last.x, last.mid_y(), 0.5 * (last.z_le + last.z_te)])
-    return Part("wing", mesh, {"root": Anchor(root), "tip": Anchor(tip)}, [_oriented_box(meshes[0], root, tip, "wing")], spec.mass_kg)
+    return Part("wing", mesh, {"root": Anchor(root), "tip": Anchor(tip)}, collision, spec.mass_kg)
 
 
 # --- the centre body --------------------------------------------------------------------------------------------------
@@ -466,9 +521,8 @@ def bolt_trunk(spec: TrunkSpec, style: Style) -> Part:
         right = [(bottom_w, bottom_y), (wide_w, wide_y), (top_w, top_y)]
         rings.append(np.array([(x, y, z) for x, y in right + [(-x, y) for x, y in reversed(right)]]))
     block = faceted(rings, [hull, hull, panel, hull, hull, hull], dark, dark)
-    mesh = Mesh.concatenate([trunk, block])
-    lo, hi = mesh.bounds()
-    return Part("trunk", mesh, collision=[Collision("box", 0.5 * (lo + hi), size=hi - lo, name="trunk")], mass_kg=spec.mass_kg)
+    collision = [_box(trunk.vertices, ""), _box(np.concatenate(rings), "block")]
+    return Part("trunk", Mesh.concatenate([trunk, block]), collision=collision, mass_kg=spec.mass_kg)
 
 
 # --- the engine pod ---------------------------------------------------------------------------------------------------
@@ -515,7 +569,7 @@ class BoltPodSpec:
 
 def bolt_pod(spec: BoltPodSpec, style: Style) -> Part:
     """Nose block, collar, body, lip, retro bell, neck and ring, thruster ports. Anchors ``center``, ``front``, ``rear``,
-    ``retro`` and ``rcs_px``, ``rcs_py``, ``rcs_ny`` (outboard, up, down); one capsule along the axis."""
+    ``retro`` and ``rcs_px``, ``rcs_py``, ``rcs_ny`` (outboard, up, down); a box on the body and one on the nose block."""
     hull, panel, dark = style.material("hull"), style.material("hull_panel"), style.material("hull_dark")
     c0, c1 = spec.collar
     zs = sorted({z for z, _ in spec.stations} | {c0, c0 + 0.04, c1 - 0.04, c1})
@@ -554,10 +608,10 @@ def bolt_pod(spec: BoltPodSpec, style: Style) -> Part:
         cone = rcs_nozzle(spec.rcs, style).transformed(basis_from_z(d), [mid[0] - 0.01 * d[0], mid[1] - 0.01 * d[1], spec.rcs_z])
         meshes.append(cone.mesh)
         anchors[f"rcs_{name}"] = cone.anchor("exit")
-    radius = float(max(np.linalg.norm(np.array(o), axis=1).max() for _, o in spec.stations))
-    length = spec.rear_z - spec.front_z
-    capsule = Collision("capsule", [0.0, 0.0, 0.5 * (spec.front_z + spec.rear_z)], radius=0.85 * radius, height=length, name="pod")
-    return Part("pod", Mesh.concatenate(meshes), anchors, [capsule], spec.mass_kg)
+    # One box: the pod's faces are flat, and a capsule would stand off its flanks and miss its corners.
+    body = _box(np.concatenate([r for r in rings if r[0, 2] >= c1]), "")
+    nose = _box(np.concatenate([*lip_rings, *[r for r in rings if r[0, 2] <= c0]]), "nose")
+    return Part("pod", Mesh.concatenate(meshes), anchors, [body, nose], spec.mass_kg)
 
 
 # --- the tail behind a pod ----------------------------------------------------------------------------------------------
@@ -577,9 +631,12 @@ class BoltTailSpec:
     mass_kg: float = 900.0
 
 
+PRONG_FROM_Z = 15.5  # a plate that ends behind this is a prong with a collision box of its own
+
+
 def bolt_tail(spec: BoltTailSpec, style: Style) -> Part:
-    """Engine, bell, blades and fin. Anchor ``main`` (the bell's exit, exhaust along +Z); a capsule on the engine and a box
-    on the fin."""
+    """Engine, bell, blades and fin. Anchor ``main`` (the bell's exit, exhaust along +Z); a capsule on the engine and its
+    plates, a box on each prong and on the fin."""
     hull, dark, metal = style.material("hull"), style.material("hull_dark"), style.material("nozzle")
     ex, ey = spec.engine_at
     z_end = spec.engine[-1][0]
@@ -587,20 +644,28 @@ def bolt_tail(spec: BoltTailSpec, style: Style) -> Part:
                  creases=set(range(1, len(spec.engine) + 1)))
     bell = nozzle(spec.bell, style).translated([ex, ey, z_end - 0.04])
     meshes = [cone.translated((ex, ey, 0.0)), bell.mesh]
-    for blade in spec.blades:
+    # The capsule holds the engine and the short plates round it, so it is as wide and as long as they are.
+    short = [np.concatenate(b.rings()) for b in spec.blades if b.stations[-1][0] <= PRONG_FROM_Z]
+    reach = max([max(r for _, r in spec.engine), *[float(np.percentile(np.linalg.norm(v[:, :2] - [ex, ey], axis=1), 80)) for v in short]])
+    z_far = max([z_end + spec.bell.length, *[float(v[:, 2].max()) for v in short]])
+    z_near = spec.engine[0][0] - 0.5 * reach  # its cap reaches forward over the ring and the shaft
+    collision = [Collision("capsule", [ex, ey, 0.5 * (z_near + z_far)], radius=reach, height=max(z_far - z_near, 2.0 * reach), name="engine")]
+    for k, blade in enumerate(spec.blades):
         rings = blade.rings()
         n = len(rings[0])
         edges = [hull] * n
         edges[n // 2 - 1] = edges[n - 1] = dark
         meshes.append(section_loft(rings, edges, dark, strip_caps=True))
-    collision = [Collision("capsule", [ex, ey, 0.5 * (spec.engine[0][0] + z_end)], radius=max(r for _, r in spec.engine),
-                           height=z_end - spec.engine[0][0] + 0.6, name="engine")]
+        if blade.stations[-1][0] > PRONG_FROM_Z:  # the short plates lie inside the engine's capsule; the prongs reach past it
+            across = np.array(blade.stations[0][1][-1]) - np.array(blade.stations[0][1][0])  # the plate's width, in its section
+            collision.append(_box(np.concatenate(rings), f"prong_{k}", normal=(-across[1], across[0], 0.0)))
     if spec.fin:
         outline = np.array(spec.fin, dtype=float)
         normal = unit(np.cross(outline[1] - outline[0], outline[-1] - outline[0]))
         half = 0.5 * spec.fin_thickness * normal
         fin = faceted([outline - half, outline + half], [dark] * len(outline), hull, hull)
         meshes.append(fin)
-        collision.append(_oriented_box(fin, outline[0], outline[1], "fin"))
+        tip = outline[int(np.argmin(outline[:, 0]))]
+        collision.append(_box(fin.vertices, "fin", tip - outline[0], normal))
     return Part("tail", Mesh.concatenate(meshes), {"main": bell.anchor("exit")}, collision, spec.mass_kg)
 

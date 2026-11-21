@@ -4,7 +4,8 @@
 #
 # Usage: scripts/model_sheet.sh <out_dir> <shot> [<shot> ...]
 #        a shot: name|asset[:option]|distance_m|view|low or high|lit or dark|aim x;y;z|wing:number   (the last two may be empty)
-#        views: three_quarter rear_quarter top bottom side front; an option is read from <asset>_options/<option>/<asset>/.
+#        views: three_quarter rear_quarter top bottom side front; an option is read from <asset>_options/<option>/<asset>/;
+#        an asset of - is the empty scene (its video memory is the baseline: each shot's is printed).
 # Environment: SHEET_PATH (the Godot project, default the repo; a scratch project holds the options), SHEET_RES (1920x1080),
 #              SHEET_SETTLE (50 frames a shot), GODOT_BIN.
 # Writes <out_dir>/<name>.png. The window runs through X11 without vsync and without sound; it takes the Godot (read) and GPU

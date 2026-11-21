@@ -78,7 +78,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q49 | T01's lengths and identifications (2026-11-20) | `docs/assets-capital.md`, "M10 lengths (T01)", approved with these changes. Sunhawk and Firehawk both **197 m** (the files' 350 m are wrong). Drakh carrier **3 316 m** (the Drakh cruiser's figure, same shape), uses gates (canon). Victory **2 012 m** (fits a gate, still opens its own points as a destroyer). **Vorlon remap**: T36 is the **Vorlon destroyer**, 131 m, from `Vorlon_Destroyer (missing pedals) - 131m.stl` and the two petal STLs; T60 is the **Vorlon heavy cruiser**, 1 528 m, from `Vorlon Dreadnought - 1528m.stl`; there is no separate Vorlon dreadnought. Battlecrab: 1 500 m is the leg span (largest extent). **Launches follow the sources strictly**: Hyperion 6 Starfuries and 2 shuttles; Avioki, Firehawk and Primus none (so the Falkosi and the Sentri have no carrier in M10). Pipelines: the Panama and the construction tender on the civilian pipeline; the Shadow scout on the capital framework with the battlecrab's organic parts; T53 and T56 one generator with a liner and a mining variant (doors moving, Q43). The jump-point first list is T03's starting point, the White Star opening its own points included |
 | Q50 | T01's open points (2026-11-20) | The White Star launches **4 Nials** and the Victory **Starfuries, Thunderbolts and Kestrel shuttles**, as the sources give (the Thunderbolt flies once M11 makes it flyable; until then its slots launch Starfuries). The mining transport is **632 m** closed (716 m open), sharing the Asimov liner's sphere and scale. The Explorer's **bow is the end with the dome and the launch bay** |
 | Q51 | T07's capital flight (2026-11-20) | **Broadcast** by class, heard by every side: cruiser 200 km, capital 500 km, dreadnought 1 000 km (`data/capitals/capitals.json`); small craft keep today's rules. **Propulsion** per hull in its `ShipSpec`: `reaction` (EA, Drazi and other reaction drives: mains, and retros where the hull has room, stand-ins at the mains' places at 50 % of a main by default; one with no retros flips and burns) or `gravitic` (e.g. Minbari, Vorlon, Shadow, ISA: thrust along any axis at a per-hull fraction, no flip); the hull tasks take the mode and the retros from T01's notes, T03 confirms. The test cruiser is reaction with stand-in retros and opens its own jump points (test hull only) |
-| Q52 | Half-size low texture sets on fighters (2026-11-20) | The **Thunderbolt (T50) is the test**: its low texture set is built a mip level down (T05's rule) and shown side by side with a full-size low set, the same close views (5 to 15 m), lit and dark. If the half size reads soft, the maintainer chooses full-size low sets for fighters. The older hulls' low sets (Starfury, raider fighter, the civilians) are not converted for now |
+| Q52 | Half-size low texture sets on fighters (2026-11-20) | The **Thunderbolt (T50) is the test**: its low texture set is built a mip level down (T05's rule) and shown side by side with a full-size low set, the same close views (5 to 15 m), lit and dark. If the half size reads soft, the maintainer chooses full-size low sets for fighters. The older hulls' low sets (Starfury, raider fighter, the civilians) are not converted for now. **Settled (2026-11-20): half-size low sets for new fighters**, after the comparison sheets (`references/screenshots/M10-T50 Thunderbolt/low_set_half_vs_full_lit.png`, `_dark.png`); a fighter whose low set is half size names its own glow map and the fighters' livery and glass materials take it; the older hulls' low sets stay as they are |
 
 ## The hulls
 
@@ -364,7 +364,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T40 | F | Brakiri Falkosi and Drakh fighters | T38, T06 | Fable | not started |
 | T41 | F | Shadow fighter and Shadow scout | T38, T06, T35 | Fable | not started |
 | T42 | F | Vorlon light fighter | T38, T06 | Fable | not started |
-| T50 | F | EA Thunderbolt fighter, model only | T01, T62; the Starfury's generator and style | Fable | in progress |
+| T50 | F | EA Thunderbolt fighter, model only | T01, T62; the Starfury's generator and style | Fable | done |
 | T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | not started |
 | T52 | F | EA Explorer class | T19, T62 | Fable | not started |
 | T53 | F | EA Asimov liner | T19, T62 | Fable | not started |
@@ -582,6 +582,24 @@ On top of it:
   The Nial: hexagonal skin (Q45).
 - **Thunderbolt (T50):** the model only, as a fighter (generator, hardpoints, break-up chunks), on the Starfury's
   generator and style where they fit (`docs/assets-starfury.md`).
+- **T50 done (2026-11-20).** `ea_thunderbolt` (16.24 m long, 12.05 m across, 6.34 m tall; 8 600 triangles), a model
+  only: `tools/procgen/assets/ea_thunderbolt.py`, `parts/thunderbolt.py`, `styles/ea_thunderbolt.py`,
+  `layouts.thunderbolt()`; as built in `docs/assets-starfury.md`, "Thunderbolt". No `ShipSpec` and no catalogue entry (M11).
+  **`refview` and `compare` take `--turn AXIS=DEG`** (the STL lies 42 degrees askew about its z: `--turn z=42`). The 90 %
+  compare (top, side, front IoU): 0.926, 0.941, 0.908, sizes within 0.4 %. The maintainer chose look A of the A/B/C sheet
+  (the show's white, red bands on wings, pods and fin tips, a black anti-glare strip) and, for Q52, the **half-size low
+  set**. A fighter by Q38's budgets: one 2 048 px atlas with a 4 096 px normal map, 29.3 MB high and 7.3 MB low (a mip
+  level down, glow map included); video memory measured 32 MB and 8 MB. **The fighters' livery and glass materials now take
+  the glow map of the texture set in use** (`MeshAssets`; T05's open point), so a fighter with a half-size low set shrinks
+  its glow map too and the Starfury keeps its one map. The Starfury's contract: five muzzles (nose battery, wing-root
+  cannons), four pods with main and retro bells, twelve RCS ports, 44 collision primitives (99.7 % of the surface within
+  0.15 m), lights, the front seat's camera, chunks `cabin` and `arm_<pod>` with joints, wing liveries in the Starfury's
+  zones. **New tool**: `scripts/model_sheet.sh` and `tools/refview/model_sheets.py` photograph and lay out a model the game
+  has no `ShipSpec` for (T38 to T42 can use it before their specs exist).
+  Tests: `test_ea_thunderbolt.py` (22), `tests/integration/test_ea_thunderbolt.gd` (4), the turn in `test_refview.py` and
+  `test_refview_compare.py` (67 with `test_refview_sections.py`; stage 1's commit message says 73, which was a miscount).
+  Look sheet, option sheet, low-set comparison and compare overlays: `references/screenshots/M10-T50 Thunderbolt/`;
+  judging the look is (H).
 - **Big civilians (T51 to T56):** as the capital hulls, on T05: sections (cargo, fuel, habitat, engine, bridge),
   hardpoints for engines and lights and, where a mission needs them, docking and berths (set when it is planned: M18 for
   the mining transport, M24 for the Asimov liner). No weapons unless T01's notes say otherwise.

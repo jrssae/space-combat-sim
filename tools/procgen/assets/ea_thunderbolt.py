@@ -21,15 +21,14 @@ The upper and lower arms are not mirror images (the lower pod is the upper one m
 each starboard arm is authored and the port side mirrors it. The sample set is exactly mirror-symmetric in x; the samples'
 centroid's y and z are moved to the origin, so the hardpoints frame equals the rendered frame.
 
-Class budget (M10 Q38): a fighter, one 2 048 px atlas with a 4 096 px normal map; the low texture set a mip level down
-(``low_shrink``; 1 writes it at full size, for the maintainer's comparison of the two, Q52).
+Class budget (M10 Q38): a fighter, one 2 048 px atlas with a 4 096 px normal map; the low texture set a mip level down,
+its glow map included (Q52: the maintainer compared it with a full-size low set and chose the half size for new fighters).
 """
 
 from __future__ import annotations
 
 import json
-import math
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -75,11 +74,13 @@ from ..parts.thunderbolt import (
     bolt_wing,
 )
 from ..styles import Style
-from ..styles.ea_thunderbolt import BLACK, DEFAULT_LOOK, LOOKS, MOUTH, TEETH, Look
+from ..styles.ea_thunderbolt import ANTI_GLARE, BAND, PLATE_TONE, THUNDERBOLT
 from .starfury_aurora import PAINTABLE, STENCIL, Placed, bare_metal, centre
 
 ASSET_ID = "ea_thunderbolt"
-GENERATOR_VERSION = 1
+STYLE = THUNDERBOLT
+# 2: the chosen look, collision in steps and panels (stage 2); 1: stage 1, three looks
+GENERATOR_VERSION = 2
 SHIP_CLASS = "fighter"  # its class budget (docs/assets-capital.md, "Class budgets")
 OBJ_NAME = "ea_thunderbolt.obj"
 HARDPOINTS_NAME = "hardpoints.json"
@@ -295,10 +296,10 @@ def _solids(spec: ThunderboltSpec) -> dict[str, Any]:
             "upper": spec.upper_wing.contains, "lower": spec.lower_wing.contains, "pod": pods}
 
 
-def build_parts(spec: ThunderboltSpec, style: Style, ctx: BuildContext, spacing: float, plate_tone: float = 0.06) -> list[Placed]:
+def build_parts(spec: ThunderboltSpec, style: Style, ctx: BuildContext, spacing: float) -> list[Placed]:
     """Every part in the authored frame, sampled, the port side mirrored from the starboard one (so the set is exactly
     symmetric); samples inside another body are dropped."""
-    surface = layouts.thunderbolt(plate_tone)
+    surface = layouts.thunderbolt(PLATE_TONE)
     solids = _solids(spec)
 
     def placed(part: Part, stream: str, own: str = "", symmetric: bool = False) -> Placed:
@@ -357,6 +358,13 @@ def build_chunks(placed: list[Placed]) -> list[ChunkSource]:
 
 
 # --- paint ----------------------------------------------------------------------------------------------------------------
+# Where the red goes (authored frame): a band across each wing, one round each pod behind its collar, the fins' tips.
+WING_BAND_X = (2.25, 2.75)
+POD_BAND_Z = (9.08, 9.42)
+FIN_TIP_Z = 15.25
+FIN_INBOARD_X = 3.9
+
+
 def _band(lo: float, hi: float, soft: float = 0.01) -> Any:
     def cover(values: np.ndarray) -> np.ndarray:
         return np.clip((np.minimum(values - lo, hi - values)) / soft + 0.5, 0.0, 1.0)
@@ -364,25 +372,13 @@ def _band(lo: float, hi: float, soft: float = 0.01) -> Any:
     return cover
 
 
-def _mouth(points: np.ndarray, normals: np.ndarray, offset: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """The shark's mouth on the chin's flanks (authored frame): its dark lip line, where it is open, and where its teeth are."""
-    z, y = points[:, 2] + offset[2], points[:, 1] + offset[1]
-    t = np.clip((z - 1.10) / 2.45, 0.0, 1.0)
-    half = 0.36 * np.sin(math.pi * t) ** 0.5 * (1.0 - 0.3 * t)
-    depth = half - np.abs(y - (-1.07 + 0.08 * t))  # how far inside the lips
-    flank = (np.abs(normals[:, 0]) > 0.5) & (t > 0.0) & (t < 1.0)
-    inside = flank & (depth > 0.0)
-    saw = 1.0 - np.abs(np.mod(z / 0.24, 1.0) - 0.5) * 2.0
-    lip = flank & (depth > -0.035) & (depth <= 0.015)
-    return lip.astype(float), inside.astype(float), (inside & (depth < 0.7 * half * saw)).astype(float)
-
-
-def markings_for(placed: list[Placed], look: Look, offset: np.ndarray) -> dict[str, tuple[Marking, ...]]:
-    """What the maps paint on each part beyond its plating (centred frame): soot at every bell, "EA" on the fuselage, and
-    the look's bands, anti-glare strip, nose cap and nose art. A wing's colours and number are the livery's."""
+def markings_for(placed: list[Placed], offset: np.ndarray) -> dict[str, tuple[Marking, ...]]:
+    """What the maps paint on each part beyond its plating (centred frame): soot at every bell, "EA" on the fuselage, the
+    red bands across the wings, round the pods and on the fin tips, and the black anti-glare strip ahead of the windscreen.
+    A wing's colours and number are the livery's."""
     off = np.asarray(offset, dtype=float)
-    red = capture_albedo(look.band) if look.band is not None else None
-    black = capture_albedo(BLACK)
+    red, black = capture_albedo(BAND), capture_albedo(ANTI_GLARE)
+    glare_z = (0.85, DEFAULT_SPEC.canopy.frames[0][0])
     out: dict[str, list[Marking]] = {}
 
     def paint(name: str, colour: tuple[float, float, float], cover: Any) -> None:
@@ -393,35 +389,26 @@ def markings_for(placed: list[Placed], look: Look, offset: np.ndarray) -> dict[s
         if kind == "pod":
             a = p.part.anchor("retro")
             out.setdefault(name, []).append(Marking.soot(name, a.position, a.direction, 0.45, 0.35, 0.6))
-            if red is not None:
-                paint(name, red, lambda q, n: _band(9.08, 9.42)(q[:, 2] + off[2]))
+            paint(name, red, lambda q, n: _band(*POD_BAND_Z)(q[:, 2] + off[2]))
         elif kind == "tail":
             a = p.part.anchor("main")
             out.setdefault(name, []).append(Marking.soot(name, a.position, a.direction, 0.6, 0.5, 0.9))
-            if red is not None:  # the fin's tip
-                paint(name, red, lambda q, n: _band(15.25, 99.0)(q[:, 2] + off[2]) * (np.abs(q[:, 0]) < 3.9))
-        elif kind == "wing" and red is not None:
-            paint(name, red, lambda q, n: _band(2.25, 2.75)(np.abs(q[:, 0])))
+            paint(name, red, lambda q, n: _band(FIN_TIP_Z, 99.0)(q[:, 2] + off[2]) * (np.abs(q[:, 0]) < FIN_INBOARD_X))
+        elif kind == "wing":
+            paint(name, red, lambda q, n: _band(*WING_BAND_X)(np.abs(q[:, 0])))
         elif name == "fuselage":
             z = 6.3 - off[2]
             for side in (1.0, -1.0):
                 out.setdefault(name, []).append(Marking.text(name, "EA", (side * 0.5, -0.45 - off[1], z), (0.0, 0.0, -side), (0.0, 1.0, 0.0),
                                                              (side, 0.0, 0.0), 0.32, STENCIL))
         if name in ("fuselage", "canopy"):
-            if look.anti_glare:
-                paint(name, black, lambda q, n: _band(0.85, 1.95)(q[:, 2] + off[2]) * (n[:, 1] > 0.3))
-            if look.nose_cap and red is not None:
-                paint(name, red, lambda q, n: _band(-9.0, 0.85)(q[:, 2] + off[2]))
-        if name == "chin" and look.nose_art:
-            paint(name, capture_albedo(MOUTH), lambda q, n: _mouth(q, n, off)[1])
-            paint(name, capture_albedo(TEETH), lambda q, n: _mouth(q, n, off)[2])
-            paint(name, black, lambda q, n: _mouth(q, n, off)[0])
+            paint(name, black, lambda q, n: _band(*glare_z)(q[:, 2] + off[2]) * (n[:, 1] > 0.3))
     return {name: tuple(marks) for name, marks in out.items()}
 
 
-def textured_parts(placed: list[Placed], look: Look, offset: np.ndarray) -> list[TexturedPart]:
+def textured_parts(placed: list[Placed], offset: np.ndarray) -> list[TexturedPart]:
     """The hull parts as the textured mesh takes them: mesh, panel phase, markings, livery zone and drawn surface."""
-    marks = markings_for(placed, look, offset)
+    marks = markings_for(placed, offset)
     return [TexturedPart(p.part.mesh, phase_steps(p.part.name, True), marks.get(p.part.name, ()), p.part.name, zone_of(p.part.name), p.part.seams)
             for p in placed if p.hull]
 
@@ -489,7 +476,7 @@ def hardpoints(placed: list[Placed], spec: ThunderboltSpec, chunks: list[dict[st
 
     anchors = {**by_name["gun_mount"].anchors, **by_name["fittings"].anchors}
     muzzles = [{"name": n, "position": _r(anchors[f"muzzle_{n}"].position), "direction": _r(anchors[f"muzzle_{n}"].direction)} for n in MUZZLE_ORDER]
-    collision = [{**shape.to_json(digits=JSON_DIGITS), "name": f"{part.name}_{shape.name}" if shape.name != part.name else part.name}
+    collision = [{**shape.to_json(digits=JSON_DIGITS), "name": f"{part.name}_{shape.name}" if shape.name else part.name}
                  for part in hull_parts for shape in part.collision]
     eye = by_name["canopy"].anchor("eye")
     return {
@@ -518,24 +505,17 @@ def hardpoints(placed: list[Placed], spec: ThunderboltSpec, chunks: list[dict[st
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the ship into ``ctx.out_dir``.
 
-    Options: ``look`` (``a``, ``b`` or ``c``: the stage 1 choices, ``styles/ea_thunderbolt.py``), ``low_shrink`` (how many
-    times smaller the low texture set's maps are; 2 by the class budgets, 1 for the full-size comparison), ``spacing`` (m,
-    the surface samples'), ``atlas_px``, ``texel_m``, ``occlusion``.
+    Options: ``spacing`` (m, the surface samples'), ``atlas_px``, ``texel_m``, ``occlusion``.
     """
     spacing = float(ctx.option("spacing", DEFAULT_SPACING_M))
     if spacing <= 0.0:
         raise ValueError("spacing must be positive")
-    key = str(ctx.option("look", DEFAULT_LOOK))
-    if key not in LOOKS:
-        raise ValueError(f"look {key!r} is not one of {sorted(LOOKS)}")
-    look = LOOKS[key]
-    low_shrink = int(ctx.option("low_shrink", LOW_SHRINK))
     atlas_px = int(ctx.option("atlas_px", ATLAS_PX))
-    spec, style = DEFAULT_SPEC, look.style
+    spec, style = DEFAULT_SPEC, STYLE
 
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
-    placed, offset = centre(build_parts(spec, style, ctx, spacing, look.plate_tone))
+    placed, offset = centre(build_parts(spec, style, ctx, spacing))
     chunk_sources = build_chunks(placed)
     comments = (f"{ASSET_ID} generator v{GENERATOR_VERSION} seed {ctx.seed}",)
 
@@ -548,9 +528,9 @@ def build(ctx: BuildContext) -> AssetOutputs:
     cuts = [ChunkCut(name, tuple(p.part.name for p in placed if p.hull and chunk_of(p.part.name) == name), tuple(float(v) for v in centroid))
             for name, centroid in chunk_offsets(chunk_sources).items()]
     textured_paths, mesh_entry = write_textured_mesh(
-        out_dir, ASSET_ID, textured_parts(placed, look, offset), style, atlas_px=atlas_px, texel_m=float(ctx.option("texel_m", TEXEL_M)),
+        out_dir, ASSET_ID, textured_parts(placed, offset), style, atlas_px=atlas_px, texel_m=float(ctx.option("texel_m", TEXEL_M)),
         seed=ctx.seed, occlusion=bool(ctx.option("occlusion", True)), paintable=PAINTABLE, chunks=cuts, grid=False,
-        detail_levels=DETAIL_LEVELS, detail_shrink={name: low_shrink for name in DETAIL_LEVELS},
+        detail_levels=DETAIL_LEVELS, detail_shrink={name: LOW_SHRINK for name in DETAIL_LEVELS},
     )
     files += textured_paths
 
@@ -560,7 +540,7 @@ def build(ctx: BuildContext) -> AssetOutputs:
     files.append(hp_path)
 
     high_mb = texture_mb([atlas_px], normal_px=atlas_px * NORMAL_SCALE)
-    low_mb = texture_mb([atlas_px // low_shrink], normal_px=atlas_px * NORMAL_SCALE // low_shrink)
+    low_mb = texture_mb([atlas_px // LOW_SHRINK], normal_px=atlas_px * NORMAL_SCALE // LOW_SHRINK)
     manifest = build_manifest(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
@@ -573,9 +553,8 @@ def build(ctx: BuildContext) -> AssetOutputs:
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
             "chunks": [c["name"] for c in chunk_entries],
             "mesh": mesh_entry,
-            "look": look.key,
             "budget": {"class": SHIP_CLASS, "triangles": mesh_entry["triangles"], "texture_mb": round(high_mb, 2),
-                       "texture_mb_low": round(low_mb, 2), "low_shrink": low_shrink,
+                       "texture_mb_low": round(low_mb, 2), "low_shrink": LOW_SHRINK,
                        "over": over_budget(SHIP_CLASS, mesh_entry["triangles"], high_mb, low_mb)},
         },
     )
@@ -583,5 +562,5 @@ def build(ctx: BuildContext) -> AssetOutputs:
     return AssetOutputs(ASSET_ID, out_dir, manifest, tuple(files), ())
 
 
-__all__ = ["ASSET_ID", "CHUNK_ORDER", "DEFAULT_SPEC", "GENERATOR_VERSION", "REFERENCE_LENGTH_M", "REFERENCE_MAPPING", "REFERENCE_TURN",
+__all__ = ["ASSET_ID", "CHUNK_ORDER", "DEFAULT_SPEC", "GENERATOR_VERSION", "REFERENCE_LENGTH_M", "REFERENCE_MAPPING", "REFERENCE_TURN", "STYLE",
            "ThunderboltSpec", "build", "build_parts", "chunk_of", "hardpoints", "zone_of"]
