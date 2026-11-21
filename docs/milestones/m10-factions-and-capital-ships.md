@@ -364,7 +364,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
 | T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | done |
-| T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | in progress |
+| T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | done |
 | T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | done |
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | not started |
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | not started |
@@ -557,6 +557,36 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Goal:** AC5's organic half (D12.2).
 - **Also:** watertightness tests and a sheen look sheet (H); no panel seams, the Vorlon glow (Q46).
 - **Done when:** an organic test asset builds within budget and draws with its sheen.
+- **Done (2026-11-21).** Fields and their mesher (`core/sdf.py`: sphere, ellipsoid, round cone, box, torus, metaballs, swept
+  bodies, smooth unions and cuts, noise relief, ribs; `core/isosurface.py`: marching cubes on a sparse grid with a generated
+  case table, watertight for all 256 patterns; `core/decimate.py`: quadric edge collapses to a triangle budget;
+  `core/sweep.py`: paths and limbs written directly). `Mesh` carries a builder's own normals, so a body cut into sections
+  shades as one skin. The framework's join (`core/organic.py`: `sectioned` cuts one body into a module per damage section;
+  collision as convex pieces per body part, M7's builder). The parts (`parts/organic.py`: lobes, pods, limb roots, claws,
+  legs, tendrils, ribs; `parts/organic_petal.py`: petals morphing between a closed and an open pose on one set of triangles,
+  the closed pose T01's measured Vorlon shell). The sheen layer (`hull_sheen_layer.gdshaderinc` over the four maps,
+  `hull_organic.gdshader`, `HullSheenMaterial`; its numbers per style in `core/sheen.py`, written to the manifest's surfaces).
+  The test hull `organic_test_hull`: 300 by 180 by 97.6 m, cruiser class, 50 250 triangles (60 000), one 4 096 px atlas,
+  53.3 / 13.3 MB (56.0 / 16.0), eight sections, 94 convex shapes, skin and collision within about 3 m of each other; it loads
+  in Godot and draws with its sheen on the RX 6950 XT (`forward_plus`). Contract: `docs/assets-capital.md`, "Organic hulls
+  and the sheen layer"; `docs/architecture.md` §22.3.
+  **The looks, the maintainer's picks (2026-11-21)** from three rounds of sheets: Vorlon, option A's bold mottling made alive
+  as a cuttlefish's skin (blotches and spots that swell and fade, iridescence that wanders, a faint breathing glow), with a
+  fifth of the hulls copper-brown, chosen per ship by a seeded hash of its name; Shadow, the blackest skin in big slow
+  cells, the seams raised dull ridges with a faint violet, each cell a pool of glossy black liquid drawn up at its edges;
+  the hexagonal hulls in a colour set a hull (`HexColours`: Minbari blue to dark blue, the White Star silver veined with
+  violet, the Victory charcoal with muted red markings; a hull task hands its own). No seams on the Shadows and Vorlons
+  (Q46); hexagons on the semi-organic ones (Q45, Q47).
+  Beside the task: a hull with no drawn layout now gets its low texture set where the set is written smaller;
+  `collision.convex_points` never keeps a corner twice.
+  Tests: 64 Python (`test_sdf` 21, `test_organic_parts` 19, `test_sheen` 12, `test_organic_test_hull` 12), GUT
+  `test_organic_test_hull_asset.gd` 6. Pictures: `references/screenshots/M10-T06 organic and sheen/` (`sheen_vorlon`,
+  `sheen_shadow`, `sheen_hex`: stage 1's options; `sheen_confirm`, `sheen_confirm2`, `sheen_tone_down`: the picks);
+  `scripts/organic_sheet.sh` shoots the looks.
+  **Open:** the red colouring is wired to a `CapitalShip`'s pieces only: break-up chunks (T08 to T11) and pooled fighters
+  (T42) must take `skin_variant` when those tasks land. What moves (the Vorlons' skin, the Shadows' liquid) is judged in a
+  windowed run `(H)`: the sheets are stills. The hexagons distort where a body curves sharply (three projections). The test
+  hull's blast energy is a placeholder (`manifest.notes`).
 
 ### M10-T07 Capital ships in the game
 

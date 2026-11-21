@@ -6981,3 +6981,40 @@ src/capital/capital_console.gd     the `capital` provider and command
   wall, and a ram on a rotor takes the rotor's motion but not its skin's own turn (a few m/s at the test hull). The tier's
   capital law caps at 2 m/s^2 whatever the hull. Engines with unequal shares fly as equal until the step takes a thrust per
   nozzle. The raider strike carrier still rides `CapitalStandin`.
+
+### 22.3 Organic hulls and the sheen layer (D12.2; T06)
+
+```
+tools/procgen/core/sdf.py, isosurface.py, decimate.py   fields, their mesher (marching cubes, sparse) and the thinning to a budget
+tools/procgen/core/sweep.py                             paths with frames; limbs written directly along them
+tools/procgen/core/organic.py                           one body cut into a module per section; convex collision for organic shapes
+tools/procgen/parts/organic.py, organic_petal.py        lobes, pods, limb roots, claws, legs, tendrils, ribs; petals that morph
+tools/procgen/core/sheen.py, styles/organic.py          the sheen layer's numbers; the Vorlon, Shadow and hexagonal looks
+assets/shaders/hull_sheen_layer.gdshaderinc             the layer; hull_organic.gdshader includes it
+src/rendering/hull_sheen_material.gd                    HullSheenMaterial
+```
+
+- **Bodies are fields.** An organic hull's body is a signed distance field melted from parts, meshed once (watertight by
+  construction, deterministic) and thinned to its class's triangles; limbs are swept directly. It then goes through T05's
+  framework unchanged: `organic.sectioned` cuts the one mesh into a module per damage section, so sections, chunks,
+  collision per section and hardpoints are the capital contract's (§22.1). No generic model builder (Q40): a hull is still a
+  hand-written generator, now with organic parts.
+- **One skin across the cuts.** `Mesh` may carry its builder's normals (`vertex_normal`, the field's); the sections share
+  their cut's vertices and normals, so the hull draws seamless (Q46) and only shows a cut when a section breaks away.
+- **Collision** stays M7's convex pieces (§20.7): fitted per body part, with points inside the body, cut further only where
+  a hull would bridge a hollow. The test hull: 94 shapes, the skin and the collision within about 3 m of each other.
+- **The sheen is a layer, not a bake.** A surface whose manifest entry has a `sheen` draws with `HullSheenMaterial`: the
+  four maps and the detail tile as the standard material draws them, and one shader include over them (iridescence from nine
+  spherical-harmonic coefficients, a mottling or cell pattern in the hull's own space, ridges and liquid pools, a glow). Its
+  numbers are a style's (`core/sheen.Sheen`), one uniform each. `MeshAssets.paint_material` picks the material, so every
+  loader (ships, pieces, chunks) gets it; `settings.texture_detail` and `settings.hull_sheen` work as on any hull.
+- **Time in the shader is a visual only.** The Vorlons' swelling mottling and the Shadows' rippling pools read the shader's
+  `TIME`; nothing in gameplay does.
+- **A second colouring per ship** (the red-based Vorlons, a fifth of them): an instance uniform (`skin_variant`) on the
+  ship's drawn pieces, chosen by `HullSheenMaterial.variant_for` from a seeded hash of the ship's own name, never a shared
+  generator, so it is the same in every run and with any thread count. `CapitalShip.skin_variant` holds it; chunks and
+  pooled fighters take it when their tasks land.
+- **Looks per hull.** Vorlon and Shadow are one sheen each; the hexagonal hulls (Minbari, Interstellar Alliance) share a
+  sheen and differ by a colour set a hull (`HexColours`, handed by the hull task). The contract, the numbers and the looks
+  are in `docs/assets-capital.md` ("Organic hulls and the sheen layer"). Tests: `test_sdf`, `test_organic_parts`,
+  `test_sheen`, `test_organic_test_hull` (Python); `test_organic_test_hull_asset.gd`.

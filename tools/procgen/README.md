@@ -223,6 +223,15 @@ piece with an atlas each, the shared detail tile, damage sections with their chu
 A capital generator is a list of modules, a list of sections and a `CapitalSpec`; docs/assets-capital.md ("Capital
 framework") has the contract. About 35 s at full size.
 
+## `organic_test_hull` and the organic part library
+
+The organic part library's test hull (M10-T06): a 300 m cruiser-class body grown from fields (`core/sdf.py`: lobes, pods and
+limb roots melted together, meshed by `core/isosurface.py`, thinned by `core/decimate.py`), cut into damage sections by
+`core/organic.sectioned`, with limbs swept along paths (`core/sweep.py`, `parts/organic.py`) and petals
+(`parts/organic_petal.py`), wearing a sheen layer (`core/sheen.py`, `styles/organic.py`). Options: `look` (`vorlon`, `shadow`,
+`minbari`, `white_star`, `victory`), `variant` (the look's second colouring on every ship), `cell_m`, `body_triangles`.
+docs/assets-capital.md ("Organic hulls and the sheen layer") has the contract. About 90 s and 7 GB at full size (built alone).
+
 ## `babylon5_station`
 
 The Babylon 5 station (M7-T04, D72; replaced M4's `b5_station` stand-in), built from the measurements in

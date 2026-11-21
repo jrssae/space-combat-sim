@@ -142,6 +142,9 @@ class OrganicStyleTests(unittest.TestCase):
         self.assertGreater(worn["liquid_flow_mps"], 0.0, "that flows")
         self.assertEqual(worn["liquid_tint"], [0.0, 0.0, 0.0], "black")
         self.assertGreater(shadow.style.material("hull").roughness_value, 0.6, "the ridges are matt: the gloss is the liquid's")
+        self.assertLess(max(worn["pattern_tint"]), min(shadow.style.material("hull").albedo), "and darker than the skin: no bright web up close")
+        self.assertGreater(worn["pattern_dark"], 0.8)
+        self.assertLessEqual(worn["iri_strength"], 0.1, "with only a trace of the sheen on them")
         self.assertGreater(worn["glow_energy"], 0.0, "a faint violet in the seams")
         self.assertLess(worn["glow_energy"], 0.02)
         self.assertEqual(worn["glow_veins"], 1.0)
@@ -190,7 +193,8 @@ class OrganicStyleTests(unittest.TestCase):
         charcoal, marks = victory.style.material("hull").albedo, victory.surface["sheen"]["pattern_tint"]
         self.assertLess(max(charcoal), 0.06)
         self.assertLess(max(charcoal) - min(charcoal), 0.015)
-        self.assertTrue(marks[0] > 3.0 * marks[1] and marks[0] < 0.15, "dull red")
+        self.assertTrue(marks[0] > marks[1] > marks[2] and marks[0] < 2.5 * marks[1] and marks[0] < 0.06, "a dull, muted red")
+        self.assertLessEqual(victory.surface["sheen"]["pattern_dark"], 0.6, "and faint")
 
 
 if __name__ == "__main__":

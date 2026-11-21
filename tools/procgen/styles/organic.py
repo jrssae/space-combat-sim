@@ -65,10 +65,11 @@ VORLON = Sheen(iri_sh=_VORLON_IRI, iri_strength=0.6, iri_base=0.08, iri_power=2.
 
 # --- the Shadows: the blackest skin, big slow cells; the seams are ridges, each cell a dished pool of black liquid -------------
 _SHADOW_IRI = sh_from_lobes((0.16, 0.05, 0.34), [((0.0, 1.0, 0.0), (-0.06, 0.03, 0.14), 110.0), ((0.0, -1.0, 0.0), (0.12, -0.02, -0.05), 110.0)])
-# The seams (the pattern's ink) are matt ridges, a shade off black, with a faint violet glow and a little of the sheen's violet.
-SHADOW = Sheen(iri_sh=_SHADOW_IRI, iri_strength=0.14, iri_base=0.0, iri_power=4.0, iri_view=0.8, iri_metal=0.3,
-               pattern_scale_m=4.0, pattern_cells=1.0, pattern_edge=0.6, pattern_cover=0.22, pattern_dark=0.5, pattern_tint=(0.012, 0.01, 0.02),
-               pattern_iri=0.0, pattern_rough=0.25, pattern_speed_mps=0.15, pattern_relief=0.55,
+# The seams (the pattern's ink) are matt ridges, darker than the skin so they do not read as a bright web up close, with a
+# faint violet glow and a trace of the sheen's violet at the rim.
+SHADOW = Sheen(iri_sh=_SHADOW_IRI, iri_strength=0.06, iri_base=0.0, iri_power=4.0, iri_view=0.8, iri_metal=0.0,
+               pattern_scale_m=4.0, pattern_cells=1.0, pattern_edge=0.6, pattern_cover=0.22, pattern_dark=0.9, pattern_tint=(0.004, 0.003, 0.007),
+               pattern_iri=0.0, pattern_rough=0.28, pattern_speed_mps=0.15, pattern_relief=0.55,
                liquid=1.0, liquid_flow_mps=0.4, liquid_dish=0.8, liquid_tint=(0.0, 0.0, 0.0),
                glow_colour=(0.45, 0.2, 1.0), glow_energy=0.008, glow_veins=1.0, coat=0.0)
 
@@ -104,9 +105,9 @@ MINBARI = HexColours("minbari", skin=(0.07, 0.17, 0.45), limbs=(0.045, 0.11, 0.3
 WHITE_STAR = HexColours("white_star", skin=(0.42, 0.42, 0.47), limbs=(0.32, 0.32, 0.38), accent=(0.30, 0.28, 0.42), mottle=(0.10, 0.05, 0.40),
                         sheen=(0.42, 0.40, 0.72), sheen_up=(0.15, 0.18, 0.10), sheen_down=(0.05, -0.12, 0.10), mottle_cover=0.5, mottle_dark=0.85,
                         mottle_m=6.0, mottle_edge=0.6, metallic=0.7, roughness=0.35)
-# The Victory class: charcoal, with dull red markings (references/show/m10/isa_victory).
-VICTORY = HexColours("victory", skin=(0.035, 0.037, 0.043), limbs=(0.028, 0.029, 0.034), accent=(0.05, 0.05, 0.058), mottle=(0.085, 0.018, 0.012),
-                     sheen=(0.16, 0.20, 0.28), sheen_up=(0.06, 0.08, 0.10), sheen_down=(0.04, -0.02, -0.03), mottle_cover=0.3, mottle_dark=0.7,
+# The Victory class: charcoal, with dull, muted red markings (references/show/m10/isa_victory).
+VICTORY = HexColours("victory", skin=(0.035, 0.037, 0.043), limbs=(0.028, 0.029, 0.034), accent=(0.05, 0.05, 0.058), mottle=(0.045, 0.022, 0.018),
+                     sheen=(0.16, 0.20, 0.28), sheen_up=(0.06, 0.08, 0.10), sheen_down=(0.04, -0.02, -0.03), mottle_cover=0.25, mottle_dark=0.55,
                      mottle_m=12.0, mottle_edge=0.5, metallic=0.6, roughness=0.45)
 HEX_COLOURS = {c.name: c for c in (MINBARI, WHITE_STAR, VICTORY)}
 

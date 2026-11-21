@@ -178,6 +178,8 @@ void sheen_layer(vec3 pos, vec3 normal, vec3 view, float footprint_m, float time
 	}
 	s.albedo = mix(s.albedo, pattern_tint, pattern_dark * ink);
 	s.roughness = clamp(s.roughness + pattern_rough * (ink + (tone - 0.5) * 0.6), 0.04, 1.0);
+	// A seam between cells is dull as well as dark: with its shine left on, a web of ridges glints over a black hull.
+	s.specular *= 1.0 - pattern_dark * ink * pattern_cells;
 
 	float facing = clamp(dot(normal, view), 0.0, 1.0);
 	float rim = pow(1.0 - facing, iri_power);
