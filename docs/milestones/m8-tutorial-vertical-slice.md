@@ -1473,7 +1473,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     (`InputSource.device`, new: the pad's glyph, or key and mouse button), from the live `InputMap`; the panel redraws when
     the words change, so a rebind or a change of device shows on the line that is up. Guard:
     `test_text_names_no_control` (table-driven, every dialog file, mission script string and scenario text; architecture
-    §18.5 has the rule). Tests (staged scratch copy, HEAD `f02a6760` plus this fix): compile check 1024 scripts clean; 12
+    §18.5 has the rule). Tests (staged scratch copy, HEAD `c15b705e` plus this fix; `f02a6760`, a native tier fix in other files, landed before the commit): compile check 1024 scripts clean; 12
     unit and neighbour files, 146 of 146 (new: `test_control_text` 7, `test_text_names_no_control` 3; the device noted by
     the real input source in `test_control_check_devices`); `test_tutorial` and `test_tutorial_lessons`, 19 passed, 1
     pending (the balance gate), 0 failed, with one new: the target-menu line on the pad, on the keyboard, after a rebind
