@@ -11,10 +11,11 @@ extends RefCounted
 ##     {"kind": "dialog_finished", "line": "intro_1"}
 ##     {"kind": "input_performed", "action": "roll_right"}                         (a `PlayerActions.NAMES` word)
 ##     {"kind": "arrived", "actor": "ALPHA 2", "at": [x, y, z], "radius_m": 150}   (no "at": the end of its route)
+##     {"kind": "targeted", "actor": "JUMPGATE"}                                   (the player's selected target)
 ##     {"kind": "fact", "fact": "gate_jumps", "at_least": 1}                       (a `MissionFacts.NAMES` number; "below": true)
 
 const KINDS: Array[StringName] = [&"proximity", &"area", &"timer", &"destroyed", &"dialog_finished", &"input_performed",
-		&"arrived", &"fact"]
+		&"arrived", &"fact", &"targeted"]
 
 
 ## `{"ok": bool, "trigger": Trigger or null, "error": String}` for one JSON trigger.
@@ -94,6 +95,11 @@ static func from_dict(data: Variant, system: StringName = &"local") -> Dictionar
 			if point == null:
 				return _fail("arrived: at must be [x, y, z], got %s" % JSON.stringify(d.get("at")))
 			return _ok(arrived(actor as String, point, radius as float))
+		&"targeted":
+			var actor: Variant = _name(d, "actor")
+			if actor == null:
+				return _fail("targeted needs an actor (what the player must select)")
+			return _ok(targeted(actor as String))
 		&"fact":
 			var fact_name: Variant = _name(d, "fact")
 			if fact_name == null or not MissionFacts.NAMES.has(StringName(fact_name as String)):
@@ -155,6 +161,11 @@ static func arrived(actor: String, point: UniversePos = null, radius_m: float = 
 ## A number the game keeps about the run has reached `at_least` (with `below`: has fallen under it).
 static func fact(fact_name: StringName, at_least: float = 1.0, below: bool = false) -> TriggerFact:
 	return TriggerFact.new(fact_name, at_least, below)
+
+
+## The player has `actor` selected as the target.
+static func targeted(actor: String) -> TriggerTargeted:
+	return TriggerTargeted.new(actor)
 
 
 static func _name(d: Dictionary, key: String) -> Variant:

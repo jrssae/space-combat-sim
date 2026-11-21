@@ -34,7 +34,12 @@ extends RefCounted
 ##     m.filled(text)                  `text` with the scenario's placeholders filled in ("{civilian}" -> the drawn ship's name)
 ## Station missions (M8 D79):
 ##     await m.launch_squadron(wing, door, flights)   the squadron-launch cinematic, then the player's own launch (M8-T03)
-##     await m.tour(stop)              one stop of the station tour on the cinematic camera (M7-T12)
+##     await m.tour(stop [, captions]) one stop of the station tour on the cinematic camera (M7-T12); `captions` false
+##                                     leaves its caption out when the mission talks over it
+##     m.put(ship, at, facing)         a ship at a place (Vector3 from the origin), at rest: a cut between scenes
+##     m.dismiss(names)                ships taken out of play with no explosion (recalled drones)
+##     m.player_target()               the name of the player's selected target ("" none); wait on one with
+##                                     `TriggerSpec.targeted(actor)`
 ##     m.traffic(on)                   the station's run of civilians between the gate and the bays
 ##     m.scramble(wing, count)         more Starfuries of the station's wing launch from its Cobra arm
 ##     m.fly(ship, points, cruise_mps [, paced]) / m.demo(ship, name)   an AI ship's route; a `Manoeuvres` move flown where it is
@@ -499,13 +504,13 @@ func _skip_launch() -> void:
 
 ## Plays the station tour's stop `stop` on the cinematic camera (M7-T12; "" for the whole tour) and waits until it ends or the
 ## player skips it. In a skipped step it is logged, not shown.
-func tour(stop: String = "") -> void:
+func tour(stop: String = "", captions: bool = true) -> void:
 	if has_ended():
 		return
 	journal.append("tour %s" % stop)
 	if stage == null or _seq.skipping:
 		return
-	var why: String = stage.tour(stop)
+	var why: String = stage.tour(stop, captions)
 	if not why.is_empty():
 		push_error("Mission: tour: %s" % why)
 		return
@@ -514,6 +519,28 @@ func tour(stop: String = "") -> void:
 	stage.stop_tour()
 	while _seq.stopped:
 		await _seq.wake
+
+
+## Puts the ship `ship_name` at `at` (metres from the scenario's origin), nose along `facing`, at rest: a cut between scenes,
+## made as a cinematic ends or with the controls held. Played or skipped, the ship ends there.
+func put(ship_name: String, at: Vector3, facing: Vector3 = Vector3.FORWARD) -> void:
+	journal.append("put %s at %s" % [ship_name, at])
+	_report("put", stage.put(ship_name, UniversePos.new(at.x, at.y, at.z, world.system_id), facing) if stage != null else "")
+
+
+## Takes the ships `names` out of play with no explosion and no kill credit (drones recalled when a drill is over). Do it
+## where the player is not looking: they vanish.
+func dismiss(names: Array) -> void:
+	journal.append("dismiss %s" % ", ".join(PackedStringArray(names)))
+	if stage != null:
+		stage.refresh(world, PackedStringArray(names))
+	for ship_name: Variant in names:
+		world.release(String(ship_name))
+
+
+## The name of the player's selected target ("" for none, or without a stage).
+func player_target() -> String:
+	return stage.player_target() if stage != null else ""
 
 
 ## Starts or stops the station's run of civilians between the jumpgate and the bays (M7-T56).

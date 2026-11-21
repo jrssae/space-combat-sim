@@ -113,10 +113,12 @@ func refresh(snapshot: MissionWorld, names: PackedStringArray) -> void:
 		for k: String in _actors:
 			capitals += 1 if _actors[k] is CapitalStandin and _node_of(k) != null else 0
 		snapshot.set_fact(&"capitals_in_play", float(capitals))
+	var selected: int = _selected_id()
 	for actor: String in names:
 		snapshot.work += 1
 		var k: String = MissionWorld.key(actor)
 		var node: Node3D = _node_of(k)
+		snapshot.set_targeted(k, selected != 0 and node != null and target_id(k) == selected)
 		if node == null:
 			# A name the stage knows was in play once (load, a pool hand-out): gone, not "not arrived yet".
 			if _carrier_left(k):
@@ -430,10 +432,11 @@ func launch_squadron(wing: String = "", door: int = 0, flights: int = 0) -> Stri
 	return launches.launch_squadron(wing, door, flights)
 
 
-## Plays the station tour's stop `stop` ("" for the whole tour, M7-T12); "" or why not.
-func tour(stop: String) -> String:
+## Plays the station tour's stop `stop` ("" for the whole tour, M7-T12), with or without its caption; "" or why not.
+func tour(stop: String, captions: bool = true) -> String:
 	if _main == null or _main.tours == null:
 		return "no tour in this scene"
+	_main.tours.captions = captions
 	return _main.tours.start(stop)
 
 
@@ -532,6 +535,43 @@ func join_flight(ship_name: String, join: bool) -> String:
 	if flight.slot_of(combatant) > 0:
 		return ""
 	return "" if wings.join(flight.name, combatant) == flight else "%s could not join %s" % [ship_name, flight.name]
+
+
+## Puts the ship `ship_name` at `at`, nose along `facing`, at rest against the station's frame: a cut between scenes, for use
+## as a cinematic ends or with the controls held (M8-T33: the tutorial's lessons start at rest in clear space). A shot still
+## filming the player is ended, since it would follow the ship across the cut. "" or why not.
+func put(ship_name: String, at: UniversePos, facing: Vector3) -> String:
+	var k: String = MissionWorld.key(ship_name)
+	var ship := _node_of(k) as Ship
+	if ship == null:
+		return "no ship %s in play" % ship_name
+	if ship == world.focus:
+		world.return_home()
+		if camera_rig != null and camera_rig.playing_shot() != null:
+			camera_rig.stop_shot()
+		if launches != null and is_instance_valid(launches):
+			launches.skip()  # a launch's burn would carry the ship on from where it is put
+	var up: Vector3 = Vector3.UP if absf(facing.normalized().dot(Vector3.UP)) < 0.99 else Vector3.BACK
+	ship.reset_to(Transform3D(Basis.looking_at(facing, up), world.universe_to_local(at)))
+	return ""
+
+
+## Selects the actor `actor` as the player's target (a skipped `targeted` trigger).
+func select(actor: String) -> void:
+	if player != null and player.ship != null and player.ship.targeting != null and _node_of(MissionWorld.key(actor)) != null:
+		player.ship.targeting.select_by_name(actor.to_upper())
+
+
+## The name of the player's selected target, "" for none.
+func player_target() -> String:
+	var targeting: TargetingController = player.ship.targeting if player != null and player.ship != null else null
+	return targeting.selected_name() if targeting != null and _selected_id() != 0 else ""
+
+
+func _selected_id() -> int:
+	var targeting: TargetingController = player.ship.targeting if player != null and player.ship != null \
+			and is_instance_valid(player.ship) else null
+	return targeting.selected_id() if targeting != null else 0
 
 
 ## Control's docking offer is the mission's to say: the HUD line stays off (M8-T06).

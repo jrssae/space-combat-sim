@@ -30,6 +30,7 @@ var _lines: Dictionary = {}  # StringName -> true
 var _seen: Dictionary = {}  # key -> true once it was in play
 var _actions: Dictionary = {}  # StringName -> true, this tick only
 var _facts: Dictionary = {}  # StringName -> float (`fact`)
+var _targeted: Dictionary = {}  # key -> true while the player has that actor selected
 
 
 ## How a name is matched: trimmed, lower case.
@@ -120,6 +121,26 @@ func route_end(actor: String) -> UniversePos:
 func line_finished(line_id: StringName) -> bool:
 	work += 1
 	return _lines.has(line_id)
+
+
+## Whether the player has `actor` selected as the target now.
+func set_targeted(actor: String, on: bool) -> void:
+	if on:
+		_targeted[key(actor)] = true
+	else:
+		_targeted.erase(key(actor))
+
+
+func is_targeted(actor: String) -> bool:
+	work += 1
+	return _targeted.has(key(actor))
+
+
+## Selects `actor` as the player's target (a skipped `targeted`), in the snapshot and in the game.
+func target(actor: String) -> void:
+	_targeted[key(actor)] = true
+	if stage != null:
+		stage.select(actor)
 
 
 ## Sets a number the game keeps about the run (`MissionFacts`, M8 D79).
