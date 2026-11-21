@@ -98,6 +98,7 @@ func _park(shot: PackedStringArray) -> String:
 	_model = MeshInstance3D.new()
 	_model.mesh = mesh
 	main.world.add_child(_model)
+	_add_rotors(asset_id, root)
 	var section: Dictionary = MeshAssets.livery_section(asset_id, root)
 	if not section.is_empty():
 		var wing: PackedStringArray = shot[7].split(":")
@@ -111,6 +112,22 @@ func _park(shot: PackedStringArray) -> String:
 	_model.global_transform = Transform3D(basis, at - basis * aim)
 	_light(camera, shot[5] == "dark")
 	return ""
+
+
+# A capital's rotating pieces (M10-T21: the Omega's drum) drawn at rest on their pivots, so the model is whole.
+func _add_rotors(asset_id: String, root: String) -> void:
+	var pieces: Variant = MeshAssets.read_manifest(asset_id, root).get("pieces", {})
+	if not pieces is Dictionary:
+		return
+	for piece_name: String in (pieces as Dictionary):
+		var entry: Dictionary = pieces[piece_name]
+		if not entry.has("pivot") or not entry.has("mesh"):
+			continue
+		var rotor := MeshInstance3D.new()
+		rotor.mesh = MeshAssets.load_textured(root.path_join(asset_id), entry["mesh"])
+		var pivot: Array = entry["pivot"]
+		rotor.position = Vector3(float(pivot[0]), float(pivot[1]), float(pivot[2]))
+		_model.add_child(rotor)
 
 
 # Turns the key star as the look sheets do: over the camera's shoulder onto the model, or from behind it so only a rim shows.

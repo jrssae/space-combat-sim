@@ -33,6 +33,7 @@ from . import Part
 from .solids import Solid
 
 CENTRE, RIGHT = "c", "r"  # as ``core/civilian.py``: on the centre line, or starboard with a port twin
+LONE = "a"  # as ``core/civilian.py``: a part one side has and the other has not (a single aerial), built as authored
 AREAL_DENSITY_KG_M2 = 260.0  # the strike carrier's: a skin's mass by its area (informational; the ShipSpec rules)
 
 TURRET, BEAM, INTERCEPTOR, MISSILE, MINE = "turret", "beam", "interceptor", "missile", "mine"
@@ -104,7 +105,7 @@ def port_name(name: str) -> str:
 @dataclass(frozen=True)
 class Module:
     """One part of a capital hull with its collision and hardpoints. ``solid`` is the volume it buries (other modules'
-    surface inside it does not count as skin), ``side`` :data:`CENTRE` or :data:`RIGHT` (a port twin follows), ``fine``
+    surface inside it does not count as skin), ``side`` :data:`CENTRE`, :data:`RIGHT` (a port twin follows) or :data:`LONE`, ``fine``
     scales its surface sampling, ``section`` the damage section it belongs to and ``skin`` the layout that dresses it."""
 
     part: Part
@@ -117,8 +118,8 @@ class Module:
     skin: str = SKIN_HULL
 
     def __post_init__(self) -> None:
-        if self.side not in (CENTRE, RIGHT):
-            raise ValueError(f"module {self.name!r}: side must be {CENTRE!r} or {RIGHT!r}")
+        if self.side not in (CENTRE, RIGHT, LONE):
+            raise ValueError(f"module {self.name!r}: side must be {CENTRE!r}, {RIGHT!r} or {LONE!r}")
         if self.skin not in SKINS:
             raise ValueError(f"module {self.name!r}: unknown skin {self.skin!r}")
         if not self.shapes:
@@ -145,6 +146,11 @@ class Module:
 
     def on_side(self, side: str) -> Module:
         return dataclasses.replace(self, side=side)
+
+    def with_params(self, **params: Any) -> Module:
+        """The module with ``params`` added to every hardpoint it carries: the weapon that stands on a mount (``weapon``), the
+        craft a bay launches and how many it holds (``craft``, ``capacity``)."""
+        return dataclasses.replace(self, hardpoints=tuple(dataclasses.replace(h, params={**h.params, **params}) for h in self.hardpoints))
 
     def mounted(self, position: Sequence[float], up: Sequence[float] = (0.0, 1.0, 0.0),
                 forward: Sequence[float] = (0.0, 0.0, -1.0)) -> Module:
@@ -195,6 +201,6 @@ def mount_basis(up: Sequence[float], forward: Sequence[float]) -> np.ndarray:
     return np.stack([np.cross(y, z), y, z], axis=1)
 
 
-__all__ = ["AREAL_DENSITY_KG_M2", "BAY", "BEAM", "CENTRE", "ENGINE", "HARDPOINT_KINDS", "INTERCEPTOR", "LAUNCH_KINDS", "LIGHT", "MINE",
+__all__ = ["AREAL_DENSITY_KG_M2", "BAY", "BEAM", "CENTRE", "ENGINE", "HARDPOINT_KINDS", "INTERCEPTOR", "LAUNCH_KINDS", "LIGHT", "LONE", "MINE",
            "MISSILE", "POINT_PARAMS", "RIGHT", "SKINS", "SKIN_FITTING", "SKIN_HULL", "SKIN_NONE", "TUBE", "TURRET", "WEAPON_KINDS", "Hardpoint", "Module",
            "left_name", "module", "mount_basis", "port_name", "with_twins"]

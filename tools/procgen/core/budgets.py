@@ -79,7 +79,7 @@ def over_budget(ship_class: str, triangles: int, high_mb: float, low_mb: float) 
     if triangles > budget.triangles:
         out.append(f"{triangles} triangles, the {ship_class} budget is {budget.triangles}")
     for label, used, limit in (("high", high_mb, budget.texture_mb), ("low", low_mb, budget.texture_mb_low)):
-        if used > limit + 1e-6:
+        if round(used, 1) > limit + 1e-6:  # the table is to a tenth of a MB: a hull at the ceiling rounds to it
             out.append(f"{used:.1f} MB in the {label} texture set, the {ship_class} budget is {limit}")
     return out
 

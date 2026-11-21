@@ -8,6 +8,8 @@ import json
 import unittest
 from pathlib import Path
 
+from tools.procgen.core import loadout
+
 ROOT = Path(__file__).resolve().parents[3]
 LOADOUTS = ROOT / "data" / "capitals" / "loadouts.json"
 CATALOGUE = ROOT / "data" / "ships" / "catalogue.json"
@@ -67,6 +69,44 @@ class LoadoutTests(unittest.TestCase):
         self.assertEqual({k for k, v in h.items() if v["lays_mines"]}, {"narn_gquan", "centauri_vorchan"})
         self.assertNotIn("pierce", self.data["traits"])
         self.assertNotIn("trait", self.weapons["centauri_ion_cannon"])
+
+
+class ManifestCheckTests(unittest.TestCase):
+    """``core/loadout.problems``: a built hull's mounts and bays against its row (each hull task's check, M10-T21 on)."""
+
+    LOADOUTS = {
+        "weapons": {"gun": {"kind": "bolt_medium"}, "beam": {"kind": "beam_sustained"}, "pd": {"kind": "interceptor"}},
+        "hulls": {"ship": {"weapons": {"gun": 2, "beam": 1}, "interceptors": {"pd": 1}, "launches": {"starfury_ally": 4}}},
+    }
+
+    @staticmethod
+    def built(**changes: object) -> dict:
+        hp = {"weapons": [{"name": "g1", "kind": "turret", "weapon": "gun"}, {"name": "g2", "kind": "turret", "weapon": "gun"},
+                          {"name": "b", "kind": "beam", "weapon": "beam"}, {"name": "p", "kind": "interceptor", "weapon": "pd"}],
+              "bays": [{"name": "bay", "craft": "starfury_ally", "capacity": 4}]}
+        hp.update(changes)
+        return hp
+
+    def test_a_hull_built_to_its_row_has_no_problems(self) -> None:
+        self.assertEqual(loadout.problems(self.built(), self.LOADOUTS, "ship"), [])
+
+    def test_each_kind_of_difference_is_named(self) -> None:
+        self.assertEqual(loadout.problems(self.built(), self.LOADOUTS, "other"), ["other: no loadout row"])
+        short = self.built(weapons=self.built()["weapons"][1:])
+        self.assertIn("weapons built", loadout.problems(short, self.LOADOUTS, "ship")[0])
+        wrong = self.built(weapons=[{**w, "kind": "turret"} for w in self.built()["weapons"]])
+        self.assertTrue(any("needs a beam" in p for p in loadout.problems(wrong, self.LOADOUTS, "ship")))
+        unnamed = self.built(weapons=[{"name": "x", "kind": "turret"}, *self.built()["weapons"]])
+        self.assertIn("mount 'x' names no weapon", loadout.problems(unnamed, self.LOADOUTS, "ship"))
+        small = self.built(bays=[{"name": "bay", "craft": "starfury_ally", "capacity": 2}])
+        self.assertIn("bays launch", loadout.problems(small, self.LOADOUTS, "ship")[0])
+
+    def test_every_loadout_weapon_kind_has_a_mount(self) -> None:
+        data = loadout.read()
+        mounted = set(loadout.MOUNT_FOR_KIND)
+        for wid, spec in data["weapons"].items():
+            if spec["kind"] not in ("mine_prox", "fighter_gun"):  # a scenario mine and a fighter's gun stand on no capital mount
+                self.assertIn(spec["kind"], mounted, wid)
 
 
 if __name__ == "__main__":
