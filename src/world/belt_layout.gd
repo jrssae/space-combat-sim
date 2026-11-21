@@ -14,13 +14,16 @@ var rocks: Array[Dictionary] = []
 var shortfall: int = 0
 
 
-## Lays out `belt` ({size: Vector3, count, radius_m: Vector2 (min, max), seed, min_gap_m}) over `shape_count` rock shapes.
+## Lays out `belt` ({size: Vector3, count, radius_m: Vector2 (min, max), seed, min_gap_m, lane_m?}) over `shape_count` rock
+## shapes. `lane_m` (M8-T26; 0 or absent: none) keeps every rock that far clear of the belt's own Z axis through its centre:
+## a lane for a ship whose route runs straight through, whatever the seed.
 static func place(belt: Dictionary, shape_count: int) -> BeltLayout:
 	var layout := BeltLayout.new()
 	var size: Vector3 = belt["size"]
 	var count: int = int(belt["count"])
 	var radii: Vector2 = belt["radius_m"]
 	var gap: float = float(belt["min_gap_m"])
+	var lane: float = float(belt.get("lane_m", 0.0))
 	var rng := RandomNumberGenerator.new()
 	rng.seed = int(belt["seed"])
 	var wanted: Array[float] = []
@@ -40,6 +43,8 @@ static func place(belt: Dictionary, shape_count: int) -> BeltLayout:
 		while tries_left > 0 and not placed:
 			tries_left -= 1
 			var at := Vector3(rng.randf_range(-room.x, room.x), rng.randf_range(-room.y, room.y), rng.randf_range(-room.z, room.z))
+			if lane > 0.0 and Vector2(at.x, at.y).length() < lane + r:
+				continue
 			if _clear(grid, cell, at, r, gap, layout.rocks):
 				var key := Vector3i((at / cell).floor())
 				if not grid.has(key):

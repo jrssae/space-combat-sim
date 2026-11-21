@@ -43,7 +43,7 @@
    "position": [
     0,
     0,
-    -45000
+    -60000
    ]
   }
  ],
@@ -52,7 +52,27 @@
    "centre": [
     0,
     0,
-    -22500
+    -19000
+   ],
+   "size": [
+    14000,
+    3000,
+    6000
+   ],
+   "count": 150,
+   "seed": 11,
+   "radius_m": [
+    10,
+    150
+   ],
+   "min_gap_m": 200,
+   "lane_m": 250
+  },
+  {
+   "centre": [
+    0,
+    0,
+    -30000
    ],
    "size": [
     24000,
@@ -60,12 +80,53 @@
     12000
    ],
    "count": 600,
+   "seed": 4,
    "radius_m": [
     10,
     150
    ],
-   "seed": 4,
-   "min_gap_m": 200
+   "min_gap_m": 200,
+   "lane_m": 250
+  },
+  {
+   "centre": [
+    0,
+    0,
+    -47000
+   ],
+   "size": [
+    14000,
+    3000,
+    7000
+   ],
+   "count": 170,
+   "seed": 12,
+   "radius_m": [
+    10,
+    150
+   ],
+   "min_gap_m": 200,
+   "lane_m": 250
+  },
+  {
+   "centre": [
+    0,
+    0,
+    -53500
+   ],
+   "size": [
+    12000,
+    3000,
+    4000
+   ],
+   "count": 100,
+   "seed": 13,
+   "radius_m": [
+    10,
+    150
+   ],
+   "min_gap_m": 200,
+   "lane_m": 250
   }
  ],
  "civilian_names": {
@@ -121,14 +182,28 @@
      "position": [
       0,
       0,
-      -11250
+      -15000
      ]
     },
     {
      "position": [
       0,
       0,
-      -44000
+      -47000
+     ]
+    }
+   ]
+  },
+  {
+   "name": "ESCORT LAST LEG",
+   "cruise_mps": 120,
+   "pace": "none",
+   "waypoints": [
+    {
+     "position": [
+      0,
+      0,
+      -59000
      ]
     }
    ]
@@ -408,7 +483,7 @@
  },
  "mission": {
   "title": "Civilian escort",
-  "briefing": "A civilian ship is crossing from NAV ALPHA to NAV BETA, 45 km out, through a field of rock. Raiders work this stretch.\n\nHer cargo is sensitive. It must get through. The escort is also a show of force, to deter raiders in this sector.\n\nLead Alpha wing with your wingmen, ALPHA 2 and ALPHA 3, and see the ship through the belt to NAV BETA. Bring them both home.",
+  "briefing": "A civilian ship is crossing from NAV ALPHA to NAV BETA, 60 km out, through four fields of rock. Raiders work this stretch.\n\nHer cargo is sensitive. It must get through. The escort is also a show of force, to deter raiders in this sector.\n\nLead Alpha wing with your wingmen, ALPHA 2 and ALPHA 3, and see the ship through the belt to NAV BETA. Bring them both home.",
   "script": "res://data/missions/civilian_escort.gd",
   "dialog": "res://data/dialog/civilian_escort.json",
   "closing_lines": {

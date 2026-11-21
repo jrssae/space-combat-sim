@@ -50,7 +50,8 @@ extends RefCounted
 ##                                                  #       the New game list, lowest first (M8 D79)}; strings may be ""
 ##      "cinematics": Dictionary,                   # (M5-T05, D55) shot id -> shot, passed through for T08; may be empty
 ##      "belts": Array[Dictionary],                 # `asteroid_belts[]` (M5-T29, D63): each {centre: UniversePos, size: Vector3,
-##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m},
+##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m,
+##                                                  #       lane_m (a clear lane along its Z axis, M8-T26; 0: none)},
 ##                                                  #       the input `BeltLayout.place` takes; may be empty
 ##      "civilian_names": Dictionary,               # (M5-T30) civilian hull -> PackedStringArray of names; may be empty
 ##      "placeholders": Dictionary,                 # (M5-T30) filled by `resolve_random_civilian`: "{civilian}" -> name
@@ -381,9 +382,12 @@ static func _belts(raw: Variant, system: StringName, source: String) -> Variant:
 		var seed_value: Variant = belt.get("seed", 1)
 		if not (seed_value is float or seed_value is int):
 			return "%s: seed must be a number" % where
+		var lane: Variant = belt.get("lane_m", 0.0)
+		if not (lane is float or lane is int) or float(lane) < 0.0:
+			return "%s: lane_m must be a number of at least 0" % where
 		out.append({"centre": centre as UniversePos, "size": size as Vector3, "count": int(count),
 				"radius_m": Vector2(float((radii as Array)[0]), float((radii as Array)[1])), "seed": int(seed_value),
-				"min_gap_m": float(gap)})
+				"min_gap_m": float(gap), "lane_m": float(lane)})
 	return out
 
 

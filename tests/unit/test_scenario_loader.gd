@@ -594,9 +594,18 @@ func test_the_civilian_escort_file_validates() -> void:
 	var props: Array = result["props"]
 	assert_eq(props.size(), 2)
 	assert_eq(props[0]["name"], "NAV ALPHA")
-	assert_almost_eq((props[0]["position"] as UniversePos).distance_to(props[1]["position"]), 45000.0, 1.0, "45 km apart (M8-T26; 30 before)")
+	assert_almost_eq((props[0]["position"] as UniversePos).distance_to(props[1]["position"]), 60000.0, 1.0, "60 km apart (M8-T26; 45 and 30 before)")
 	assert_eq_deep(result["pools"], {&"raider_fighter": 24, &"starfury_ally": 2, &"random_civilian": 1})
-	assert_eq((result["belts"] as Array).size(), 1, "the belt across the route")
+	assert_eq((result["belts"] as Array).size(), 4, "the belt across the middle of the route and three pockets of rock (M8-T26)")
+	var routes: Array = result["routes"]
+	assert_eq(routes.size(), 2, "the route to its holding point, and the last leg to NAV BETA")
+	var script: GDScript = load("res://data/missions/civilian_escort.gd")
+	var hold: Vector3 = script.get("HOLD_AT")
+	var first: Route = routes[0]
+	var origin := UniversePos.new(0.0, 0.0, 0.0, first.waypoint(0).position.system_id)
+	assert_almost_eq(origin.offset_to(first.waypoint(first.count() - 1).position).distance_to(hold), 0.0, 1.0, "its route ends where the script says it waits")
+	assert_lt(hold.z, (script.get("POINT_75") as Vector3).z - 2.0 * MissionStage.HOLD_END_M, "past the 75 % mark by more than it may stop short")
+	assert_eq((routes[1] as Route).name, script.get("LAST_LEG"))
 	assert_eq((result["civilian_names"] as Dictionary).size(), ShipCatalog.CIVILIAN_TYPES.size(), "names for all nine hulls")
 	var mission: Dictionary = result["mission"]
 	assert_eq(mission["script"], "res://data/missions/civilian_escort.gd")
@@ -606,20 +615,34 @@ func test_the_civilian_escort_file_validates() -> void:
 	assert_eq(ids, ["escort", "home", "carrier"], "and, optional, a raider carrier destroyed (M8-T08)")
 
 
-func test_the_escort_belt_leaves_the_route_and_its_middle_point_clear() -> void:
+func test_the_escorts_fields_of_rock_leave_the_route_clear() -> void:
+	# M8-T26: the belt across the middle and three pockets on the way, each with a lane along the route (`lane_m`), so the
+	# straight line is clear whatever the seed. A Saturn 8 is about 100 m round.
 	var result: Dictionary = ScenarioLoader.load("res://data/scenarios/civilian_escort.json")
-	var belt: Dictionary = result["belts"][0]
-	var layout: BeltLayout = BeltLayout.place(belt, 16)
-	assert_eq(layout.rocks.size(), 600, "all 600 rocks fit (12 km deep at the density of the old 8 km, M8-T26)")
-	var middle: float = INF
-	var line: float = INF
-	for rock: Dictionary in layout.rocks:
-		var o: Vector3 = rock["offset"]
-		middle = minf(middle, o.length() - float(rock["radius"]))
-		line = minf(line, Vector2(o.x, o.y).length() - float(rock["radius"]))
-	# A skip places the civilian at the 50 % point, the belt's centre; a Saturn 8 (about 100 m round) passes the straight line.
-	assert_gt(middle, 500.0, "no rock within 500 m of the 50 % point")
-	assert_gt(line, 200.0, "the straight route clears every rock by 200 m")
+	var rocks: int = 0
+	var spans: Array[Vector2] = []
+	for belt: Dictionary in result["belts"]:
+		var layout: BeltLayout = BeltLayout.place(belt, 16)
+		assert_eq(layout.shortfall, 0, "every rock asked for fits")
+		rocks += layout.rocks.size()
+		var centre: UniversePos = belt["centre"]
+		var at: Vector3 = UniversePos.new(0.0, 0.0, 0.0, centre.system_id).offset_to(centre)
+		assert_almost_eq(Vector2(at.x, at.y).length(), 0.0, 1e-3, "centred on the route, which runs along -Z")
+		assert_gte(float(belt["lane_m"]), 250.0, "with a lane")
+		spans.append(Vector2(at.z - 0.5 * (belt["size"] as Vector3).z, at.z + 0.5 * (belt["size"] as Vector3).z))
+		for rock: Dictionary in layout.rocks:
+			var o: Vector3 = rock["offset"]
+			assert_gte(Vector2(o.x, o.y).length() - float(rock["radius"]), float(belt["lane_m"]) - 1e-3,
+					"no rock within the lane round the straight route")
+	assert_between(rocks, 900, 1200, "about a thousand rocks in all: the middle belt's 600 and the pockets'")
+	for i: int in range(1, spans.size()):
+		assert_lt(spans[i].y, spans[i - 1].x, "the fields lie apart along the route, open space between them")
+	var marks: GDScript = load("res://data/missions/civilian_escort.gd")
+	assert_between(spans[0].y, (marks.get("POINT_25") as Vector3).z - 5000.0, (marks.get("POINT_25") as Vector3).z,
+			"the first begins just after the 25 % mark, where the first wave comes")
+	assert_between((marks.get("HOLD_AT") as Vector3).z, spans[2].x, spans[2].y, "the third is where the civilian waits for the last wave")
+	assert_lt(spans[3].y, (marks.get("HOLD_AT") as Vector3).z, "the fourth lies on the last leg, where the last wave is fought")
+	assert_gt(spans[-1].x, (marks.get("BETA_AT") as Vector3).z + 3000.0, "and ends short of NAV BETA")
 
 
 # --- the random civilian (M5-T30, D62) ------------------------------------------------------------------------------------

@@ -834,6 +834,11 @@ func _ai_leads_player_wing() -> bool:
 	return false
 
 
+## The scenario's route called `route_name`, or null (M8-T26: a mission sends a ship on to another of its routes).
+func scenario_route(route_name: String) -> Route:
+	return _route_named(route_name)
+
+
 func _route_named(route_name: String) -> Route:
 	for route: Route in _scenario_routes:
 		if route.name == route_name:

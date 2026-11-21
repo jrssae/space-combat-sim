@@ -697,9 +697,14 @@ the list while it is focused. Each start from the menu draws a new seed, and wit
   controls held until "the flight is yours". **A** or **Start** skips one shot; holding **X** (keyboard Shift or Mouse 4) for 2 s
   skips the whole opening, intro and briefing, to the hand-over (M7-T54; `HOLD X / SHIFT / MOUSE 4: SKIP` and its bar show while
   it can).
-- **The crossing.** The civilian flies to NAV BETA, 45 km out (M8-T26; 30 before), at up to 120 m/s, threading the asteroid
-  belt (24 km across, 12 km deep) in the middle of the route. The second wave waits 60 s after the first is down, the third 30 s;
-  a scripted fought run takes about 15 minutes. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
+- **The crossing (H, changed 2026-11-21).** The civilian flies to NAV BETA, 60 km out (45 and 30 before), at up to 120 m/s,
+  through four fields of rock: a pocket after the 25 % mark, the belt across the middle (24 km across, 12 km deep), a pocket
+  at the 75 % mark and one on the last leg, each with a clear lane along the route. Its route ends 2 km past the 75 % mark,
+  in the third field: it waits there if need be and flies the last 12 km only once the third wave has jumped in, so it
+  cannot be at NAV BETA before that wave is fought. In a scripted fought run it arrives about 100 s after the third wave is
+  beaten and the run takes about 17.5 minutes. Say if the wait in the rocks (when you are slow with the second wave) and
+  the last leg feel right; the distances are data (`data/scenarios/civilian_escort.json`, the marks in the mission script).
+  The second wave waits 60 s after the first is down, the third 30 s. The waypoint marks the civilian. Three raider waves jump in 6 to 12 km off it as it passes
   25 % (6 raiders, before the belt), 50 % (8, inside it) and 75 % (10, past it; M8-T08); a later wave also waits until the one
   before is down and 30 s have passed (M7-T54). A fought run now takes about 12 minutes (it was 6 to 8 with waves of 3, 4
   and 6), and the civilian is often at NAV BETA before the last wave comes. Each wave rides in docked on a raider strike

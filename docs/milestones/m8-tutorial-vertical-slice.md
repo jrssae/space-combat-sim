@@ -1299,6 +1299,33 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
     138 passed, 0 failed, 6 pending (the AI runs, behind `GUT_BALANCE`): `test_civilian_escort` 28 of 34, `test_scenario_loader`
     40, `test_belt_layout` 7, `test_asteroid_belt` 4, `test_dialog_ids` 5, `test_dialog_book` 15, the mission catalog, front
     end and mission skip files.
+- **Fix (2026-11-21, the maintainer's play-test: "the civilian reaches NAV BETA before the second carrier is done"):** measured
+  first (the scripted fought run, seed 3: each wave shot down to three 10 s a raider after contact, the three fly home).
+  - **Before (45 km):** waves at 101, 325 and 631 s, beaten at 265, 540 and 808 s; the civilian passed NAV BETA's place at
+    about 525 s, during the second wave and 100 s before the third came; the run ended at 968 s.
+  - **Now (60 km):** waves at 132, 396 and 660 s, beaten at 318, 629 and 842 s; **the civilian is at NAV BETA at 944 s, 102 s
+    after the third wave is beaten**; the run ends at 1 052 s (17.5 minutes). It never waited on the way in this run.
+  - **Why not further.** Tried 104 km and 65 km first: the civilian arrived 253 s and 177 s after the third wave was beaten
+    (the run 25 and 18 minutes), because it flees sideways in each fight and has to come back. What sets the arrival is the
+    last leg, not the whole distance, so the rule is structural: the civilian's route ends 2 km past the 75 % mark
+    (`HOLD_AT`), where it waits if the player is slow, and `m.fly_route` sends it on the last 12 km (`ESCORT LAST LEG`) only
+    when the third wave has jumped in. It cannot be at NAV BETA before that wave is fought, whatever the player's pace or
+    its own. The marks stay at 25, 50 and 75 % (15, 30 and 45 km).
+  - **Rocks:** four fields instead of one, 1 020 rocks (600 before): a pocket after the 25 % mark (14 by 3 by 6 km, 150), the
+    belt across the middle (24 by 3 by 12 km, 600), a pocket where it waits (14 by 3 by 7 km, 170) and one on the last leg
+    where the third wave is fought (12 by 3 by 4 km, 100). Belts take a `lane_m` now (`BeltLayout`): no rock within it of
+    the belt's own axis, whatever the seed; all four have a 250 m lane along the route. The Saturn 8 crosses all four with
+    no rock hit. On the GPU: 144 fps before and after (capped), 85 and 105 draw calls.
+  - **Also:** the hold point is past the mark because a civilian stopping just short of a mark that is its route's end
+    would never bring the wave (seen in a test before it shipped).
+  - **Tests** (scratch copy of HEAD plus the staged change, `GUT_SLOW=1`): compile check 1 017 scripts; GUT 9 files, 150
+    tests, 144 passed, 0 failed, 6 pending (the AI runs, behind `GUT_BALANCE`): `test_civilian_escort` 28 of 34 (new: it
+    waits in the third field until the last wave comes; the fought run now asserts the timeline: at NAV BETA after every
+    wave has come and closed, within -60 to +240 s of the third being beaten), `test_scenario_loader` 40 (the four fields,
+    their lanes, the two routes), `test_belt_layout` 8 (1 new: the lane), the asteroid belt, dialog, mission catalog,
+    mission runner, mission skip and front-end files. One AI-flown run (the wing and an AI for the player, seed 2, on
+    the 104 km try) lost the civilian in the first wave at 649 s, as those runs do; it gave no timeline.
+  - **(H):** fly it; `docs/playtest.md`, "The crossing".
 
 ### M8-T27 Remove the Raider Battle Wagon
 
