@@ -279,14 +279,18 @@ static func _edge_arrow(input: HudInput, f: HudFrame, point: Vector3) -> Diction
 # --- route waypoint (M3-T09) -------------------------------------------------------------------------------------------
 
 
-# The route's next waypoint: a marker where it projects, or an edge arrow, with its label and range.
+# The route's next waypoint: a marker where it projects, or an edge arrow, with its label and range. A waypoint that sits
+# on the selected target shows no marker of its own: the target's mark already names it and gives its range, and two labels
+# on one spot ran into each other (M8-T33's play-test). Its diamond on the radar stays.
 static func _waypoint(input: HudInput, f: HudFrame) -> void:
 	if not input.has_waypoint:
+		return
+	f.waypoint_radar_index = f.radar_plot.ids.find(input.waypoint_id) if input.waypoint_id != 0 else -1
+	if input.waypoint_id != 0 and input.target != null and input.selected_id == input.waypoint_id:
 		return
 	f.waypoint_present = true
 	f.waypoint_label = input.waypoint_label
 	f.waypoint_range_m = input.own_position.distance_to(input.waypoint_position)
-	f.waypoint_radar_index = f.radar_plot.ids.find(input.waypoint_id) if input.waypoint_id != 0 else -1
 	var shown: Dictionary = project(input, input.waypoint_position)
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.waypoint_on_screen = true

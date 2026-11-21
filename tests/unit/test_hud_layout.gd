@@ -188,6 +188,32 @@ func test_no_target_no_box_no_lead() -> void:
 # --- route waypoint (M3-T09) -------------------------------------------------------------------------------------------
 
 
+## M8-T33's play-test: a mission's waypoint on the selected target showed two labels with two ranges on one spot.
+func test_a_waypoint_on_the_selected_target_shows_the_targets_label_alone() -> void:
+	var input: HudInput = _hud_input()
+	input.has_waypoint = true
+	input.waypoint_position = Vector3(0.0, 0.0, -3000.0)
+	input.waypoint_label = "JUMPGATE"
+	input.waypoint_id = 4242
+	input.target = _target(Vector3(0.0, 0.0, -3000.0))
+	input.selected_id = 4242
+	var merged: HudFrame = HudLayout.compute(input)
+	assert_true(merged.target_present, "the target's mark and label stay")
+	assert_false(merged.waypoint_present, "the waypoint's own marker and label are left out")
+	assert_false(merged.waypoint_on_screen or merged.waypoint_edge_visible)
+	input.selected_id = 7
+	var apart: HudFrame = HudLayout.compute(input)
+	assert_true(apart.waypoint_present, "another target selected: the objective keeps its label")
+	assert_eq(apart.waypoint_label, "JUMPGATE")
+	input.target = null
+	input.selected_id = 0
+	assert_true(HudLayout.compute(input).waypoint_present, "nothing selected: the objective's label shows")
+	input.waypoint_id = 0
+	input.selected_id = 0
+	input.target = _target(Vector3(0.0, 0.0, -3000.0))
+	assert_true(HudLayout.compute(input).waypoint_present, "a bare place is no target: it keeps its marker")
+
+
 func test_the_waypoint_marker_sits_on_the_projected_route_point() -> void:
 	var input: HudInput = _hud_input()
 	assert_false(HudLayout.compute(input).waypoint_present, "no route, no marker")
