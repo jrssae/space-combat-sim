@@ -12,7 +12,7 @@ extends CapitalBody
 ##   of fire see the real shape; a hit or ram is named by its section (`section_hit`) for T08.
 ## - **In play.** `Targetable` of kind capital, heard as far as its class broadcasts (`CapitalData.broadcast_range_m`); in the
 ##   low-attention tier it is a capital row (`CapitalBody`); it opens and holds its own jump point at its anchor when its type
-##   can (`open_own_point`).
+##   can (`open_own_point`). Destroyed, the `DestructionDirector` draws its blast and it leaves play (`leave_play`).
 ##
 ## Console: provider and command `capital` (`CapitalConsole`).
 
@@ -104,6 +104,9 @@ func _ready() -> void:
 	_register_surfaces()
 	if _world_signals != null:
 		CapitalFlight.attach(_world_signals).join(self)
+	var destruction: DestructionDirector = DestructionDirector.current()
+	if destruction != null:
+		destruction.watch_capital(self)  # its death is drawn and takes it out of play (M10-T21)
 
 
 func _exit_tree() -> void:
@@ -171,6 +174,16 @@ func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> v
 	super.unpark_from_tier(xform, velocity, spin)
 	for rotor: CapitalRotor in rotors:
 		rotor.snap()
+
+
+## Out of play for good once destroyed: its sections leave the core too, so no bolt or ram meets the wreck before T11's break-up.
+func leave_play() -> void:
+	super.leave_play()
+	if _core != null and is_instance_valid(_core):
+		_core.clear_surface(get_instance_id())
+		for rotor: CapitalRotor in rotors:
+			_core.clear_surface(rotor.get_instance_id())
+	_core = null
 
 
 ## Opens its own jump point at its anchor from `pool` (`direction` arrival or departure) and holds it; null when it cannot

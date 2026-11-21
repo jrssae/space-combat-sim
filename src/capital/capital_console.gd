@@ -13,6 +13,7 @@ var flight: CapitalFlight = null
 var focus: CapitalShip = null
 var _points: JumpPointPool = null
 var _spawned: int = 0
+var _named: Dictionary = {}  # type -> how many of its names `spawn` has given
 
 
 func _init(p_flight: CapitalFlight) -> void:
@@ -82,8 +83,14 @@ func _spawn(type: StringName, ahead_m: float) -> ConsoleResult:
 	if world == null or player == null or not is_instance_valid(player.ship):
 		return ConsoleResult.failure("capital spawn: no player to place it by")
 	_spawned += 1
-	var label: String = "%s %d" % [String(type).to_upper().replace("_", " "), _spawned]
-	var ship: CapitalShip = CapitalShip.create(type, ShipCatalog.faction_for(type), label, player.ship.linear_velocity)
+	var faction: StringName = ShipCatalog.data().faction(type)
+	# A class with a name list gives its ships their names (the Omegas' Greek ones); the rest are numbered by type.
+	var label: String = ShipNames.pick(type, faction, _named.get(type, 0))
+	if label.is_empty():
+		label = "%s %d" % [String(type).to_upper().replace("_", " "), _spawned]
+	else:
+		_named[type] = int(_named.get(type, 0)) + 1
+	var ship: CapitalShip = CapitalShip.create(type, faction, label, player.ship.linear_velocity)
 	if ship == null:
 		return ConsoleResult.failure("capital spawn: %s is not generated (scripts/gen_assets.sh, then import)" % type)
 	var basis: Basis = player.ship.global_basis

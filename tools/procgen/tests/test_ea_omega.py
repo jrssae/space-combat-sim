@@ -106,7 +106,12 @@ class OmegaBuildTests(unittest.TestCase):
         for e in self.hp["engines"]:
             self.assertAlmostEqual(self.authored(e["position"])[2], eo.om.ENGINE_MOUTH_Z, places=3)
         roles = sorted(light["role"] for light in self.hp["lights"])
-        self.assertEqual(roles, ["beacon", "beacon", "port", "starboard", "top"])
+        self.assertEqual(roles, ["bay"] * BAYS + ["beacon", "beacon", "port", "starboard", "top"], "and one red light in each bay")
+        bay_lights = {light["name"]: light for light in self.hp["lights"] if light["role"] == "bay"}
+        for bay in self.hp["bays"]:
+            light = bay_lights[f"{bay['name']}_light"]
+            self.assertEqual(light["section"], bay["section"])
+            self.assertNotIn("craft", light, "a bay's craft and capacity are its launch point's alone")
         port = next(light for light in self.hp["lights"] if light["role"] == "port")
         self.assertLess(port["position"][0], 0.0, "red to port")
 

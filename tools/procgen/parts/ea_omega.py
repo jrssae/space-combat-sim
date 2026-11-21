@@ -199,7 +199,7 @@ def bay_centres() -> list[float]:
 
 def drum_arm(s: Style, section: str) -> list[cp.Module]:
     """The starboard arm at rest (it reaches along +x): the body, the neck, the cap's bar and slope, and the rim with its
-    launch bays, each bay opening outward through the rim's face."""
+    launch bays, each bay opening outward through the rim's face, in the hull's paint and lit red (the maintainer, 2026-11-21)."""
     z0, z1 = DRUM_Z
     body = cs.prism("arm_body_r", [(79.0, -81.0), (79.0, 81.0), (111.0, 101.0), (139.0, 101.0), (186.0, 55.0), (186.0, -55.0), (139.0, -101.0),
                                    (111.0, -101.0)], z0, z1, s, DECKED)
@@ -209,17 +209,17 @@ def drum_arm(s: Style, section: str) -> list[cp.Module]:
     half = 0.5 * BAY_MOUTH[1] + BAY_WALL  # the bays' strip through the rim, above and below the axis plane
     back = DRUM_REACH - BAY_DEPTH - BAY_WALL
     rim_top = cs.prism("arm_rim_top_r", [(272.0, half), (272.0, 41.0), (294.6, 41.0), (DRUM_REACH, 25.0), (DRUM_REACH, half)], z0, z1, s, DECKED)
-    rim_back = cs.box("arm_rim_back_r", (272.0, -half, z0), (back, half, z1), s, DARK)
+    rim_back = cs.box("arm_rim_back_r", (272.0, -half, z0), (back, half, z1), s, DECKED)
     out = [body, neck, bar, slope, rim_top, _flip_y(rim_top, "arm_rim_low_r"), rim_back]
     # Between the bays the strip is solid; each bay's housing fills its own stretch, its mouth flush with the rim.
     width = BAY_MOUTH[0] + 2.0 * BAY_WALL
     edges = [z0] + [c + d for c in bay_centres() for d in (-0.5 * width, 0.5 * width)] + [z1]
     for k in range(0, len(edges), 2):
-        out.append(cs.box(f"arm_rim_block_{k // 2 + 1}_r", (back, -half, edges[k]), (DRUM_REACH, half, edges[k + 1]), s, DARK))
+        out.append(cs.box(f"arm_rim_block_{k // 2 + 1}_r", (back, -half, edges[k]), (DRUM_REACH, half, edges[k + 1]), s, DECKED))
     outward = np.array([[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])  # a bay's way out (-z) turned to +x, its width along z
     for k, zc in enumerate(bay_centres()):
-        bay = bays.launch_bay(f"bay_{k + 1}_r", BAY_MOUTH, BAY_DEPTH, s, BAY_WALL).transformed(outward, (DRUM_REACH, 0.0, zc))
-        out.append(bay.with_params(craft=CRAFT, capacity=STARFURIES_PER_BAY))
+        bay = bays.launch_bay(f"bay_{k + 1}_r", BAY_MOUTH, BAY_DEPTH, s, BAY_WALL, lit=True).transformed(outward, (DRUM_REACH, 0.0, zc))
+        out.append(bay.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES_PER_BAY))
     return [_put(section, m, cp.RIGHT) for m in out]
 
 

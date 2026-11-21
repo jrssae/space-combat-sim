@@ -381,7 +381,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
-| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | in progress |
+| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
 | T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | not started |
 | T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | not started |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
@@ -675,6 +675,25 @@ On top of it:
   largest of all): check their jump points and far representations.
   T60 is built on T36's parts, with T04's Vorlon mechanics.
   T27: two variants (Q41). T28, T33, T34: hexagonal skin (Q45). T35: no jump points or gates, it shimmers (Q44).
+- **T21 done (2026-11-21).** `ea_omega`, the Omega-class destroyer (1 714.3 m; 11 948 triangles; two 4 096 px atlases,
+  measured 110 MB high and 30 MB low): `tools/procgen/assets/ea_omega.py` on `parts/ea_omega.py` (measured off the STL),
+  `parts/capital_solids.py`, `styles/ea_capital.py` (look A, approved) and `core/loadout.py` (mounts against
+  `data/capitals/loadouts.json`: 4 heavy plasma, 12 pulse, 6 sweep beams, 2 missile batteries, 8 interceptors, 8 bays of 4
+  Starfuries). Compare 0.969 / 0.950 / 0.930, sizes within 0.2 %, all 31 part sections at 0.91 or over; as built in
+  `docs/assets-capital.md`, "`ea_omega`". **Lit bays** (the maintainer): the bays keep the hull's paint and glow red, as the
+  station's docking bay (its red and its lamps), through `capital_bays.launch_bay(lit=True)` and
+  `styles/ea_capital.bay_light_materials`, for every EA hull; each bay has a `bay` light hardpoint. **Names**:
+  `data/ships/names.json` and `ShipNames` (twenty Greek names for the Omega, `EAS Agamemnon` first; a list per class);
+  `capital spawn` uses them. In the game: `assets/ships/ea_omega.tres` (1.05e9 kg, 1.2 m/s2, reaction with stand-in
+  retros, 2 deg/s, 30 000 hull points, own jump points), catalogue `ea_omega` (class `destroyer`: 500 km, 90 s recharge);
+  the drum a `CapitalRotor` (`AnimatableBody3D`). **Every `CapitalShip` now dies**: the destruction director watches it and
+  `leave_play` clears its sections from the core. Tests (staged copy): Python 113 (+2 STL section tests run with the
+  references linked); GUT `test_ea_omega` 3 (spawns named, flies and brakes, takes the Starfury's fire on the drum's
+  sections and dies), `test_ship_names` 3, with `test_capital_ship`, `test_jump_capability`, the catalogue files, the
+  console list and `test_capital_framework_asset`: 52 + 18 in two batches, all passing after the fix in the second.
+  Look sheet `references/screenshots/M10-T21 Omega/look_sheet.png`. **Open:** its weapons fire with T12 to T14 (the numbers
+  are T03's loadout; no `WeaponSpec`s yet); the renegades' marking is T02's (the `livery` hook unused); at 100 km it is under
+  a pixel (no far representation); the bay lights are hardpoints only until a light rig reads capital lights.
 - **Faction fighters (T38 to T42):** the fighter pipeline (the generator as `raider_fighter`, not the capital framework),
   with T06's parts where organic; its `ShipSpec`, thruster layout, guns per T03, a pilot profile, break-up chunks. Done
   when a seeded fight against Starfuries also runs headless; its carriers launch it in T17.

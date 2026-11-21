@@ -147,10 +147,11 @@ class Module:
     def on_side(self, side: str) -> Module:
         return dataclasses.replace(self, side=side)
 
-    def with_params(self, **params: Any) -> Module:
-        """The module with ``params`` added to every hardpoint it carries: the weapon that stands on a mount (``weapon``), the
-        craft a bay launches and how many it holds (``craft``, ``capacity``)."""
-        return dataclasses.replace(self, hardpoints=tuple(dataclasses.replace(h, params={**h.params, **params}) for h in self.hardpoints))
+    def with_params(self, only: str | None = None, **params: Any) -> Module:
+        """The module with ``params`` added to every hardpoint it carries (or only to those of kind ``only``): the weapon that
+        stands on a mount (``weapon``), the craft a bay launches and how many it holds (``craft``, ``capacity``)."""
+        return dataclasses.replace(self, hardpoints=tuple(dataclasses.replace(h, params={**h.params, **params}) if only in (None, h.kind) else h
+                                                          for h in self.hardpoints))
 
     def mounted(self, position: Sequence[float], up: Sequence[float] = (0.0, 1.0, 0.0),
                 forward: Sequence[float] = (0.0, 0.0, -1.0)) -> Module:

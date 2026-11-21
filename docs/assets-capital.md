@@ -408,6 +408,95 @@ over by its cradle. The `jump_point` anchor is where it opens the point it leave
 - The decks' sheen: square-on to the sun a deck shows one bright highlight; the plating stays readable beside it.
 - VRAM and frame cost on the target GPU (the sheets were shot on oscar's R9 280X).
 
+## `ea_omega` (M10-T21)
+
+`tools/procgen/assets/ea_omega.py` on `parts/ea_omega.py` (the structure, measured off the reference), the capital parts
+library, `parts/capital_solids.py` and `styles/ea_capital.py`. The shape is described in `docs/design-references.md`, "EA
+Omega-class destroyer". Earth Alliance only; the renegades fly it with their marking (M10-T02, not built here: the style's
+`livery` hook stays unused).
+
+### Measurements
+
+| | |
+|---|---|
+| Reference | `EA Omega Destroyer.stl`, mapping `--right=+y --up=+z --aft=+x`; the drum is turned 45 degrees in the file (`drum_deg -45` builds it so for the compare) |
+| Length | **1 714.3 m** (T01) |
+| Span, height | 474.6 m, 545.3 m with the drum turned as the reference's (474 x 545); 620 x 478 m at rest, the arms to port and starboard |
+| Pieces | `hull` and `drum`, the rotating section (555 to 879 m from the boom's tip), on its own 4 096 px atlas, turning at 0.1 rad/s about the spine's axis (about a third of a g at the arms' bodies) |
+| Triangles | 11 948 (budget 100 000) |
+| Texture sets | 109.3 MB high, 29.3 MB low (budget 109.3 and 29.3: two 4 096 px atlases); measured 110 MB high and 30 MB low on the RX 6950 XT (model sheet, against the empty scene) |
+| Mass (informational) | 1 053 kt from the skin's area at 260 kg/m2; the `ShipSpec` takes it (1.05e9 kg) |
+
+### Sections and hardpoints
+
+Twelve sections: `bow`, `bridge`, `fuel` (the reactant tanks under the command block), `spine_fore`, the drum's `drum_hub`,
+`hangar_r` and `hangar_l`, `magazine`, `spine_aft`, `reactor` (the engine housing), `engine_r` and `engine_l`; blast
+energies on the fuel, magazine and reactor. Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
+
+- 4 `ea_plasma_heavy` turrets on the forward spine's centre line (two above, two below), 24 m (the maintainer, 2026-11-21);
+- 12 `ea_pulse_medium` turrets on the spines' corners, in three rings of four;
+- 6 `ea_sweep_beam` emitters: one on each shield's pod covering the fore hemisphere, four on the skirt's corners the aft;
+- 2 `ea_missile` batteries on the aft spine over the magazine;
+- 8 `ea_interceptor` domes along the flanks;
+- 8 launch bays in the drum's rims, four an arm, `craft` `starfury_ally` and `capacity` 4 each (32 Starfuries);
+- running lights (red to port, green to starboard, white on the roof, red-orange beacons at the keel and the stern), the
+  four engines in a square, and a jump anchor 1 500 m ahead with a 450 m mouth.
+
+**The lit bays** (the maintainer, 2026-11-21: the bays keep the hull's colour and glow red, as Babylon 5's docking bay; every
+EA hull's bays do). `parts/capital_bays.launch_bay(lit=True)`: the frame round the mouth in the hull's paint, a red band
+round the mouth on its face, three rings of red strips down the hall (the first at the mouth, the deeper ones dimmer), red
+guide strips on the deck, a red lamp at each corner of the mouth and the hall's walls faintly red; each bay also gets a
+light hardpoint of role `bay` (`bay_1_r_light`, red, in the hall's mouth) for the game's light rig. The colours are the
+station's: `BAY_RED` for the strips (1.6 at the mouth, as the station's mouth frames; 0.9 inside) and its red lamp. The roles
+(`bay_light`, `bay_light_deep`, `bay_lamp`, `bay_hall`) come with `styles/ea_capital.bay_light_materials`, which the
+Hyperion, Nova, Warlock and Explorer get with the style.
+
+### Fidelity (Q10)
+
+```
+.venv/bin/python3 -I tools/refview/compare.py "references/EA Omega Destroyer.stl" ea_omega --length 1714.3 --right=+y --up=+z --aft=+x
+```
+
+(built with `drum_deg -45`, as the reference has its drum).
+
+| View | IoU | | Dimension | Mesh / STL |
+|---|---|---|---|---|
+| top | 0.969 | | length | 1.000 (1 714.3 / 1 714.3 m) |
+| side | 0.950 | | width | 1.001 (474.6 / 473.9 m) |
+| front | 0.930 | | height | 1.000 (545.3 / 545.1 m) |
+
+**Per-part sections** (`parts/ea_omega_fidelity.py`, `tools/refview/sections.py`; `test_ea_omega.py` holds them): the bow
+block, the tankage (its forward plane by outline: the reference's tanks are open shells there), the command section, both
+spines, the collars, each drum arm and the hub (turned back 45 degrees, each in its own window), the engine housing and the
+engines, 31 planes, every one at 0.91 or over; no exemptions.
+
+### Surface: look A, show grey with a rust face (the maintainer, 2026-11-21)
+
+From three options (B, station grey and clean; C, dark gunmetal with an ochre face): a mottled blue-grey plate mosaic
+(18 x 9 m plates cut twice, frames every 30 m), dark recessed bands, the command section's fore face rust ochre, black
+window rows, blue-white engine throats.
+
+### In the game
+
+`assets/ships/ea_omega.tres`, catalogue `ea_omega`, capital class `destroyer` (heard 500 km out, a 90 s jump recharge):
+1.05e9 kg, 1.2 m/s2 on its four mains with stand-in retros at half a main (reaction, Q51: no flip), turns at 2 degrees a
+second (1.5 in roll), 30 000 hull points, opens its own jump points. `CapitalShip` builds it; the drum is a `CapitalRotor`
+(an `AnimatableBody3D`, as the station's drum) whose hits are named `drum_hub`, `hangar_r` or `hangar_l`. Destroyed, it leaves
+play through the destruction director, its sections gone from the core; the staged break-up along its section chunks is
+T11's. Its guns, beams, missiles and interceptors fire when T12 to T14 put capital weapons on the native rows; the weapon
+numbers are `data/capitals/loadouts.json`'s. Names: `data/ships/names.json` gives the Omegas twenty Greek names, the
+Agamemnon first, as `EAS <name>` (`ShipNames`; the console's `capital spawn ea_omega` uses them).
+
+Sheets (gitignored, `references/screenshots/M10-T21 Omega/`): `look_sheet.png` with its shots in `look_sheet/` (from 50 m,
+1 km, 10 km and 100 km, the drum in the low texture set, the lit bays from 60 m and into one from 40 m, lit and back-lit), made
+with `scripts/model_sheet.sh`; `option_sheet.png` and `section_compare.png` from stage 1. At 100 km the hull is under a pixel.
+
+### Open for the human tester `(H)`
+
+- The lit bays' red: strength and how far off it still reads.
+- The 4 096 px atlas over 1.7 km from 50 m (the plates and the detail tile carry it).
+- VRAM and frame cost with Omegas in a fight.
+
 ## M10 lengths (T01)
 
 Stage 1 of M10-T01 (Q4, Q22, Q48): every M10 hull's quoted length with its sources, the reference STL's proportions, the

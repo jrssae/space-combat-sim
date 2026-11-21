@@ -1,6 +1,6 @@
 """Earth Alliance warships (M10-T21, the Omega first; the Hyperion, Nova and Warlock follow): the fleet's grey plating in a
 panel mosaic (``styles/capital.PanelMosaic``), dark recessed bands, a painted face on the command section, black window
-rows, red-orange running lights and blue-white engines.
+rows, red-orange running lights, blue-white engines and the fleet's red-lit launch bays.
 
 Colours are sRGB read off the stills in ``references/show/m10/ea_omega/`` (gitignored): the plating a mottled blue-grey
 that wanders from plate to plate, the command section's fore face a rust ochre, the rotating section's slats a darker
@@ -22,12 +22,18 @@ from ..core.geometry import Material
 from . import Style
 from .capital import CapitalStyle, PanelMosaic
 from .ea_civilian import lin
+from .earth_alliance_station import BAY_RED, LAMP_GLOW, LAMP_STRENGTH
 
 PREFIX = "eaw"
 ENGINE_GLOW = 0xBFD8FF  # the blue-white of the wake in the stills
 ENGINE_STRENGTH = 4.0
 DECK_GLOW = 0xFFC890  # the warm light in a launch bay's hall
 WINDOW_GLOW = 0xFFE7C2
+# A launch bay's red light (the maintainer, 2026-11-21: every EA hull's bays, as Babylon 5's docking bay): the station's red, bright
+# round the mouth and dimmer inside, and its red lamps at the mouth's corners. ``parts/capital_bays.launch_bay(lit=True)`` uses them.
+BAY_MOUTH_STRENGTH = 1.6  # the station's mouth frames
+BAY_DEEP_STRENGTH = 0.9
+BAY_HALL_STRENGTH = 0.12  # the hall's walls, faintly red as if lit by the strips
 
 
 @dataclass(frozen=True)
@@ -89,6 +95,7 @@ def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None
                  for role, (paneled, metallic, roughness) in ROLES.items()}
     materials["hazard"] = Material(f"{tag}_deck_lit", capture_albedo(0x8A8474), emissive=lin(DECK_GLOW), emissive_strength=0.6)
     materials["window"] = Material(f"{tag}_window", capture_albedo(0x2A2824), emissive=lin(WINDOW_GLOW), emissive_strength=1.5)
+    materials.update(bay_light_materials(tag))
     materials["nozzle_throat"] = Material(f"{tag}_nozzle_throat", capture_albedo(0x1C1B1A), metallic=0.8, roughness=0.45, emissive=lin(ENGINE_GLOW),
                                           emissive_strength=ENGINE_STRENGTH)
     style = Style(
@@ -107,4 +114,16 @@ def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None
     return CapitalStyle(f"ea_capital_{look}", style, skin)
 
 
-__all__ = ["DEFAULT_LOOK", "LOOKS", "Look", "ea_capital"]
+def bay_light_materials(tag: str) -> dict[str, Material]:
+    """The roles a lit launch bay draws its glow in (``parts/capital_bays.BAY_LIGHT_ROLES``), named under ``tag``: any style whose
+    hulls have red-lit bays adds these."""
+    red = lin(BAY_RED)
+    return {
+        "bay_light": Material(f"{tag}_bay_light", capture_albedo(0xD8D0C0), emissive=red, emissive_strength=BAY_MOUTH_STRENGTH),
+        "bay_light_deep": Material(f"{tag}_bay_light_deep", capture_albedo(0xD8D0C0), emissive=red, emissive_strength=BAY_DEEP_STRENGTH),
+        "bay_lamp": Material(f"{tag}_bay_lamp", capture_albedo(0x7A2A24), emissive=lin(LAMP_GLOW), emissive_strength=LAMP_STRENGTH),
+        "bay_hall": Material(f"{tag}_bay_hall", capture_albedo(0x3C3838), metallic=0.5, roughness=0.6, emissive=red, emissive_strength=BAY_HALL_STRENGTH),
+    }
+
+
+__all__ = ["DEFAULT_LOOK", "LOOKS", "Look", "bay_light_materials", "ea_capital"]

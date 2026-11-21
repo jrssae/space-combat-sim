@@ -38,6 +38,8 @@
       "faction": "raiders", "role": "capital", "capital_class": "strike_carrier", "pooled": false, "look_sheet": "hull"},
     {"id": "capital_test_cruiser", "spec": "res://assets/ships/capital_test_cruiser.tres", "asset": "capital_test_cruiser",
       "faction": "earth_alliance", "role": "capital", "capital_class": "cruiser", "pooled": false, "name": "Test cruiser"},
+    {"id": "ea_omega", "spec": "res://assets/ships/ea_omega.tres", "asset": "ea_omega",
+      "faction": "earth_alliance", "role": "capital", "capital_class": "destroyer", "pooled": false, "name": "Omega-class destroyer"},
     {"id": "ea_shuttle", "spec": "res://assets/ships/ea_shuttle.tres", "asset": "ea_shuttle",
       "faction": "earth_alliance", "role": "civilian", "ai_profile": "civilian", "name": "EA shuttle",
       "look_sheet": "pool", "callsign": "SHUTTLE", "random_pool": false},

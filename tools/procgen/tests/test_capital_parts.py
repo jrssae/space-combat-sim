@@ -17,6 +17,7 @@ from tools.procgen.parts import capital_fittings as fittings
 from tools.procgen.parts import capital_hull as hull
 from tools.procgen.parts import capital_weapons as weapons
 from tools.procgen.styles.capital import FRAMEWORK_GREY
+from tools.procgen.styles.ea_capital import ea_capital
 
 STYLE = FRAMEWORK_GREY.style
 STATIONS = (hull.Station(0.0, 20.0, 10.0, 3.0), hull.Station(40.0, 22.0, 11.0, 4.0), hull.Station(70.0, 15.0, 8.0, 2.0, 1.0))
@@ -104,6 +105,32 @@ class CapitalPartsTests(unittest.TestCase):
             if len(inside):
                 self.assertGreater(float(col.gaps(bay.shapes, inside).min()), 0.2, f"hall clear at z = {z:.1f}")
         self.assertEqual(float(col.gaps(bay.shapes, np.array([[0.0, 0.0, 30.5]])).max()), 0.0, "the hall has a back wall")
+
+    def test_a_lit_bay_keeps_the_hull_paint_and_glows_red(self) -> None:
+        ea = ea_capital().style
+        plain = bays.launch_bay("bay", (18.0, 12.0), 30.0, ea, 2.0)
+        lit = bays.launch_bay("bay", (18.0, 12.0), 30.0, ea, 2.0, lit=True)
+
+        def used(m: cp.Module) -> set[str]:
+            mesh = m.part.mesh
+            return {mesh.materials[i].name for i in set(mesh.face_material.tolist())}
+
+        roles = {role: ea.material(role).name for role in ("hull", "hazard", "hazard_dark", *bays.BAY_LIGHT_ROLES)}
+        self.assertTrue({roles["hazard_dark"], roles["hazard"]} <= used(plain))
+        self.assertFalse({roles["hazard_dark"], roles["hazard"]} & used(lit), "no dark frame or warm deck: the hull's paint round the mouth")
+        self.assertTrue({roles[r] for r in bays.BAY_LIGHT_ROLES} <= used(lit), "the mouth's band, the hall's strips and the corner lamps")
+        for role in bays.BAY_LIGHT_ROLES:
+            glow = ea.material(role)
+            self.assertGreater(glow.emissive_strength, 0.0, role)
+            self.assertGreater(glow.emissive[0], 4.0 * glow.emissive[1], f"{role} is red")
+        self.assertEqual([s.name for s in lit.shapes], [s.name for s in plain.shapes], "the light adds no collision")
+        launch, light = lit.hardpoints
+        self.assertEqual((launch.kind, light.kind, light.params["role"]), (cp.BAY, cp.LIGHT, bays.BAY_LIGHT_ROLE))
+        self.assertTrue(0.0 < float(light.position[2]) < 30.0, "the light is in the hall")
+        np.testing.assert_allclose(light.forward, (0.0, 0.0, -1.0), err_msg="shining out of the mouth")
+        lo, hi = lit.part.mesh.bounds()
+        self.assertGreater(float(lo[2]), -1.0, "nothing stands more than a lamp proud of the mouth")
+        self.assertLessEqual(float(hi[0]), 11.0 + 1e-6, "nor outside the housing")
 
     def test_a_tube_starts_at_its_breech_and_its_bore_is_open(self) -> None:
         tube = self.parts["launch_tube"]
