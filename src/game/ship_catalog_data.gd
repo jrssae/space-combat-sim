@@ -14,13 +14,15 @@ extends RefCounted
 ## - `look_sheet`: `pool` parks a pooled ship of this type for the asset's look sheet, `hull` the bare hull (`LookScene`).
 ## - `docking`: where it docks at the station: `tunnel` (the main docking bay) or `cargo_bay` (`DockingPlan`).
 ## - `callsign`: the name an encounter or station civilian of this type calls in under.
+## - `random_pool`: false keeps a civilian out of the hulls random traffic, encounters and `random_civilian` spawns draw from
+##   (default true); a mission names such a hull itself (the shuttles, M10-T57).
 ## Entry order matters: every list built from the file keeps it, and seeded picks index into those lists.
 
 const ROLES: Array[String] = ["fighter", "civilian", "capital"]
 const DOCKING: Array[String] = ["", "tunnel", "cargo_bay"]
 const LOOK_SHEETS: Array[String] = ["", "pool", "hull"]
 const REQUIRED: Array[String] = ["id", "spec", "asset", "faction", "role"]
-const OPTIONAL: Array[String] = ["ai_profile", "capital_class", "pooled", "name", "look_sheet", "docking", "callsign"]
+const OPTIONAL: Array[String] = ["ai_profile", "capital_class", "pooled", "name", "look_sheet", "docking", "callsign", "random_pool"]
 
 ## Why the file was refused ("" when it is good); a refused file has no entries.
 var error: String = ""
@@ -77,6 +79,16 @@ func ids() -> Array[StringName]:
 ## The types `ShipPool` builds by name, in file order.
 func pooled_ids() -> Array[StringName]:
 	return _list("pooled", func(e: Dictionary) -> bool: return bool(e.get("pooled", true)))
+
+
+## The civilian hulls random picks draw from, in file order: every civilian but those marked `random_pool: false`.
+func civilian_pool() -> Array[StringName]:
+	return _list("civilian_pool", func(e: Dictionary) -> bool: return e["role"] == "civilian" and bool(e.get("random_pool", true)))
+
+
+## Whether random picks may draw `id` (true for anything not marked otherwise).
+func in_random_pool(id: StringName) -> bool:
+	return _by_id.has(id) and bool(_by_id[id].get("random_pool", true))
 
 
 ## The types whose `key` is `value`, in file order.
@@ -142,6 +154,8 @@ func _add(raw: Variant) -> String:
 		return "look_sheet must be one of %s" % [LOOK_SHEETS]
 	if e.has("pooled") and not (e["pooled"] is bool):
 		return "pooled must be true or false"
+	if e.has("random_pool") and not (e["random_pool"] is bool):
+		return "random_pool must be true or false"
 	_entries.append(e)
 	_by_id[id] = e
 	return ""

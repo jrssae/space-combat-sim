@@ -76,6 +76,16 @@ func test_hulls_built_another_way_are_listed_but_not_pooled() -> void:
 	assert_eq(ShipCatalog.entry_text(&"raider_strike_carrier", "spec"), CapitalStandin.CLASSES[CapitalStandin.STRIKE_CARRIER]["spec"])
 
 
+func test_the_shuttles_are_civilians_only_missions_place() -> void:
+	for type: StringName in [&"ea_shuttle", &"ea_atmo_shuttle"]:
+		assert_true(ShipCatalog.has_type(type), "%s is pooled" % type)
+		assert_true(ShipCatalog.is_civilian(type), "%s carries the civilian role" % type)
+		assert_eq(ShipCatalog.faction_for(type), Factions.EARTH_ALLIANCE)
+		assert_false(ShipCatalog.civilian_types().has(type), "%s stays out of random traffic and encounters" % type)
+		assert_false(DockingPlan.tunnel_types().has(type), "%s is not station traffic" % type)
+		assert_eq(LookScene.pool_types().get(String(type)), type, "its look sheet parks one")
+
+
 func test_default_factions() -> void:
 	assert_eq(ShipCatalog.faction_for(&"starfury_ally"), Factions.EARTH_ALLIANCE)
 	assert_eq(ShipCatalog.faction_for(&"starfury_aurora"), Factions.EARTH_ALLIANCE)

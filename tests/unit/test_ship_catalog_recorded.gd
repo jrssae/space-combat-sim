@@ -1,7 +1,8 @@
 extends GutTest
 ## The ship catalogue (M10-T61) answers what the per-type lists it replaced answered: types, specs, factions, roles, the docking,
 ## look-sheet, class-name and callsign lists, all in their old order (seeded picks index into them). The old answers were captured
-## from the code before the catalogue (`tests/fixtures/ships/catalog_before_t61.json`).
+## from the code before the catalogue (`tests/fixtures/ships/catalog_before_t61.json`). Hulls added since come after the old ones
+## in the type and look-sheet lists; the lists seeded picks draw from (the civilians, the docking hulls) stay exactly the old ones.
 
 const RECORDING: String = "res://tests/fixtures/ships/catalog_before_t61.json"
 
@@ -20,7 +21,8 @@ func _names(list: Array) -> Array[String]:
 
 
 func test_the_types_in_their_order() -> void:
-	assert_eq(_names(ShipCatalog.types()), _names(_old["types"]))
+	var old: Array[String] = _names(_old["types"])
+	assert_eq(_names(ShipCatalog.types()).slice(0, old.size()), old, "the old types lead, in their order")
 
 
 func test_every_type_gives_the_same_spec_faction_role_and_callsign() -> void:
@@ -48,7 +50,7 @@ func test_the_lists_in_their_order() -> void:
 	var pool: Dictionary = LookScene.pool_types()
 	for asset: Variant in pool:
 		pairs.append([str(asset), String(pool[asset])])
-	assert_eq(pairs, _old["look_pool_types"], "the look sheets' pooled types")
+	assert_eq(pairs.slice(0, (_old["look_pool_types"] as Array).size()), _old["look_pool_types"], "the look sheets' pooled types lead")
 
 
 func test_the_class_names() -> void:

@@ -1,18 +1,19 @@
 """``ea_shuttle`` and ``ea_atmo_shuttle``: the Earth Alliance's two small shuttles (M10-T57; docs/assets-civilian.md and
 docs/design-references.md, "EA shuttle" and "EA atmospheric shuttle").
 
+Both are small craft by the class budgets (M10 Q38): one 2 048 px atlas, the low texture set a mip level down.
+
 Composition only: the pieces of ``parts/ea_shuttle.py`` (18.64 m, a blunt octagonal box hull) and
-``parts/ea_atmo_shuttle.py`` (25.59 m long, 45.6 m across its swept wings, a lifting body), each in one of the looks of
+``parts/ea_atmo_shuttle.py`` (25.59 m long, 45.6 m across its swept wings, a lifting body), each in its look from
 ``styles/ea_shuttle.py``, through the shared civilian pipeline (``core/civilian.py``): one textured mesh with a full and
 a low texture set, the fallback mesh, the break-up chunks as cuts of the hull, ``hardpoints.json`` and the manifest,
 every output derived from the placed pieces so they agree by construction. Neither craft carries a turret.
-
-Option ``look`` (``a``, ``b`` or ``c``) picks the surface option; the default is the one the maintainer chose.
+``hardpoints.json`` adds ``docking_ports[]`` to the civilians' contract: where another hull's lock meets this one (the
+shuttle's stern hatch; the atmospheric shuttle has none).
 """
 
 from __future__ import annotations
 
-import functools
 import json
 import math
 from collections.abc import Callable, Sequence
@@ -23,6 +24,7 @@ from typing import Any
 import numpy as np
 
 from ..core import civilian as cv
+from ..core.budgets import LOW_SHRINK, low_set_mb, texture_mb
 from ..core.color import capture_albedo
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import Mesh
@@ -33,11 +35,12 @@ from ..parts import Part, mass_centroid, total_mass
 from ..parts import ea_atmo_shuttle as ap
 from ..parts import ea_shuttle as sp
 from ..parts.propulsion import pilot_tags
-from ..styles.ea_shuttle import DEFAULT_OPTION, Look, atmo_looks, shuttle_looks
+from ..styles.ea_shuttle import ATMO_LOOK, SHUTTLE_LOOK, Look
 
 SHUTTLE_ID = "ea_shuttle"
 ATMO_ID = "ea_atmo_shuttle"
 GENERATOR_VERSION = 1
+SHIP_CLASS = "small_craft"  # the class budget both are held to (docs/assets-capital.md, "Class budgets")
 HARDPOINTS_NAME = "hardpoints.json"
 BURIED_MARGIN_M = 0.02
 CHASE_ANCHOR_SHARE = (0.3, 1.2)  # above and behind the centroid, in lengths
@@ -57,7 +60,7 @@ class Craft:
     asset_id: str
     spacing_m: float  # the surface samples' spacing: the body origin and the chunks' offsets
     chunk_order: tuple[str, ...]
-    looks: Callable[[], dict[str, Look]]
+    look: Look
     assemble: Callable[[Any], list[cv.Piece]]
     dress: Callable[[list[cv.Piece], Look], tuple[list[cv.Piece], dict[str, tuple[Marking, ...]]]]
     thrust_y: float
@@ -67,6 +70,7 @@ class Craft:
     ports: Callable[[dict[str, Part]], list[Port]]
     lights: Callable[[dict[str, Part]], dict[str, np.ndarray]]
     joints: Callable[[dict[str, Part]], dict[str, np.ndarray]]
+    docks: Callable[[dict[str, Part]], list[tuple[str, np.ndarray, np.ndarray]]]  # name, position, the way out of the hull
 
 
 # --- surfaces ------------------------------------------------------------------------------------------------------------------
@@ -119,22 +123,9 @@ def dress_shuttle(pieces: list[cv.Piece], look: Look) -> tuple[list[cv.Piece], d
     return dressed, {name: tuple(m) for name, m in marks.items()}
 
 
-def _blotches(points: np.ndarray, normals: np.ndarray, phase: float, share: float) -> np.ndarray:
-    """Where one colour of the camouflage lies: soft-edged blotches a few metres across, on every face but the belly's."""
-    p = np.asarray(points, dtype=float)
-    wave = (np.sin(0.61 * p[:, 0] + 0.23 * p[:, 2] + phase) * np.sin(0.19 * p[:, 0] - 0.47 * p[:, 2] + 1.7 * phase)
-            + 0.5 * np.sin(1.13 * p[:, 0] + 0.83 * p[:, 2] + 2.3 * phase))  # fmt: skip
-    cover = np.clip((wave - (1.0 - 2.0 * share)) / 0.12, 0.0, 1.0)
-    return cover * (np.asarray(normals, dtype=float)[:, 1] > -0.3)
-
-
-def _everywhere(points: np.ndarray, normals: np.ndarray) -> np.ndarray:
-    return np.ones(len(points))
-
-
 def dress_atmo(pieces: list[cv.Piece], look: Look) -> tuple[list[cv.Piece], dict[str, tuple[Marking, ...]]]:
-    """The atmospheric shuttle's seams and paint: frames across the body, spars along the wings, the patchwork, then the look's
-    bands, camouflage and tail colour."""
+    """The atmospheric shuttle's seams and paint: frames across the body, spars along the wings, the patchwork, then the
+    look's bands across the body's back."""
     major: list[Feature] = [Cut(axis=2, at=z, level=1, width=1.4) for z in (2.0, 9.2, 14.6)]
     major += [Cut(axis=0, at=x, level=1, lo=(-INF, -INF, 14.0)) for x in (ap.WING_STATIONS[1][0], 13.2)]
     full: list[Feature] = [Cut(axis=2, at=z, level=2) for z in (4.0, 6.5, 11.8, 16.6, 19.5, 22.0)]
@@ -147,24 +138,8 @@ def dress_atmo(pieces: list[cv.Piece], look: Look) -> tuple[list[cv.Piece], dict
     layout = SeamLayout.of(major + full + plating(look, (2.4, 1.5), 613)).mirrored_too()
     dressed = [cv.Piece(p.part.with_seams(layout), p.solid, p.side, p.fine) for p in pieces]
 
-    names = [p.name for p in cv.with_twins(pieces)]
-    marks: dict[str, list[Marking]] = {name: [] for name in names}
-    for k, colour in enumerate(look.camo):
-        cover = functools.partial(_blotches, phase=1.9 + 2.6 * k, share=0.42 - 0.16 * k)
-        for name in ("body", "spine", "intake_r", "intake_l", "wing_r", "wing_l"):
-            marks[name].append(Marking.paint(name, capture_albedo(colour), cover))
-    for name in ("body", "spine", "intake_r", "intake_l"):
-        marks[name] += _bands(name, look)
-    if look.tail is not None:
-        for name in ("fin", "tailplane"):
-            marks[name].append(Marking.paint(name, capture_albedo(look.tail), _everywhere))
-    if look.tail_marks is not None:
-        mark = capture_albedo(look.tail_marks)
-        for side in (1.0, -1.0):
-            marks["fin"].append(Marking.rect("fin", (side * 0.11, 2.75, 19.3), sp.Z_AXIS, sp.Y_AXIS, (side, 0.0, 0.0), (1.9, 0.28), mark))
-        for z in (23.0, 23.7):
-            marks["tailplane"] += [Marking.rect("tailplane", (side * 6.6, 4.25, z), sp.X_AXIS, sp.Z_AXIS, sp.Y_AXIS, (0.9, 0.3), mark) for side in (1.0, -1.0)]
-    return dressed, {name: tuple(m) for name, m in marks.items() if m}
+    marks = {name: _bands(name, look) for name in ("body", "spine", "intake_r", "intake_l")}
+    return dressed, marks
 
 
 # --- hardpoints ----------------------------------------------------------------------------------------------------------------
@@ -192,6 +167,12 @@ def shuttle_joints(by_name: dict[str, Part]) -> dict[str, np.ndarray]:
     """Where each chunk breaks away: on the hull's axis at the two cuts, the cabin between them."""
     bow, stern = np.array([0.0, sp.AXIS_Y, sp.CABIN_Z[0]]), np.array([0.0, sp.AXIS_Y, sp.CABIN_Z[1]])
     return {"bow": bow, "cabin": 0.5 * (bow + stern), "stern": stern}
+
+
+def shuttle_docks(by_name: dict[str, Part]) -> list[tuple[str, np.ndarray, np.ndarray]]:
+    """The stern hatch: the one way in."""
+    hatch = by_name["stern_plate"].anchor("hatch")
+    return [("stern_hatch", hatch.position, hatch.direction)]
 
 
 def atmo_ports(by_name: dict[str, Part]) -> list[Port]:
@@ -222,13 +203,17 @@ def atmo_joints(by_name: dict[str, Part]) -> dict[str, np.ndarray]:
             "body": np.array([0.0, ap.EDGE_Y, 14.0])}
 
 
-SHUTTLE = Craft(SHUTTLE_ID, 0.12, ("bow", "cabin", "stern"), shuttle_looks, sp.assemble, dress_shuttle, sp.AXIS_Y,
+def no_docks(by_name: dict[str, Part]) -> list[tuple[str, np.ndarray, np.ndarray]]:
+    return []
+
+
+SHUTTLE = Craft(SHUTTLE_ID, 0.2, ("bow", "cabin", "stern"), SHUTTLE_LOOK, sp.assemble, dress_shuttle, sp.AXIS_Y,
                 (("l", "left", "engine_l", 0.6), ("r", "right", "engine_r", 0.6)), 0.0, (1.5, sp.AXIS_Y, sp.HULL_STATIONS[0][0], 0.25),
-                shuttle_ports, shuttle_lights, shuttle_joints)  # fmt: skip
-ATMO = Craft(ATMO_ID, 0.16, ("body", "wing_l", "wing_r", "tail", "engines"), atmo_looks, ap.assemble, dress_atmo, ap.ENGINE_Y,
+                shuttle_ports, shuttle_lights, shuttle_joints, shuttle_docks)  # fmt: skip
+ATMO = Craft(ATMO_ID, 0.25, ("body", "wing_l", "wing_r", "tail", "engines"), ATMO_LOOK, ap.assemble, dress_atmo, ap.ENGINE_Y,
              (("l", "left", "engine_l", ap.ENGINE_EXIT_R), ("cl", "left", "engine_c", 0.5 * ap.ENGINE_EXIT_R),
               ("cr", "right", "engine_c", 0.5 * ap.ENGINE_EXIT_R), ("r", "right", "engine_r", ap.ENGINE_EXIT_R)), 0.3,
-             (2.0, ap.EDGE_Y, 0.8, 0.3), atmo_ports, atmo_lights, atmo_joints)  # fmt: skip
+             (2.0, ap.EDGE_Y, 0.8, 0.3), atmo_ports, atmo_lights, atmo_joints, no_docks)  # fmt: skip
 
 
 def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]], offset: np.ndarray) -> dict[str, Any]:
@@ -294,6 +279,8 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
             "cabin_range_m": round(max(NAV_CABIN_RANGE_SHARE * length, 1.0), 2),
         },
         "turrets": [],
+        "docking_ports": [{"name": name, "position": cv.r(np.asarray(at) - offset), "out": cv.r(out), "up": [0.0, 1.0, 0.0]}
+                          for name, at, out in craft.docks(by_name)],
         "chunks": [{**c, "joint": cv.r(joints[c["name"]] - offset)} for c in chunks],
     }
 
@@ -302,17 +289,13 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
 def build_craft(craft: Craft, ctx: BuildContext) -> AssetOutputs:
     """Generate one shuttle into ``ctx.out_dir``.
 
-    Options: ``look`` (the surface option, ``a``, ``b`` or ``c``), ``spacing`` (m, the surface samples' spacing), ``atlas_px``
-    (the hull's atlas, default 2 048), ``occlusion`` (default off).
+    Options: ``spacing`` (m, the surface samples' spacing), ``atlas_px`` (the hull's atlas, default 2 048), ``occlusion``
+    (default off).
     """
     spacing = float(ctx.option("spacing", craft.spacing_m))
     if spacing <= 0.0 or not math.isfinite(spacing):
         raise ValueError("spacing must be positive")
-    looks = craft.looks()
-    option = str(ctx.option("look", DEFAULT_OPTION))
-    if option not in looks:
-        raise ValueError(f"{craft.asset_id} has no look {option!r} (one of {sorted(looks)})")
-    look = looks[option]
+    look = craft.look
     out_dir = ctx.out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
     comments = (f"{craft.asset_id} generator v{GENERATOR_VERSION} seed {ctx.seed}",)
@@ -320,7 +303,9 @@ def build_craft(craft: Craft, ctx: BuildContext) -> AssetOutputs:
     pieces, markings = craft.dress(craft.assemble(look.style), look)
     sampled = cv.sample_pieces(pieces, ctx, spacing, buried_margin=BURIED_MARGIN_M)
     offset = cv.centroid(sampled)
-    hull = cv.write_hull(out_dir, craft.asset_id, cv.hull_parts(sampled, offset, markings), craft.chunk_order, look.style, ctx, comments)
+    hull = cv.write_hull(out_dir, craft.asset_id, cv.hull_parts(sampled, offset, markings), craft.chunk_order, look.style, ctx, comments,
+                         low_shrink=LOW_SHRINK)
+    atlas = [int(hull.mesh_section["atlas_px"])]
     files: list[Path] = list(hull.files)
 
     hp = hardpoints(craft, pieces, hull.chunks, offset)
@@ -341,7 +326,8 @@ def build_craft(craft: Craft, ctx: BuildContext) -> AssetOutputs:
             "chunks": [c["name"] for c in hull.chunks],
             "surface_spacing_m": spacing,
             "dimensions_m": {"length": hp["length_m"], "span": hp["span_m"], "height": hp["height_m"]},
-            "look": look.name,
+            "budget": {"class": SHIP_CLASS, "triangles": hull.mesh_section["triangles"], "texture_mb": round(texture_mb(atlas), 2),
+                       "texture_mb_low": round(low_set_mb(atlas), 2)},
         },
     )
     files.append(write_manifest(out_dir, manifest))

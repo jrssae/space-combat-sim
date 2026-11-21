@@ -367,7 +367,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T54 | F | not needed: reference removed by the maintainer, 2026-11-20 | - | - | not needed |
 | T55 | F | EA construction tender | T19, T62 | Fable | not started |
 | T56 | F | EA mining transport (Q43): the mining variant of T53's generator | T53 | Fable | not started |
-| T57 | F | EA shuttle and EA atmospheric shuttle | T01, T62 | Fable | in progress |
+| T57 | F | EA shuttle and EA atmospheric shuttle | T01, T62 | Fable | done |
 | T58 | F | Centauri shuttle and Minbari Flyer | T57, T06 | Fable | not started |
 | T59 | F | Drazi Firehawk | T19, T62 | Fable | not started |
 | T60 | F | Vorlon heavy cruiser, 1 528 m (Q49) | T06, T19, T36 | Fable | not started |
@@ -564,6 +564,23 @@ On top of it:
   T56's doors move (Q43).
 - **Small craft (T57, T58):** M5's civilian pipeline (`docs/assets-civilian.md`), as the cargo pod (M7-T33): generator
   and style, hardpoints, `ShipSpec` (the Flyer's skin: Q45). The missions that need them wire them.
+- **T57 done (2026-11-20).** `ea_shuttle` (18.64 m, 1 456 triangles) and `ea_atmo_shuttle` (25.59 m, 45.5 m across,
+  3 074 triangles): `tools/procgen/assets/ea_shuttles.py`, `parts/ea_shuttle.py`, `parts/ea_atmo_shuttle.py`,
+  `styles/ea_shuttle.py`; as built in `docs/assets-civilian.md`, "`ea_shuttle` and `ea_atmo_shuttle`". The 90 % compare
+  (top, side, front IoU): 0.984, 0.984, 0.971 and 0.973, 0.974, 0.932, sizes within 1.2 %. The maintainer chose option C
+  for both from the A/B/C sheets: the shuttle a worn dark grey with a green band and the number 03, the atmospheric
+  shuttle the fleet's grey with one red band. Small craft by Q38's budgets: one 2 048 px atlas, 13.3 MB high and 3.3 MB
+  low (a mip level down); about 13 and 14 MB of video memory measured. Hardpoints as the civilians', no turrets, plus
+  `docking_ports[]` (the shuttle's stern hatch; none stands out on the atmospheric shuttle). `ShipSpec`s
+  `assets/ships/ea_shuttle.tres` and `ea_atmo_shuttle.tres` (first numbers; M24 tunes the shuttle as a player ship) and
+  one catalogue entry each.
+  **A catalogue flag was added**: `random_pool: false` keeps a civilian out of the hulls random traffic, encounters and
+  `random_civilian` spawns draw from (`ShipCatalog.civilian_types`), so older scenarios' seeded picks stay as they were
+  and only a mission that names a shuttle places it; T58's craft should carry it too. `test_ship_catalog_recorded.gd`
+  now holds the old types and look-sheet list as the leading part of today's (new hulls come after).
+  Tests: `test_ea_shuttles.py` (56) and `tests/integration/test_ea_shuttles.gd` (3: import with the low set, flight,
+  in play and break-up). Look sheets, option sheets and compare overlays: `references/screenshots/M10-T57 EA shuttles/`;
+  judging the look is (H).
 
 ### M10-T43 to T47 Mechanics, sounds, bench, scenarios and performance
 

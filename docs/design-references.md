@@ -1590,6 +1590,8 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 - **Shape.** A blunt box hull: a sloped, faceted **nose** (0 to 25 %) with the cockpit windows, a long cabin body (25 to
   85 %) with a row of six side windows each side and angled chines, four small engine bells and RCS blocks aft.
 - **Colours (show).** Light grey and white panels, a **red-orange stripe** and a blue cockpit band, EA markings.
+- **As built (M10-T57).** The maintainer chose a worn darker grey with a green nose band and the number 03 (one of the
+  show's three bands); `docs/assets-civilian.md`, "`ea_shuttle` and `ea_atmo_shuttle`".
 
 ### EA atmospheric shuttle (`ea_atmo_shuttle`, T57)
 
@@ -1598,6 +1600,8 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 - **Shape.** A lifting body: a rounded **nose** and a broad flat fuselage (0 to 75 %), long **swept wings** from 40 % out
   to the tips (x ±23) at 90 %, three engines and two canted tail fins at the stern.
 - **Colours (show).** Grey and olive with orange-red markings; orange engine glow.
+- **As built (M10-T57).** The maintainer chose the fleet's cool grey with one red band; the tail is a T-tail on a thin
+  fin and each engine carries a forked vane above and below it (`docs/assets-civilian.md`).
 
 ### Centauri shuttle (`centauri_shuttle`, T58)
 

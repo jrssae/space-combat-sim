@@ -8,7 +8,7 @@ const OUT_PATH: String = "res://docs/catalogue/ships.md"
 const COLUMNS: Array[String] = ["id", "faction", "role", "size", "hull", "weapons", "jump", "fighters"]
 const HEADERS: Array[String] = ["id", "faction", "role", "size L x W x H (m)", "hull points", "weapons", "jump capable",
 		"carries fighters"]
-const FLAG_COLUMNS: Array[String] = ["id", "spec", "ai_profile", "pooled", "docking", "look_sheet", "name", "callsign"]
+const FLAG_COLUMNS: Array[String] = ["id", "spec", "ai_profile", "pooled", "random_pool", "docking", "look_sheet", "name", "callsign"]
 
 
 ## One row of facts per catalogue entry, in catalogue order, every value already text.
@@ -29,7 +29,12 @@ static func rows(data: ShipCatalogData, asset_root: String = ShipSpec.ASSET_ROOT
 			row["jump"] = "yes" if spec.can_open_jump_point else "no"
 		for key: String in FLAG_COLUMNS:
 			if not row.has(key):
-				row[key] = data.text(id, key) if key != "pooled" else ("yes" if data.is_pooled(id) else "no")
+				if key == "pooled":
+					row[key] = "yes" if data.is_pooled(id) else "no"
+				elif key == "random_pool":
+					row[key] = "" if data.role(id) != &"civilian" else ("yes" if data.in_random_pool(id) else "no")
+				else:
+					row[key] = data.text(id, key)
 		out.append(row)
 	return out
 
@@ -51,8 +56,10 @@ static func render(p_rows: Array[Dictionary]) -> String:
 	]
 	lines.append_array(_table(p_rows, COLUMNS, HEADERS))
 	lines.append_array(["", "## What other code reads from each entry", "",
-		"`pooled`: `ShipPool` builds it by type. `docking`: `tunnel` (the main docking bay) or `cargo_bay`. `look_sheet`: what",
-		"`sheet <asset>` parks. `name`: the target preview's class line. `callsign`: a civilian's radio name.", ""])
+		"`pooled`: `ShipPool` builds it by type. `random_pool`: whether random traffic, encounters and `random_civilian` spawns",
+		"may draw a civilian (`no`: only a mission that names it places it). `docking`: `tunnel` (the main docking bay) or",
+		"`cargo_bay`. `look_sheet`: what `sheet <asset>` parks. `name`: the target preview's class line. `callsign`: a",
+		"civilian's radio name.", ""])
 	lines.append_array(_table(p_rows, FLAG_COLUMNS, FLAG_COLUMNS))
 	return "\n".join(lines) + "\n"
 

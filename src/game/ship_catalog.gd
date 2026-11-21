@@ -50,9 +50,11 @@ static func types() -> Array[StringName]:
 	return data().pooled_ids()
 
 
-## The civilian hulls (M5-T16, Q24), in catalogue order: built with the `civilian` role, flown by the `civilian` AI profile by default.
+## The civilian hulls random traffic, encounters and `random_civilian` spawns draw from (M5-T16, Q24), in catalogue order: built
+## with the `civilian` role, flown by the `civilian` AI profile by default. A civilian marked `random_pool: false` (the shuttles,
+## M10-T57) is left out: `is_civilian` still says what it is, and a mission places it by name.
 static func civilian_types() -> Array[StringName]:
-	return data().ids_where("role", "civilian")
+	return data().civilian_pool()
 
 
 ## The types whose catalogue `key` is `value`, pooled or not, in catalogue order.

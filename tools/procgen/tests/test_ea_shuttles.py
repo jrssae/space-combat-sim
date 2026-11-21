@@ -1,5 +1,5 @@
 """``ea_shuttle`` and ``ea_atmo_shuttle`` (M10-T57): files, the mesh contract with both texture sets, budgets, sizes and frames,
-outward faces, symmetry, chunk cuts, the hardpoint contract, the three looks and determinism.
+outward faces, symmetry, chunk cuts, collision coverage, the hardpoint contract, the chosen looks and determinism.
 The expected numbers are typed in from docs/design-references.md ("EA shuttle", "EA atmospheric shuttle") and
 docs/assets-capital.md ("M10 lengths (T01)"), not read from the generators.
 """
@@ -18,11 +18,19 @@ from tools.procgen.assets import ASSETS
 from tools.procgen.assets import ea_shuttles as es
 from tools.procgen.core import civilian as cv
 from tools.procgen.core import manifest as manifest_io
+from tools.procgen.core.budgets import LOW_SHRINK, low_set_mb, over_budget, texture_mb
 from tools.procgen.core.context import BuildContext
+from tools.procgen.core.image import read_png
 from tools.procgen.core.obj import read_obj
 from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
-from tools.procgen.styles.ea_shuttle import DEFAULT_OPTION, OPTIONS, atmo_looks, shuttle_looks
-from tools.procgen.tests.mesh_checks import TEST_OPTIONS, assert_chunks_cut_the_hull, assert_hull_mesh, assert_mirror_symmetric, glowing_points
+from tools.procgen.styles.ea_shuttle import ATMO_LOOK, SHUTTLE_LOOK
+from tools.procgen.tests.mesh_checks import (
+    TEST_OPTIONS,
+    assert_chunks_cut_the_hull,
+    assert_hull_mesh,
+    assert_mirror_symmetric,
+    glowing_points,
+)
 
 PILOT_TERMS = {
     "sway_left", "sway_right", "heave_up", "heave_down", "pitch_up", "pitch_down",
@@ -39,6 +47,17 @@ def mirrored(v: list[float]) -> list[float]:
     return [-v[0], v[1], v[2]]
 
 
+def inside_primitive(points: np.ndarray, c: dict, inflate: float) -> np.ndarray:
+    basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
+    local = (points - np.array(c["position"])) @ basis
+    if c["type"] == "box":
+        return np.all(np.abs(local) <= 0.5 * np.array(c["size"]) + inflate, axis=1)
+    half = 0.5 * c["height"] - c["radius"]
+    along = np.clip(local[:, 2], -half, half)
+    axis_point = np.column_stack([np.zeros_like(along), np.zeros_like(along), along])
+    return np.linalg.norm(local - axis_point, axis=1) <= c["radius"] + inflate
+
+
 class ShuttleChecks:
     """The checks both shuttles share; a subclass names the craft and its expected numbers."""
 
@@ -47,7 +66,7 @@ class ShuttleChecks:
     LENGTH: float
     SPAN: float
     HEIGHT: float
-    TRIANGLE_BUDGET: int
+    BAND_SRGB: int
     CHUNKS: tuple[str, ...]
     THRUST_Y: float
     ASYMMETRIC: tuple[str, ...] = ()  # pieces the reference has off centre
@@ -64,7 +83,10 @@ class ShuttleChecks:
         cls.hp = json.loads((cls.dir_a / es.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.obj = read_obj(cls.dir_a / f"{cls.asset_id}.obj")
         cls.offset = np.array(cls.manifest["centroid_offset"])
-        cls.pieces = cls.CRAFT.assemble(cls.CRAFT.looks()[DEFAULT_OPTION].style)
+        cls.spacing = float(cls.manifest["surface_spacing_m"])
+        cls.pieces = cls.CRAFT.assemble(cls.CRAFT.look.style)
+        sampled = cv.sample_pieces(cls.pieces, BuildContext(cls.dir_a, seed=42), cls.spacing, buried_margin=es.BURIED_MARGIN_M)
+        cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -85,7 +107,7 @@ class ShuttleChecks:
         stem = self.asset_id
         expected = {"hardpoints.json", "manifest.json", f"{stem}.glb", f"{stem}.obj"}
         expected |= {f"{stem}_{k}.png" for k in ("albedo", "normal", "orm", "emissive")}
-        expected |= {f"{stem}_{k}_low.png" for k in ("albedo", "normal", "orm")}
+        expected |= {f"{stem}_{k}_low.png" for k in ("albedo", "normal", "orm", "emissive")}
         expected |= {f"{stem}_chunk_{c}.{ext}" for c in self.CHUNKS for ext in ("obj", "glb")}
         self.assertTrue(expected <= names, sorted(expected - names))
         self.assertFalse([n for n in names if "turret" in n], "the shuttles carry no turret")
@@ -94,12 +116,24 @@ class ShuttleChecks:
 
     def test_the_hull_is_its_textured_mesh_inside_the_budget(self) -> None:
         assert_hull_mesh(self, self.dir_a, self.manifest, f"{self.asset_id}.obj")
-        self.assertLessEqual(self.manifest["mesh"]["triangles"], self.TRIANGLE_BUDGET)
         self.assertEqual((self.manifest["asset_id"], self.manifest["frame"], self.manifest["seed"]), (self.asset_id, "godot", 42))
 
-    def test_the_manifest_names_a_low_texture_set(self) -> None:
-        low = self.manifest["mesh"]["surfaces"][0]["detail"]["low"]
-        self.assertEqual(low, {k: f"{self.asset_id}_{k}_low.png" for k in ("albedo", "normal", "orm")})
+    def test_the_low_texture_set_is_a_mip_level_down(self) -> None:
+        surface = self.manifest["mesh"]["surfaces"][0]
+        low = surface["detail"]["low"]
+        self.assertEqual(low, {k: f"{self.asset_id}_{k}_low.png" for k in ("albedo", "normal", "orm", "emissive")})
+        for key, file in low.items():
+            high = read_png(self.dir_a / surface[key])
+            self.assertEqual(read_png(self.dir_a / file).shape[:2], (high.shape[0] // LOW_SHRINK, high.shape[1] // LOW_SHRINK), key)
+
+    def test_the_hull_is_inside_the_small_craft_budget(self) -> None:
+        budget = self.manifest["budget"]
+        self.assertEqual((budget["class"], budget["triangles"]), ("small_craft", self.manifest["mesh"]["triangles"]))
+        atlas = [cv.HULL_ATLAS_PX]  # the default build's one atlas; the test build's is smaller
+        self.assertEqual(over_budget("small_craft", budget["triangles"], texture_mb(atlas), low_set_mb(atlas)), [])
+        built = [TEST_OPTIONS["atlas_px"]]
+        self.assertAlmostEqual(budget["texture_mb"], texture_mb(built), places=2, msg="the manifest records this build's")
+        self.assertAlmostEqual(budget["texture_mb_low"], low_set_mb(built), places=2)
 
     def test_the_default_atlas_lands_under_four_centimetres_a_texel(self) -> None:
         parts = [TexturedPart(p.part.mesh, phase_steps(p.name, False), (), p.name) for p in cv.with_twins(self.pieces)]
@@ -155,7 +189,7 @@ class ShuttleChecks:
     def test_hardpoints_schema(self) -> None:
         keys = {"asset_id", "generator_version", "frame", "units", "length_m", "span_m", "height_m", "mass_kg",
                 "inertia_estimate_kg_m2", "center_of_mass", "cockpit_camera", "chase_anchor", "muzzles", "pods", "rcs",
-                "collision", "nav_lights", "turrets", "chunks"}  # fmt: skip
+                "collision", "nav_lights", "turrets", "docking_ports", "chunks"}  # fmt: skip
         self.assertEqual(set(self.hp), keys)
         self.assertEqual((self.hp["muzzles"], self.hp["turrets"]), ([], []), "unarmed")
         self.assertGreater(self.hp["mass_kg"], 0.0)
@@ -202,30 +236,63 @@ class ShuttleChecks:
         self.assertGreater(lights["cabin_range_m"], 0.0)
         self.assertEqual(lights["cabin"], self.hp["cockpit_camera"]["position"])
 
-    def test_collision_primitives_are_proper_and_named_once(self) -> None:
-        names = [c["name"] for c in self.hp["collision"]]
-        self.assertEqual(len(names), len(set(names)))
-        self.assertGreater(len(names), 4)
+    def test_the_body_origin_is_the_visible_surfaces_centroid(self) -> None:
+        np.testing.assert_allclose(self.xyz.mean(axis=0)[1:], 0.0, atol=1e-3)
+
+    def test_collision_primitives_cover_the_visible_surface_and_stay_close(self) -> None:
+        inside = np.zeros(len(self.xyz), dtype=bool)
+        for c in self.hp["collision"]:
+            inside |= inside_primitive(self.xyz, c, inflate=self.spacing)
+        missed = self.xyz[~inside] + self.offset
+        self.assertTrue(bool(inside.all()), f"every visible surface sample; missed (authored frame): {np.round(missed[:10], 2).tolist()}")
+        lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
         for c in self.hp["collision"]:
             basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
             np.testing.assert_allclose(basis.T @ basis, np.eye(3), atol=1e-4, err_msg=c["name"])
             self.assertAlmostEqual(float(np.linalg.det(basis)), 1.0, places=3, msg=c["name"])
+            if c["type"] == "box":
+                corners = np.array([[a, b, d] for a in (-1, 1) for b in (-1, 1) for d in (-1, 1)]) * 0.5 * np.array(c["size"])
+                extent = corners @ basis.T + np.array(c["position"])
+            else:
+                half = 0.5 * c["height"] - c["radius"]
+                ends = np.array([[0, 0, -half], [0, 0, half]]) @ basis.T + np.array(c["position"])
+                extent = np.concatenate([ends - c["radius"], ends + c["radius"]])
+            self.assertTrue(np.all(extent.min(axis=0) >= lo - 0.5) and np.all(extent.max(axis=0) <= hi + 0.5), c["name"])
+
+    def test_collision_is_mirror_symmetric(self) -> None:
+        shapes = {c["name"]: c for c in self.hp["collision"]}
+        self.assertEqual(len(shapes), len(self.hp["collision"]), "unique names")
+        for name, c in shapes.items():
+            part = name.split("_")
+            side = next((k for k, w in enumerate(part) if w in ("r", "l")), None)
+            if side is None:
+                if not name.startswith(self.ASYMMETRIC):
+                    self.assertAlmostEqual(c["position"][0], 0.0, places=4, msg=name)
+            elif part[side] == "r":
+                twin = shapes["_".join(part[:side] + ["l"] + part[side + 1 :])]
+                np.testing.assert_allclose(twin["position"], mirrored(c["position"]), atol=1e-4, err_msg=name)
+                np.testing.assert_allclose(sorted(twin.get("size", [0.0])), sorted(c.get("size", [0.0])), atol=1e-4, err_msg=name)
 
     # --- looks, determinism, options -----------------------------------------------------------------------------------------
-    def test_three_looks_and_the_default_is_built(self) -> None:
-        looks = self.CRAFT.looks()
-        self.assertEqual(tuple(looks), OPTIONS)
-        self.assertEqual(self.manifest["look"], DEFAULT_OPTION)
-        self.assertEqual(len({look.style.name for look in looks.values()}), 3)
+    def test_the_look_carries_the_chosen_band(self) -> None:
+        look = self.CRAFT.look
+        self.assertIn(self.BAND_SRGB, [colour for _, _, colour in look.bands])
+        self.assertEqual(look.style.name, self.asset_id)
+        lead = int(np.argmax([(self.BAND_SRGB >> shift) & 255 for shift in (16, 8, 0)]))
+        albedo = read_png(self.dir_a / self.manifest["mesh"]["surfaces"][0]["albedo"])[..., :3].astype(int)
+        others = np.delete(albedo, lead, axis=2).max(axis=2)
+        painted = float(np.mean(albedo[..., lead] > others + 30))
+        self.assertGreater(painted, 0.002, "the band's colour is on the atlas; the plating is grey")
 
-    def test_another_look_repaints_the_same_hull(self) -> None:
+    def test_a_different_seed_changes_the_wear_but_not_the_design(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            other = self.BUILD(BuildContext(Path(tmp), seed=42, options={**TEST_OPTIONS, "look": "b"}))
+            other = self.BUILD(BuildContext(Path(tmp), seed=7, options=TEST_OPTIONS))
             albedo = self.manifest["mesh"]["surfaces"][0]["albedo"]
-            self.assertEqual(other.manifest["look"], "b")
             self.assertNotEqual(sha256(Path(tmp) / albedo), sha256(self.dir_a / albedo))
-            np.testing.assert_array_equal(read_obj(Path(tmp) / f"{self.asset_id}.obj").vertices, self.obj.vertices)
-            self.assertEqual(sha256(Path(tmp) / es.HARDPOINTS_NAME), sha256(self.dir_a / es.HARDPOINTS_NAME))
+            self.assertEqual(other.manifest["dimensions_m"], self.manifest["dimensions_m"])
+            self.assertEqual(other.manifest["mesh"]["triangles"], self.manifest["mesh"]["triangles"])
+            hp = json.loads((Path(tmp) / es.HARDPOINTS_NAME).read_text(encoding="utf-8"))
+            self.assertEqual([c["name"] for c in hp["collision"]], [c["name"] for c in self.hp["collision"]])
 
     def test_same_seed_gives_byte_identical_output(self) -> None:
         for out in self.out_a.files:
@@ -233,25 +300,31 @@ class ShuttleChecks:
 
     def test_invalid_options_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            with self.assertRaises(ValueError):
-                self.BUILD(BuildContext(Path(tmp), options={"look": "z"}))
-            with self.assertRaises(ValueError):
-                self.BUILD(BuildContext(Path(tmp), options={"spacing": 0.0}))
+            for bad in (0.0, -1.0):
+                with self.assertRaises(ValueError):
+                    self.BUILD(BuildContext(Path(tmp), options={"spacing": bad}))
 
 
 class EaShuttleTests(ShuttleChecks, unittest.TestCase):
     CRAFT = es.SHUTTLE
     BUILD = staticmethod(es.build_shuttle)
     LENGTH, SPAN, HEIGHT = 18.64, 9.21, 5.27  # T01's length and the reference's box at it
-    TRIANGLE_BUDGET = 6_000  # 1 456 as built
     CHUNKS = ("bow", "cabin", "stern")
     THRUST_Y = -0.31  # the hull's centre line under the box centre
     ASYMMETRIC = ("nose_blocks",)
+    BAND_SRGB = 0x2E8B4E  # the maintainer's choice (2026-11-20): worn dark grey, green band, number 03
 
-    def test_the_looks_wear_their_bands(self) -> None:
-        looks = shuttle_looks()
-        self.assertEqual([look.number for look in looks.values()], ["25", "18", "03"])
-        self.assertEqual(len({look.bands[0][2] for look in looks.values()}), 3)
+    def test_the_shuttle_is_number_03(self) -> None:
+        self.assertIs(self.CRAFT.look, SHUTTLE_LOOK)
+        self.assertEqual(SHUTTLE_LOOK.number, "03")
+
+    def test_the_stern_hatch_is_the_docking_port(self) -> None:
+        (port,) = self.hp["docking_ports"]
+        self.assertEqual((port["name"], port["out"], port["up"]), ("stern_hatch", [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]))
+        at = self.authored(port["position"])
+        np.testing.assert_allclose(at[:2], [0.0, self.THRUST_Y], atol=1e-4)
+        self.assertGreater(at[2], 18.0)
+        self.assertLessEqual(at[2], self.LENGTH)
 
     def test_the_bow_carries_the_reference_off_centre_blocks(self) -> None:
         block = next(p for p in self.pieces if p.name == "nose_blocks").part.mesh.vertices
@@ -263,9 +336,13 @@ class EaAtmoShuttleTests(ShuttleChecks, unittest.TestCase):
     CRAFT = es.ATMO
     BUILD = staticmethod(es.build_atmo)
     LENGTH, SPAN, HEIGHT = 25.59, 45.56, 8.56  # T01's length and the reference's box at it
-    TRIANGLE_BUDGET = 10_000  # 3 074 as built
     CHUNKS = ("body", "wing_l", "wing_r", "tail", "engines")
     THRUST_Y = -0.47  # the three nacelles' axes
+    BAND_SRGB = 0xA8322C  # the maintainer's choice (2026-11-20): fleet grey, one red band
+
+    def test_the_atmospheric_shuttle_has_no_docking_port(self) -> None:
+        self.assertIs(self.CRAFT.look, ATMO_LOOK)
+        self.assertEqual(self.hp["docking_ports"], [])
 
     def test_three_engines_the_centre_one_as_two_pods(self) -> None:
         mains = {pod["name"]: self.authored(pod["main"]["position"]) for pod in self.hp["pods"]}
@@ -280,14 +357,6 @@ class EaAtmoShuttleTests(ShuttleChecks, unittest.TestCase):
         self.assertGreater(starboard[1], 3.0, "dihedral")
         self.assertGreater(starboard[2], 23.0, "sweep")
         self.assertAlmostEqual(port[0], -starboard[0], places=4)
-
-    def test_the_camouflage_look_paints_the_tail_its_own_colour(self) -> None:
-        look = atmo_looks()["b"]
-        self.assertEqual(len(look.camo), 2)
-        self.assertIsNotNone(look.tail)
-        _, marks = es.dress_atmo(self.pieces, look)
-        self.assertEqual({m.kind for m in marks["fin"]}, {"paint", "rect"})
-        self.assertEqual(len([m for m in marks["body"] if m.kind == "paint"]), 2)
 
 
 if __name__ == "__main__":

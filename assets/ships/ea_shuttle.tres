@@ -1,0 +1,29 @@
+[gd_resource type="Resource" script_class="ShipSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://csixdcdy0fu46" path="res://src/ship/ship_spec.gd" id="1_ship_spec"]
+
+[resource]
+script = ExtResource("1_ship_spec")
+asset_id = "ea_shuttle"
+mass = 60000.0
+inertia = Vector3(1.87e+06, 2.16e+06, 5.6e+05)
+pod_main_thrust = 360000.0
+pod_retro_thrust = 120000.0
+rcs_force_max = Vector3(300000.0, 300000.0, 0)
+rcs_torque_max = Vector3(1.9e+06, 2.2e+06, 8.4e+05)
+rate_max = Vector3(40, 40, 60)
+assist_gain_k = 3.0
+pod_yaw_gain = 0.5
+pod_yaw_deadzone = 0.1
+pod_yaw_smoothing_s = 0.3
+brake_gain_k = 1.0
+exhaust_velocity = 30000.0
+fuel_capacity_kg = 14400.0
+assist_speed_max_mps = 1500.0
+hull_max = 200.0
+ram_safe_dv_mps = 3.0
+ram_lethal_dv_mps = 12.0
+has_cockpit_interior = false
+engine_glow_color = Color(1.8, 1.25, 1.0, 1)
+damage_layout = &""
+tier_hit_scale = 1.0

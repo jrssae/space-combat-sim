@@ -22,5 +22,5 @@ func test_render_puts_one_row_per_entry_in_both_tables() -> void:
 			"weapons": "none", "jump": "no", "fighters": "no", "spec": "res://a.tres", "pooled": "yes", "callsign": "BEE"}]
 	var page: String = ShipCatalogDoc.render(rows)
 	assert_string_contains(page, "| `a` | narn | civilian | 10.0 x 5.0 x 2.0 | 900 | none | no | no |")
-	assert_string_contains(page, "| `a` | `res://a.tres` | - | yes | - | - | - | BEE |", "an empty flag reads -")
+	assert_string_contains(page, "| `a` | `res://a.tres` | - | yes | - | - | - | - | BEE |", "an empty flag reads -")
 	assert_true(page.ends_with("\n"))

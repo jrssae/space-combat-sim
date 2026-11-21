@@ -128,6 +128,28 @@ def box_of(points: np.ndarray, name: str, basis: np.ndarray | None = None) -> Co
     return Collision("box", b @ (0.5 * (lo + hi)), size=tuple(hi - lo), basis=b, name=name)
 
 
+def face_slabs(rings: Sequence[np.ndarray], names: Sequence[str | None], depth: float) -> list[Collision]:
+    """A loft's flat sides as hit volumes: per ring edge with a name, one box lying in that side's plane, ``depth`` deep
+    into the loft, so slanted faces are covered without a box standing proud of them."""
+    rings = [np.asarray(ring, dtype=float) for ring in rings]
+    n = len(rings[0])
+    axis = np.concatenate(rings).mean(axis=0)
+    out = []
+    for k, name in enumerate(names):
+        if name is None:
+            continue
+        j = (k + 1) % n
+        face = np.concatenate([[ring[k], ring[j]] for ring in rings])
+        along = rings[-1][k] + rings[-1][j] - rings[0][k] - rings[0][j]
+        normal = np.cross(rings[0][j] - rings[0][k], along)
+        normal /= np.linalg.norm(normal)
+        if normal @ (face.mean(axis=0) - axis) < 0.0:
+            normal = -normal
+        u = along / np.linalg.norm(along)
+        out.append(box_of(np.concatenate([face, face - depth * normal]), name, np.column_stack([u, normal, np.cross(u, normal)])))
+    return out
+
+
 def piece(name: str, group: str, meshes: Mesh | Sequence[Mesh], mass_kg: float, side: str = CENTRE, solid: Solid | None = None,
           collision: Sequence[Collision] = (), anchors: dict[str, Anchor] | None = None, fine: float = 1.0) -> Piece:
     mesh = meshes if isinstance(meshes, Mesh) else Mesh.concatenate(meshes)
@@ -152,14 +174,8 @@ def roof_y(z: float) -> float:
     return float(np.interp(z, [s[0] for s in HULL_STATIONS], [s[1] for s in HULL_STATIONS]))
 
 
-def _hull_collision(name: str, z0: float, z1: float) -> list[Collision]:
-    """The cabin's octagon as three boxes: flank to flank, roof to keel, and one between that fills the chines."""
-    top_y, top_w, flank_w, flank_top, flank_bottom, keel_y, _ = CABIN
-    mid = 0.5 * (top_w + flank_w)
-    rise = 0.5 * (top_y - flank_top)
-    return [box_of(np.array([[-flank_w, flank_bottom, z0], [flank_w, flank_top, z1]]), f"{name}_wide"),
-            box_of(np.array([[-top_w, keel_y, z0], [top_w, top_y, z1]]), f"{name}_tall"),
-            box_of(np.array([[-mid, flank_bottom - rise, z0], [mid, flank_top + rise, z1]]), f"{name}_chine")]
+HULL_SIDES = ("flank_r", "chine_up_r", "roof", "chine_up_l", "flank_l", "chine_down_l", "keel", "chine_down_r")  # ``hull_ring``'s edges
+HULL_SLAB_M = 0.8  # how deep the hull's hit volumes reach under its skin
 
 
 def hull_pieces(style: Style) -> list[Piece]:
@@ -167,20 +183,16 @@ def hull_pieces(style: Style) -> list[Piece]:
     hull, dark, inside = style.material("hull"), style.material("hull_dark"), style.material("interior")
     nose = [hull_ring(*s) for s in HULL_STATIONS]
     cabin = [hull_ring(z, *CABIN) for z in CABIN_Z]
-    nose_boxes = []
-    for k, (a, b) in enumerate(zip(HULL_STATIONS[1:-1], HULL_STATIONS[2:], strict=True)):
-        # Each nose box is the section halfway along its run, so it stands no further out than it falls short.
-        m = 0.5 * (np.array(a) + np.array(b))
-        nose_boxes.append(box_of(np.array([[-m[3], m[5], a[0]], [m[3], m[4], b[0]]]), f"nose_wide{k}"))
-        nose_boxes.append(box_of(np.array([[-m[2], m[6], a[0]], [m[2], m[1], b[0]]]), f"nose_tall{k}"))
-    nose_boxes.append(box_of(np.array([[-2.1, -1.1, 0.0], [2.1, 0.48, HULL_STATIONS[1][0]]]), "nose_tip"))
+    nose_boxes = [*face_slabs(nose, HULL_SIDES, HULL_SLAB_M), box_of(np.array([[-2.02, -1.17, 0.0], [2.02, 0.55, HULL_STATIONS[1][0]]]), "tip")]
+    # A box down the hull's middle, inside the chines: it closes the hit volumes at the bulkhead and where a chunk breaks off.
+    cores = [box_of(np.array([[-3.0, -1.6, z0], [3.0, 1.0, z1]]), "core") for z0, z1 in zip(CABIN_Z[:-1], CABIN_Z[1:], strict=True)]
     return [
         piece("hull_bow", "bow", faceted(nose, hull, cap_start=hull, cap_end=inside), 9000.0, solid=loft_solid(2, nose),
               collision=nose_boxes),
         piece("hull_cabin", "cabin", faceted(cabin[:2], hull, cap_start=inside, cap_end=inside), 16000.0,
-              solid=loft_solid(2, cabin[:2]), collision=_hull_collision("cabin", CABIN_Z[0], CABIN_Z[1])),
+              solid=loft_solid(2, cabin[:2]), collision=[*face_slabs(cabin[:2], HULL_SIDES, HULL_SLAB_M), cores[0]]),
         piece("hull_stern", "stern", faceted(cabin[1:], hull, cap_start=inside, cap_end=dark), 12000.0,
-              solid=loft_solid(2, cabin[1:]), collision=_hull_collision("stern", CABIN_Z[1], CABIN_Z[2])),
+              solid=loft_solid(2, cabin[1:]), collision=[*face_slabs(cabin[1:], HULL_SIDES, HULL_SLAB_M), cores[1]]),
     ]
 
 
@@ -198,13 +210,17 @@ def bow_pieces(style: Style) -> list[Piece]:
     out = [
         piece("nose_blocks", "bow", face, 600.0, solid=box_solid((1.9, 0.95, 0.62), (-0.85, -0.275, 0.31))),
         piece("hood", "bow", [hood, _frame_only(rim), *manifold], 900.0, solid=loft_solid(2, hood_rings),
-              anchors={"eye": Anchor(EYE, (0.0, 0.0, -1.0))}),
+              collision=[box_of(np.array([[-1.74, 0.80, 2.45], [1.74, 1.88, 5.50]]), "hood")], anchors={"eye": Anchor(EYE, (0.0, 0.0, -1.0))}),
     ]
     # The flank pipes: a slab lying against the nose's slanted flank.
     z0, z1 = 0.75, 5.30
     slab = [np.array([[flank_half_width(z) - 0.05, -0.87, z], [flank_half_width(z) + 0.17, -0.87, z],
                       [flank_half_width(z) + 0.17, 0.36, z], [flank_half_width(z) - 0.05, 0.36, z]]) for z in (z0, z1)]
-    out.append(piece("nose_pipes_r", "bow", faceted(slab, dark, cap_start=dark, cap_end=dark), 250.0, RIGHT))
+    run = slab[1].mean(axis=0) - slab[0].mean(axis=0)
+    run /= np.linalg.norm(run)
+    lying = np.column_stack([np.cross(Y_AXIS, run), Y_AXIS, run])  # the box lies along the slanted flank
+    out.append(piece("nose_pipes_r", "bow", faceted(slab, dark, cap_start=dark, cap_end=dark), 250.0, RIGHT,
+                     collision=[box_of(np.concatenate(slab), "pipes", lying)]))
     return out
 
 
@@ -239,9 +255,11 @@ def cabin_pieces(style: Style) -> list[Piece]:
               collision=[box_of(np.array([[flank_w, flank_bottom, FLANK_BLOCK_Z[0]], [flank_w + 0.42, flank_top, FLANK_BLOCK_Z[3] + FLANK_BLOCK_LENGTH]]), "blocks")]),
         piece("flank_blocks_aft_r", "stern", [flank_block(z) for z in FLANK_BLOCK_Z[4:]], 600.0, RIGHT,
               collision=[box_of(np.array([[flank_w, flank_bottom, FLANK_BLOCK_Z[4]], [flank_w + 0.42, flank_top, FLANK_BLOCK_Z[5] + FLANK_BLOCK_LENGTH]]), "blocks")]),
-        piece("roof_pipes_r", "cabin", pipes, 500.0, RIGHT),
-        piece("ridge", "cabin", faceted(ridge, panel, cap_start=panel, cap_end=panel), 400.0, solid=loft_solid(2, ridge)),
-        piece("keel_pipes_r", "cabin", under, 450.0, RIGHT),
+        piece("roof_pipes_r", "cabin", pipes, 500.0, RIGHT, collision=[box_of(np.array([[0.14, roof, 5.27], [1.88, roof + 0.35, 14.25]]), "pipes")]),
+        piece("ridge", "cabin", faceted(ridge, panel, cap_start=panel, cap_end=panel), 400.0, solid=loft_solid(2, ridge),
+              collision=[box_of(np.concatenate(ridge), "ridge")]),
+        piece("keel_pipes_r", "cabin", under, 450.0, RIGHT,
+              collision=[box_of(np.array([[0.20, keel - 0.36, 5.89], [1.22, keel, 8.64]]), "fore"), box_of(np.array([[1.22, keel - 0.16, 8.45], [1.57, keel, 14.41]]), "aft")]),
     ]
 
 
@@ -300,14 +318,21 @@ def stern_pieces(style: Style) -> list[Piece]:
     rails = [block((4.00, y, 15.96), (4.45, y + 0.14, 18.31), dark) for y in (-0.68, -0.04)]
     flaps = [faceted(r, panel, cap_start=panel, cap_end=panel) for r in (diag, lower, side)]
     flap_boxes = [box_of(np.concatenate(r), f"flap{k}") for k, r in enumerate((diag, lower, side))]
+    flap_boxes.append(box_of(np.array([[4.00, -0.68, 15.96], [4.45, 0.10, 18.31]]), "rails"))
+    rise = spine[1].mean(axis=0) - spine[0].mean(axis=0)
+    rise /= np.linalg.norm(rise)
+    ramp = np.column_stack([X_AXIS, np.cross(rise, X_AXIS), rise])  # the box leans with the spine's ramp
     return [
         piece("spine", "stern", faceted(spine, hull, cap_start=hull, cap_end=hull), 1500.0, solid=loft_solid(2, spine),
-              collision=[box_of(np.concatenate(spine[1:]), "spine")]),
+              collision=[box_of(np.concatenate(spine[:2]), "ramp", ramp), box_of(np.concatenate(spine[1:]), "spine")]),
         piece("stern_plate", "stern", [faceted(plate, hull, cap_start=hull, cap_end=panel), *hatch], 1800.0, solid=loft_solid(2, plate),
-              collision=[box_of(np.concatenate(plate), "plate")], anchors={"hatch": Anchor((0.0, AXIS_Y, 18.30), Z_AXIS)}),
-        piece("roof_fins", "stern", [*fins, crown], 500.0, collision=[box_of(np.array([[-1.94, roof, 15.28], [1.94, 2.31, 16.69]]), "fins")],
+              collision=[box_of(np.concatenate(plate), "plate"), box_of(np.array([[-0.60, -1.77, 18.00], [0.60, 1.25, 18.30]]), "hatch")],
+              anchors={"hatch": Anchor((0.0, AXIS_Y, 18.30), Z_AXIS)}),
+        piece("roof_fins", "stern", [*fins, crown], 500.0,
+              collision=[box_of(np.array([[-1.94, roof, 15.28], [1.94, 2.31, 16.69]]), "fins"), box_of(np.array([[-0.56, 2.30, 14.13], [0.56, 2.63, 14.94]]), "crown")],
               anchors={"top": Anchor((0.0, 2.63, 14.53), Y_AXIS)}),
-        piece("corner_boxes_r", "stern", corner_boxes, 300.0, RIGHT),
+        piece("corner_boxes_r", "stern", corner_boxes, 300.0, RIGHT,
+              collision=[box_of(np.array([[1.12, roof, 14.13], [1.94, roof + 0.34, 14.94]]), "up"), box_of(np.array([[1.12, keel - 0.33, 14.13], [1.94, keel, 14.94]]), "down")]),
         piece("chine_box_up_r", "stern", chine_box(False), 700.0, RIGHT, collision=[chine_collision(False, "box")]),
         piece("chine_box_down_r", "stern", chine_box(True), 700.0, RIGHT, collision=[chine_collision(True, "box")]),
         piece("engine_r", "stern", [wing, engine, brace], 1600.0, RIGHT, collision=[box_of(np.concatenate(wing_rings), "wing")],

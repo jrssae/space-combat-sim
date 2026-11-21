@@ -24,24 +24,30 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `centauri_brezebel` | centauri | civilian | 60.0 x 39.1 x 25.2 | 300 | none | no | no |
 | `brakiri_bokmai` | brakiri | civilian | 79.9 x 31.6 x 30.9 | 330 | turrets `turret_light_brakiri` | no | no |
 | `raider_strike_carrier` | raiders | capital (strike_carrier) | 112.0 x 85.5 x 84.3 | 10000 | none | yes | yes (18 cradles) |
+| `ea_shuttle` | earth_alliance | civilian | 18.6 x 9.2 x 5.3 | 200 | none | no | no |
+| `ea_atmo_shuttle` | earth_alliance | civilian | 25.6 x 45.5 x 8.5 | 260 | none | no | no |
 
 ## What other code reads from each entry
 
-`pooled`: `ShipPool` builds it by type. `docking`: `tunnel` (the main docking bay) or `cargo_bay`. `look_sheet`: what
-`sheet <asset>` parks. `name`: the target preview's class line. `callsign`: a civilian's radio name.
+`pooled`: `ShipPool` builds it by type. `random_pool`: whether random traffic, encounters and `random_civilian` spawns
+may draw a civilian (`no`: only a mission that names it places it). `docking`: `tunnel` (the main docking bay) or
+`cargo_bay`. `look_sheet`: what `sheet <asset>` parks. `name`: the target preview's class line. `callsign`: a
+civilian's radio name.
 
-| id | spec | ai_profile | pooled | docking | look_sheet | name | callsign |
-|---|---|---|---|---|---|---|---|
-| `starfury_aurora` | `res://assets/ships/starfury_aurora.tres` | - | yes | - | - | Aurora Starfury | - |
-| `starfury_ally` | `res://assets/ships/starfury_ally.tres` | ally_starfury | yes | - | pool | - | - |
-| `raider_fighter` | `res://assets/ships/raider_delta_v.tres` | raider | yes | - | pool | Delta-V raider | - |
-| `saturn_3_freighter` | `res://assets/ships/saturn_3_freighter.tres` | civilian | yes | cargo_bay | pool | Saturn 3 freighter | SATURN |
-| `saturn_4_transport` | `res://assets/ships/saturn_4_transport.tres` | civilian | yes | cargo_bay | pool | Saturn 4 transport | SATURN |
-| `saturn_4_tanker` | `res://assets/ships/saturn_4_tanker.tres` | civilian | yes | cargo_bay | pool | Saturn 4 tanker | SATURN |
-| `saturn_8_transport` | `res://assets/ships/saturn_8_transport.tres` | civilian | yes | cargo_bay | pool | Saturn 8 transport | SATURN |
-| `saturn_8_tanker` | `res://assets/ships/saturn_8_tanker.tres` | civilian | yes | cargo_bay | pool | Saturn 8 tanker | SATURN |
-| `skylark_transport` | `res://assets/ships/skylark_transport.tres` | civilian | yes | tunnel | pool | Skylark transport | SKYLARK |
-| `narn_transport` | `res://assets/ships/narn_transport.tres` | civilian | yes | tunnel | pool | Narn transport | NARN |
-| `centauri_brezebel` | `res://assets/ships/centauri_brezebel.tres` | civilian | yes | tunnel | pool | Brezebel transport | BREZEBEL |
-| `brakiri_bokmai` | `res://assets/ships/brakiri_bokmai.tres` | civilian | yes | - | pool | Bokmai hauler | BOKMAI |
-| `raider_strike_carrier` | `res://assets/ships/raider_strike_carrier.tres` | - | no | - | hull | - | - |
+| id | spec | ai_profile | pooled | random_pool | docking | look_sheet | name | callsign |
+|---|---|---|---|---|---|---|---|---|
+| `starfury_aurora` | `res://assets/ships/starfury_aurora.tres` | - | yes | - | - | - | Aurora Starfury | - |
+| `starfury_ally` | `res://assets/ships/starfury_ally.tres` | ally_starfury | yes | - | - | pool | - | - |
+| `raider_fighter` | `res://assets/ships/raider_delta_v.tres` | raider | yes | - | - | pool | Delta-V raider | - |
+| `saturn_3_freighter` | `res://assets/ships/saturn_3_freighter.tres` | civilian | yes | yes | cargo_bay | pool | Saturn 3 freighter | SATURN |
+| `saturn_4_transport` | `res://assets/ships/saturn_4_transport.tres` | civilian | yes | yes | cargo_bay | pool | Saturn 4 transport | SATURN |
+| `saturn_4_tanker` | `res://assets/ships/saturn_4_tanker.tres` | civilian | yes | yes | cargo_bay | pool | Saturn 4 tanker | SATURN |
+| `saturn_8_transport` | `res://assets/ships/saturn_8_transport.tres` | civilian | yes | yes | cargo_bay | pool | Saturn 8 transport | SATURN |
+| `saturn_8_tanker` | `res://assets/ships/saturn_8_tanker.tres` | civilian | yes | yes | cargo_bay | pool | Saturn 8 tanker | SATURN |
+| `skylark_transport` | `res://assets/ships/skylark_transport.tres` | civilian | yes | yes | tunnel | pool | Skylark transport | SKYLARK |
+| `narn_transport` | `res://assets/ships/narn_transport.tres` | civilian | yes | yes | tunnel | pool | Narn transport | NARN |
+| `centauri_brezebel` | `res://assets/ships/centauri_brezebel.tres` | civilian | yes | yes | tunnel | pool | Brezebel transport | BREZEBEL |
+| `brakiri_bokmai` | `res://assets/ships/brakiri_bokmai.tres` | civilian | yes | yes | - | pool | Bokmai hauler | BOKMAI |
+| `raider_strike_carrier` | `res://assets/ships/raider_strike_carrier.tres` | - | no | - | - | hull | - | - |
+| `ea_shuttle` | `res://assets/ships/ea_shuttle.tres` | civilian | yes | no | - | pool | EA shuttle | SHUTTLE |
+| `ea_atmo_shuttle` | `res://assets/ships/ea_atmo_shuttle.tres` | civilian | yes | no | - | pool | EA atmospheric shuttle | KESTREL |

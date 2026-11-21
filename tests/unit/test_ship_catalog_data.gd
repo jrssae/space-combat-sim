@@ -56,6 +56,17 @@ func test_ids_where_keeps_file_order_and_is_read_only() -> void:
 	assert_eq(data.ids_where("docking", "nowhere"), [] as Array[StringName])
 
 
+func test_a_civilian_marked_out_of_the_random_pool_is_still_a_civilian() -> void:
+	var marked: String = GOOD.replace('"docking": "tunnel", "callsign": "BEE"', '"docking": "tunnel", "callsign": "BEE", "random_pool": false')
+	var data: ShipCatalogData = _parse(marked)
+	assert_eq(data.error, "")
+	assert_eq(data.civilian_pool(), [&"d_hauler"] as Array[StringName], "random picks leave it out")
+	assert_eq(data.ids_where("role", "civilian"), [&"b_hauler", &"d_hauler"] as Array[StringName], "its role stands")
+	assert_false(data.in_random_pool(&"b_hauler"))
+	assert_true(data.in_random_pool(&"d_hauler"), "the default")
+	assert_eq(_parse(GOOD).civilian_pool(), [&"b_hauler", &"d_hauler"] as Array[StringName])
+
+
 func test_by_asset_maps_each_asset_once_to_the_first_entry_with_a_value() -> void:
 	var data: ShipCatalogData = _parse(GOOD)
 	assert_eq(data.by_asset("name"), {"a": "A fighter"})
@@ -81,6 +92,8 @@ func test_bad_files_say_why() -> void:
 			"look_sheet")
 	assert_string_contains(_parse(_with('{"id": "a", "spec": "res://a.tres", "asset": "a", "faction": "x", "role": "fighter", "colour": "red"}')).error,
 			"colour")
+	assert_string_contains(_parse(_with('{"id": "a", "spec": "res://a.tres", "asset": "a", "faction": "x", "role": "civilian", "random_pool": "no"}')).error,
+			"random_pool")
 	var twice: String = '{"id": "a", "spec": "res://a.tres", "asset": "a", "faction": "x", "role": "fighter"}'
 	assert_string_contains(_parse('{"ships": [%s, %s]}' % [twice, twice]).error, "twice")
 

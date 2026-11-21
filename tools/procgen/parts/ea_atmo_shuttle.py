@@ -36,6 +36,8 @@ BODY_STATIONS = (
 )  # fmt: skip
 BODY_RING_POINTS = 44
 RIM_HALF_M = 0.19  # the rim is blunt: this far above and below its height
+BODY_RUNS = ((2, 6), (6, 10), (10, 14))  # the runs of stations a hit volume spans
+BODY_SLAB = 0.35  # how far towards the body's middle its hit volumes reach, as a share
 
 # The canopy spine: z, half width, top.
 SPINE_STATIONS = ((1.78, 1.45, 0.68), (2.75, 1.72, 0.99), (4.64, 1.72, 1.14), (5.59, 1.71, 1.21), (6.54, 1.60, 1.26), (7.48, 1.46, 1.33),
@@ -115,16 +117,32 @@ def body_top(x: float, z: float) -> float:
 
 
 def _body_collision() -> list[Collision]:
-    """The lens as boxes: per run of stations a wide flat one out to most of the half width and a deep one round the middle."""
-    out = []
-    runs = ((0, 4), (4, 7), (7, 10), (10, 14))
-    for k, (a, b) in enumerate(runs):
-        z0, z1 = BODY_STATIONS[a][0] if a else 0.0, BODY_STATIONS[b][0]
-        _, w, crown, keel = (0.5 * (np.array(BODY_STATIONS[a]) + np.array(BODY_STATIONS[b])))
-        for name, share in (("rim", 0.97), ("mid", 0.75), ("deep", 0.42)):
-            rise = math.sqrt(1.0 - share**2)
-            out.append(box_of(np.array([[-share * w, EDGE_Y - (EDGE_Y - keel) * rise - 0.02, z0], [share * w, EDGE_Y + (crown - EDGE_Y) * rise + 0.02, z1]]),
-                              f"{name}{k}"))  # fmt: skip
+    """The lens as hit volumes: its skin cut into patches, three across each side of the crown and of the keel per run of
+    stations, each a box lying on its patch and reaching in towards the body's middle; a box behind the nose tip and one
+    inside the flat stern close them."""
+    out = [box_of(np.array([[-1.56, -0.51, 0.0], [1.56, 0.08, 0.5]]), "nose"),
+           box_of(np.array([[-6.6, -1.3, BODY_END_Z - 0.65], [6.6, 0.9, BODY_END_Z]]), "stern")]
+    half = BODY_RING_POINTS // 2
+    cuts = (0, 4, 8, half // 2)  # ring corners from the rim to the centre line; the port side mirrors them
+    for k, (a, b) in enumerate(BODY_RUNS):
+        rings = [body_ring(*station) for station in BODY_STATIONS[a : b + 1]]
+        core = np.array([0.0, EDGE_Y, 0.0])
+        for face, start in (("top", 0), ("keel", half)):
+            for c, (i, j) in enumerate(zip(cuts[:-1], cuts[1:], strict=True)):
+                # The starboard patch counts from the rim on the crown and towards it on the keel.
+                span = slice(start + i, start + j + 1) if face == "top" else slice(start + half - 1 - j, start + half - i)
+                patch = np.concatenate([ring[span] for ring in rings])
+                inner = patch + BODY_SLAB * (core - patch) * np.array([1.0, 1.0, 0.0])
+                along = rings[-1][span].mean(axis=0) - rings[0][span].mean(axis=0)
+                u = along / np.linalg.norm(along)
+                across = rings[-1][span][-1] - rings[-1][span][0]
+                normal = np.cross(u, across)
+                normal /= np.linalg.norm(normal)
+                basis = np.column_stack([u, normal, np.cross(u, normal)])
+                for tag, flip in (("r", 1.0), ("l", -1.0)):
+                    turn = np.diag([flip, 1.0, 1.0])
+                    mirrored = turn @ basis @ np.diag([1.0, 1.0, flip])  # mirrored, and still a rotation
+                    out.append(box_of(np.concatenate([patch, inner]) * np.array([flip, 1.0, 1.0]), f"{face}{k}{c}_{tag}", mirrored))
     return out
 
 
@@ -161,8 +179,11 @@ def body_pieces(style: Style) -> list[Piece]:
         piece("body", "body", body, 52000.0, solid=loft_solid(2, solid_rings), collision=_body_collision(),
               anchors={"nose": Anchor((0.0, EDGE_Y, 0.0), (0.0, 0.0, -1.0)), "belly": Anchor((0.0, -1.89, 12.0), (0.0, -1.0, 0.0))}),
         piece("spine", "body", [spine, fairing], 2500.0, solid=loft_solid(2, spine_rings),
-              collision=[box_of(np.concatenate(spine_rings[1:6]), "canopy")], anchors={"eye": Anchor(EYE, (0.0, 0.0, -1.0))}),
-        piece("intake_r", "body", intake, 1500.0, RIGHT, solid=loft_solid(2, intake_rings)),
+              collision=[*[box_of(np.concatenate(spine_rings[a : b + 1]), f"run{k}") for k, (a, b) in enumerate(((0, 1), (1, 4), (4, 7), (7, 10)))],
+                         box_of(np.array([[-0.8, 1.45, BODY_END_Z - 0.4], [0.8, 1.74, 19.18]]), "fairing")],
+              anchors={"eye": Anchor(EYE, (0.0, 0.0, -1.0))}),
+        piece("intake_r", "body", intake, 1500.0, RIGHT, solid=loft_solid(2, intake_rings),
+              collision=[box_of(np.concatenate([ring[1:6] for ring in intake_rings[:2]]), "mouth"), box_of(np.concatenate([ring[1:6] for ring in intake_rings[1:]]), "aft")]),
     ]
 
 
@@ -174,9 +195,12 @@ def wing_ring(x: float, lead: float, flat0: float, flat1: float, trail: float, y
                      [x, y + half, flat0], [x, y + nose, lead]])
 
 
-def swept_box(rings: Sequence[np.ndarray], name: str) -> Collision:
-    """A box round a run of a swept surface's sections, lying along the run so it follows the sweep and the dihedral."""
+def swept_box(rings: Sequence[np.ndarray], name: str, swept: bool = True) -> Collision:
+    """A box round a run of a swept surface's sections, lying along the run so it follows the sweep and the dihedral;
+    not ``swept``, it follows the dihedral alone (a tip, where a swept box would reach past the surface's own box)."""
     along = rings[-1].mean(axis=0) - rings[0].mean(axis=0)
+    if not swept:
+        along[2] = 0.0
     u = along / np.linalg.norm(along)
     n = np.cross(u, Z_AXIS)
     n /= np.linalg.norm(n)
@@ -188,7 +212,7 @@ def wing_pieces(style: Style) -> list[Piece]:
     hull, panel = style.material("hull"), style.material("hull_panel")
     rings = [wing_ring(*s) for s in WING_STATIONS]
     mesh = faceted(rings, [panel, hull, hull, hull, hull, panel, panel], cap_end=panel)
-    boxes = [swept_box(rings[a : b + 1], f"span{k}") for k, (a, b) in enumerate(((1, 2), (3, 4), (4, 6)))]
+    boxes = [swept_box(rings[a : b + 1], f"span{k}", swept=b < 6) for k, (a, b) in enumerate(((1, 2), (3, 4), (4, 5), (5, 6)))]
     tip = WING_STATIONS[-1]
     return [piece("wing_r", "wing_r", mesh, 4200.0, RIGHT, collision=boxes, fine=0.7,
                   anchors={"tip": Anchor((tip[0], tip[5], 0.5 * (tip[1] + tip[4])), (1.0, 0.0, 0.0)),
@@ -209,7 +233,7 @@ def tail_pieces(style: Style) -> list[Piece]:
     fin = prism([(np.array(q), panel) for q in FIN_QUADS], [(np.array(FIN_OUTLINE), hull)], FIN_THICKNESS).transformed(upright)
     half = 0.5 * FIN_THICKNESS
     fin_boxes = [box_of(np.array([[sx * half, y, z] for z, y in quad for sx in (1.0, -1.0)]), f"fin{k}") for k, quad in enumerate(FIN_QUADS)]
-    plane_boxes = [swept_box(plane_rings[a : b + 1], f"plane{k}") for k, (a, b) in enumerate(((0, 1), (1, 2), (2, 3)))]
+    plane_boxes = [swept_box(plane_rings[k : k + 2], name) for k, name in enumerate(("half_l", "root", "half_r"))]
     return [
         piece("fin", "tail", fin, 900.0, collision=fin_boxes, fine=0.6, anchors={"joint": Anchor((0.0, 1.9, 17.0))}),
         piece("tailplane", "tail", plane, 1300.0, collision=plane_boxes, fine=0.6,
@@ -268,7 +292,7 @@ def engine_piece(style: Style, x: float, name: str, side: str) -> Piece:
     meshes = [nacelle, vane_mesh(UPPER_VANE, x, dark, nozzle), vane_mesh(LOWER_VANE, x, dark, nozzle),
               strut_mesh(UPPER_STRUT, x, dark), strut_mesh(LOWER_STRUT, x, dark)]
     solid = lathe_solid(outer).translated((x, ENGINE_Y, 0.0))
-    barrel = Collision("capsule", (x, ENGINE_Y, 0.5 * (BODY_END_Z + ENGINE_EXIT_Z)), radius=1.3, height=ENGINE_EXIT_Z - BODY_END_Z + 0.9, name="nacelle")
+    barrel = Collision("capsule", (x, ENGINE_Y, 19.6), radius=1.5, height=5.0, name="nacelle")
     anchors = {"main": Anchor((x, ENGINE_Y, ENGINE_EXIT_Z), Z_AXIS), "centre": Anchor((x, ENGINE_Y, 19.6)),
                "vane_top": Anchor((x, 3.83, 25.2), Y_AXIS), "vane_bottom": Anchor((x, -4.28, 22.4), (0.0, -1.0, 0.0))}
     return piece(name, "engines", meshes, 3800.0, side, solid=solid, fine=0.6, anchors=anchors,

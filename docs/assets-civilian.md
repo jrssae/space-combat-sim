@@ -279,6 +279,8 @@ within a pixel; the splat column is gone with the splats.
 | `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.977 | 0.954 | 0.999 | 0.999 | 0.999 | 2026-11-07 |
 | `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.983, 0.945) | 0.965 | 0.983 | 0.970 | 1.000 | 1.000 | 0.999 | 2026-11-07 |
 | `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 2026-11-07 |
+| `ea_shuttle` | whole craft (no shift; M10-T57) | 0.984 | 0.984 | 0.971 | 1.000 | 0.999 | 0.998 | 2026-11-20 |
+| `ea_atmo_shuttle` | whole craft (best shift x +0.06 m, the model's vanes sit 0.15 m to starboard; unshifted 0.979, 0.974, 0.917; M10-T57) | 0.973 | 0.974 | 0.932 | 1.000 | 0.999 | 0.988 | 2026-11-20 |
 
 **The generator sections below** record each task as it was built on splats (T12 to T22). Their geometry, hardpoints and
 fidelity stand; their splat counts, level shares, lighting records and splat-check numbers are history since M5-T27,
@@ -581,6 +583,75 @@ at 0.11 m, like the others. The lens shape follows the frame's rounded, organic 
 
 The arms (2.0 m), struts (2.6 m) and fins (1 to 1.7 m) are only a few spacings across. The verdict scores the mesh, so
 build them at their measured size and let the splat check show the reading loss.
+
+## `ea_shuttle` and `ea_atmo_shuttle` (M10-T57)
+
+`tools/procgen/assets/ea_shuttles.py` (both builds), parts in `tools/procgen/parts/ea_shuttle.py` and
+`parts/ea_atmo_shuttle.py`, looks in `tools/procgen/styles/ea_shuttle.py`, built through the shared civilian pipeline
+(`core/civilian.py`). Both are **small craft** by the class budgets (`docs/assets-capital.md`, "Class budgets", M10 Q38):
+one 2 048 px atlas, the low texture set a mip level down. Neither carries a turret.
+
+**As built (2026-11-20, seed 42).**
+
+| | `ea_shuttle` | `ea_atmo_shuttle` |
+|---|---|---|
+| Size (L x W x H) | 18.64 x 9.20 x 5.26 m | 25.59 x 45.50 x 8.46 m |
+| Triangles (budget 30 000) | 1 456 | 3 074 |
+| Texel, atlas fill | 1.9 cm, 0.74 | 3.0 cm, 0.70 |
+| Texture memory, high / low set (budget 16.0 / 6.0 MB) | 13.3 / 3.3 MB | 13.3 / 3.3 MB |
+| Video memory on the GPU, high set (RX 6950 XT, read off the sheet run) | about 13 MB | about 14 MB |
+| Chunks | `bow`, `cabin`, `stern` | `body`, `wing_l`, `wing_r`, `tail`, `engines` |
+| Collision primitives | 65 | 71 |
+| Sample spacing | 0.20 m | 0.25 m |
+
+| Craft | Parts (authored frame: x to starboard, y up, z aft from the nose, x and y on the reference's box centre) |
+|---|---|
+| `ea_shuttle` | An octagonal hull lofted through four stations of the tapered nose (z 0.55 to 5.45) and level from there to the stern bulkhead (z 17.41), its centre line 0.31 m under the box centre; it is cut at z 5.45 and 12.8 into the three chunks. On it: the docking and sensor blocks on the nose face (off centre to port, as the reference has them; the only parts that are not mirror symmetric), the cockpit hood with its window, a pipe slab along each nose flank, six framed blocks along each flank, three pipes and a manifold each side of the roof with a ridge between, pipes and boxes under the keel, the raised spine and the tall stern plate with the hatch, three cross fins and a crown box on the roof, a box on each of the four chines aft, the bulkhead's wing plates with the two engine panels, and six flaps flaring out behind the bulkhead to z 18.64. |
+| `ea_atmo_shuttle` | A lens-shaped lifting body lofted smooth through 15 stations (a half ellipse over the rim, a deeper one under it, the rim a blunt band at y -0.22), flat at the stern (z 17.95); the canopy spine with its windshield; an intake hump on each shoulder, standing proud at its mouth (z 9.2) and sinking into the body aft; a wing each side through seven sections (root chord 3.2 m at x 9.5, a step in the trailing edge at x 13, the tip at x 22.75 and y 3.2: 15 degrees of dihedral); a thin fin on the centre line carrying the swept tailplane (span 14.6 m); three nacelles on y -0.47 at x 0 and ±4.43, each with a forked vane above and below it. |
+
+**Fidelity (Q10).** Both pass the 90 % rule (the table in "Fidelity" above). The reference's vanes sit 0.15 m to
+starboard of their engines; here they are centred on them, which costs the front view a little (0.932).
+
+**Looks (Q11).** The `ea_civilian` texture pack at a small craft's scale (seams 3 cm, plates of mixed size 0.2 to
+2.4 m, a scatter of small proud hatches), then the paint. The maintainer chose both from A/B/C sheets on 2026-11-20
+(`references/screenshots/M10-T57 EA shuttles/`):
+
+- **EA shuttle: option C**, a worn darker grey (#8D8F8A, panels #73756F, mechanical parts #3F4144), heavier grime and
+  edge wear, a **green band** (#2E8B4E) round the nose from z 1.35 to 2.25 with the number **03** (#62D0BE) on the roof,
+  five dark slots on each upper chine, the stern panels glowing warm red-white (#FFB89A). Not chosen: A, pale grey-white
+  with a red-orange band 25; B, the fleet's grey with a blue band 18 (the show's stills carry all three bands).
+- **EA atmospheric shuttle: option C**, the fleet's cool grey (#A4A7AA, panels #8A8D90) with **one red band** (#A8322C)
+  across the back from z 5.2 to 6.1 between two thin off-white ones, dark nacelles and vanes, the throats glowing orange
+  (#FFB060). Not chosen: A, stained pale grey with two orange-red bands; B, grey and olive camouflage with a cream tail.
+
+**Hardpoints.** The civilians' contract ("Hardpoints" above) with `turrets: []`, plus `docking_ports[]`, each
+`{"name", "position", "out", "up"}`: where another hull's lock meets this one and the way out of the hull there.
+
+| | `ea_shuttle` | `ea_atmo_shuttle` |
+|---|---|---|
+| Thrust line and centre of mass | y -0.31 (the hull's centre line) | y -0.47 (the nacelles' axes) |
+| `pods[]` main | `l`, `r`: the engine panels on the bulkhead's wing plates, (±2.36, -0.31, 17.96), radius 0.6 | `l`, `r`: the outer nozzles, (±4.43, -0.47, 21.67), radius 0.6; `cl`, `cr`: the centre nozzle as two halves at x ±0.3, radius 0.3 |
+| `pods[]` retro | the nose face, (±1.5, -0.31, 0.55) | the nose's rim, (±2.0, -0.22, 0.8) |
+| `rcs[]` | bow and stern flank, roof and keel, each side (12) | wing tips up and down, nose and stern rim each side, nose up and down (10) |
+| `cockpit_camera`, `nav_lights.cabin` | behind the hood's window, (0, 1.2, 2.9) | behind the windshield, (0, 0.72, 2.6) |
+| `nav_lights` port and starboard, top | the third flank block; the roof's crown box | the wing tips; the tailplane's crest |
+| `docking_ports[]` | `stern_hatch` at (0, -0.31, 18.30), out aft | none (no hatch stands out on the reference) |
+| Collision | the hull's eight sides as slabs 0.8 m deep per chunk with a core box inside the chines; boxes for the fittings | the lens as 36 patches of its skin (three across each side of crown and keel per run of stations), boxes along the wings' and the tail's sweep, a capsule per nacelle, a box per vane |
+
+Every visible surface sample lies inside a primitive grown by one sample spacing, and no primitive reaches more than
+0.5 m past the hull's box (`test_ea_shuttles.py`).
+
+**In the game.** `assets/ships/ea_shuttle.tres` (60 t, two pods of 0.36 MN: 12 m/s², 40/40/60 deg/s, 200 hull points)
+and `assets/ships/ea_atmo_shuttle.tres` (90 t, four pods of 0.34 MN: 15 m/s², 35/35/50 deg/s, 260 hull points); first
+numbers, to be tuned when a mission flies them (M24 makes the shuttle a player ship). Both are catalogue civilians of
+`earth_alliance` with `random_pool: false`: `ShipCatalog.is_civilian` holds, but random traffic, encounters and
+`random_civilian` spawns do not draw them, so the seeded picks of older scenarios stay as they were; a mission places them
+by type. Callsigns `SHUTTLE` and `KESTREL` (TBP's class name for the atmospheric shuttle, Q50).
+
+```
+.venv/bin/python3 -I tools/refview/compare.py "references/EA Shuttle.stl" ea_shuttle --length 18.64 --right=-x --up=+z --aft=+y
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Atmospheric_Shuttle.stl ea_atmo_shuttle --length 25.59 --right=-x --up=+z --aft=+y
+```
 
 ## Styles
 
