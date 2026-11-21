@@ -265,6 +265,7 @@ func _build(display_name: String) -> void:
 	targetable.display_name = display_name
 	targetable.faction = faction
 	targetable.kind = Targetable.Kind.CAPITAL
+	targetable.class_label = String(ship_class).capitalize().to_upper()
 	add_child(targetable)
 	damageable = Damageable.new()
 	damageable.name = "Damageable"
@@ -305,6 +306,7 @@ func _build_hull(display_name: String, spec_path: String) -> bool:
 	targetable.display_name = display_name
 	targetable.faction = faction
 	targetable.kind = Targetable.Kind.CAPITAL
+	targetable.class_label = String(ship_class).capitalize().to_upper()
 	add_child(targetable)
 	damageable = Damageable.new()
 	damageable.name = "Damageable"

@@ -78,6 +78,8 @@ func paint(f: HudFrame, surface: HudSurface) -> void:
 		_draw_target_panel(f, surface, s, w)
 	if items.has(HudSurface.WAYPOINT):
 		_draw_waypoint(f, s, w)
+	if items.has(HudSurface.CAPITALS):
+		_draw_capital_marks(f, s, w)
 	if items.has(HudSurface.GRID):
 		_draw_grid(surface, f, s, w)
 	if items.has(HudSurface.SPEED):
@@ -354,6 +356,36 @@ func _draw_waypoint(f: HudFrame, s: float, w: float) -> void:
 		_canvas.draw_polyline(PackedVector2Array([p + Vector2.from_angle(a + 2.5) * size * 0.8, p + Vector2.from_angle(a) * size,
 				p + Vector2.from_angle(a - 2.5) * size * 0.8]), LINE_COLOR, w)
 		_text(label, p + Vector2(0.0, 26.0 * s), 13.0 * s, LINE_COLOR, HORIZONTAL_ALIGNMENT_CENTER)
+
+
+# Far capitals (M8-T08): a long hexagon, not a fighter's brackets, with the class above and the range below; off screen the same
+# glyph at the border with a chevron pointing the way.
+func _draw_capital_marks(f: HudFrame, s: float, w: float) -> void:
+	for mark: Dictionary in f.capital_marks:
+		var c: Vector2 = mark["pos"]
+		var color: Color = mark["color"]
+		var range_text: String = _range_text(float(mark["range_m"]))
+		if bool(mark["on_screen"]):
+			var half := Vector2(16.0, 7.0) * s
+			_capital_glyph(c, half, color, w)
+			_text(String(mark["label"]), c + Vector2(0.0, -half.y - 7.0 * s), 13.0 * s, color, HORIZONTAL_ALIGNMENT_CENTER)
+			_text(range_text, c + Vector2(0.0, half.y + 17.0 * s), 13.0 * s, color, HORIZONTAL_ALIGNMENT_CENTER)
+			continue
+		var a: float = float(mark["angle"])
+		var half_edge := Vector2(11.0, 5.0) * s
+		_capital_glyph(c, half_edge, color, w)
+		var tip: Vector2 = c + Vector2.from_angle(a) * 24.0 * s
+		_canvas.draw_polyline(PackedVector2Array([tip + Vector2.from_angle(a + 2.5) * 9.0 * s, tip,
+				tip + Vector2.from_angle(a - 2.5) * 9.0 * s]), color, w)
+		_text("%s  %s" % [String(mark["label"]), range_text], c + Vector2(0.0, half_edge.y + 16.0 * s), 12.0 * s, color,
+				HORIZONTAL_ALIGNMENT_CENTER)
+
+
+# A capital's glyph: a hexagon `half` wide and tall each way from `c`, pointed at the sides.
+func _capital_glyph(c: Vector2, half: Vector2, color: Color, w: float) -> void:
+	var inset: float = half.x - half.y
+	_canvas.draw_polyline(PackedVector2Array([c + Vector2(-half.x, 0.0), c + Vector2(-inset, -half.y), c + Vector2(inset, -half.y),
+			c + Vector2(half.x, 0.0), c + Vector2(inset, half.y), c + Vector2(-inset, half.y), c + Vector2(-half.x, 0.0)]), color, w)
 
 
 ## "H +12.5  V -3.0" (degrees off the nose, horizontal then vertical), or dashes when the ship is not moving.

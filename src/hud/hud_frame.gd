@@ -116,6 +116,10 @@ var waypoint_edge_angle: float = 0.0
 ## The waypoint's contact in `radar_plot` (M5-T25), or -1: the radar marks it with a diamond.
 var waypoint_radar_index: int = -1
 
+## Far capitals' markers (M8-T08, `CapitalMarksLayout`): each `{on_screen, pos, angle, label, range_m, color}`; off screen, `pos`
+## and `angle` are its edge arrow's.
+var capital_marks: Array[Dictionary] = []
+
 ## The mission's objectives list (M5-T05), top right, right-aligned: the caption's baseline, then one line per active objective
 ## (`{text: String, pos: Vector2, primary: bool}`).
 var objectives_caption_pos: Vector2 = Vector2.ZERO

@@ -7,6 +7,8 @@ extends Node3D
 ## Do not add it to `world_shiftable`: it moves with its parent, which is the shiftable node.
 
 const GROUP: StringName = &"targetable"
+## The capitals' own group (M8-T08), so the HUD finds its few far capitals without a walk of every target.
+const CAPITAL_GROUP: StringName = &"targetable_capital"
 ## Metadata on a body with no marker of its own, naming the `Targetable` that speaks for it (the station's turning drum, whose
 ## guns fire for the station): a pilot hit by that body's shots knows whom to answer.
 const SPEAKS_FOR: StringName = &"speaks_for"
@@ -27,6 +29,8 @@ enum Role { SHIP, CIVILIAN, BEACON }
 @export var kind: Kind = Kind.SHIP
 ## Its `Role` (M5-T25).
 var role: Role = Role.SHIP
+## A capital's class as the HUD's far marker names it ("STRIKE CARRIER", M8-T08); empty uses `display_name`.
+var class_label: String = ""
 ## What a long hold of the auto-track button does to it while selected (M7-T27): a gate's jump, a bay's placeholder; null = nothing.
 var interaction: TargetInteraction = null
 ## How far this target is heard beyond the sensors (M3-T17, Q21), m: 0 = not at all, `INF` = everywhere. Nav buoys use
@@ -59,6 +63,8 @@ func _init() -> void:
 
 func _enter_tree() -> void:
 	_sync_broadcaster()
+	if kind == Kind.CAPITAL:
+		add_to_group(CAPITAL_GROUP)
 	_hull_known = false
 	var parent: Node = get_parent()
 	if parent != null and not parent.child_order_changed.is_connected(_forget_hull):

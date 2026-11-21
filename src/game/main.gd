@@ -724,6 +724,8 @@ func _build_hud_input() -> HudInput:
 	# The radar's contacts straight from the targetables (M4-T36): the candidate list is built only when something cycles it.
 	input.radar_contacts = RadarContacts.gather(get_tree(), ship, ship.targeting.system.sensor_range_m)
 	input.selected_id = ship.targeting.selected_id()
+	input.capital_rules = CapitalMarkerRules.shared()
+	input.capitals = CapitalContacts.gather(get_tree(), ship, input.capital_rules.max_range_m)
 	input.status_line = status_line
 	input.roster = wings.hud_roster()
 	input.roster_color = Factions.FRIENDLY_COLOR

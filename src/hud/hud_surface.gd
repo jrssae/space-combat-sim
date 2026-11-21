@@ -29,6 +29,8 @@ const ACK: StringName = &"ack"
 const ROSTER: StringName = &"roster"
 ## The mission's active objectives (M5-T05): on the window in both views, only while there are any, so it is not in `ALL_ITEMS`.
 const OBJECTIVES: StringName = &"objectives"
+## Far capitals' markers (M8-T08): on the window in both views, only while there are any, so it is not in `ALL_ITEMS`.
+const CAPITALS: StringName = &"capitals"
 ## The interaction hold's progress bar across the top (M7-T27): on the window in both views, only while a hold runs, so it is not in
 ## `ALL_ITEMS`.
 const INTERACT: StringName = &"interact"
