@@ -162,7 +162,7 @@ def spec(look: str = DEFAULT_LOOK, drum_deg: float = 0.0) -> cap.CapitalSpec:
         bridge=cap.Pose((0.0, 0.0, 180.0)),
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=1500.0, mouth_radius_m=450.0),
-        notes=("the renegades' marking (M10-T02) is not built: styles/ea_capital.ea_capital takes a livery",),
+        notes=("the renegades' red X marks (M10-T02) are `mark` hardpoints with `only_faction`: the game draws them on a renegade ship",),
     )
 
 

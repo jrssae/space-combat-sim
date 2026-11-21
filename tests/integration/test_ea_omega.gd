@@ -68,11 +68,11 @@ func _fly(seconds: float, done: Callable = Callable()) -> void:
 	Engine.max_physics_steps_per_frame = _steps_backup
 
 
-# The painted letters on `cap`'s shields: one node per shield, each showing `letter`'s cell of the glyph atlas.
-func _letters(cap: CapitalShip) -> Array[HullMarkNode]:
+# The painted letters on `cap`'s shields (or, with `faction_marks`, the faction-only marks): one node per shield, each showing `letter`'s cell of the glyph atlas.
+func _letters(cap: CapitalShip, faction_marks: bool = false) -> Array[HullMarkNode]:
 	var out: Array[HullMarkNode] = []
 	for node: Node in cap.hull_piece.get_children():
-		if node is HullMarkNode:
+		if node is HullMarkNode and (node as HullMarkNode).only_faction.is_empty() != faction_marks:
 			out.append(node)
 	return out
 
@@ -97,6 +97,24 @@ func test_each_omega_wears_its_names_first_letter_on_both_shields() -> void:
 		assert_lt(letters[0].position.x * letters[1].position.x, 0.0, "one to each side")
 		assert_lt(letters[0].position.y, -100.0, "at the bottom of the shield")
 	assert_false(atlas.is_empty())
+
+
+func test_the_red_x_marks_show_on_a_renegade_omega_only() -> void:
+	var rest: Vector3 = main.world.rest_velocity()
+	var shown: Dictionary = {}
+	for faction: StringName in [Factions.EARTH_ALLIANCE, &"renegades"]:
+		var cap: CapitalShip = CapitalShip.create(TYPE, faction, "EAS Hector", rest)
+		assert_not_null(cap)
+		if cap == null:
+			continue
+		main.world.spawn(cap, main.world.to_universe(main.ship.global_position + Vector3(0.0, 0.0, -9000.0)), Basis.IDENTITY)
+		var xs: int = 0
+		for node: HullMarkNode in _letters(cap, true):
+			if node.visible:
+				xs += 1
+		shown[faction] = xs
+	assert_eq(shown.get(Factions.EARTH_ALLIANCE), 0, "a loyal Omega wears no X")
+	assert_eq(shown.get(&"renegades"), 3, "a renegade one wears three")
 
 
 func test_it_spawns_named_with_its_drum_on_its_own_body() -> void:

@@ -105,6 +105,19 @@ def shield_mark(x: float, top: tuple[float, float, float], bottom: tuple[float, 
     return fittings.hull_mark("mark_initial_r", at, normal, up / np.linalg.norm(up), MARK_HEIGHT_M)
 
 
+RENEGADE_RED = (0.78, 0.09, 0.07)
+X_HEIGHT_M = 34.0
+
+
+def renegade_xs() -> dict[str, cp.Hardpoint]:
+    """The renegades' small red X paint marks (M10-T02), shown only on a renegade ship: one on each shield's vertical panel and
+    one on the command block's roof. Keyed by the module that carries them."""
+    def x(name: str, at: tuple[float, float, float], normal: tuple[float, float, float], up: tuple[float, float, float]) -> cp.Hardpoint:
+        return fittings.hull_mark(name, at, normal, up, X_HEIGHT_M, colour=RENEGADE_RED, text="X", only_faction="renegades")
+    return {"shield_mid_r": x("mark_x_r", (68.0, 0.0, 275.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
+            "command_roof": x("mark_x_roof", (0.0, 62.5, 238.0), (0.0, 1.0, 0.0), (0.0, 0.0, -1.0))}
+
+
 def shields(s: Style) -> list[cp.Module]:
     """The starboard armour shield: a vertical panel and two leaning in above and below it, 5 m thick."""
     thick, x = 4.0, 68.0
@@ -112,6 +125,7 @@ def shields(s: Style) -> list[cp.Module]:
     mid = cs.slab("shield_mid_r", [(x, 57.4, 193.0), (x, 57.4, 358.0), (x, -55.6, 358.0), (x, -55.6, 193.0)], thick, inward, s, PLAIN)
     upper = cs.slab("shield_upper_r", [(x, 57.4, 193.0), (x, 57.4, 358.0), (43.5, 95.4, 307.0), (43.5, 95.4, 214.0)], thick, inward, s, PLAIN)
     lower = cs.slab("shield_lower_r", [(x, -55.6, 193.0), (x, -55.6, 358.0), (26.0, -195.6, 270.0), (26.0, -195.6, 214.0)], thick, inward, s, PLAIN)
+    mid = dataclasses.replace(mid, hardpoints=(renegade_xs()["shield_mid_r"],))
     lower = dataclasses.replace(lower, hardpoints=(shield_mark(x, (-55.6, 193.0, 358.0), (-195.6, 214.0, 270.0)),))
     pod = cs.convex("beam_pod_r", [(px, py, pz) for px, c in ((68.0, 0.0), (88.0, 4.0)) for py in (-22.0 + c, 22.0 - c) for pz in (205.0 + c, 247.0 - c)],
                     s, DARK, skin=cp.SKIN_FITTING)
@@ -134,6 +148,7 @@ def command_block(s: Style) -> list[cp.Module]:
                      HullRoles(side="canopy_glass", deck="canopy_glass", keel="canopy_glass"), skin=cp.SKIN_NONE)
     strake = cs.prism("command_strake_r", [(SPINE_W - 1.0, 8.0), (72.0, 3.5), (72.0, -3.5), (SPINE_W - 1.0, -8.0)], 200.0, 372.0, s, DARK)
     sided = (strake, shoulder, _flip_y(shoulder, "command_shoulder_low_r"))
+    roof = dataclasses.replace(roof, hardpoints=(renegade_xs()["command_roof"],))
     return [_put("bridge", m) for m in (block, waist, roof, head, nose, frame, glass)] + [_put("bridge", m, cp.RIGHT) for m in sided]
 
 

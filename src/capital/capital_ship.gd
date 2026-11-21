@@ -143,6 +143,7 @@ func set_faction(p_faction: StringName) -> void:
 	super.set_faction(p_faction)
 	for rotor: CapitalRotor in rotors:
 		rotor.hull.faction = p_faction
+	_show_marks_for_faction()
 
 
 ## Sets the helm: the bow toward `heading` (World; zero holds the bow where it is) and `velocity` to hold (World frame).
@@ -297,6 +298,17 @@ func _add_marks(display_name: String) -> void:
 		return
 	for node: HullMarkNode in HullMarkNode.build_all(HullMarks.marks_of(_hardpoints), _hardpoints["mark_atlas"], _dir, display_name):
 		hull_piece.add_child(node)
+	_show_marks_for_faction()
+
+
+## Shows the marks painted for this ship's faction only (the renegades' red X) and hides the rest.
+func _show_marks_for_faction() -> void:
+	if hull_piece == null:
+		return
+	for node: Node in hull_piece.get_children():
+		if node is HullMarkNode:
+			var mark := node as HullMarkNode
+			mark.visible = HullMarks.shown_for({"only_faction": String(mark.only_faction)}, faction)
 
 
 func _build_rotor(piece_name: String, entry: Dictionary) -> void:

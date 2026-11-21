@@ -35,3 +35,9 @@ func test_the_quad_reads_upright_from_outside_the_face() -> void:
 
 func test_the_quad_holds_the_letters_height() -> void:
 	assert_almost_eq(HullMarks.quad_side_m(40.0, ATLAS), 40.0 / 0.65625, 0.001)
+
+
+func test_a_faction_only_mark_shows_on_that_faction() -> void:
+	assert_true(HullMarks.shown_for({"text": "initial"}, &"earth_alliance"), "no restriction: every ship")
+	assert_true(HullMarks.shown_for({"only_faction": "renegades"}, &"renegades"))
+	assert_false(HullMarks.shown_for({"only_faction": "renegades"}, &"earth_alliance"))

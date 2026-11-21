@@ -91,14 +91,16 @@ def lamp(name: str, role: str, colour: tuple[float, float, float], range_m: floa
 
 
 def hull_mark(name: str, at: Sequence[float], normal: Sequence[float], up: Sequence[float], height_m: float,
-              colour: tuple[float, float, float] = (0.84, 0.85, 0.87), text: str = "initial") -> Hardpoint:
+              colour: tuple[float, float, float] = (0.84, 0.85, 0.87), text: str = "initial", only_faction: str = "") -> Hardpoint:
     """A place for painted lettering on a hull (``core/glyphs.py``): ``at`` is the letter's centre on the face, ``normal`` the
     face's outward direction and ``up`` the way the letters stand. ``text`` is what the ship wears, chosen when it is spawned:
-    ``initial`` the first letter of its name (the EA destroyers' bows), or a fixed string. The game draws it; no geometry is made here."""
+    ``initial`` the first letter of its name (the EA destroyers' bows), or a fixed string. ``only_faction`` shows it only on a ship
+    of that faction (the renegades' red X). The game draws it; no geometry is made here."""
     if height_m <= 0.0:
         raise ValueError(f"mark {name!r} needs a height")
     return Hardpoint(name, MARK, tuple(at), tuple(normal), tuple(up),
-                     {"text": text, "height_m": round(height_m, 2), "colour": [round(float(c), 4) for c in colour]})
+                     {"text": text, "height_m": round(height_m, 2), "colour": [round(float(c), 4) for c in colour],
+                      **({"only_faction": only_faction} if only_faction else {})})
 
 
 __all__ = ["LIGHT_ROLES", "antenna", "hull_mark", "lamp", "rotating_section"]

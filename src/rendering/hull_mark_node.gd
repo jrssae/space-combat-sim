@@ -3,6 +3,9 @@ extends MeshInstance3D
 ## One painted letter on a hull (M10-T21): a quad a little off the face, showing one cell of the generated glyph atlas. A thin
 ## adapter; the rules are in `HullMarks`.
 
+## The faction this mark is painted for; empty for every ship's.
+var only_faction: StringName = &""
+
 static var _materials: Dictionary = {}  # "<atlas path>|<cell>|<colour>" -> StandardMaterial3D, shared by every ship
 
 
@@ -41,6 +44,7 @@ static func create(mark: Dictionary, text: String, index: int, atlas: Dictionary
 	quad.size = Vector2(side, side)
 	node.mesh = quad
 	node.material_override = _material(texture, path, cell, int(atlas.get("columns", 1)), _colour(mark.get("colour")))
+	node.only_faction = StringName(str(mark.get("only_faction", "")))
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.transform = Transform3D(basis, _vec(mark.get("position")) + normal.normalized() * HullMarks.STANDOFF_M + basis.x * shift)
 	return node

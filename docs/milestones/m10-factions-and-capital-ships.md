@@ -501,6 +501,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   hull on the livery shader and to any `ThrusterVisuals`; the X marker needs the hull's manifest to carry a `livery` section with the
   `renegades` marker and its mesh zones (`ZONES`: strut_upper, fuselage, ...) tagged, which an Omega-class build must add in
   `tools/procgen/styles/ea_capital.py` (T21's files); until then an Omega wears its own paint with only the engine colour.
+  **Capital X marks (2026-11-21):** done through T21's `mark` hardpoints, not livery zones: `fittings.hull_mark(..., text="X", only_faction="renegades")` puts a red X on each Omega shield's vertical panel and one on the command roof (`parts/ea_omega.renegade_xs`); `HullMarks.shown_for` / `CapitalShip._show_marks_for_faction` show them only on a renegade ship (and follow `set_faction`). Any later EA capital adds the same three-line hardpoints. Shots: `references/screenshots/M10-T02 renegade marking v2/capital/`.
   **Hidden renegades (2026-11-21, maintainer: renegades are scary because they cannot easily be detected).** The `renegades` profile
   has `transponder: earth_alliance`: each renegade ship broadcasts Earth Alliance until its first hostile act. `Targetable.transponder`
   is the per-ship state (`disguise_as`, `reveal`; a pool acquire starts it again) and `SimCore.set_disguise` gives it to the core, whose

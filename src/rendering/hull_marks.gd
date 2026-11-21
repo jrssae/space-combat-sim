@@ -24,6 +24,12 @@ static func text_for(mark: Dictionary, display_name: String, chars: String) -> S
 	return out
 
 
+## Whether `mark` is painted on a ship of `faction`: a mark with no `only_faction` is on every ship (the renegades' red X is not).
+static func shown_for(mark: Dictionary, faction: StringName) -> bool:
+	var only: String = str(mark.get("only_faction", ""))
+	return only.is_empty() or only == String(faction)
+
+
 ## The first letter of the ship's own name: "EAS Agamemnon" gives "A" (a leading all-capitals word is the faction's prefix).
 static func initial_of(display_name: String) -> String:
 	var words: PackedStringArray = display_name.strip_edges().split(" ", false)

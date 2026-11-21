@@ -117,7 +117,7 @@ class OmegaBuildTests(unittest.TestCase):
 
     def test_each_shield_wears_the_name_letter_on_its_lower_panel(self) -> None:
         marks = {m["name"]: m for m in self.hp["marks"]}
-        self.assertEqual(sorted(marks), ["mark_initial_l", "mark_initial_r"])
+        self.assertEqual(sorted(marks), ["mark_initial_l", "mark_initial_r", "mark_x_l", "mark_x_r", "mark_x_roof"])
         right, left = marks["mark_initial_r"], marks["mark_initial_l"]
         self.assertEqual((right["text"], right["section"], right["height_m"]), ("initial", "bow", eo.om.MARK_HEIGHT_M))
         self.assertGreater(right["normal"][0], 0.9, "the starboard letter faces outward")
@@ -129,6 +129,15 @@ class OmegaBuildTests(unittest.TestCase):
         atlas = self.hp["mark_atlas"]
         self.assertTrue((self.dir / atlas["file"]).is_file())
         self.assertTrue((self.dir / (atlas["file"] + ".import")).is_file())
+
+    def test_the_renegades_red_x_marks_are_for_renegades_only(self) -> None:
+        xs = [m for m in self.hp["marks"] if m["text"] == "X"]
+        self.assertEqual(len(xs), 3, "one on each shield and one on the roof")
+        for m in xs:
+            self.assertEqual(m["only_faction"], "renegades")
+            self.assertGreater(m["colour"][0], 0.6)
+            self.assertLess(m["colour"][1], 0.2)
+        self.assertNotIn("only_faction", next(m for m in self.hp["marks"] if m["name"] == "mark_initial_r"), "the name letter is for everyone")
 
     def test_the_hull_is_inside_the_capital_budget(self) -> None:
         budget = self.manifest["budget"]
