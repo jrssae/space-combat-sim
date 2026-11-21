@@ -7003,6 +7003,9 @@ src/capital/capital_flight.gd      CapitalFlight (World child, priority -1): eve
 src/capital/capital_helm.gd        CapitalHelm, pure: heading and velocity to a FlightCommand (flips a hull with no retros)
 src/capital/capital_propulsion.gd  CapitalPropulsion, pure: the engines as the step's nozzles; the gravitic flight spec (Q51)
 src/capital/capital_sections.gd    CapitalSections, pure: the collision pieces as sections per body; a point named by its section
+src/capital/capital_damage.gd      CapitalDamage, pure: damage by section (T08, D12.5): states, mounts, engines, bays, power
+src/capital/capital_section.gd     CapitalSection, pure: one section's points, state and what it holds
+src/capital/capital_mount.gd       CapitalMount, pure: one weapon mount's own points and reach
 src/capital/capital_console.gd     the `capital` provider and command
 ```
 
@@ -7010,7 +7013,7 @@ src/capital/capital_console.gd     the `capital` provider and command
   `capital_class`), the `ShipSpec` and the manifest: mass and inertia from the spec, the centre of mass from the hardpoints, no
   damping (`DAMP_MODE_REPLACE`), the hull piece's sections as `CollisionShape3D`s on the one body (Jolt's compound), drawn as
   the hull piece (`RenderPiece`). `Targetable` of kind capital, heard as far as its class broadcasts (`CapitalData`,
-  Q51: cruiser 200 km, capital 500 km, dreadnought 1 000 km); hull points only until T08.
+  Q51: cruiser 200 km, capital 500 km, dreadnought 1 000 km); its hull points are its sections' (T08, below).
 - **Flight.** The hardpoints' `engines[]` become the step's mains with a stand-in retro at each main's place, pointing the other
   way (`CapitalPropulsion.layout`; an engine on the centre line counts on both sides). A `reaction` spec flies as written: its
   `pod_retro_thrust` is its retros (0: none, and `CapitalHelm` flips it: it turns toward the change, burns, turns back once it
@@ -7027,8 +7030,22 @@ src/capital/capital_console.gd     the `capital` provider and command
   with its own piece's maps (`MeshAssets.chunk_mesh`'s `piece`).
 - **Hit volumes in the core.** The hull's and each rotor's section volumes, with the convex hulls they are fitted to, are the
   bodies' surfaces (`ScsSimCore.set_surface`, §20.1; the rotor named by its hull): the hit sweep lands bolts on the shape Jolt
-  collides with, the fire lane and avoidance go round it, the brains range to it. A hit or a ram is named by its section
-  (`section_hit`, `CapitalSections.section_at`) for T08. No native change: the surfaces already follow a moving row.
+  collides with, the fire lane and avoidance go round it, the brains range to it. A bolt's hit is named by the section of the
+  volume the core's sweep entered first (`hit_bolts` returns it per pair, T08; `HitInfo.volume`), a ram's by its point
+  (`CapitalSections.section_at`); `section_hit` says which.
+- **Damage by section (T08, D12.5, Q53).** No armour: each section holds its `hull_share` of the hull's points, and the
+  `Damageable`'s `hit_router` (the hull's and each rotor's) sends every hit to `CapitalDamage`, the hull's total falling with
+  the sections'. A hit within reach of a live weapon mount (10 m, or its barrel's length) also takes the mount's own points
+  (Q53's table by weapon kind, `data/capitals/capitals.json` `mount_hit_points`). A section at 0 is lost (`disabled`) with what
+  its hardpoints name: mounts, bays, engines. Magazine or fuel at 0 blows (`destroyed`), and the hull goes with it, so the
+  destruction director takes the death; a reactor at 0 shuts down (power 0: the ship is disabled) and blows after another 50 %
+  of its points; below half its points it gives half power. A lost bridge leaves last orders at half the rate of fire and
+  disables only with every engine gone too. A hit on a lost section passes half on to the nearest live section, as does damage
+  past a section's last point. The rules are `section_damage` in the same file. Effects: an engine lost or a power stage refits
+  the drive (`CapitalPropulsion.live_layout`: the live engines' nozzles at their thrust as built, an engine left alone on one
+  side listed on both, scaled by the power), a disabled hull gets no command and drifts; `mount_works`, `bay_works`,
+  `damage.fire_rate()` and the signals `section_changed`, `mount_lost`, `ship_disabled` are what T09 to T18 build on. All of it
+  runs per event in GDScript (about 6 us a hit); the native change is the sweep's volume column.
 - **The tier.** A capital beyond the radius is a capital row (§17.14) holding `cruise_velocity`, the velocity its helm holds;
   parked, hull and rotors leave Jolt and the flight step; promoted, it comes back where its row is with the rotors placed.
 - **Jump points.** `can_open_jump_point` per hull type (Q22; the test cruiser can, as a test hull); `open_own_point(pool)` opens
@@ -7036,10 +7053,11 @@ src/capital/capital_console.gd     the `capital` provider and command
   collapsing as M6-T23 says; its drive recharges by class (`CapitalData`).
 - **Per tick and per event.** Native: the flight step, the surfaces, the rams. GDScript per tick and per capital: the helm
   (a few vector operations) and the rotors' placing.
-- **Console.** Command `capital [info|list|spawn|helm|jump|focus]`, provider `capital` (`info.md`).
+- **Console.** Command `capital [info|list|spawn|helm|jump|focus|sections|damage]`, provider `capital` (`info.md`).
 - **Tests.** `test_capital_propulsion`, `test_capital_helm`, `test_capital_sections` (unit); `test_capital_ship` (the main
   scene: the body and damping, both drives flown natively, a flip, a rebase, the tier hand-over, a ram on the bow, a held point,
-  the console).
+  the console); `test_capital_damage` (unit, per section kind; and on the Omega: bolts named by the swept volume, engines and
+  reactor lost, a drifting hulk, the magazine blowing, the console).
 - **Known gaps.** A rotor is kinematic, so as heavy as the world to Jolt: a capital ramming another's rotor is stopped as by a
   wall, and a ram on a rotor takes the rotor's motion but not its skin's own turn (a few m/s at the test hull). The tier's
   capital law caps at 2 m/s^2 whatever the hull. Engines with unequal shares fly as equal until the step takes a thrust per

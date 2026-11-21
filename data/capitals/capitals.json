@@ -28,5 +28,38 @@
    "attack_memory_s": 15.0,
    "danger_weight": 4.0
   }
+ },
+ "section_damage": {
+  "_doc": "M10-T08 (D12.5, Q53): how a capital's sections take damage. reactor_overload: share of a reactor's points it takes after it shuts down before it blows; pass_on: share of a hit on a lost section passed to the nearest live section; headless_fire_rate: rate of fire on last orders after the bridge is lost; power_stage_at and power_stage_level: below this share of its points a reactor gives this share of power; mount_reach_m: a hit this close to a live mount (or within its barrel's length) lands on it too.",
+  "reactor_overload": 0.5,
+  "pass_on": 0.5,
+  "headless_fire_rate": 0.5,
+  "power_stage_at": 0.5,
+  "power_stage_level": 0.5,
+  "mount_reach_m": 10.0
+ },
+ "mount_hit_points": {
+  "_doc": "M10-T08 (Q53, docs/assets-capital.md 'Sections, mounts and blasts'): a mount's own hit points, by its weapon's kind (data/capitals/loadouts.json), else by the hardpoint's kind.",
+  "by_weapon_kind": {
+   "bolt_light": 300.0,
+   "bolt_medium": 800.0,
+   "bolt_heavy": 2000.0,
+   "bolt_fixed": 2000.0,
+   "beam_pulsed": 2500.0,
+   "beam_sustained": 2500.0,
+   "missile": 1200.0,
+   "torpedo": 1200.0,
+   "interceptor": 400.0,
+   "mine_prox": 1200.0,
+   "mine_energy": 1200.0,
+   "mine_guided": 1200.0
+  },
+  "by_mount_kind": {
+   "turret": 800.0,
+   "beam": 2500.0,
+   "interceptor": 400.0,
+   "missile": 1200.0,
+   "mine": 1200.0
+  }
  }
 }

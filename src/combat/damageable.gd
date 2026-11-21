@@ -62,6 +62,9 @@ var respects_god_mode: bool = false
 ## `invulnerable`). Hits still arrive (`hit_taken`); only the console's `kill` gets through, as it does through god mode.
 ## The pool clears it on every acquire.
 var invulnerable: bool = false
+## A hull that takes damage by section (a capital, M10-T08) routes each hit here instead of straight to `hull`: it is called
+## with the `HitInfo`, removes the points itself (from `hull` too) and returns how many it removed. Empty for every other ship.
+var hit_router: Callable = Callable()
 ## The hit volumes' scale about the body origin (M6-T22: a ship shrunk in a jump vortex's funnel); 1 normally.
 var hull_scale: float = 1.0
 ## How many times the hull was made whole again (`restore`: a respawn, a pool re-use, a heal): a far missile launched at one
@@ -206,7 +209,7 @@ func apply_hit(info: HitInfo) -> void:
 	var applied: float = 0.0
 	var killed: bool = false  # this hit's own kill, never one left over from an earlier hit (code review 2026-11-12)
 	if not invulnerable and not (respects_god_mode and DebugConsole.flags.invulnerable):
-		applied = hull.apply(info.damage)
+		applied = float(hit_router.call(info)) if hit_router.is_valid() else hull.apply(info.damage)
 		killed = hull.destroyed_now
 	info.applied = applied
 	if applied > 0.0:

@@ -367,7 +367,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | done |
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | done |
 | T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | done |
-| T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | in progress |
+| T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | done |
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | not started |
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | not started |
 | T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
@@ -667,6 +667,28 @@ parity green.
 
 - **T08 to T11 (damage):** D12.5 (tests per section kind), D12.6, D12.7 with Q19's cap, D12.8 (headless tests that a
   death plays its plan and its blasts hurt what is near). Done when AC8.
+- **T08 done (2026-11-21).** Damage by section on every `CapitalShip` (`docs/architecture.md` §22.2, "Damage by section"):
+  `CapitalDamage` with `CapitalSection` and `CapitalMount` (pure), fed through the `Damageable`'s new `hit_router` (the hull's and
+  each rotor's). A bolt's hit is named by the volume the core's sweep entered (`hit_bolts` returns it per pair; `HitInfo.volume`:
+  the only native change, so parity and threads are untouched), a ram's by its point. Sections hold their `hull_share` of the
+  hull (no armour); mounts their own points by weapon kind (Q53; `mount_hit_points` and the rules `section_damage` in
+  `data/capitals/capitals.json`). Lost (`disabled`) at 0 with their mounts, bays and engines; magazine and fuel blow
+  (`destroyed`, the hull with them, so the destruction director takes it); a reactor shuts down (disabled), blows after another
+  50 %, and gives half power below half its points; a lost bridge halves the rate of fire, disabling only with every engine gone;
+  hits on a lost section, and damage past a section's last point, pass half to the nearest live section. Engines lost or a
+  power stage refit the drive (`CapitalPropulsion.live_layout`: one side's engines alone are listed on both sides at half thrust
+  a nozzle); a disabled hull gets no command and drifts. For T09 to T18: `mount_works`, `bay_works`, `damage.fire_rate()`,
+  `power()`, `thrust_fraction()`, signals `section_changed`, `mount_lost`, `ship_disabled`. Console `capital sections` and
+  `capital damage <section|mount> <amount>`, provider fields `state`, `sections`, `power`, `thrust`, `fire_rate`, `mounts`,
+  `bays` (`info.md`). Tests (staged copy): cargo 271 (new: a bolt across two sections meeting at a cut names the one it meets
+  first); GUT `test_capital_damage` unit 12 (one or more per section kind) and integration 4 on the Omega, with the capital,
+  Omega, propulsion (+1), sections, helm, framework asset and console list files 47/47, and hit resolver, damage, rams,
+  destruction, station sections and in game, strike carrier, broad phase, parity fixture, flight parity fight, core and station
+  threads and carrier logic 142/142; compile check 1075 scripts clean. Cost: nothing per tick; about 6 us of GDScript a hit
+  (0.6 ms to build the Omega's model at spawn), and a bolt's section now comes from the sweep instead of `section_at`'s
+  100 us search. **Open:** "nearest live structure" is read as the nearest live section of any kind; the disabled hull's thrust
+  goes at once (T10 stages it); subsystems are not yet targets in the HUD (T18); bays only stop by their section (they have no
+  points of their own in Q53's table).
 - **T12 to T15 (weapons):** D12.9 with T03's numbers: beams and their batched draw, interceptors and the EA hulls'
   screens, capital turrets and missiles, mines placed by scenario data and laid in battle, with the radar's short range
   (Q20). Done when AC9, apart from the stand-ins' removal (T45).

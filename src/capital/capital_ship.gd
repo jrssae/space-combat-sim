@@ -9,7 +9,11 @@ extends CapitalBody
 ## - **Collision.** The hull piece's sections are compound shapes on this body (Jolt's compound); each rotating piece is a
 ##   `CapitalRotor`, a kinematic body turned about its pivot. Every section's hit volumes, with the convex hulls they are fitted
 ##   to, go to the native core as the body's surface (`ScsSimCore.set_surface`), so the hit sweep, the rams and the turrets' line
-##   of fire see the real shape; a hit or ram is named by its section (`section_hit`) for T08.
+##   of fire see the real shape; a hit or ram is named by its section (`section_hit`), by the volume the core's sweep entered.
+## - **Damage by section** (M10-T08, D12.5). Its `Damageable` routes every hit to `damage` (`CapitalDamage`): the section's
+##   points, a mount within reach, what a lost section takes with it. An engine lost or the reactor's power down a stage refits
+##   the drive (the live engines' nozzles at the power left); a disabled ship gets no thrust and drifts; a section that blows
+##   destroys the hull. `mount_works`, `bay_works` and `damage.fire_rate()` are what its weapons and launches read (T12 to T17).
 ## - **In play.** `Targetable` of kind capital, heard as far as its class broadcasts (`CapitalData.broadcast_range_m`); in the
 ##   low-attention tier it is a capital row (`CapitalBody`); it opens and holds its own jump point at its anchor when its type
 ##   can (`open_own_point`). Destroyed, the `DestructionDirector` draws its blast and it leaves play (`leave_play`).
@@ -18,12 +22,19 @@ extends CapitalBody
 
 ## A hit or a ram landed: the section it landed on ("" when none was found) and the hit.
 signal section_hit(section: String, info: HitInfo)
+## A section changed state (`CapitalSection.State`), a weapon mount was lost, power or control is gone (M10-T08).
+signal section_changed(section: String, state: int)
+signal mount_lost(mount: String)
+signal ship_disabled
 
 const GROUP: StringName = &"capital_ships"
 ## Contact points Jolt keeps for the hull, which the ram tracker reads by body RID (as a ship's, `Ship.CONTACTS_REPORTED`).
 const CONTACTS_REPORTED: int = 16
 ## Set on a hit a rotor passes on: the piece it landed on (none: the hull).
 const PIECE_META: StringName = &"capital_piece"
+## Set on every hit it takes: the section it landed on and where, in the body frame with the rotating pieces at rest.
+const SECTION_META: StringName = &"capital_section"
+const REST_POINT_META: StringName = &"capital_rest_point"
 
 ## The catalogue type it was built from and its capital class (`capital_class` there: what its broadcast and drive read).
 var type_id: StringName = &""
@@ -43,6 +54,8 @@ var last_section: String = ""
 var section_hits: Dictionary = {}
 ## The flight step's slot (set by `CapitalFlight`; -1 when not registered).
 var flight_slot: int = -1
+## Its damage by section (M10-T08): states, mounts, engines and bays that still work.
+var damage: CapitalDamage = null
 
 static var _by_body: Dictionary[int, CapitalShip] = {}
 
@@ -55,6 +68,8 @@ var _packed_volumes := PackedFloat64Array()  # the hull's sections as the core's
 var _packed_hulls := PackedFloat64Array()
 var _core: Object = null
 var _world_signals: WorldFrame = null
+var _volume_sections: Dictionary[String, PackedStringArray] = {}  # per body: each surface volume's section, as the core holds them
+var _full_layout: ThrusterLayout = null  # every engine's nozzles, as built
 
 
 ## The capital ship of catalogue type `type`, for `p_faction`, called `display_name`, holding `velocity` (World frame). Null
@@ -152,8 +167,10 @@ func set_course(heading: Vector3, velocity: Vector3) -> void:
 	cruise_velocity = velocity
 
 
-## This tick's command for the flight step (the helm on `cruise_velocity`).
+## This tick's command for the flight step (the helm on `cruise_velocity`); none for a disabled or destroyed hull, which drifts.
 func flight_command() -> FlightCommand:
+	if damage.is_disabled or damage.is_destroyed:
+		return FlightCommand.new()
 	helm.velocity = cruise_velocity
 	return helm.command(global_basis, linear_velocity)
 
@@ -210,6 +227,25 @@ func chunk_mesh(chunk_name: String) -> Mesh:
 	return null
 
 
+## Whether weapon mount `mount` can fire, and bay `bay` launch (M10-T08: alive, its section standing, the ship fighting).
+func mount_works(mount: String) -> bool:
+	return damage.mount_works(mount)
+
+
+func bay_works(bay: String) -> bool:
+	return damage.bay_works(bay)
+
+
+## Takes hit `info` by section (its `Damageable`'s and each rotor's `hit_router`): the points go off the section it landed on,
+## and off the hull's total; a section that blows takes the rest of the hull. Returns the hull points removed.
+func route_hit(info: HitInfo) -> float:
+	if not info.has_meta(SECTION_META):
+		_name_hit(info)
+	var removed: float = damage.hit(str(info.get_meta(SECTION_META)), info.get_meta(REST_POINT_META) as Vector3, info.damage)
+	var hull: HullHealth = damageable.hull
+	return hull.apply(hull.hp if damage.is_destroyed else removed)
+
+
 ## How many collision shapes the hull body has (the rotors' are their own).
 func hull_shape_count() -> int:
 	return _hull_shapes
@@ -227,6 +263,7 @@ func _build(loaded: ShipSpec, display_name: String) -> bool:
 	var parsed: Variant = JSON.parse_string(text) if not text.is_empty() else null
 	_hardpoints = parsed if parsed is Dictionary else {}
 	layout = CapitalPropulsion.layout(_hardpoints)
+	_full_layout = layout
 	var pieces: Dictionary = _manifest.get("pieces", {}) if _manifest.get("pieces") is Dictionary else {}
 	if not sections.valid or not layout.valid or not pieces.has(CapitalSections.HULL):
 		push_warning("CapitalShip: %s is not generated or is broken (%s %s); run scripts/gen_assets.sh, then import" % [
@@ -249,8 +286,16 @@ func _build(loaded: ShipSpec, display_name: String) -> bool:
 	skin_variant = HullSheenMaterial.variant_of_mesh((pieces[CapitalSections.HULL] as Dictionary).get("mesh", {}), display_name)
 	_build_hull(pieces[CapitalSections.HULL], display_name)
 	for piece_name: String in sections.bodies():
+		_volume_sections[piece_name] = sections.volume_sections(piece_name)
 		if piece_name != CapitalSections.HULL and pieces.has(piece_name):
 			_build_rotor(piece_name, pieces[piece_name])
+	damage = CapitalDamage.build(sections, _hardpoints, spec.hull_max)
+	damage.section_changed.connect(section_changed.emit)
+	damage.mount_lost.connect(mount_lost.emit)
+	damage.disabled.connect(ship_disabled.emit)
+	damage.drive_changed.connect(_refit_drive)
+	damageable.hit_router = route_hit
+	damageable.restored.connect(_on_restored)
 	return true
 
 
@@ -343,23 +388,79 @@ func _register_surfaces() -> void:
 	_core = sim.core
 	_core.set_surface(get_instance_id(), _packed_volumes, _packed_hulls, 0.0)
 	_core.set_surface_owner(get_instance_id(), 0, false)
+	_check_volume_count(CapitalSections.HULL, get_instance_id())
 	for rotor: CapitalRotor in rotors:
 		# No spin in the core: a ram on the rotor takes the rotor's own motion (the hull's) instead of its skin's turn alone.
 		_core.set_surface(rotor.get_instance_id(), rotor.packed_volumes, rotor.packed_hulls, 0.0)
 		_core.set_surface_owner(rotor.get_instance_id(), get_instance_id(), false)
+		_check_volume_count(rotor.piece_name, rotor.get_instance_id())
+
+
+# The core drops a volume that is not finite, which would shift the sweep's volume numbers: that body's hits are then named by
+# their point instead.
+func _check_volume_count(piece: String, body_id: int) -> void:
+	if int(_core.surface_volume_count(body_id)) != _volume_sections.get(piece, PackedStringArray()).size():
+		push_warning("CapitalShip %s: the core holds a different count of %s volumes; hits there are named by point" % [name, piece])
+		_volume_sections[piece] = PackedStringArray()
 
 
 # A hit or ram on the hull or a rotor (which says which) is named by the section it landed in.
 func _on_hit(info: HitInfo) -> void:
+	if not info.has_meta(SECTION_META):
+		_name_hit(info)
+	last_section = str(info.get_meta(SECTION_META))
+	section_hits[last_section] = int(section_hits.get(last_section, 0)) + 1
+	section_hit.emit(last_section, info)
+
+
+# Names the section a hit landed on, by the surface volume the core's sweep entered when it gives one (a bolt), else by the
+# point (a ram, the console), and where it landed with the rotating pieces at rest, where the mounts are listed.
+func _name_hit(info: HitInfo) -> void:
 	var piece: String = str(info.get_meta(PIECE_META, CapitalSections.HULL))
 	var node: Node3D = self
+	var rest_offset := Vector3.ZERO
 	for rotor: CapitalRotor in rotors:
 		if rotor.piece_name == piece:
 			node = rotor
+			rest_offset = rotor.pivot
 	var local: Vector3 = node.global_transform.affine_inverse() * info.point if node.is_inside_tree() else info.point
-	last_section = sections.section_at(piece, local)
-	section_hits[last_section] = int(section_hits.get(last_section, 0)) + 1
-	section_hit.emit(last_section, info)
+	var by_volume: PackedStringArray = _volume_sections.get(piece, PackedStringArray())
+	var section: String = by_volume[info.volume] if info.volume >= 0 and info.volume < by_volume.size() else sections.section_at(piece, local)
+	info.set_meta(SECTION_META, section)
+	info.set_meta(REST_POINT_META, local + rest_offset)
+
+
+# An engine lost or the reactor's power changed: the flight step flies the live engines' nozzles, each at the thrust it had as
+# built, scaled by the power left (every engine's nozzles at no thrust with none left), the helm keeping its course.
+func _refit_drive() -> void:
+	var live: Dictionary = CapitalPropulsion.live_layout(_hardpoints, damage.live_engines())
+	var refit: ThrusterLayout = live["layout"] if (live["layout"] as ThrusterLayout).valid else _full_layout
+	var base: ShipSpec = CapitalPropulsion.flight_spec(spec, CapitalPropulsion.main_count(_full_layout))
+	var power: float = damage.power() if not damage.is_disabled and not damage.is_destroyed else 0.0
+	var per_nozzle: float = power * float(live["nozzle_scale"])
+	var scaled: ShipSpec = base.duplicate() as ShipSpec
+	scaled.pod_main_thrust = base.pod_main_thrust * per_nozzle
+	scaled.pod_retro_thrust = base.pod_retro_thrust * per_nozzle
+	# A gravitic drive's sideways push is its engines'; a reaction hull's thrusters only need power.
+	var side: float = power * (damage.engine_share() if CapitalPropulsion.is_gravitic(spec) else 1.0)
+	scaled.rcs_force_max = base.rcs_force_max * side
+	scaled.rcs_torque_max = base.rcs_torque_max * power
+	var old: CapitalHelm = helm
+	layout = refit
+	flight_spec = scaled
+	helm = CapitalHelm.make(flight_spec, layout)
+	helm.heading = old.heading
+	helm.velocity = old.velocity
+	helm.flipping = old.flipping
+	var flight: CapitalFlight = CapitalFlight.of(_world_signals) if _world_signals != null else null
+	if flight != null and flight.ships().has(self):
+		flight.join(self)
+
+
+# Whole again (the console's heal, a rebuild): every section and mount, and the drive as built.
+func _on_restored() -> void:
+	damage.restore()
+	_refit_drive()
 
 
 # After a rebase moved the hull, the rotors are put beside it at once (they are not in the shifted group).

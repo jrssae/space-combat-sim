@@ -619,3 +619,20 @@ fn a_wish_at_a_face_it_could_not_stop_short_of_is_turned_off_it_early() {
     let far = fighter(Vector3::new(-2535.0, 700.0, 365.0), Vector3::new(0.0, 0.0, 120.0));
     assert_eq!(avoid(&rows, &far, &[0], &[], 0, Vector3::new(150.0, 0.0, 0.0)).v_des, Vector3::new(150.0, 0.0, 0.0));
 }
+
+// A capital's sections overlap a little at their cuts (M10-T05); its hit lands on the section the bolt meets first (M10-T08).
+#[test]
+fn a_bolt_across_two_sections_meeting_at_a_cut_names_the_one_it_meets_first() {
+    let mut p = Vec::new();
+    p.extend(packed_box([0.0, 0.0, -51.0], [20.0, 20.0, 52.0])); // the bow, z -103 to 1
+    p.extend(packed_box([0.0, 0.0, 51.0], [20.0, 20.0, 52.0])); // the stern, z -1 to 103
+    let s = from_packed(&p, 0.0);
+    let (_, k) = sweep(&s, [0.0, 0.0, 300.0], [0.0, 0.0, -300.0], 0.5).unwrap();
+    assert_eq!(k, 1, "from astern, the stern first though it is listed second");
+    let (_, k) = sweep(&s, [0.0, 0.0, -300.0], [0.0, 0.0, 300.0], 0.5).unwrap();
+    assert_eq!(k, 0, "from ahead, the bow");
+    let (_, k) = sweep(&s, [100.0, 0.0, 0.5], [-100.0, 0.0, 0.5], 0.0).unwrap();
+    assert_eq!(k, 0, "square on the cut, where both start at once: the earlier listed");
+    let (_, k) = sweep(&s, [100.0, 0.0, 30.0], [-100.0, 0.0, 30.0], 0.0).unwrap();
+    assert_eq!(k, 1, "across the stern alone");
+}

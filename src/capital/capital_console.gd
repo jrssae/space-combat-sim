@@ -1,10 +1,11 @@
 class_name CapitalConsole
 extends RefCounted
 ## The `capital` provider and command (M10-T07): the capital ships in play, one in focus (the newest by default), and ways to
-## spawn one, set its helm, open its own jump point and hurt a section, so the capital path can be driven from a live build.
+## spawn one, set its helm, open its own jump point, list its sections and hurt a section or a mount (M10-T08), so the capital
+## path can be driven from a live build.
 
 const PROVIDER: StringName = &"capital"
-const ACTIONS: Array[StringName] = [&"info", &"list", &"spawn", &"helm", &"jump", &"focus"]
+const ACTIONS: Array[StringName] = [&"info", &"list", &"spawn", &"helm", &"jump", &"focus", &"sections", &"damage"]
 ## How far ahead of the player `capital spawn` places a ship, m, unless told.
 const SPAWN_AHEAD_M: float = 2000.0
 
@@ -35,6 +36,19 @@ func register() -> void:
 				"type": TYPE_FLOAT, "doc": "Hull points left, 0 to 1"},
 		&"last_section": {"get": func() -> String: return _focused().last_section if _focused() != null else "",
 				"doc": "The section the last hit or ram landed on"},
+		&"state": {"get": _state_text, "doc": "fighting, disabled or destroyed (and the section that blew), M10-T08"},
+		&"sections": {"get": func() -> String: return "; ".join(_focused().damage.describe()) if _focused() != null else "",
+				"doc": "Each section: kind, state (intact, damaged, disabled, destroyed), points left, a reactor's overload"},
+		&"power": {"get": func() -> float: return _focused().damage.power() if _focused() != null else 0.0, "type": TYPE_FLOAT,
+				"doc": "Its reactors' power, 0 to 1 (a stage down below half a reactor's points)"},
+		&"thrust": {"get": func() -> float: return _focused().damage.thrust_fraction() if _focused() != null else 0.0,
+				"type": TYPE_FLOAT, "doc": "The thrust it can give, 0 to 1: the live engines' share at the power left"},
+		&"fire_rate": {"get": func() -> float: return _focused().damage.fire_rate() if _focused() != null else 0.0,
+				"type": TYPE_FLOAT, "doc": "Its weapons' rate of fire, 0 to 1 (half on last orders with the bridge lost)"},
+		&"mounts": {"get": func() -> String: return _live_text(_focused().damage.live_mounts().size(), _focused().damage.mounts.size()) if _focused() != null else "",
+				"doc": "Weapon mounts that work, of all"},
+		&"bays": {"get": func() -> String: return _live_text(_focused().damage.live_bays().size(), _focused().damage.bay_sections.size()) if _focused() != null else "",
+				"doc": "Launch bays that work, of all"},
 		&"collision": {"get": _collision_text, "doc": "Hull shapes, rotors, sections, and whether the core holds the surfaces"},
 		&"broadcast_km": {"get": func() -> float: return _focused().targetable.broadcast_range_m / 1000.0 if _focused() != null else 0.0,
 				"type": TYPE_FLOAT, "doc": "How far it is heard, km (by class)"},
@@ -45,7 +59,7 @@ func register() -> void:
 				"doc": "Wall-clock cost of the last tick's capital flight, us (a readout)"},
 	}), flight)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Capital ships (M10-T07): info, list, spawn <type> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>",
+			"Capital ships (M10-T07): info, list, spawn <type> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"a"),
 					ConsoleArg.float_optional(&"b", null)]), _cmd, flight)
 
@@ -67,11 +81,53 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 			return _helm(a, args[&"b"])
 		&"jump":
 			return _jump()
+		&"sections":
+			return _sections()
+		&"damage":
+			return _damage(a, args[&"b"])
 	var ship: CapitalShip = _focused()
 	if ship == null:
 		return ConsoleResult.line("no capital ships")
-	return ConsoleResult.line("%s (%s): %s; %s; hull %.2f; %s; %s" % [ship.targetable.display_name, ship.type_id,
-			_propulsion_text(), _helm_text(), ship.damageable.hull.fraction(), _collision_text(), _jump_text()])
+	return ConsoleResult.line("%s (%s): %s; %s; %s; hull %.2f; %s; %s" % [ship.targetable.display_name, ship.type_id,
+			_state_text(), _propulsion_text(), _helm_text(), ship.damageable.hull.fraction(), _collision_text(), _jump_text()])
+
+
+# The focused ship's sections, one a line, and what still works.
+func _sections() -> ConsoleResult:
+	var ship: CapitalShip = _focused()
+	if ship == null:
+		return ConsoleResult.failure("capital sections: no capital ship")
+	var lines: PackedStringArray = ship.damage.describe()
+	lines.append("%s; power %.2f, thrust %.2f, fire rate %.2f; mounts %s, bays %s" % [_state_text(), ship.damage.power(),
+			ship.damage.thrust_fraction(), ship.damage.fire_rate(), _live_text(ship.damage.live_mounts().size(), ship.damage.mounts.size()),
+			_live_text(ship.damage.live_bays().size(), ship.damage.bay_sections.size())])
+	return ConsoleResult.success(lines)
+
+
+# A hit of `amount` with no shooter on the focused ship's section or mount `target`, through its Damageable (god mode aside),
+# landing at the section's centre or on the mount.
+func _damage(target: String, amount: Variant) -> ConsoleResult:
+	var ship: CapitalShip = _focused()
+	var usage: String = "capital damage <section|mount> <amount>"
+	if ship == null or amount == null or float(amount) <= 0.0:
+		return ConsoleResult.failure(usage)
+	var rest: Vector3
+	var section: String = target
+	if ship.damage.mounts.has(target):
+		rest = ship.damage.mounts[target].position
+		section = ship.damage.mounts[target].section
+	elif ship.damage.sections.has(target):
+		rest = ship.damage.sections[target].box.get_center()
+	else:
+		return ConsoleResult.failure("%s; sections %s" % [usage, ", ".join(PackedStringArray(ship.damage.sections.keys()))])
+	var info := HitInfo.new(ship.get_instance_id(), 0, &"", float(amount), ship.global_transform * rest, Vector3.ZERO, 0.0,
+			HitInfo.CAUSE_CONSOLE)
+	info.set_meta(CapitalShip.SECTION_META, section)
+	info.set_meta(CapitalShip.REST_POINT_META, rest)
+	ship.damageable.apply_hit(info)
+	var s: CapitalSection = ship.damage.sections[section]
+	return ConsoleResult.line("%s: %.0f on %s, now %s %.0f/%.0f; %s" % [ship.targetable.display_name, info.applied, target,
+			CapitalSection.state_name(s.state), s.hp, s.max_hp, _state_text()])
 
 
 # A capital of `type` ahead of the player, at the player's velocity, flying on.
@@ -165,6 +221,19 @@ func _helm_text() -> String:
 		return ""
 	return "heading %s, holding %.1f m/s%s" % [ship.helm.heading.snappedf(0.01), ship.cruise_velocity.length(),
 			", flipping" if ship.helm.flipping else ""]
+
+
+func _state_text() -> String:
+	var ship: CapitalShip = _focused()
+	if ship == null:
+		return ""
+	if ship.damage.is_destroyed:
+		return "destroyed (%s blew)" % ship.damage.blown
+	return "disabled" if ship.damage.is_disabled else "fighting"
+
+
+static func _live_text(live: int, total: int) -> String:
+	return "%d/%d" % [live, total]
 
 
 func _collision_text() -> String:

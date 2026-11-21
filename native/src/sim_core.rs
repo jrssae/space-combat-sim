@@ -1207,7 +1207,9 @@ impl ScsSimCore {
     /// hull's slot in the hull columns that follow (only hulls some kept pair names, bases three columns each); the beams'
     /// indices and ids; the rows the core owns, the bolt count and the hull count. Then, per kept hull pair, where along
     /// the bolt's tick it enters a big hull's surface (M7-T06: the station; -1 for any other hull, which GDScript sweeps
-    /// itself): a pair whose bolt misses the surface is not kept, so 4 km of bounding sphere costs GDScript nothing.
+    /// itself): a pair whose bolt misses the surface is not kept, so 4 km of bounding sphere costs GDScript nothing. Last,
+    /// per kept hull pair, the index of the surface volume it enters first (-1 for any other hull): a capital's hit lands
+    /// on that volume's section (M10-T08).
     /// `delta` is the tick, the hull's own move across it taken off the bolt's end as the resolver does.
     #[func]
     fn hit_bolts(
@@ -1225,6 +1227,7 @@ impl ScsSimCore {
         // Each bolt's run of kept keys in the filtered lists.
         let mut kept_hulls: Vec<i32> = Vec::with_capacity(hull_keys.len());
         let mut kept_t: Vec<f64> = Vec::with_capacity(hull_keys.len());
+        let mut kept_volume: Vec<i32> = Vec::with_capacity(hull_keys.len());
         let mut hull_range = vec![(0i32, 0i32); n];
         let mut slot_of_hull: HashMap<usize, i32> = HashMap::new();
         let mut hull_list: Vec<u32> = Vec::new();
@@ -1242,12 +1245,12 @@ impl ScsSimCore {
                 continue;
             }
             let row = self.sweep_rows[j] as usize;
-            let surface_t = match self.rows.surface(row) {
+            let (surface_t, volume) = match self.rows.surface(row) {
                 Some(surface) => match self.surface_entry(surface, row, i, delta) {
-                    Some(t) => t,
+                    Some((t, k)) => (t, k as i32),
                     None => continue, // the bolt passes the big hull's volumes
                 },
-                None => -1.0,
+                None => (-1.0, -1),
             };
             if hull_range[i].1 == hull_range[i].0 {
                 hull_range[i] = (kept_hulls.len() as i32, kept_hulls.len() as i32);
@@ -1258,6 +1261,7 @@ impl ScsSimCore {
             });
             kept_hulls.push(slot);
             kept_t.push(surface_t);
+            kept_volume.push(volume);
             hull_range[i].1 = kept_hulls.len() as i32;
         }
         let mut kept_rocks: Vec<i64> = Vec::with_capacity(rock_keys.len());
@@ -1336,6 +1340,7 @@ impl ScsSimCore {
         }
         out.push(&(hull_total as i64).to_variant());
         out.push(&PackedFloat64Array::from(kept_t.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(kept_volume.as_slice()).to_variant());
         out
     }
 
@@ -1358,9 +1363,10 @@ impl ScsSimCore {
 }
 
 impl ScsSimCore {
-    // Where bolt `i`'s path this tick enters `surface`, row `row`'s big hull, as a fraction of it (M7-T06), or none: the
-    // path taken into the hull's frame at its pose this tick, the hull's own move off its end, as `HitResolver` does.
-    fn surface_entry(&self, surface: &crate::rows::Surface, row: usize, i: usize, delta: f64) -> Option<f64> {
+    // Where bolt `i`'s path this tick enters `surface`, row `row`'s big hull, as a fraction of it (M7-T06), and the volume it
+    // enters (a capital's section, M10-T08), or none: the path taken into the hull's frame at its pose this tick, the hull's
+    // own move off its end, as `HitResolver` does.
+    fn surface_entry(&self, surface: &crate::rows::Surface, row: usize, i: usize, delta: f64) -> Option<(f64, usize)> {
         let b = &self.bolts;
         let start = sub(b.positions[i], b.last_steps[i]);
         let at = self.rows.positions[row];
@@ -1368,7 +1374,7 @@ impl ScsSimCore {
         let basis = &self.rows.bases[row];
         let a = crate::surface::into_body(basis, at, start);
         let end = crate::surface::into_body(basis, moved, b.positions[i]);
-        crate::surface::sweep(surface, a, end, b.radii[i]).map(|(t, _)| t)
+        crate::surface::sweep(surface, a, end, b.radii[i])
     }
 
     // The index of `faction` in the core's table, added on first sight.

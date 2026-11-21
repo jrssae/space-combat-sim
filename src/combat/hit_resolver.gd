@@ -80,6 +80,7 @@ var _bolt_ids := PackedInt64Array()
 var _bolt_count: int = 0
 var _hull_keys := PackedInt32Array()  # per kept hull pair, the paired hull's slot in the hull columns
 var _surface_t := PackedFloat64Array()  # per kept hull pair: where the bolt enters a big hull's surface (M7-T06), else -1
+var _surface_volume := PackedInt32Array()  # per kept hull pair: the surface volume it enters first (M10-T08), else -1
 var _rock_keys := PackedInt64Array()
 var _beam_ids := PackedInt64Array()
 var _hull_first := PackedInt32Array()
@@ -128,6 +129,7 @@ var _best_t: float = INF
 var _best_a := Vector3.ZERO
 var _best_b := Vector3.ZERO
 var _best_stop: bool = false  # the best hit is a bolt stopping on a big hull it cannot hurt (M7-T07)
+var _best_volume: int = -1  # the big hull's volume the best hit enters (M10-T08), else -1
 ## `settings.friendly_fire` as of the last tick.
 var friendly_fire: bool = false
 ## Throws the sparks of a hull hit (`Main` sets it); none without it.
@@ -254,6 +256,7 @@ func _candidates(sim: SimCore, keys: PackedInt64Array, rock_keys: PackedInt64Arr
 	_bases = c[23]
 	hulls_last_tick = int(c[24])
 	_surface_t = c[25]
+	_surface_volume = c[26]
 	_hull_count = _body_ids.size()
 	_damageables.clear()
 	_damageables.resize(_hull_count)
@@ -515,6 +518,7 @@ func _earliest_hit(c: int, first: int, next: int) -> bool:
 			_best_a = a
 			_best_b = b
 			_best_stop = stops
+			_best_volume = _surface_volume[k] if _surface_t[k] >= 0.0 else -1
 	return _best >= 0
 
 
@@ -534,6 +538,7 @@ func _land(i: int, delta: float) -> void:
 			t0 + move * t + basis * local_point,
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
+	info.volume = _best_volume
 	_spend(i)
 	if _best_stop:
 		friendly_stops += 1

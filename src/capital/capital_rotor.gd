@@ -5,9 +5,10 @@ extends AnimatableBody3D
 ## manifest's piece (`pivot`, `axis`, `spin_rad_s`) and its sections' collision, which sit in the piece's own frame.
 ##
 ## It is a child of its capital but placed by script in the World (`top_level`), aimed one tick ahead of the hull so the two
-## move together through Jolt's step. Its hits and rams are the capital's: its `Damageable` shares the capital's hull points
-## and passes every signal on (the capital's `section_hit` names the section). A kinematic body is as heavy as the world to
-## Jolt: a capital that rams another's rotor is stopped as by a wall (known gap until a ram resolver takes rotors).
+## move together through Jolt's step. Its hits and rams are the capital's: its `Damageable` shares the capital's hull points,
+## routes its hits to the capital's sections and passes every signal on (the capital's `section_hit` names the section). A
+## kinematic body is as heavy as the world to Jolt: a capital that rams another's rotor is stopped as by a wall (known gap
+## until a ram resolver takes rotors).
 
 ## The hull this rotor belongs to.
 var capital: CapitalShip = null
@@ -64,6 +65,7 @@ func _ready() -> void:
 	add_collision_exception_with(capital)
 	set_meta(Targetable.SPEAKS_FOR, capital.targetable)  # its shots and hits answer for the capital
 	hull.hull = capital.damageable.hull  # one set of hull points for the whole ship
+	hull.hit_router = capital.route_hit  # its hits land on its sections (M10-T08)
 	hull.ram_mass_kg = capital.mass
 	hull.ram_safe_dv_mps = capital.damageable.ram_safe_dv_mps
 	hull.ram_lethal_dv_mps = capital.damageable.ram_lethal_dv_mps

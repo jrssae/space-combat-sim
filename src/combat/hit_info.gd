@@ -42,6 +42,9 @@ var applied: float = 0.0
 var blast_energy_j: float = 0.0
 var blast_radius_m: float = 0.0
 var blast_point: Vector3 = Vector3.ZERO
+## The big hull's surface volume the bolt entered first, as the core's sweep found it (a capital's hit lands on that volume's
+## section, M10-T08); -1 for any other hit.
+var volume: int = -1
 
 
 func _init(p_target_id: int = 0, p_shooter_id: int = 0, p_faction: StringName = &"", p_damage: float = 0.0,

@@ -14,9 +14,9 @@ const GRAVITIC: StringName = &"gravitic"
 
 
 ## The engines as the flight step's nozzles, about the hardpoints' centre of mass: each engine a main, with a stand-in retro
-## at its place. An engine on the centre line (x = 0) is listed on both sides, so its thrust counts twice. Invalid (with its
-## `error`) when there are no engines.
-static func layout(hardpoints: Dictionary) -> ThrusterLayout:
+## at its place. An engine on the centre line (x = 0), or every engine with `both_sides`, is listed on both sides, so its thrust
+## counts twice. Invalid (with its `error`) when there are no engines, or they are all on one side without `both_sides`.
+static func layout(hardpoints: Dictionary, both_sides: bool = false) -> ThrusterLayout:
 	var pods: Array = []
 	var engines: Variant = hardpoints.get("engines")
 	for raw: Variant in (engines as Array) if engines is Array else []:
@@ -27,9 +27,9 @@ static func layout(hardpoints: Dictionary) -> ThrusterLayout:
 		var exhaust: Array = engine.get("exhaust", [0.0, 0.0, 1.0])
 		var reverse: Array = [-float(exhaust[0]), -float(exhaust[1]), -float(exhaust[2])]
 		var sides := PackedStringArray()
-		if float(at[0]) >= 0.0:
+		if float(at[0]) >= 0.0 or both_sides:
 			sides.append("right")
-		if float(at[0]) <= 0.0:
+		if float(at[0]) <= 0.0 or both_sides:
 			sides.append("left")
 		for side: String in sides:
 			pods.append({"name": "%s_%s" % [engine.get("name", "engine"), side], "side": side,
@@ -43,6 +43,27 @@ static func layout(hardpoints: Dictionary) -> ThrusterLayout:
 		none.error = "hardpoints have no engines[]"
 		return none
 	return ThrusterLayout.from_dict({"pods": pods}, centre)
+
+
+## The nozzles of the engines `live` names, of those in `hardpoints` (M10-T08: the engines whose sections stand), as
+## `{layout, nozzle_scale}`: engines left on one side only are each listed on both, at the same place, so the step still takes
+## them, and `nozzle_scale` is what each nozzle's thrust is multiplied by so each live engine gives the thrust it had as built.
+## The layout is invalid with no live engine.
+static func live_layout(hardpoints: Dictionary, live: PackedStringArray) -> Dictionary:
+	var kept: Array = []
+	var built_nozzles: int = 0
+	var engines: Variant = hardpoints.get("engines")
+	for raw: Variant in (engines as Array) if engines is Array else []:
+		if raw is Dictionary and live.has(str((raw as Dictionary).get("name", ""))):
+			kept.append(raw)
+			var at: Array = (raw as Dictionary).get("position", [0.0, 0.0, 0.0])
+			built_nozzles += 2 if float(at[0]) == 0.0 else 1
+	var subset: Dictionary = {"engines": kept, "center_of_mass": hardpoints.get("center_of_mass", [0.0, 0.0, 0.0])}
+	var out: ThrusterLayout = layout(subset)
+	if not out.valid and not kept.is_empty():
+		out = layout(subset, true)
+	var nozzles: int = main_count(out) if out.valid else 0
+	return {"layout": out, "nozzle_scale": float(built_nozzles) / float(nozzles) if nozzles > 0 else 0.0}
 
 
 ## Whether `spec` flies a gravitic drive.

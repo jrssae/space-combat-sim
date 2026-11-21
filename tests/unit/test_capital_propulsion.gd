@@ -76,3 +76,23 @@ func test_broadcast_range_by_class_from_the_data() -> void:
 	assert_almost_eq(CapitalData.broadcast_range_m(&"capital"), 5.0e5, 1e-3, "capitals 500 km")
 	assert_almost_eq(CapitalData.broadcast_range_m(&"dreadnought"), 1.0e6, 1e-3, "dreadnoughts 1 000 km")
 	assert_almost_eq(CapitalData.broadcast_range_m(&"destroyer"), 5.0e5, 1e-3, "a class the file does not name is a capital")
+
+
+func test_the_live_engines_keep_their_thrust_as_built_when_one_side_is_lost() -> void:
+	var hardpoints: Dictionary = _hardpoints([25.0, 25.0, -25.0, -25.0])
+	var both: Dictionary = CapitalPropulsion.live_layout(hardpoints, PackedStringArray(["engine_0", "engine_2"]))
+	assert_true((both["layout"] as ThrusterLayout).valid)
+	assert_eq(CapitalPropulsion.main_count(both["layout"]), 2, "one a side, as built")
+	assert_eq(both["nozzle_scale"], 1.0)
+	var port: Dictionary = CapitalPropulsion.live_layout(hardpoints, PackedStringArray(["engine_2", "engine_3"]))
+	var layout: ThrusterLayout = port["layout"]
+	assert_true(layout.valid, "the port pair alone still makes a layout (M10-T08)")
+	assert_eq(CapitalPropulsion.main_count(layout), 4, "each listed on both sides")
+	assert_almost_eq(float(port["nozzle_scale"]) * 4.0, 2.0, 1e-9, "at half thrust a nozzle: the two engines' thrust")
+	for i: int in 4:
+		assert_lt(layout.nozzle_positions[i].x, 0.0, "at the port engines' places")
+	var centre: Dictionary = CapitalPropulsion.live_layout(_hardpoints([0.0, 25.0, -25.0]), PackedStringArray(["engine_0"]))
+	assert_eq(centre["nozzle_scale"], 1.0, "a centre-line engine already counts on both sides")
+	var none: Dictionary = CapitalPropulsion.live_layout(hardpoints, PackedStringArray())
+	assert_false((none["layout"] as ThrusterLayout).valid, "no live engine")
+	assert_eq(none["nozzle_scale"], 0.0)
