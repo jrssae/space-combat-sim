@@ -2,7 +2,7 @@
 
 > "The first mission." (`docs/roadmap.md`)
 
-**Status:** **built, awaiting the maintainer's play-test** (2026-11-19; started 2026-11-18 with T07). Every task but T17 is `done`
+**Status:** **accepted 2026-11-21 by the maintainer** and merged into `main` (built 2026-11-19; started 2026-11-18 with T07). Every task is `done`
 (T09's Battle Wagon removed again by T27). T17 ran the standard suite once on `dd72d616`: Python 1 261 tests OK (2 skipped), Rust 257
 passed, import and compile check clean (1 003 scripts), the console smokes passed, and GUT green in six shards (491 scripts, 4 734
 tests: 4 696 passed, 38 pending, 0 failed; about 115 minutes, so the unsharded cap was raised, `a5284588`). The (H) list is
@@ -382,7 +382,7 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
 | T31 | C | Docking into the main docking bay: more camera angles, and the Starfury visibly matching the drum's rotation before it enters (maintainer, 2026-11-19) | T06 | Opus | Docking shots and a roll-match stage in the docking autopilot | done |
 | T32 | C | Hold X for 1 s to abort any autopilot (gate jump, docking), until its point of no return (maintainer, 2026-11-19) | T29, T31 | Opus | One abort rule over every autopilot, the hold bar and keyboard parity | done |
 | T34 | D | Babylon 5 commands: with the station targeted, the comms menu sends orders to Babylon 5 (launch wing, recall fighters, defense grid on/off, fire support, shelter civilians, sitrep) (maintainer, 2026-11-19) | T24 | Opus | A second comms page on the radial framework and station-side handlers | done |
-| T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | in progress |
+| T17 | - | Integration, full suite, docs and acceptance | all | controller | One full run, the GPU check, the (H) list | done |
 
 ### M8-T01 Tutorial script (discussion with the maintainer)
 
@@ -1600,3 +1600,17 @@ Today a navigation target that offers an interaction (the jumpgate, the docking 
   page's M8 items collected into one "M8 acceptance checklist" with new items for the launch shots, the radial fit, Gamma
   Leporis, the interceptor muzzle and the release build; the roadmap row; `gate shots` in `info.md`'s usage. Suite counts in the
   status line. Open: AC13, the maintainer's play-test.
+- **Done (2026-11-21):** AC13 met: the maintainer accepted M8 after the play-tests of 2026-11-19 to 11-21. Their findings were
+  fixed on `m8` under T06, T08, T13, T17, T24, T26 and T33. The fixes covered:
+  - a second dock with traffic, and wingmen breaking off while the player docks;
+  - jump points that kill on opening and closing, the vortex keep-out, arrivals that survive, the departure vortex held open for
+    following wingmen with the camera on the gate, and back-to-back jumps;
+  - wingmen flying back after a respawn and catching up fast from far away, and FORM ON ME firing while HOLD FIRE never shoots;
+  - the raider carrier's launches and stand-off, an encounter schedule that no longer stalls at the cap, and patrol routes that
+    finish in the low-attention tier;
+  - the escort's Nav Beta at 60 km with four rock fields, the launch base pinned in Allies and eight ships per target list;
+  - the tutorial's lessons starting at rest in space, with nine more findings, and dialog that names the control as bound;
+  - capital markers off unless a scenario enables them.
+
+  CI was green on every push through `7317e55a`, after GUT went to seven shards (`615440a0`). Two known limits stay in the
+  checklist: a fighter docking onto a braking carrier can die, and a civilian standing aside at the bay adds a few minutes.
