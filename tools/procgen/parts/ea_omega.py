@@ -89,7 +89,7 @@ def _put(section: str, m: cp.Module, side: str = cp.CENTRE) -> cp.Module:
 
 # --- the bow -------------------------------------------------------------------------------------------------------------
 MARK_HEIGHT_M = 40.0  # the show's letter stands about a sixth of the shield's height
-MARK_AT = 0.26  # how far up the lower panel the letter's centre sits, from its bottom edge
+MARK_AT = 0.2  # how far up the lower panel the letter's centre sits, from its bottom edge
 
 
 def shield_mark(x: float, top: tuple[float, float, float], bottom: tuple[float, float, float]) -> cp.Hardpoint:

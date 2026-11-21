@@ -1,8 +1,7 @@
 """Hull lettering (M10-T21): a blocky capital-letter and digit set drawn in code and packed in one atlas, so any hull that
 carries a name letter or a number (the EA warships' bows, a fighter's tail code) shares the same print.
 
-The glyphs are 5 by 7 bitmaps, grown into rounded block print by blurring and cutting the result (heavy strokes, softened
-corners), one per atlas cell, white on transparent: the game tints the quad that shows one.
+The glyphs are 5 by 7 bitmaps, grown into block print by blurring and cutting the result (heavy strokes, trimmed corners), one per atlas cell, white on transparent: the game tints the quad that shows one.
 """
 
 from __future__ import annotations
@@ -18,6 +17,7 @@ COLUMNS = 6  # the atlas is COLUMNS by COLUMNS cells, row by row in CHARS order
 CELL_PX = 128
 GLYPH_PX = (84, 60)  # a glyph's height and width inside its cell: the letter is 7 by 5 units of 12 px
 UNIT_PX = 12
+SOFTEN_PX = 5  # how far the blur reaches, px
 ATLAS_NAME = "{asset}_marks.png"
 
 _BITMAPS = {
@@ -65,10 +65,10 @@ def glyph(char: str) -> np.ndarray:
     rows = _BITMAPS[char]
     bits = np.array([[c == "1" for c in row] for row in rows], dtype=float)
     big = np.kron(bits, np.ones((UNIT_PX, UNIT_PX)))
-    k = np.ones(UNIT_PX) / UNIT_PX  # a box blur one unit wide rounds the corners and thickens the diagonals
+    k = np.ones(SOFTEN_PX) / SOFTEN_PX  # a narrow box blur trims the corners and fills the diagonals, keeping the print square
     for axis in (0, 1):
         big = np.apply_along_axis(lambda v: np.convolve(v, k, mode="same"), axis, big)
-    cover = np.clip((big - 0.42) * 6.0 + 0.5, 0.0, 1.0)
+    cover = np.clip((big - 0.45) * 8.0 + 0.5, 0.0, 1.0)
     out = np.zeros((CELL_PX, CELL_PX))
     top, left = (CELL_PX - GLYPH_PX[0]) // 2, (CELL_PX - GLYPH_PX[1]) // 2
     out[top:top + GLYPH_PX[0], left:left + GLYPH_PX[1]] = cover

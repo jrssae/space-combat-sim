@@ -106,6 +106,10 @@ tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part,
   - `engines[]`: `thrust` (the push on the ship), `exhaust`, `share` (of the ship's thrust; they add up to 1), `radius_m`;
   - `rotors[]`: `piece`, `pivot`, `axis`, `spin_rad_s`, `sections`;
   - `lights[]`: `direction`, `role` (`port`, `starboard`, `top`, `beacon`, `flood`), `colour` (linear RGB), `range_m`;
+  - `marks[]` (M10-T21, painted lettering): `position` (the letter's centre on the face), `normal`, `up`, `text` (`initial`, the
+    first letter of the ship's name, or a fixed string), `height_m`, `colour`; with `mark_atlas` (`file`, `chars`, `columns`,
+    `glyph_height_share`) when any exist. `parts/capital_fittings.hull_mark` makes one; `core/glyphs.py` draws the blocky
+    A to Z and 0 to 9 set into `<asset>_marks.png` (6 by 6 cells of 128 px, lossless, no geometry or hull texture spent);
   - `chunks[]` gain `piece`; `jump_point` as the carrier's.
 - **Collision** (above): one entry of `collision.pieces` per section, named for it, with `piece` (the body that carries
   it); 64 shapes a section and 32 points a hull by default; `coverage` over the whole skin. A bay's hall and a rotating
@@ -485,7 +489,11 @@ second (1.5 in roll), 30 000 hull points, opens its own jump points. `CapitalShi
 play through the destruction director, its sections gone from the core; the staged break-up along its section chunks is
 T11's. Its guns, beams, missiles and interceptors fire when T12 to T14 put capital weapons on the native rows; the weapon
 numbers are `data/capitals/loadouts.json`'s. Names: `data/ships/names.json` gives the Omegas twenty Greek names, the
-Agamemnon first, as `EAS <name>` (`ShipNames`; the console's `capital spawn ea_omega` uses them).
+Agamemnon first, as `EAS <name>` (`ShipNames`; the console's `capital spawn ea_omega` uses them). **Name letter**: as the show's
+Zeus and Talos, each Omega wears the first letter of its name in large white block print at the bottom of each shield, on the
+leaning lower panel (`parts/ea_omega.shield_mark`, 40 m tall, a fifth of the way up the panel). The hull's `marks` and the glyph
+atlas carry it; `CapitalShip` stands one `HullMarkNode` quad (`HullMarks` picks the letter from the display name, skipping the
+faction's all-capitals prefix) a little off each face when it is created, so any hull with a name list and marks reuses it.
 
 Sheets (gitignored, `references/screenshots/M10-T21 Omega/`): `look_sheet.png` with its shots in `look_sheet/` (from 50 m,
 1 km, 10 km and 100 km, the drum in the low texture set, the lit bays from 60 m and into one from 40 m, lit and back-lit), made

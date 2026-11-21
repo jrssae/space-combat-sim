@@ -381,7 +381,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
-| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | in progress |
+| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
 | T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | not started |
 | T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | not started |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
@@ -712,7 +712,10 @@ On top of it:
   references linked); GUT `test_ea_omega` 3 (spawns named, flies and brakes, takes the Starfury's fire on the drum's
   sections and dies), `test_ship_names` 3, with `test_capital_ship`, `test_jump_capability`, the catalogue files, the
   console list and `test_capital_framework_asset`: 52 + 18 in two batches, all passing after the fix in the second.
-  Look sheet `references/screenshots/M10-T21 Omega/look_sheet.png`. **Open:** its weapons fire with T12 to T14 (the numbers
+  Look sheet `references/screenshots/M10-T21 Omega/look_sheet.png`. **Name letter** (the maintainer, per the show's Zeus and
+  Talos): the first letter of each Omega's name in white block print on both shields' lower panels: `core/glyphs.py` (the atlas),
+  the `mark` hardpoint kind and `marks[]` in `hardpoints.json`, `HullMarks` and `HullMarkNode` (a quad off each face, chosen at
+  spawn); sheet `references/screenshots/M10-T21 Omega/letters/letters_sheet.png`. **Open:** its weapons fire with T12 to T14 (the numbers
   are T03's loadout; no `WeaponSpec`s yet); the renegades' marking is T02's (the `livery` hook unused); at 100 km it is under
   a pixel (no far representation); the bay lights are hardpoints only until a light rig reads capital lights.
 - **Faction fighters (T38 to T42):** the fighter pipeline (the generator as `raider_fighter`, not the capital framework),
