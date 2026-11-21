@@ -360,7 +360,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
-| T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | in progress |
+| T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
@@ -501,6 +501,16 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   hull on the livery shader and to any `ThrusterVisuals`; the X marker needs the hull's manifest to carry a `livery` section with the
   `renegades` marker and its mesh zones (`ZONES`: strut_upper, fuselage, ...) tagged, which an Omega-class build must add in
   `tools/procgen/styles/ea_capital.py` (T21's files); until then an Omega wears its own paint with only the engine colour.
+  **Hidden renegades (2026-11-21, maintainer: renegades are scary because they cannot easily be detected).** The `renegades` profile
+  has `transponder: earth_alliance`: each renegade ship broadcasts Earth Alliance until its first hostile act. `Targetable.transponder`
+  is the per-ship state (`disguise_as`, `reveal`; a pool acquire starts it again) and `SimCore.set_disguise` gives it to the core, whose
+  row flags carry the broadcast faction index above bit 8 (`rows::seen_ix`). Perception reads it, except by the ship's own faction: the
+  native brains' relations and nearest-hostile pick, the radar, the tier's target columns, `ContactScan`, the target list and cycling, the
+  HUD faction line. Hits, friendly fire and mines use the true faction. Reveal: a shot at the player or the broadcast faction's side
+  (the target the ship holds, `Transponder.note_shot`) or a bolt that hits them (`note_hit`); console `transponder <reveal|hide>
+  [target|player|all]`; `targeting.faction` is what is shown, `targeting.true_faction` and `targeting.revealed` the truth. Limits:
+  station grids and turrets, and a tier ship's own brain (its guns), still read the true faction (a grid opens fire on renegades after
+  one fires on it).
 
 ### M10-T03 Weapons and balance concept (discussion with the maintainer)
 
