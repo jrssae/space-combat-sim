@@ -373,6 +373,11 @@ pub struct Context {
     /// The evasion's leash (M8-T06, `AiContext.leash_m`): a wingman evading farther than this from its lead breaks toward
     /// the lead instead of on away (0: none).
     pub leash_m: f64,
+    /// A long rejoin (M8-T17, `AiContext.catch_up_m`, `catch_up_mps`; data/wings/flights.json): a ship in formation farther
+    /// than `catch_up_m` from its slot closes at up to `catch_up_mps`, braking back to formation's own closing in time
+    /// (0: none).
+    pub catch_up_m: f64,
+    pub catch_up_mps: f64,
 }
 
 impl Context {
@@ -400,6 +405,8 @@ impl Context {
         self.rejoined_m = 0.0;
         self.strayed = false;
         self.leash_m = 0.0;
+        self.catch_up_m = 0.0;
+        self.catch_up_mps = 0.0;
     }
 }
 
@@ -483,6 +490,7 @@ struct Tick<'a> {
     ctx_link: Option<[f64; 3]>,
     ctx_link_velocity: Vector3,
     ctx_leash_m: f64,
+    ctx_catch_up: (f64, f64),
 }
 
 impl Tick<'_> {
@@ -615,6 +623,7 @@ impl<'a> Tick<'a> {
             ctx_link: ctx.link,
             ctx_link_velocity: ctx.link_velocity,
             ctx_leash_m: ctx.leash_m,
+            ctx_catch_up: (ctx.catch_up_m, ctx.catch_up_mps),
         }
     }
 }
@@ -3588,6 +3597,36 @@ struct FormationState {
     firing: bool,
     // Stopped where it was under the order to hold position (M8-T19).
     holding: bool,
+    // On a long rejoin (M8-T17): closing faster than formation's own until it has braked back to it.
+    catching_up: bool,
+}
+
+/// A long rejoin's closing cap (M8-T17): a ship in formation `distance_m` from its slot, closing at `towards_mps`, on the rejoin
+/// already (`on`) or not, with the band's `beyond_m` and `fast_mps`, formation's own far closure `base_mps` from `settle_m` in,
+/// and the braking it plans with, m/s^2. The cap follows the braking curve down to `base_mps` at `settle_m`, at most
+/// `fast_mps`; the rejoin starts beyond `beyond_m` and ends once the ship is back to formation's own closing or inside
+/// `settle_m`. Returns the cap (0 when it is off) and whether the rejoin goes on.
+#[allow(clippy::too_many_arguments)]
+pub fn catch_up_cap(
+    distance_m: f64,
+    towards_mps: f64,
+    on: bool,
+    beyond_m: f64,
+    fast_mps: f64,
+    base_mps: f64,
+    settle_m: f64,
+    brake_mps2: f64,
+) -> (f64, bool) {
+    let on = if distance_m > beyond_m && beyond_m > 0.0 {
+        true
+    } else {
+        on && distance_m > settle_m && towards_mps > base_mps
+    };
+    if !on {
+        return (0.0, false);
+    }
+    let curve = (base_mps * base_mps + 2.0 * brake_mps2.max(0.1) * (distance_m - settle_m).max(0.0)).sqrt();
+    (curve.min(fast_mps).max(base_mps), true)
 }
 
 // What a ship in formation shoots with (M8-T19): its attack's fire gate and this tick's aim error.
@@ -3635,6 +3674,8 @@ impl FormationState {
     const HOLD_MATCHED_MPS: f64 = 3.0;
     // A ship in its slot turns its guns on a hostile this far off its leader's nose at most, deg (M8-T19).
     const FIRE_ARC_DEG: f64 = 40.0;
+    // A long rejoin brakes on this share of the ship's stronger of its mains and retros, so it never overshoots (M8-T17).
+    const CATCH_UP_BRAKE_SHARE: f64 = 0.75;
 
     fn new(profile: &Profile) -> Self {
         FormationState {
@@ -3656,6 +3697,7 @@ impl FormationState {
             fire_target_id: 0,
             firing: false,
             holding: false,
+            catching_up: false,
         }
     }
 
@@ -3672,6 +3714,7 @@ impl FormationState {
         self.fire_target_id = 0;
         self.firing = false;
         self.holding = false;
+        self.catching_up = false;
     }
 
     fn enter(&mut self) {
@@ -3794,11 +3837,35 @@ impl FormationState {
             slot
         };
         let error = add(sub(aim, p.position), scale(sub(slot_velocity, p.velocity), Self::LEAD_S));
-        let cap = if self.slot_error_m <= Self::FAR_RANGE_M {
+        let mut cap = if self.slot_error_m <= Self::FAR_RANGE_M {
             Self::NEAR_CLOSURE_MPS
         } else {
             self.far_closure_mps
         };
+        // A long rejoin (M8-T17): far off the ship closes fast, and brakes back to formation's own closing in time.
+        let (catch_up_m, catch_up_mps) = tick.ctx_catch_up;
+        if catch_up_mps > self.far_closure_mps {
+            let towards = if self.slot_error_m > 1e-3 {
+                f64::from(dot(sub(p.velocity, slot_velocity), to_slot)) / self.slot_error_m
+            } else {
+                0.0
+            };
+            let brake = Self::CATCH_UP_BRAKE_SHARE * ship.capability.a_retro.max(ship.capability.a_main);
+            let (fast_cap, on) = catch_up_cap(
+                self.slot_error_m,
+                towards,
+                self.catching_up,
+                catch_up_m,
+                catch_up_mps,
+                self.far_closure_mps,
+                Self::FAR_RANGE_M,
+                brake,
+            );
+            self.catching_up = on;
+            cap = cap.max(fast_cap);
+        } else {
+            self.catching_up = false;
+        }
         let mut v_des = add(
             add(
                 slot_velocity,

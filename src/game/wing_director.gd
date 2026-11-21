@@ -644,6 +644,10 @@ func refresh(wing: Wing) -> void:
 		# An evading wingman of a flight, or of a wing told to form up, turns back at the cohesion distance (M8-T06).
 		var forming: bool = order == AiContext.Order.FORM_ON_ME or order == AiContext.Order.FORM_HOLD_FIRE
 		ctx.leash_m = flight_rules.cohesion_m if ai_flight or (alive and forming) else 0.0
+		# Far off its slot (a respawn, a gate, a recall) it closes fast and brakes in time (M8-T17).
+		ctx.catch_up_m = flight_rules.catch_up_beyond_m
+		ctx.catch_up_mps = minf(flight_rules.catch_up_mps, member.ship.spec.assist_speed_max_mps) if member.ship.spec != null \
+				else flight_rules.catch_up_mps
 		if alive and wing.leader.is_player:
 			member.ship.running_lights = wing.leader.ship.running_lights
 	if leader_pilot != null and wing.flight > 0:

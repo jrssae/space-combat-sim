@@ -1572,6 +1572,7 @@ too quiet or right, against the engines (the bed the rest sits on).
       the vortex forms.
 - [ ] **(H) A jump at speed and a busy gate:** fly at the gate fast from the side and hold X just inside 10 km: the autopilot
       takes you round and through, never into an arm. Die in a run-in (`god off`, `damage 200`) and respawn: your wing flies
-      back to you from the gate (about 4 to 5 minutes from 50 km at its cruise) and re-forms; nobody is placed. Jump while civilians come and go: none flies in as you come out; they wait clear of the
+      back to you from the gate (about 1 minute 40 s from 50 km: fast while far off, braking into its slots) and re-forms;
+      nobody is placed and nobody overshoots. Jump while civilians come and go: none flies in as you come out; they wait clear of the
       mouth and go after.
 

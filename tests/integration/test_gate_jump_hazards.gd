@@ -4,8 +4,10 @@ extends GutTest
 ## run-in and respawned finds its wing flying back to formation round it, nothing placed; an AI ship on its own departure run when the player comes
 ## out of the gate stands aside until the arrival is through, then departs.
 
-## Formation's far closure over the profile's cruise (`FormationState::FAR_EXTRA_MPS`, native/src/brain_behaviours.rs).
+## Formation's far closure over the profile's cruise, and the share of its stronger engines a long rejoin brakes on
+## (`FormationState::FAR_EXTRA_MPS`, `CATCH_UP_BRAKE_SHARE`, native/src/brain_behaviours.rs).
 const FAR_EXTRA_MPS: float = 100.0
+const CATCH_UP_BRAKE_SHARE: float = 0.75
 const SPEED_UP: float = 8.0
 
 var _rate_backup: int = 60
@@ -143,37 +145,60 @@ func test_a_player_killed_in_its_run_in_finds_its_wing_flying_back_after_respawn
 	assert_eq(wing.order, AiContext.Order.FORM_ON_ME, "under its last order")
 	for c: Combatant in wingmen:
 		assert_true(c.ship.visible and not wing.is_away(c) and not c.driver.in_passage, "%s flies again" % c.display_name)
-	# They fly back, nothing placed: the bound is the way home at formation's far closure, plus a minute to turn and settle.
-	var far_mps: float = AiProfile.load_named(&"ally_starfury").cruise_mps + FAR_EXTRA_MPS
+	# They fly back, nothing placed, far off at the long rejoin's speed (M8-T17, data/wings/flights.json): the bound is the way
+	# home at that speed, the braking back to formation's own closing, and a minute to settle.
+	var rules: FlightRules = FlightRules.shared()
+	var base_mps: float = AiProfile.load_named(&"ally_starfury").cruise_mps + FAR_EXTRA_MPS
+	var spec: ShipSpec = wingmen[0].ship.spec
+	var capability: ShipCapability = ShipCapability.from_spec(spec, wingmen[0].ship.get_layout())
+	var brake: float = CATCH_UP_BRAKE_SHARE * maxf(capability.a_retro, capability.a_main)
+	var fast_mps: float = minf(rules.catch_up_mps, spec.assist_speed_max_mps)
 	var farthest: float = 0.0
 	for c: Combatant in wingmen:
 		farthest = maxf(farthest, c.ship.global_position.distance_to(main.ship.global_position))
-	var bound_s: float = farthest / far_mps + 60.0
-	var max_step: float = wingmen[0].ship.spec.assist_speed_max_mps / 60.0
+	var bound_s: float = farthest / fast_mps + (fast_mps - base_mps) / brake + 60.0
+	var max_step: float = spec.assist_speed_max_mps / 60.0
 	var last: Array[UniversePos] = []  # universe positions: a frame rebase moves no ship
+	var approach: Array[Vector3] = []  # each wingman's way in to its slot, to measure an overshoot along it
+	var overshoot: Array[float] = []
 	for c: Combatant in wingmen:
 		last.append(main.world.to_universe(c.ship.global_position))
+		approach.append((_slot_of(c) - c.ship.global_position).normalized())
+		overshoot.append(-INF)
 	_fast()
-	var formed: bool = false
+	var formed_at: float = -1.0
 	var jumped: String = ""
 	var elapsed_s: float = 0.0
-	while elapsed_s < bound_s:
+	while elapsed_s < bound_s + 10.0:
 		await get_tree().physics_frame
 		elapsed_s += 1.0 / 60.0
-		formed = true
+		var all_in: bool = true
 		for i: int in wingmen.size():
 			var at: UniversePos = main.world.to_universe(wingmen[i].ship.global_position)
 			var step: float = last[i].offset_to(at).length()
 			if step > max_step and jumped.is_empty():
 				jumped = "%s moved %.0f m in a tick" % [wingmen[i].display_name, step]
 			last[i] = at
-			formed = formed and wingmen[i].ship.global_position.distance_to(main.ship.global_position) < 300.0
-		if formed:
-			break
+			var off: Vector3 = wingmen[i].ship.global_position - _slot_of(wingmen[i])
+			overshoot[i] = maxf(overshoot[i], off.dot(approach[i]))
+			all_in = all_in and off.length() < 300.0
+		if all_in and formed_at < 0.0:
+			formed_at = elapsed_s
+		if formed_at >= 0.0 and elapsed_s > formed_at + 10.0:
+			break  # ten seconds in the slot, for any overshoot to show
 	_normal()
 	assert_eq(jumped, "", "no wingman was placed: each flew")
-	assert_true(formed, "back in formation within %.0f s (%.1f km at %.0f m/s); took %.0f s" % [bound_s, farthest / 1000.0, far_mps, elapsed_s])
-	gut.p("fly-back: %.1f km in %.0f s (bound %.0f s)" % [farthest / 1000.0, elapsed_s, bound_s])
+	assert_between(formed_at, 0.0, bound_s, "back in formation within %.0f s (%.1f km at up to %.0f m/s); took %.0f s" % [bound_s,
+			farthest / 1000.0, fast_mps, formed_at])
+	for i: int in wingmen.size():
+		assert_lt(overshoot[i], 200.0, "%s did not overshoot its slot (%.0f m past it)" % [wingmen[i].display_name, overshoot[i]])
+	gut.p("fly-back: %.1f km in %.0f s (bound %.0f s); overshoot %s" % [farthest / 1000.0, formed_at, bound_s, overshoot])
+
+
+# Where `c`'s slot round the player is now.
+func _slot_of(c: Combatant) -> Vector3:
+	var basis: Basis = main.ship.global_basis
+	return Formation.slot_point(main.ship.global_position, -basis.z, basis.y, wing.slot_offset(wing.slot_of(c)))
 
 
 func test_an_ai_departure_stands_aside_for_the_players_arrival_then_departs() -> void:

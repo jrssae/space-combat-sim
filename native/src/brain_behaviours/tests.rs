@@ -1289,3 +1289,27 @@ fn the_leash_lets_go_only_well_inside_and_follows_the_wings_link_out_of_sight() 
     assert!(far.evade.leashed, "7 km from the link's lead");
     assert!(far.desired_velocity.x < -45.0, "toward the link: {:?}", far.desired_velocity);
 }
+
+
+// A long rejoin (M8-T17): far off it closes at the band's speed, it brakes on its curve back to formation's own closing, it
+// never starts inside the band, and it ends once back to formation's closing.
+#[test]
+fn a_long_rejoin_closes_fast_and_brakes_in_time() {
+    let (beyond, fast, base, settle, brake) = (5000.0, 1000.0, 200.0, 1500.0, 20.0);
+    let (cap, on) = catch_up_cap(54000.0, 0.0, false, beyond, fast, base, settle, brake);
+    assert!(on && (cap - fast).abs() < 1e-9, "54 km out: the band's speed ({cap})");
+    let (cap, on) = catch_up_cap(3000.0, 0.0, false, beyond, fast, base, settle, brake);
+    assert!(!on && cap == 0.0, "3 km out, not rejoining: formation's own");
+    // Braking: at every distance the cap is a speed it can still shed before the settle point.
+    let mut d = 20000.0;
+    while d > settle {
+        let (cap, on) = catch_up_cap(d, 900.0, true, beyond, fast, base, settle, brake);
+        assert!(on);
+        assert!(cap * cap - base * base <= 2.0 * brake * (d - settle) + 1e-6, "{d} m: {cap} m/s can stop in time");
+        d -= 250.0;
+    }
+    let (_, on) = catch_up_cap(2000.0, base - 1.0, true, beyond, fast, base, settle, brake);
+    assert!(!on, "back to formation's own closing: the rejoin ends");
+    let (_, on) = catch_up_cap(1400.0, 600.0, true, beyond, fast, base, settle, brake);
+    assert!(!on, "inside the settle point: the rejoin ends");
+}

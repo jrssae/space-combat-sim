@@ -132,6 +132,20 @@ var leash_m: float = 0.0:
 			return
 		leash_m = value
 		_changed()
+## A long rejoin (M8-T17; `WingDirector` sets it from `FlightRules` for every ship with a slot): farther than `catch_up_m` from
+## its slot the ship closes at up to `catch_up_mps`, braking back to formation's own closing in time (0: none).
+var catch_up_m: float = 0.0:
+	set(value):
+		if value == catch_up_m:
+			return
+		catch_up_m = value
+		_changed()
+var catch_up_mps: float = 0.0:
+	set(value):
+		if value == catch_up_mps:
+			return
+		catch_up_mps = value
+		_changed()
 ## Whether this wingman is too far from its lead to fight (`refresh` works it out every think).
 var strayed: bool = false
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
@@ -329,6 +343,8 @@ func clear_wing() -> void:
 	cohesion_m = 0.0
 	leash_m = 0.0
 	rejoined_m = 0.0
+	catch_up_m = 0.0
+	catch_up_mps = 0.0
 	strayed = false
 
 

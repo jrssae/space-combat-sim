@@ -5541,7 +5541,13 @@ At 1 000 km (GPU): the gate 23 draw calls, 145 fps (the display's cap), 379 MB; 
   flies in, and the player from its jump's start to its end, does not collide with the gate's own arms (a jump asked at speed
   from the side flew the player into the far arm). A follower that cannot stop short of the mouth when its hold is called off
   goes through with the player. On respawn the player's wing drops any jump state and flies back to its slots round the player
-  (`WingDirector.regroup`: no teleport; formation's far closure, cruise plus 100 m/s, about 4 to 5 minutes from the gate). A
+  (`WingDirector.regroup`: no teleport).
+- **A long rejoin (M8-T17, maintainer 2026-11-20).** A ship in formation (the player's wing or a flight) farther than
+  `catch_up_beyond_m` (5 km) from its slot closes at up to `catch_up_mps` (1 000 m/s, never past its ShipSpec), braking on a
+  curve back to formation's own far closure (cruise plus 100 m/s) at 1.5 km, on three quarters of its stronger engines, so it
+  does not overshoot (data/wings/flights.json; `catch_up_cap` in the native formation, `AiContext.catch_up_m`, `catch_up_mps`
+  set by `WingDirector` for every slot). From the gate to the home spawn, 54 km, a Starfury (30 m/s^2) takes about 100 s;
+  accelerating to 1 000 m/s and braking back already take some 60 s of that. A
   follower dying or the order changing calls the hold off at once and the vortex folds. Gate only: the player opens no point of
   its own.
 - Console `gate [status|open|close|jump|cancel|target|approach|view]` (`gate open <dir> <hold_s>`; `gate view reference` is the
