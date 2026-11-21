@@ -1,5 +1,5 @@
 {
- "_doc": "M10-T03 (Q53): weapon kinds and numbers, and each hull's loadout, class, hull points, interceptors, launches and in-battle mines. Hull tasks build their manifests' weapon mounts to these counts; T12 to T16 read the numbers (each weapon becomes a WeaponSpec .tres in assets/weapons/). Numbers are T03's starting points; T16 tunes damage and hull points against the balance fights (docs/assets-capital.md, 'Weapons and loadouts (T03)'). damage: per bolt, shot or warhead (hull points); cycle_s: s between shots or bursts (a sustained beam's whole cycle); beams: beam_dps while on for beam_on_s; barrels fire together each cycle. launches: catalogue ids (starfury_ally stands in for the Thunderbolt until M11).",
+ "_doc": "M10-T03 (Q53; damage_scale per hull from Q54 multiplies every anti-capital weapon of that hull): weapon kinds and numbers, and each hull's loadout, class, hull points, interceptors, launches and in-battle mines. Hull tasks build their manifests' weapon mounts to these counts; T12 to T16 read the numbers (each weapon becomes a WeaponSpec .tres in assets/weapons/). Numbers are T03's starting points; T16 tunes damage and hull points against the balance fights (docs/assets-capital.md, 'Weapons and loadouts (T03)'). damage: per bolt, shot or warhead (hull points); cycle_s: s between shots or bursts (a sustained beam's whole cycle); beams: beam_dps while on for beam_on_s; barrels fire together each cycle. launches: catalogue ids (starfury_ally stands in for the Thunderbolt until M11).",
  "kinds": [
   "bolt_light",
   "bolt_medium",
@@ -634,6 +634,7 @@
    "task": "T22",
    "class": "capital",
    "hull": 17000,
+   "damage_scale": 0.71,
    "jump": "own",
    "weapons": {
     "ea_plasma_heavy": 2,
@@ -672,6 +673,7 @@
    "task": "T24",
    "class": "dreadnought",
    "hull": 45000,
+   "damage_scale": 1.48,
    "jump": "own",
    "weapons": {
     "ea_particle_cannon_heavy": 2,
@@ -692,6 +694,7 @@
    "task": "T25",
    "class": "capital",
    "hull": 30000,
+   "damage_scale": 0.71,
    "jump": "own",
    "weapons": {
     "narn_heavy_laser": 2,
@@ -738,6 +741,7 @@
    "task": "T28",
    "class": "capital",
    "hull": 58000,
+   "damage_scale": 1.55,
    "jump": "own",
    "weapons": {
     "minbari_neutron_cannon": 6,
@@ -824,6 +828,7 @@
    "task": "T33",
    "class": "cruiser",
    "hull": 8000,
+   "damage_scale": 2.28,
    "jump": "own",
    "weapons": {
     "isa_neutron_laser": 1,
@@ -840,6 +845,7 @@
    "task": "T34",
    "class": "dreadnought",
    "hull": 75000,
+   "damage_scale": 1.56,
    "jump": "own",
    "weapons": {
     "isa_fusion_beam": 2,
@@ -859,6 +865,7 @@
    "task": "T35",
    "class": "capital",
    "hull": 120000,
+   "damage_scale": 1.6,
    "jump": "shimmer",
    "weapons": {
     "ancient_slicer": 1
@@ -873,6 +880,7 @@
    "task": "T41",
    "class": "cruiser",
    "hull": 20000,
+   "damage_scale": 1.93,
    "jump": "shimmer",
    "weapons": {
     "ancient_slicer_small": 1
@@ -885,6 +893,7 @@
    "task": "T36",
    "class": "cruiser",
    "hull": 25000,
+   "damage_scale": 1.73,
    "jump": "own",
    "weapons": {
     "ancient_lance_small": 1
@@ -897,6 +906,7 @@
    "task": "T60",
    "class": "capital",
    "hull": 120000,
+   "damage_scale": 1.8,
    "jump": "own",
    "weapons": {
     "ancient_lance": 1
@@ -911,6 +921,7 @@
    "task": "T37",
    "class": "dreadnought",
    "hull": 50000,
+   "damage_scale": 1.52,
    "jump": "gate",
    "weapons": {
     "drakh_beam": 6,
@@ -927,6 +938,7 @@
    "task": "T52",
    "class": "dreadnought",
    "hull": 60000,
+   "damage_scale": 0.38,
    "jump": "own",
    "weapons": {
     "ea_pulse_medium": 4,

@@ -583,6 +583,30 @@ Minbari Flyer 300 hull points; the EA shuttles as built.
 | Shadow fighter T41 | 400 | beam 60 dps, 2 s on in 4 (T04) |
 | Vorlon fighter T42 | 400 | lance 120 / 3 s (T04) |
 
+### Re-balance (Q54)
+
+The maintainer's 2026-11-21 judgement on the ladder above: `damage_scale` in `loadouts.json` multiplies every anti-capital
+weapon of the hull; hull points are unchanged. Power is hull points x anti-capital dps, the Omega = 1; "even" is the
+square law (N ships even with M Omegas when N = M / sqrt(power)), the form T16 writes the bars in.
+
+| Hull | damage_scale | dps | Power | Even fight |
+|---|---|---|---|---|
+| Shadow battlecrab (T04 placeholder) | 1.60 | 560 | 12 | 1 ~ 3.5 Omegas |
+| Vorlon heavy cruiser (T04 placeholder) | 1.80 | 560 | 12 | 1 ~ 3.5 Omegas |
+| ISA Victory | 1.56 | 375 | 5.0 | 1 ~ 2.2 Omegas |
+| EA Warlock | 1.48 | 375 | 3.0 | 1 ~ 1.7 Omegas |
+| Minbari Sharlin | 1.55 | 290 | 3.0 | 1 ~ 1.7 Omegas (beats 1, sometimes 2, never 3) |
+| Drakh carrier | 1.52 | 225 | 2.0 | 1 ~ 1.4 Omegas |
+| Vorlon destroyer (T04 placeholder) | 1.73 | 270 | 1.2 | 1 ~ 1 Omega |
+| Shadow scout (T04 placeholder) | 1.93 | 170 | 0.6 | 4 ~ 3 Omegas |
+| Narn G'Quan | 0.71 | 95 | 0.5 | 3 ~ 2 Omegas |
+| ISA White Star | 2.28 | 210 | 0.3 | 2 ~ 1 Omega |
+| EA Explorer | 0.38 | 28 | 0.3 | 2 ~ 1 Omega (mostly hull) |
+| EA Hyperion | 0.71 | 65 | 0.2 | 2 to 3 ~ 1 Omega |
+
+Unchanged: Omega 1.0, Nova 1.35, Primus 0.74, Stormfalcon 0.33, Avioki 0.30, Vorchan 0.13, Xill 0.12, Sunhawk and Firehawk
+0.03 (6 ~ 1 Omega). Launched fighters are not in the power figure.
+
 ### Sections, mounts and blasts
 
 **Section shares** (a template; a hull task may move up to 0.05 between rows):
