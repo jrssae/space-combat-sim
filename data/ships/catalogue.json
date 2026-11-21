@@ -51,6 +51,8 @@
       "look_sheet": "pool", "callsign": "PANAMA", "random_pool": false},
     {"id": "ea_construction_tender", "spec": "res://assets/ships/ea_construction_tender.tres", "asset": "ea_construction_tender",
       "faction": "earth_alliance", "role": "civilian", "ai_profile": "civilian", "name": "EA construction tender",
-      "look_sheet": "pool", "callsign": "TENDER", "random_pool": false}
+      "look_sheet": "pool", "callsign": "TENDER", "random_pool": false},
+    {"id": "starfury_renegade", "spec": "res://assets/ships/starfury_renegade.tres", "asset": "starfury_aurora",
+      "faction": "renegades", "role": "fighter", "ai_profile": "ally_starfury", "look_sheet": "pool"}
   ]
 }

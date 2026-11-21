@@ -78,6 +78,21 @@ func test_the_renegades_fly_the_alliance_hulls_with_their_own_marking() -> void:
 	assert_eq(_table.marking(EA), "")
 
 
+func test_only_the_renegades_have_red_engines() -> void:
+	var glow: Color = _table.engine_glow(RENEGADES)
+	assert_eq(glow.a, 1.0)
+	assert_gt(glow.r, glow.b * 3.0, "red, not the alliance's blue-white")
+	assert_eq(_table.engine_glow(EA).a, 0.0)
+	assert_eq(_table.engine_glow(&"pirates").a, 0.0)
+
+
+func test_a_bad_engine_glow_is_refused_with_its_path() -> void:
+	var doc: Dictionary = {"factions": [{"id": "a", "name": "A", "engine_glow": [1.0, 2.0]}], "relations": [], "default": "neutral"}
+	var result: Dictionary = FactionTable.from_dict(doc)
+	assert_false(result["ok"])
+	assert_string_contains(String(result["error"]), "factions[0].engine_glow")
+
+
 func test_an_unlisted_faction_has_an_empty_profile() -> void:
 	assert_eq(_table.style(&"pirates"), "")
 	assert_true(_table.fighters(&"pirates").is_empty())
@@ -128,12 +143,20 @@ func test_a_scenario_file_may_carry_relations() -> void:
 	assert_string_contains(String(bad["error"]), "relations[0].b")
 
 
-func test_a_marking_is_the_named_row_or_nothing() -> void:
-	var section: Dictionary = {"liveries": {"renegades": {"primary": [0.5, 0.0, 0.0], "secondary": [0.1, 0.1, 0.1],
-			"number_colour": [1, 1, 1], "pattern": "plain", "numbers": []}}, "patterns": {"plain": []}, "number_fields": {}}
-	assert_null(Livery.for_marking("", section))
-	assert_null(Livery.for_marking("renegades", {"liveries": {}}), "a hull without the row keeps its own paint")
-	var marked: Livery = Livery.for_marking("renegades", section)
-	assert_not_null(marked)
-	assert_eq(marked.number, 0)
-	assert_eq(marked.primary.r, 0.5)
+func test_a_marking_is_a_named_marker_over_the_paint_or_nothing() -> void:
+	var section: Dictionary = {"liveries": {}, "plain": {"primary": [0.2, 0.2, 0.2], "secondary": [0.2, 0.2, 0.2]},
+			"patterns": {"plain": []}, "number_fields": {},
+			"markers": {"sparse": {"colour": [0.0, 0.0, 0.0], "marks": []}, "renegades": {"colour": [0.5, 0.0, 0.0], "marks": []}}}
+	var base: Livery = Livery.for_wing("", 0, section).with_marking("", section)
+	assert_eq(base.marker_index, 0)
+	assert_eq(Livery.for_wing("", 0, section).with_marking("nobody", section).marker_index, 0, "an unknown mark leaves the paint")
+	var marked: Livery = Livery.for_wing("", 0, section).with_marking("renegades", section)
+	assert_eq(marked.marker_index, 2, "indices start at 1 in the section's order")
+	assert_eq(marked.marker_colour.r, 0.5)
+	assert_almost_eq(marked.primary.r, 0.2, 1e-6, "the hull's own colours stay")
+
+
+func test_the_renegade_starfury_flies_for_the_renegades_and_broadcasts() -> void:
+	assert_true(ShipCatalog.has_type(ShipPool.RENEGADE_TYPE))
+	assert_eq(ShipCatalog.faction_for(ShipPool.RENEGADE_TYPE), RENEGADES)
+	assert_eq(ShipPool.default_broadcast_range_m(ShipPool.RENEGADE_TYPE), ShipPool.ALLY_BROADCAST_RANGE_M, "its transponder names it")

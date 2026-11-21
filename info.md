@@ -129,6 +129,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 | `upscale` | `[native\|bilinear\|fsr1\|fsr2] [preset\|<scale>]` | Show or set how the 3D view is rendered and enlarged to the window, live | front end, flight |
 | `backdrop` | `<move\|wide\|close\|rack\|second> [time_s]` | The menu's Cobra-bay hangar (M7-T09, M7-T20): show it from its slow camera move (`time_s` sets how far into the move) or from the look sheets' fixed views: wide, one racked fighter close, the six racks, or the second row | front end |
 | `sheet` | `<asset_id> [distance_m] [lit\|dark\|off] [wing:number\|-] [view]` | Park one idle ship of an asset ahead of the camera for a look sheet; `view` is `three_quarter\|top\|side\|front`; a capital hull (`raider_strike_carrier`, M12-T19) is parked as its bare mesh with its nearest corner `distance_m` away and a Delta-V on one cradle, and `<asset>:<option>` shows a surface option built under `<asset>_options/<option>/` | in flight |
+| `marker` | `<renegades\|none> [ship]` | Put the renegades' unit marking (M10-T02: a red X on each upper strut and one on the deck) over a ship's paint, to look at it; their red engines come from the faction's `engine_glow` (`data/factions.json`), not this command | in flight |
 | `livery` | `<wing\|plain> [number] [ship]` | Paint a ship in a wing's livery with its number, to look at it | in flight |
 | `fxburst` | `[hit\|ram\|explosion_sparks\|explosion_fragments\|explosion_gas\|debris\|intercept]` | Throw one burst of an effect 40 m in front of the camera | in flight |
 
@@ -145,7 +146,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 
 | Command | Arguments | Does | Where |
 |---|---|---|---|
-| `spawn` | `<raider\|ally> [options]` | Take a raider or an allied Starfury from the pool ahead of the player. Options: a behaviour (`idle`, `patrol`, `attack`, `aggro`, `ai`; allies take `idle` or `ai`), then distance in m, yaw and pitch in degrees, then `skill=`, `aggression=` and `lights=on\|off` | in flight |
+| `spawn` | `<raider\|ally\|renegade> [options]` | Take a raider, an allied Starfury or a renegade Starfury (M10-T02: faction `renegades`, named RENEGADE n, needs the scenario pool `starfury_renegade`; `combat_sandbox` has one) from the pool ahead of the player. Options: a behaviour (`idle`, `patrol`, `attack`, `aggro`, `ai`; allies take `idle` or `ai`), then distance in m, yaw and pitch in degrees, then `skill=`, `aggression=` and `lights=on\|off` | in flight |
 | `despawn` | `[target\|all]` | Return the selected pooled ship, or every one, to the pool without effects | in flight |
 | `wave` | `<start\|next\|stop\|restart> [index]` | Drive the raider waves | in flight |
 | `wing` | `[order\|formation\|replenish] [value]` | Order the player's wing (`wing order attack\|form\|engage\|cover\|form_hold\|hold`; `form_hold` is form up and hold fire, `hold` is hold position and hold fire: M8-T19, and any other order lifts them), change its formation or launch replacements; alone, show the wing. Where the scenario gives the player only its own flight (`wings[].flight`) the order reaches its two wingmen and nobody else | in flight |

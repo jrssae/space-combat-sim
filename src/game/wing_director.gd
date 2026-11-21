@@ -235,7 +235,7 @@ func _paint(wing: Wing, member: Combatant, number: int) -> void:
 		return
 	var section: Dictionary = MeshAssets.livery_section(member.ship.spec.asset_id)
 	if not section.is_empty() and (pool == null or pool.type_of(member) == ShipPool.ALLY_TYPE):
-		member.ship.set_livery(Livery.for_wing(wing.name, number, section))
+		member.ship.set_livery(Livery.for_wing(wing.name, number, section).with_faction(Factions.table(), member.faction, section))
 
 
 # A wing's AI ships rally on an engaged wingmate when they have nothing to attack (`BehaviourRally`).

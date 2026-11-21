@@ -383,3 +383,13 @@ func test_advance_before_setup_does_nothing() -> void:
 	add_child_autofree(bare)
 	bare.advance(DT)
 	assert_eq(bare.glow_count(), 0)
+
+
+func test_a_new_glow_colour_retints_the_plumes_and_back() -> void:
+	var red := Color(1.9, 0.3, 0.2)
+	visuals.set_glow_color(red)
+	var cone: MeshInstance3D = _cone_of(_pod_plume(layout.nozzle_names[0]))
+	assert_eq((cone.material_override as StandardMaterial3D).emission, red)
+	assert_eq((_core_of(_pod_plume(layout.nozzle_names[0])).material_override as StandardMaterial3D).albedo_color, red)
+	visuals.set_glow_color(ThrusterVisuals.DEFAULT_GLOW_COLOR)
+	assert_null(cone.material_override, "the shared default materials again")

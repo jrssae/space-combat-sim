@@ -15,6 +15,8 @@ const HULL_SHEEN := preload("res://src/rendering/hull_sheen_material.gd")
 const MAX_STRIPES: int = 48
 const MAX_PATTERNS: int = 12
 const MAX_FIELDS: int = 8
+const MAX_MARKERS: int = 6
+const MAX_MARKS: int = 24
 
 const GLASS_SURFACE: String = "glass"
 const MAP_KEYS: Array[String] = ["albedo", "normal", "orm", "emissive"]
@@ -362,6 +364,43 @@ static func _set_livery_tables(material: ShaderMaterial, section: Dictionary) ->
 	material.set_shader_parameter(&"field_right", right)
 	material.set_shader_parameter(&"field_up", up)
 	material.set_shader_parameter(&"field_facing", face)
+	_set_marker_tables(material, section)
+
+
+# The marker sets' marks as the shader's uniform arrays; a set's index is its place in the section's `markers` (plus one: 0 is none).
+static func _set_marker_tables(material: ShaderMaterial, section: Dictionary) -> void:
+	var centre := PackedVector4Array()
+	var right := PackedVector4Array()
+	var up := PackedVector4Array()
+	var face := PackedVector4Array()
+	var shape := PackedVector4Array()
+	var spans := PackedVector2Array([Vector2.ZERO])
+	var markers: Dictionary = section.get("markers", {})
+	for name: String in markers:
+		var marks: Array = (markers[name] as Dictionary).get("marks", [])
+		spans.append(Vector2(centre.size(), marks.size()))
+		for mark: Dictionary in marks:
+			var c: Array = mark.get("centre", [0, 0, 0])
+			var r: Array = mark.get("right", [1, 0, 0])
+			var u: Array = mark.get("up", [0, 0, -1])
+			var f: Array = mark.get("facing", [0, 1, 0])
+			var h: Array = mark.get("half", [0.1, 0.1])
+			centre.append(Vector4(float(c[0]), float(c[1]), float(c[2]), float(_zone_bits(mark.get("zones", [])))))
+			right.append(Vector4(float(r[0]), float(r[1]), float(r[2]), 0.0))
+			up.append(Vector4(float(u[0]), float(u[1]), float(u[2]), 0.0))
+			face.append(Vector4(float(f[0]), float(f[1]), float(f[2]), 0.0))
+			shape.append(Vector4(float(mark.get("shape", 0)), float(h[0]), float(h[1]), 1.0 if bool(mark.get("mirror", true)) else 0.0))
+	if centre.size() > MAX_MARKS or spans.size() > MAX_MARKERS:
+		push_warning("MeshAssets: the marker table has %d marks in %d sets, over the shader's %d and %d" % [centre.size(), spans.size() - 1, MAX_MARKS, MAX_MARKERS - 1])
+	for array: PackedVector4Array in [centre, right, up, face, shape]:
+		array.resize(MAX_MARKS)
+	spans.resize(MAX_MARKERS)
+	material.set_shader_parameter(&"mark_centre", centre)
+	material.set_shader_parameter(&"mark_right", right)
+	material.set_shader_parameter(&"mark_up", up)
+	material.set_shader_parameter(&"mark_facing", face)
+	material.set_shader_parameter(&"mark_shape", shape)
+	material.set_shader_parameter(&"marker_span", spans)
 
 
 static func _zone_bits(zones: Array) -> int:

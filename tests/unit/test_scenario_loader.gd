@@ -180,7 +180,8 @@ func test_the_combat_sandbox_file_validates() -> void:
 	assert_true(result["ok"], result["error"])
 	assert_eq(result["scenario_id"], &"combat_sandbox")
 	assert_eq((result["props"] as Array).size(), 5, "the buoys stay as scenery")
-	assert_eq(result["pools"], {&"raider_fighter": 9, &"starfury_ally": 4}, "nine raiders and four allied Starfuries (M3-T10)")
+	assert_eq(result["pools"], {&"raider_fighter": 9, &"starfury_ally": 4, &"starfury_renegade": 3},
+			"nine raiders, four allied Starfuries (M3-T10) and three renegades (M10-T02)")
 	assert_eq(result["loop"], {"from_wave": 3, "add_per_loop": 1, "skill_step": 0.1})
 	var waves: Array[Dictionary] = result["waves"]
 	assert_eq(waves.size(), 3)

@@ -192,6 +192,23 @@ func setup(layout: ThrusterLayout, output_source: Callable) -> void:
 		_build_multimesh()
 
 
+## Re-tints the plumes, cores and nozzle lights to `color` (a pooled ship taking another faction's engine colour, M10-T02).
+## Cheap when it is already that colour.
+func set_glow_color(color: Color) -> void:
+	if color.is_equal_approx(glow_color):
+		return
+	glow_color = color
+	_build_tint_materials()
+	for i: int in _cones.size():
+		_cones[i].material_override = _tinted_plume_material
+		_cores[i].material_override = _tinted_core_material
+	if instanced and multimesh != null:
+		material_override = _instanced_material(glow_color)
+	for light: LightEmitter in _lights:
+		if light != null:
+			light.color = EmitterCurves.light_color(glow_color)
+
+
 ## Number of plumes: every pod nozzle plus every RCS nozzle.
 func glow_count() -> int:
 	return _levels.size()

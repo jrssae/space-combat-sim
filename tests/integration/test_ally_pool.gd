@@ -128,6 +128,19 @@ func test_acquire_gives_each_type_its_own_transponder_back() -> void:
 	assert_eq(raider.targetable.broadcast_range_m, 0.0, "raiders stay silent")
 
 
+func test_a_renegade_starfury_has_red_engines_and_marks_and_an_ally_keeps_blue_white() -> void:
+	assert_eq(pool.prepare(ShipPool.RENEGADE_TYPE, 1), 1)
+	var renegade: Combatant = pool.acquire("RENEGADE 1", UniversePos.new(0.0, 0.0, 300.0), Basis.IDENTITY, Vector3.ZERO, null, ShipPool.RENEGADE_TYPE)
+	var ally: Combatant = _ally_at(600.0)
+	assert_eq(renegade.faction, &"renegades")
+	assert_eq(renegade.thrusters.glow_color, Factions.table().engine_glow(&"renegades"))
+	assert_eq(renegade.ship.livery.marker, "renegades")
+	assert_gt(renegade.ship.livery.engine_tint.a, 0.0)
+	assert_eq(ally.thrusters.glow_color, ally.ship.spec.engine_glow_color)
+	assert_eq(ally.ship.livery.marker, "")
+	assert_eq(ally.ship.livery.engine_tint.a, 0.0)
+
+
 func test_alive_is_per_type() -> void:
 	var a: Combatant = _ally_at(-200.0)
 	var b: Combatant = _ally_at(-300.0, "ALPHA 3")
@@ -310,7 +323,7 @@ class TestAlliesInTheSandbox:
 	func test_the_sandbox_builds_an_ally_pool_beside_the_raiders() -> void:
 		assert_gt(main.ships.pool_size(ShipPool.ALLY_TYPE), 0, "the sandbox scenario pools allies")
 		assert_eq(main.ships.pool_size(ShipPool.DEFAULT_TYPE), 9)
-		assert_eq(main.ships.pool_size(), main.ships.pool_size(ShipPool.ALLY_TYPE) + 9)
+		assert_eq(main.ships.pool_size(), main.ships.pool_size(ShipPool.ALLY_TYPE) + main.ships.pool_size(ShipPool.RENEGADE_TYPE) + 9)
 
 	# The ally this test spawned (the newest one in play).
 	func _spawned_ally() -> Combatant:

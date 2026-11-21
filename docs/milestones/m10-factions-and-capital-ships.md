@@ -360,7 +360,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
-| T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | in progress |
+| T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
@@ -381,7 +381,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
-| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | in progress |
+| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
 | T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | not started |
 | T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | not started |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
@@ -490,6 +490,17 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Goal:** AC4 (D12.3, Q8, Q12).
 - **Files:** `data/factions.json`, `FactionTable` if the format grows, the style names in `tools/procgen/styles/`, the
   renegades' marking as a livery option on EA hulls and the Starfury, tests on the relations, the `faction` provider.
+- **Done (2026-11-21).** `data/factions.json` holds the fourteen factions, the Q12 relations, each profile (style, fighters,
+  weapons, mines, `marking`, `engine_glow`) and scenarios may override relations; the target box and panel name the target's faction
+  from its transponder (`targeting.faction`). The renegades' look (maintainer's choice, marker C with red engines) is one marker, `renegades`
+  (a red X on each upper strut and one on the deck, procgen `core/livery.py` `MARKERS`, drawn by `hull_livery.gdshader` over the ship's own paint)
+  plus the faction's `engine_glow` (red, HDR): at spawn `ShipPool.acquire` and `WingDirector` give the ship `Livery.with_faction`
+  (marker and an engine tint on the hull's glow map) and `ThrusterVisuals.set_glow_color` (plumes, cores, nozzle lights), reset to the hull's own
+  colour for any other faction. Catalogue type `starfury_renegade` (pool in `combat_sandbox`, `spawn renegade`), console `marker <renegades|none> [ship]`.
+  Look sheets: `references/screenshots/M10-T02 renegade marking v2/final/`. **Capital hulls:** the red engines apply at runtime to any
+  hull on the livery shader and to any `ThrusterVisuals`; the X marker needs the hull's manifest to carry a `livery` section with the
+  `renegades` marker and its mesh zones (`ZONES`: strut_upper, fuselage, ...) tagged, which an Omega-class build must add in
+  `tools/procgen/styles/ea_capital.py` (T21's files); until then an Omega wears its own paint with only the engine colour.
 
 ### M10-T03 Weapons and balance concept (discussion with the maintainer)
 

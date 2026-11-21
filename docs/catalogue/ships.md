@@ -30,6 +30,7 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `ea_atmo_shuttle` | earth_alliance | civilian | 25.6 x 45.5 x 8.5 | 260 | none | no | no |
 | `ea_panama` | earth_alliance | civilian | 180.0 x 44.8 x 29.6 | 600 | none | no | no |
 | `ea_construction_tender` | earth_alliance | civilian | 50.0 x 69.7 x 24.0 | 300 | none | no | no |
+| `starfury_renegade` | renegades | fighter | 9.8 x 15.4 x 7.5 | 300 | fixed `pulse_cannon_ef` | no | no |
 
 ## What other code reads from each entry
 
@@ -59,3 +60,4 @@ civilian's radio name.
 | `ea_atmo_shuttle` | `res://assets/ships/ea_atmo_shuttle.tres` | civilian | yes | no | - | pool | EA atmospheric shuttle | KESTREL |
 | `ea_panama` | `res://assets/ships/ea_panama.tres` | civilian | yes | no | - | pool | Panama transport | PANAMA |
 | `ea_construction_tender` | `res://assets/ships/ea_construction_tender.tres` | civilian | yes | no | - | pool | EA construction tender | TENDER |
+| `starfury_renegade` | `res://assets/ships/starfury_renegade.tres` | ally_starfury | yes | - | - | pool | - | - |

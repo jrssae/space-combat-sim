@@ -96,6 +96,36 @@ class Livery:
         return tuple(float(c) for c in srgb_to_linear(np.asarray(getattr(self, which), dtype=float) / 255.0))
 
 
+SHAPES: dict[str, int] = {"cross": 0}  # the shader's shape codes (``hull_livery.gdshader``)
+
+
+@dataclass(frozen=True)
+class Mark:
+    """One small painted shape (a unit marking, M10-T02): on ``zones``' faces turned to ``facing``, centred on ``centre`` in the
+    plane spanned by ``right`` and ``up``, ``half`` metres out each way. ``mirror`` repeats it across x = 0."""
+
+    shape: str
+    zones: tuple[int, ...]
+    centre: Vec3
+    half: tuple[float, float]
+    right: Vec3 = (1.0, 0.0, 0.0)
+    up: Vec3 = (0.0, 0.0, -1.0)
+    facing: Vec3 = UP
+    mirror: bool = True
+
+
+@dataclass(frozen=True)
+class Marker:
+    """A set of marks in one colour (sRGB 0..255), worn over whatever livery the ship has; it never recolours the hull."""
+
+    name: str
+    colour: Vec3
+    marks: tuple[Mark, ...]
+
+    def linear(self) -> Vec3:
+        return tuple(float(c) for c in srgb_to_linear(np.asarray(self.colour, dtype=float) / 255.0))
+
+
 def _zones(*names: str) -> tuple[int, ...]:
     return tuple(ZONES[n] for n in names)
 
@@ -156,6 +186,17 @@ NUMBER_FIELDS: dict[str, NumberField] = {
                           0.8, 1.15),
     # Small on the upper left strut, behind its hazard stripes, as the show's ID numbers.
     "wing": NumberField(_zones("strut_upper"), (-2.6, 1.7, 0.3), (1.0, 0.0, 0.0), (0.0, 0.0, -1.0), UP, 0.42, 0.9),
+}
+
+# The renegades' unit markings (M10-T02): small, over the standard paint, so a renegade reads as Earthforce at a glance and as a
+# renegade from its transponder. The Starfury's frame; the Thunderbolt shares the zones, so the marks land on the same parts.
+MARK_RED: Vec3 = (178.0, 34.0, 30.0)
+MARKERS: dict[str, Marker] = {
+    # A small red cross on each upper strut and one on the deck behind the canopy.
+    "renegades": Marker("renegades", MARK_RED, (
+        Mark("cross", _zones("strut_upper"), (3.1, 1.7, 0.3), (0.3, 0.3)),
+        Mark("cross", BODY + _zones("strut_upper"), (0.0, 1.5, 0.4), (0.16, 0.16), mirror=False),
+    )),
 }
 
 LIVERIES: dict[str, Livery] = {
@@ -222,6 +263,21 @@ def paint_slots(stripes: Sequence[Stripe], points: np.ndarray, normals: np.ndarr
     return out
 
 
+def marked(marker: Marker, points: np.ndarray, normals: np.ndarray, zones: np.ndarray) -> np.ndarray:
+    """Per point: True where a mark of ``marker`` is painted (the shader's shapes, hard edged)."""
+    p = np.asarray(points, dtype=float)
+    n = np.asarray(normals, dtype=float)
+    out = np.zeros(len(p), dtype=bool)
+    for m in marker.marks:
+        q = np.column_stack([np.abs(p[:, 0]) if m.mirror else p[:, 0], p[:, 1], p[:, 2]])
+        d = q - np.asarray(m.centre)
+        a = np.abs(d @ np.asarray(m.right)) / m.half[0]
+        b = np.abs(d @ np.asarray(m.up)) / m.half[1]
+        metric = np.maximum(np.maximum(a, b), np.abs(a - b) / 0.3)  # a cross: two diagonal bars
+        out |= np.isin(np.asarray(zones), m.zones) & (metric <= 1.0) & (n @ np.asarray(m.facing) >= 0.5)
+    return out
+
+
 # --- the digit atlas ------------------------------------------------------------------------------
 def digit_atlas() -> np.ndarray:
     """Ten cells, 0 to 9, of the stroke font's digits as distance fields: 255 on a stroke's centre line, falling to 0 at
@@ -270,6 +326,17 @@ def _livery_json(livery: Livery) -> dict[str, Any]:
     }
 
 
+def _marker_json(marker: Marker) -> dict[str, Any]:
+    return {
+        "colour": _r(marker.linear()),
+        "marks": [
+            {"shape": SHAPES[m.shape], "zones": list(m.zones), "centre": _r(m.centre), "half": _r(m.half), "right": _r(m.right),
+             "up": _r(m.up), "facing": _r(m.facing), "mirror": m.mirror}
+            for m in marker.marks
+        ],
+    }
+
+
 def livery_section(digit_file: str, hull_paint: Sequence[float]) -> dict[str, Any]:
     """The manifest's ``livery`` section: the hull paint the base map was painted with (linear), the zones, every pattern's
     stripes, the number fields, the named liveries (linear RGB), the plain one and the fallback's palettes, patterns and number
@@ -290,6 +357,7 @@ def livery_section(digit_file: str, hull_paint: Sequence[float]) -> dict[str, An
                    "height_m": f.height_m, "weight": f.weight}
             for name, f in NUMBER_FIELDS.items()
         },
+        "markers": {name: _marker_json(m) for name, m in MARKERS.items()},
         "liveries": {name: _livery_json(livery) for name, livery in LIVERIES.items()},
         "plain": _livery_json(PLAIN),
         "fallback": {

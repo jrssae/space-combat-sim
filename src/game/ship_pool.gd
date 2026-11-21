@@ -20,17 +20,19 @@ signal acquired(combatant: Combatant)
 
 const DEFAULT_TYPE: StringName = &"raider_fighter"
 const ALLY_TYPE: StringName = &"starfury_ally"
+## An Earthforce Starfury that flew with the renegades (M10-T02): the ally hull, its own faction and a transponder that says so.
+const RENEGADE_TYPE: StringName = &"starfury_renegade"
 const NAME_PREFIX: String = "RAIDER"
 const ALLY_NAME_PREFIX: String = "ALPHA"
 ## The wing leader (the player) is ALPHA 1.
 const ALLY_FIRST_NUMBER: int = 2
-const SPAWN_CHOICES: Array[StringName] = [&"raider", &"ally"]
+const SPAWN_CHOICES: Array[StringName] = [&"raider", &"ally", &"renegade"]
 ## The pool type each `spawn` word takes a ship from.
-const SPAWN_TYPES: Dictionary[StringName, StringName] = {&"raider": DEFAULT_TYPE, &"ally": ALLY_TYPE}
-## The behaviours a console `spawn ally` accepts (a raider takes every `BrainFactory` behaviour).
+const SPAWN_TYPES: Dictionary[StringName, StringName] = {&"raider": DEFAULT_TYPE, &"ally": ALLY_TYPE, &"renegade": RENEGADE_TYPE}
+## The behaviours a console `spawn ally` or `spawn renegade` accepts (a raider takes every `BrainFactory` behaviour).
 const ALLY_SPAWN_BEHAVIOURS: Array[StringName] = [&"idle", &"ai"]
 ## The `AiProfile` an `ai` console spawn flies, by spawn word.
-const SPAWN_PROFILES: Dictionary[StringName, String] = {&"raider": "raider", &"ally": "ally_starfury"}
+const SPAWN_PROFILES: Dictionary[StringName, String] = {&"raider": "raider", &"ally": "ally_starfury", &"renegade": "ally_starfury"}
 const DESPAWN_CHOICES: Array[StringName] = [&"target", &"all"]
 ## Allied ships broadcast their position this far (M3-T17, Q21): 100 km. Raiders do not broadcast.
 const ALLY_BROADCAST_RANGE_M: float = 1.0e5
@@ -71,7 +73,7 @@ func _exit_tree() -> void:
 
 ## The transponder range a ship of `type` starts with: allies and civilians broadcast, raiders do not.
 static func default_broadcast_range_m(type: StringName) -> float:
-	if type == ALLY_TYPE:
+	if type == ALLY_TYPE or type == RENEGADE_TYPE:
 		return ALLY_BROADCAST_RANGE_M
 	return CIVILIAN_BROADCAST_RANGE_M if ShipCatalog.is_civilian(type) else 0.0
 
@@ -145,13 +147,22 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	var section: Dictionary = MeshAssets.livery_section(ship.spec.asset_id)
 	if not section.is_empty():
 		var wing_and_number: Array = Livery.parse_name(display_name) if type == ALLY_TYPE else ["", 0]
-		# A faction with a marking (the renegades) wears it instead of a wing's paint (M10-T02).
-		var marked: Livery = Livery.for_marking(Factions.table().marking(combatant.faction), section)
-		ship.set_livery(marked if marked != null else Livery.for_wing(wing_and_number[0], wing_and_number[1], section))
+		# A faction with a marking and engine colour (the renegades) wears them over that paint (M10-T02).
+		ship.set_livery(Livery.for_wing(wing_and_number[0], wing_and_number[1], section).with_faction(
+				Factions.table(), combatant.faction, section))
+	_tint_engines(combatant)
 	_set_brain(combatant, brain)
 	_in_use.append(combatant)
 	acquired.emit(combatant)
 	return combatant
+
+
+# The plumes and nozzle lights in the faction's engine colour, or the hull's own when the faction has none (a pooled ship is reused).
+func _tint_engines(combatant: Combatant) -> void:
+	if combatant.thrusters == null:
+		return
+	var glow: Color = Factions.table().engine_glow(combatant.faction)
+	combatant.thrusters.set_glow_color(glow if glow.a > 0.0 else combatant.ship.spec.engine_glow_color)
 
 
 ## Parks a ship again (no effects; destruction effects are `DestructionDirector`'s). Ignores ships not in use. A ship in
@@ -340,7 +351,7 @@ func _cmd_spawn(args: Dictionary) -> ConsoleResult:
 	var kind: StringName = StringName(args[&"type"])
 	var type: StringName = SPAWN_TYPES[kind]
 	var usage: String = ("spawn raider [idle|patrol|attack|aggro|ai] [distance_m] [yaw_deg] [pitch_deg]" if kind == &"raider" \
-			else "spawn ally [idle|ai] [distance_m] [yaw_deg] [pitch_deg]") + " [skill=<rank|0-1>] [aggression=<level|0-1>] [lights=on|off]"
+			else "spawn %s [idle|ai] [distance_m] [yaw_deg] [pitch_deg]" % kind) + " [skill=<rank|0-1>] [aggression=<level|0-1>] [lights=on|off]"
 	if player == null or not is_instance_valid(player) or world == null:
 		return ConsoleResult.failure("no player ship to place the %s relative to" % kind)
 	# `[behaviour] [distance_m] [yaw_deg] [pitch_deg]`: the behaviour word is optional (idle), the numbers too (30 0 0).
@@ -360,7 +371,7 @@ func _cmd_spawn(args: Dictionary) -> ConsoleResult:
 	if not words.is_empty() and BrainFactory.BEHAVIOURS.has(StringName(words[0])):
 		behaviour = StringName(words[0])
 		words.remove_at(0)
-	if kind == &"ally" and not ALLY_SPAWN_BEHAVIOURS.has(behaviour):
+	if kind != &"raider" and not ALLY_SPAWN_BEHAVIOURS.has(behaviour):
 		return ConsoleResult.failure("an ally takes idle or ai, not %s (%s)" % [behaviour, usage])
 	var numbers: Array[float] = [30.0, 0.0, 0.0]
 	if words.size() > 3:
@@ -377,7 +388,8 @@ func _cmd_spawn(args: Dictionary) -> ConsoleResult:
 	var basis: Basis = facing * Basis(Vector3.UP, deg_to_rad(numbers[1])) * Basis(Vector3.RIGHT, deg_to_rad(numbers[2]))
 	var local: Vector3 = player.global_position + forward * distance
 	var at: UniversePos = world.to_universe(local)
-	var ship_name: String = next_name() if kind == &"raider" else next_name(ALLY_NAME_PREFIX, ALLY_FIRST_NUMBER)
+	var ship_name: String = next_name() if kind == &"raider" else next_name(ALLY_NAME_PREFIX, ALLY_FIRST_NUMBER) if kind == &"ally" \
+			else next_name("RENEGADE")
 	var spec: Dictionary = _console_behaviour(kind, behaviour, basis)
 	if not temper.is_empty():
 		if behaviour != &"ai":

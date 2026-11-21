@@ -8,6 +8,8 @@ render_mode blend_mix, depth_draw_opaque, cull_back, diffuse_burley, specular_sc
 const int MAX_STRIPES = 48;
 const int MAX_PATTERNS = 12;
 const int MAX_FIELDS = 8;
+const int MAX_MARKERS = 6;
+const int MAX_MARKS = 24;
 
 uniform sampler2D albedo_map : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform sampler2D normal_map : hint_normal, filter_linear_mipmap_anisotropic, repeat_disable;
@@ -32,6 +34,14 @@ uniform vec4 field_centre[MAX_FIELDS];
 uniform vec4 field_right[MAX_FIELDS];
 uniform vec4 field_up[MAX_FIELDS];
 uniform vec4 field_facing[MAX_FIELDS];
+// Each mark (M10-T02): centre (w zone bits), right, up, facing (w unused), shape (x code, yz half extents, w mirror). Each marker set's
+// first mark and count.
+uniform vec4 mark_centre[MAX_MARKS];
+uniform vec4 mark_right[MAX_MARKS];
+uniform vec4 mark_up[MAX_MARKS];
+uniform vec4 mark_facing[MAX_MARKS];
+uniform vec4 mark_shape[MAX_MARKS];
+uniform vec2 marker_span[MAX_MARKERS];
 // The digit atlas: ten cells of cell_units (x, y) glyph units, the glyph's size, the advance, and the distance range.
 uniform vec4 digit_layout = vec4(6.0, 8.0, 5.4, 1.5);
 uniform vec2 glyph_size = vec2(4.0, 6.0);
@@ -42,6 +52,10 @@ instance uniform vec4 livery_number_colour = vec4(0.8, 0.8, 0.8, 1.0);
 instance uniform int livery_pattern = 0;
 instance uniform int livery_fields = 0;
 instance uniform int livery_number = 0;
+instance uniform int livery_marker = 0;
+instance uniform vec4 livery_marker_colour = vec4(0.7, 0.05, 0.04, 1.0);
+// The engine glow's hue for this ship (rgb, peak 1; a is 0 for the map's own blue-white): the renegades' red.
+instance uniform vec4 livery_engine_tint = vec4(0.0);
 
 varying vec3 v_obj_pos;
 varying vec3 v_obj_normal;
@@ -85,7 +99,7 @@ void fragment() {
 	vec3 colour = base.rgb;
 	// Only per-instance values decide which paths run (the same for every pixel of a quad), so every derivative and every sample
 	// below is taken on all of them; the zone, the facing and the paint mask are multiplied in instead of branched on.
-	if (livery_pattern > 0 || (livery_fields != 0 && livery_number > 0)) {
+	if (livery_pattern > 0 || livery_marker > 0 || (livery_fields != 0 && livery_number > 0)) {
 		vec3 p = v_obj_pos;
 		vec3 face = normalize(cross(dFdx(p), dFdy(p)));
 		face = dot(face, v_obj_normal) < 0.0 ? -face : face;
@@ -126,6 +140,25 @@ void fragment() {
 				coverage = cover + coverage * (1.0 - cover);
 			}
 		}
+		if (livery_marker > 0 && livery_marker < MAX_MARKERS) {
+			vec2 span = marker_span[livery_marker];
+			int first = int(span.x);
+			int last = min(first + int(span.y), MAX_MARKS);
+			for (int i = first; i < last; i++) {
+				vec3 q = vec3(mark_shape[i].w > 0.5 ? abs(p.x) : p.x, p.y, p.z);
+				vec3 d = q - mark_centre[i].xyz;
+				vec2 half_size = mark_shape[i].yz;
+				float a = abs(dot(d, mark_right[i].xyz)) / half_size.x;
+				float b = abs(dot(d, mark_up[i].xyz)) / half_size.y;
+				// A cross (two diagonal bars): 1 on its edge and below 1 inside it.
+				float m = max(max(a, b), abs(a - b) / 0.3);
+				float w = max(fwidth(m), 1e-4);
+				float on = ((int(mark_centre[i].w) & zone_bit) != 0 && dot(face, mark_facing[i].xyz) >= 0.5) ? 1.0 : 0.0;
+				float cover = on * clamp((1.0 - m) / w + 0.5, 0.0, 1.0);
+				paint = paint * (1.0 - cover) + livery_marker_colour.rgb * cover;
+				coverage = cover + coverage * (1.0 - cover);
+			}
+		}
 		float wear = clamp(dot(base.rgb, vec3(1.0)) / max(dot(hull_paint, vec3(1.0)), 1e-4), 0.0, 1.4);
 		// `paint` is premultiplied by `coverage`; the albedo's alpha keeps it off chips, markings and unpainted materials.
 		colour = base.rgb * (1.0 - coverage * base.a) + paint * wear * base.a;
@@ -142,5 +175,8 @@ void fragment() {
 	float on_paint = (1.0 - smoothstep(0.62, 0.78, orm.b)) * clamp((0.85 - orm.g) / 0.35, 0.0, 1.0);
 	CLEARCOAT = sheen * on_paint;
 	CLEARCOAT_ROUGHNESS = clamp(sheen_roughness + (orm.g - 0.5), 0.1, 1.0);
-	EMISSION = texture(emissive_map, UV).rgb * emission_energy;
+	vec3 glow = texture(emissive_map, UV).rgb;
+	// A tint recolours the whole glow map (a fighter's is its engine rings and lamps) to the ship's engine colour, as bright as before.
+	glow = mix(glow, livery_engine_tint.rgb * dot(glow, vec3(0.3, 0.5, 0.2)) / max(dot(livery_engine_tint.rgb, vec3(0.3, 0.5, 0.2)), 1e-4), livery_engine_tint.a);
+	EMISSION = glow * emission_energy;
 }

@@ -58,6 +58,9 @@ func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"livery",
 			"Paint a ship in a wing's livery with a number (plain for none), for looking at it: the player's ship, `sheet` for the parked one, or a ship by name",
 			[ConsoleArg.string_required(&"wing"), ConsoleArg.int_optional(&"number", 1, 0, 99), ConsoleArg.string_rest(&"ship").make_optional("player")]), _cmd_livery, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"marker",
+			"Put a faction unit marking (`renegades`, M10-T02) over a ship's paint, or `none`: the player's ship, `sheet` or a ship by name",
+			[ConsoleArg.string_required(&"marker"), ConsoleArg.string_rest(&"ship").make_optional("player")]), _cmd_marker, self)
 	DebugConsole.registry.register_provider(&"livery", ConsoleVars.new({
 		&"player": {"get": func() -> String: return _describe(player if player != null else _player_ship()),
 				"doc": "The player's ship's livery: wing, number, pattern"},
@@ -328,6 +331,21 @@ func _cmd_livery(args: Dictionary) -> ConsoleResult:
 	var wing: String = String(args[&"wing"])
 	var livery: Livery = Livery.for_wing("" if wing.to_lower() == "plain" else wing, int(args[&"number"]),
 			MeshAssets.livery_section(target.spec.asset_id))
+	target.set_livery(livery)
+	return ConsoleResult.line("livery: %s" % livery.describe())
+
+
+func _cmd_marker(args: Dictionary) -> ConsoleResult:
+	var target: Ship = _ship_named(String(args[&"ship"]))
+	if target == null or target.livery == null:
+		return ConsoleResult.failure("no ship called '%s' that takes a livery" % String(args[&"ship"]))
+	var section: Dictionary = MeshAssets.livery_section(target.spec.asset_id)
+	var wanted: String = String(args[&"marker"])
+	var livery: Livery = Livery.for_wing(target.livery.wing, target.livery.number, section)
+	if wanted.to_lower() != "none":
+		if not (section.get("markers", {}) as Dictionary).has(wanted):
+			return ConsoleResult.failure("no marker '%s' (known: %s)" % [wanted, ", ".join(PackedStringArray((section.get("markers", {}) as Dictionary).keys()))])
+		livery.with_marking(wanted, section)
 	target.set_livery(livery)
 	return ConsoleResult.line("livery: %s" % livery.describe())
 

@@ -6,7 +6,7 @@ extends RefCounted
 ## File shape:
 ##
 ##     {"factions":  [{"id": "earth_alliance", "name": "Earth Alliance", "style": "earthforce", "fighters": [...],
-##                     "weapons": [...], "mine": "ea_mine", "battle_mine": "", "marking": ""}, ...],
+##                     "weapons": [...], "mine": "ea_mine", "battle_mine": "", "marking": "", "engine_glow": []}, ...],
 ##      "relations": [{"a": "earth_alliance", "b": "raiders", "relation": "hostile"}, ...],
 ##      "default":   "neutral"}
 ##
@@ -33,7 +33,8 @@ const ID_PATTERN: String = "^[a-z0-9_]{1,32}$"
 var _names: Dictionary = {}
 # id -> {other id -> relation (int)}, symmetric: both directions are stored so a lookup allocates nothing.
 var _matrix: Dictionary = {}
-# id -> {"style": String, "fighters": Array[StringName], "weapons": Array[StringName], "mine", "battle_mine", "marking": String}.
+# id -> {"style": String, "fighters": Array[StringName], "weapons": Array[StringName], "mine", "battle_mine", "marking": String,
+# "engine_glow": Color (alpha 0: none)}.
 var _profiles: Dictionary = {}
 # The listed pairs in the order they were set: {"a": StringName, "b": StringName, "relation": int}.
 var _pairs: Array[Dictionary] = []
@@ -245,6 +246,11 @@ func marking(id: StringName) -> String:
 	return String(_profile_of(id)["marking"])
 
 
+## The HDR colour a faction's engines glow, its ships' own hull colour overridden (the renegades' red, M10-T02); alpha 0 for none.
+func engine_glow(id: StringName) -> Color:
+	return _profile_of(id)["engine_glow"] as Color
+
+
 ## The relation of a known pair that `relations` does not list.
 func default_relation() -> Factions.Relation:
 	return _default as Factions.Relation
@@ -274,7 +280,7 @@ func _profile_of(id: StringName) -> Dictionary:
 	if _profiles.has(id):
 		return _profiles[id]
 	var none: Array[StringName] = []
-	return {"style": "", "fighters": none, "weapons": none, "mine": "", "battle_mine": "", "marking": ""}
+	return {"style": "", "fighters": none, "weapons": none, "mine": "", "battle_mine": "", "marking": "", "engine_glow": Color(0.0, 0.0, 0.0, 0.0)}
 
 
 # The optional profile keys of one `factions[]` entry, or the path-qualified error.
@@ -285,6 +291,15 @@ static func _profile(entry: Dictionary, path: String) -> Variant:
 		if not (text is String) or ((text as String) != "" and id_regex().search(text as String) == null):
 			return "%s.%s must be \"\" or match %s, got %s" % [path, key, ID_PATTERN, JSON.stringify(text)]
 		out[key] = text
+	var glow: Variant = entry.get("engine_glow", [])
+	if not (glow is Array) or ((glow as Array).size() != 0 and (glow as Array).size() != 3):
+		return "%s.engine_glow must be [] or [r, g, b], got %s" % [path, JSON.stringify(glow)]
+	out["engine_glow"] = Color(0.0, 0.0, 0.0, 0.0)
+	if (glow as Array).size() == 3:
+		for channel: Variant in glow as Array:
+			if not (channel is float or channel is int) or float(channel) < 0.0:
+				return "%s.engine_glow must hold three numbers of 0 or more, got %s" % [path, JSON.stringify(glow)]
+		out["engine_glow"] = Color(float(glow[0]), float(glow[1]), float(glow[2]), 1.0)
 	for key: String in ["fighters", "weapons"]:
 		var list: Variant = entry.get(key, [])
 		var ids: Array[StringName] = []

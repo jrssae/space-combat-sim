@@ -20,6 +20,12 @@ var fields: PackedStringArray = PackedStringArray()
 ## The pattern's index and the number fields' bits in the section's tables, as the shader reads them.
 var pattern_index: int = 0
 var field_bits: int = 0
+## The unit marking worn over the paint (a `markers` row of the section; "" for none) and its index in the shader's table (0: none).
+var marker: String = ""
+var marker_index: int = 0
+var marker_colour: Color = Color(0.7, 0.05, 0.04)
+## The hue the hull's engine glow map is recoloured to (alpha 0: the map's own), a faction's `engine_glow` normalised to a peak of 1.
+var engine_tint: Color = Color(0.0, 0.0, 0.0, 0.0)
 
 
 ## FNV-1a, 32 bits, over the UTF-8 bytes of `text` (procgen's `fnv1a32`).
@@ -67,12 +73,33 @@ static func for_wing(p_wing: String, p_number: int, section: Dictionary) -> Live
 	return out
 
 
-## The marking a faction's ships wear (`FactionTable.marking`, M10-T02: the renegades' paint over EA hulls) from the section's
-## named liveries, or null when `marking` is empty or the hull's table has no such row, so the hull keeps its own paint.
-static func for_marking(marking: String, section: Dictionary) -> Livery:
-	if marking.is_empty() or not (section.get("liveries", {}) as Dictionary).has(marking):
-		return null
-	return for_wing(marking, 0, section)
+## Adds the faction's marking (`FactionTable.marking`, M10-T02: the renegades' small unit marks) over this livery without recolouring
+## the hull. An empty `marking`, or one the hull's table does not name, leaves the livery as it is. Returns `self`.
+func with_marking(marking: String, section: Dictionary) -> Livery:
+	var markers: Dictionary = section.get("markers", {})
+	if marking.is_empty() or not markers.has(marking):
+		return self
+	marker = marking
+	marker_index = markers.keys().find(marking) + 1
+	var row: Dictionary = markers[marking]
+	marker_colour = _colour(row.get("colour", [0.7, 0.05, 0.04]))
+	return self
+
+
+## A faction's look over this livery (`FactionTable`): its marking and its engine colour. Returns `self`.
+func with_faction(table: FactionTable, faction: StringName, section: Dictionary) -> Livery:
+	with_marking(table.marking(faction), section)
+	return with_engine_glow(table.engine_glow(faction))
+
+
+## Recolours the hull's engine glow map to `glow` (a faction's HDR engine colour; alpha 0 for none). Returns `self`.
+func with_engine_glow(glow: Color) -> Livery:
+	engine_tint = Color(0.0, 0.0, 0.0, 0.0)
+	if glow.a > 0.0:
+		var peak: float = maxf(glow.r, maxf(glow.g, glow.b))
+		if peak > 0.0:
+			engine_tint = Color(glow.r / peak, glow.g / peak, glow.b / peak, 1.0)
+	return self
 
 
 ## The player's own livery until the paint-scheme choice exists: Alpha 01.
@@ -103,11 +130,15 @@ func apply(instance: GeometryInstance3D) -> void:
 	instance.set_instance_shader_parameter(&"livery_pattern", pattern_index)
 	instance.set_instance_shader_parameter(&"livery_fields", field_bits)
 	instance.set_instance_shader_parameter(&"livery_number", number)
+	instance.set_instance_shader_parameter(&"livery_marker", marker_index)
+	instance.set_instance_shader_parameter(&"livery_marker_colour", marker_colour)
+	instance.set_instance_shader_parameter(&"livery_engine_tint", engine_tint)
 
 
 ## A short line for the console and the state provider.
 func describe() -> String:
-	return "%s %s (%s)" % [wing if not wing.is_empty() else "plain", number_text() if number > 0 else "-", pattern]
+	return "%s %s (%s)%s" % [wing if not wing.is_empty() else "plain", number_text() if number > 0 else "-", pattern,
+			" marked %s" % marker if not marker.is_empty() else ""]
 
 
 static func _colour(values: Array) -> Color:

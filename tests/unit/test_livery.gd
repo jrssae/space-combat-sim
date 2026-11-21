@@ -73,3 +73,22 @@ func test_the_pools_names_parse_into_wing_and_number() -> void:
 	assert_eq(Livery.parse_name("SHEET"), ["", 0])
 	assert_eq(Livery.parse_name("PLAYER"), ["", 0])
 	assert_eq(Livery.parse_name(""), ["", 0])
+
+
+func test_an_engine_glow_becomes_a_peak_one_tint_and_none_leaves_the_map() -> void:
+	var tinted: Livery = Livery.for_wing("", 0, _section()).with_engine_glow(Color(1.9, 0.3, 0.2, 1.0))
+	assert_almost_eq(tinted.engine_tint.r, 1.0, 1e-6)
+	assert_almost_eq(tinted.engine_tint.g, 0.3 / 1.9, 1e-6)
+	assert_eq(tinted.engine_tint.a, 1.0)
+	assert_eq(tinted.with_engine_glow(Color(0.0, 0.0, 0.0, 0.0)).engine_tint.a, 0.0, "alpha 0 is no tint")
+
+
+func test_the_renegades_marker_is_in_the_starfury_table_and_a_faction_applies_it() -> void:
+	var section: Dictionary = _section()
+	assert_eq((section["markers"] as Dictionary).keys(), ["renegades"], "one marker for every renegade ship")
+	var livery: Livery = Livery.for_wing("", 0, section).with_faction(Factions.table(), &"renegades", section)
+	assert_eq(livery.marker, "renegades")
+	assert_eq(livery.engine_tint.a, 1.0)
+	var plain: Livery = Livery.for_wing("", 0, section).with_faction(Factions.table(), &"earth_alliance", section)
+	assert_eq(plain.marker, "")
+	assert_eq(plain.engine_tint.a, 0.0)

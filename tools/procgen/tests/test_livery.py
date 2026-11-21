@@ -99,6 +99,49 @@ class PatternTests(unittest.TestCase):
         self.assertLess(field.up[2], -0.9)  # the tops of the digits point at the nose
 
 
+class MarkerTests(unittest.TestCase):
+    """The renegades' small unit marks (M10-T02): data shape, mirror symmetry and the manifest rows."""
+
+    def test_every_mark_is_well_formed(self) -> None:
+        for name, marker in lv.MARKERS.items():
+            self.assertTrue(marker.marks, name)
+            for m in marker.marks:
+                self.assertIn(m.shape, lv.SHAPES, name)
+                self.assertTrue(m.zones, name)
+                self.assertTrue(0.0 < m.half[0] <= 0.5 and 0.0 < m.half[1] <= 0.5, f"{name}: small marks only")
+
+    def test_the_renegades_have_one_marker_of_crosses(self) -> None:
+        self.assertEqual(list(lv.MARKERS), ["renegades"])
+        self.assertEqual({m.shape for m in lv.MARKERS["renegades"].marks}, {"cross"})
+        self.assertEqual(len(lv.MARKERS["renegades"].marks), 2, "one on each upper strut (mirrored) and one on the deck")
+
+    def test_a_mirrored_mark_is_the_same_on_both_wings(self) -> None:
+        marker = lv.MARKERS["renegades"]
+        points = np.array([[3.1, 1.7, 0.3], [-3.1, 1.7, 0.3], [0.0, 1.7, 0.3]])
+        normals = np.array([[0.0, 1.0, 0.0]] * 3)
+        zones = np.array([lv.ZONES["strut_upper"]] * 3)
+        hit = lv.marked(marker, points, normals, zones)
+        self.assertTrue(hit[0] and hit[1] and not hit[2])
+
+    def test_a_mark_ignores_other_zones_and_faces_turned_away(self) -> None:
+        marker = lv.MARKERS["renegades"]
+        points = np.array([[3.1, 1.7, 0.3]] * 2)
+        hit = lv.marked(marker, points, np.array([[0.0, 1.0, 0.0], [0.0, -1.0, 0.0]]), np.array([lv.ZONES["strut_upper"]] * 2))
+        self.assertEqual(list(hit), [True, False])
+        self.assertFalse(lv.marked(marker, points[:1], np.array([[0.0, 1.0, 0.0]]), np.array([lv.ZONES["pod"]]))[0])
+
+    def test_the_manifest_lists_the_markers_in_order_with_linear_colours(self) -> None:
+        section = lv.livery_section("digits.png", (0.3, 0.3, 0.3))
+        self.assertEqual(list(section["markers"]), list(lv.MARKERS))
+        row = section["markers"]["renegades"]
+        self.assertEqual(len(row["marks"]), len(lv.MARKERS["renegades"].marks))
+        self.assertTrue(all(0.0 <= c <= 1.0 for c in row["colour"]))
+
+    def test_no_livery_recolours_the_hull_for_the_renegades(self) -> None:
+        self.assertFalse([name for name in lv.LIVERIES if "renegade" in name], "the renegades wear a marker, not a livery")
+        self.assertFalse([name for name in lv.PATTERNS if "renegade" in name])
+
+
 class DigitAtlasTests(unittest.TestCase):
     def test_the_atlas_covers_0_to_9(self) -> None:
         atlas = lv.digit_atlas()
@@ -201,6 +244,15 @@ class StarfuryPlacementTests(unittest.TestCase):
         self.assertGreater(bands[z["strut_lower"]], 1000)
         pods = self._painted_zones("nose_band")
         self.assertGreater(pods[z["pod"]], 500, "Beta's band on every pod")
+
+    def test_each_marker_paints_a_little_on_paintable_plating(self) -> None:
+        # M10-T02: a unit marking is small (a few percent of the paintable upward plating) and never lands on bare metal or glass.
+        up_paint = self.paint & (self.n[:, 1] > 0.5)
+        for name, marker in lv.MARKERS.items():
+            hit = lv.marked(marker, self.p, self.n, self.zone)
+            self.assertGreater(int(hit.sum()), 100, f"{name} paints something")
+            self.assertGreater(float(self.paint[hit].mean()), 0.8, f"{name} lies on paintable plating")
+            self.assertLess(float(hit.sum()) / float(up_paint.sum()), 0.05, f"{name} stays a marking, not a repaint")
 
     def test_both_number_fields_lie_on_paintable_upward_plating(self) -> None:
         for name in ("dorsal", "wing"):
