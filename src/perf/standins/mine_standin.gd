@@ -30,8 +30,6 @@ const BLAST_RADIUS_M: float = 100.0
 ## Each mine checks once every this many ticks, a third of them each tick.
 const TRIGGER_TICKS: int = 3
 const DAMAGE: float = 200.0
-## A blast's energy, J (about a fighter's death): how long its far flash lasts.
-const BLAST_ENERGY_J: float = 1.0e9
 const RELAY_S: float = 10.0
 ## What a blast's `HitInfo.cause` says.
 const CAUSE: StringName = &"mine"

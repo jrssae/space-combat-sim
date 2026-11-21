@@ -323,6 +323,17 @@ impl ScsSimCore {
         true
     }
 
+    /// Adds `dv` to body `body_id`'s tier row velocity (M10-T09: a blast's push on a hull flying in the tier). False when it
+    /// is not in the tier.
+    #[func]
+    fn tier_add_velocity(&mut self, body_id: i64, dv: Vector3) -> bool {
+        let Some(i) = self.tier.index_of(body_id) else {
+            return false;
+        };
+        self.tier.velocities[i] += dv;
+        true
+    }
+
     /// Promotes body `body_id`: its row's state (`position`, `velocity`, `basis`, `angular`, `pod_yaw`, `assist_on`,
     /// `hulk`, `command`, `cruise`, `kind`), the row removed. Empty when the body is not in the tier.
     #[func]

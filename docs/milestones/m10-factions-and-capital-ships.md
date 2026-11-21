@@ -368,7 +368,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | done |
 | T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | done |
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | done |
-| T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | in progress |
+| T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | done |
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | not started |
 | T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
 | T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | not started |
@@ -689,6 +689,28 @@ parity green.
   100 us search. **Open:** "nearest live structure" is read as the nearest live section of any kind; the disabled hull's thrust
   goes at once (T10 stages it); subsystems are not yet targets in the HUD (T18); bays only stop by their section (they have no
   points of their own in Q53's table).
+- **T09 done (2026-11-21).** One blast model for every explosion (`docs/architecture.md` §22.4, D12.6): `BlastSpec` (the curve
+  `(1 - (d/R)^2)^2`, damage `d0 x f`, push `I0 x f x A / m` capped at 50 m/s, energy `5e6 J x d0`), `BlastTable` (T03's rows as
+  `blasts` in `data/capitals/capitals.json`: sources, section kinds per blast class, class and side mappings, hulls, roles and
+  cargo) and `BlastResolver` (lands a blast: damage through `apply_hit`, cause `blast`, on the nearest section of a capital via
+  `HitInfo.volume`, the push on the body or the tier row; chains queued and landed in the same tick). The native reach
+  (`blast_kernels.rs`, engine-free, under the guard; `ScsSimCore.blast_reach`; `tier_add_velocity`) names the hulls a blast
+  touches and each one's nearest surface volume. Wired: every death through the director (a pooled hull's by role and cargo,
+  a capital's by the section that blew, from its centre; the far flash reads the same energy, `ExplosionLod`'s constant refitted
+  so a Starfury flashes as before) and a missile's warhead on top of its impact. Console `blast [source] [ahead_m]`, provider
+  `blasts` (`info.md`). Tests (staged copy): cargo 277 (new: `blast_kernels` 6); GUT 2 428 of 2 436 over the quick suite plus
+  20 damage, fight, parity and thread files (new: `test_blast_model` 8, `test_blasts` 7, `test_blast_threads` 1), the two
+  failures there before this task (`test_sim_core`'s guard on `kernels.rs:46` from T02, `test_ship_catalog_doc` on assets the
+  shared tree lacks); compile check 1 081 scripts clean. Cost: nothing per tick; per blast in the seeded battle 170 to 220 us
+  (two to three hulls hurt, mostly killed), of which the core's reach 8 to 13 us. Tests changed by the new rule:
+  `test_bench` (the transit carrier's raiders are checked before its collapse kills it: its blast now takes them),
+  `test_civilian_escort` (a killed carrier's raiders out of its blast fight on), `test_station_in_game` (the player's death
+  blast may hurt the station; rams still never do), `test_explosion_lod` (the blast's energy and radius from the table).
+  **Open:** mines keep their flat 200 points until T15 (their far flash reads `mine_prox`); a dead capital's unblown sections
+  wait for T11; the manifests' `sections[].blast_energy_j` is no longer read (the generators can drop it); placeholders to
+  confirm: the Thunderbolt as the heavy fighter (x1.3 on `d0` only) and the tankers' fuel cargo (x1.5 `d0`, x1.25 radius and
+  impulse); a strike carrier's death (cruiser reactor, 1 800 at the centre out to 1 km) now kills its own fighters within
+  about 750 m (in the escort mission a carrier killed at its standoff takes all six raiders it launched).
 - **T12 to T15 (weapons):** D12.9 with T03's numbers: beams and their batched draw, interceptors and the EA hulls'
   screens, capital turrets and missiles, mines placed by scenario data and laid in battle, with the radar's short range
   (Q20). Done when AC9, apart from the stand-ins' removal (T45).

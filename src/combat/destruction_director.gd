@@ -23,11 +23,16 @@ extends Node
 ## flew. A **capital** stand-in's death (`watch_capital`) is drawn the same way; the capital then leaves play (and the tier)
 ## and `capital_destroyed` is emitted. A **mine** that goes off (`watch_mines`, M7-T64) is drawn the same way, its fireball as big
 ## as its blast; at most `MINE_BLASTS_MAX` of its explosions are alive at once and the rest are far flashes, so a battle's
-## chains stay cheap. Every death's killing hit carries its blast's energy, radius and point (`set_blast`),
-## the data M12's blast damage and hulks start from.
+## chains stay cheap. Every death's killing hit carries its blast's energy, radius and point (`set_blast`).
+##
+## **Death blasts** (M10-T09, D12.6): every death is a falloff blast (`BlastResolver`) sized by the hull's class and what it
+## carries (`BlastTable`): a pooled hull's by its role and cargo, from where its explosion starts; a capital's by the section
+## that blew (its reactor's without one), from that section's centre. It hurts and pushes whatever is near, friend or foe, and
+## a hull it kills blows in turn in the same tick. The far flash reads the same blast's energy.
 ##
 ## Console: `kill [target|all|allies|player]` destroys now, bypassing god mode: the selected pooled ship or capital, every
-## raider, every ally, or the player.
+## raider, every ally, or the player. `blast [source] [ahead_m]` sets off a test blast ahead of the player (its fireball as
+## big as its radius); provider `blasts` (`BlastResolver.stats`).
 
 ## A pooled ship was destroyed (it is already back in the pool): a raider or an allied Starfury.
 signal ship_destroyed(combatant: Combatant, info: HitInfo)
@@ -45,10 +50,6 @@ signal capital_destroyed(capital: CapitalBody, info: HitInfo)
 signal mine_exploded(at: Vector3)
 
 const RESPAWN_DELAY_S: float = 3.0
-## A death's blast (M4-T22): energy per kilogram of the dead hull, J/kg, and its reach in bounding radii (the explosion's
-## light reaches four). Placeholders until M12 sizes a blast by the ship's class and what it carries.
-const BLAST_J_PER_KG: float = 1.0e5
-const BLAST_RADIUS_FACTOR: float = 4.0
 ## DamageZones' X-fighter zones -> the Starfury chunk each one is.
 const ZONE_CHUNKS: Dictionary[int, StringName] = {
 	DamageZones.CABIN: &"cabin", DamageZones.UPPER_LEFT: &"arm_ul", DamageZones.UPPER_RIGHT: &"arm_ur",
@@ -85,6 +86,22 @@ func _ready() -> void:
 	DebugConsole.registry.register_command(ConsoleCommand.new(&"kill",
 			"Destroy the selected target, every raider, every allied ship or the player now (bypasses god mode)",
 			[ConsoleArg.enum_optional(&"who", KILL_CHOICES, &"target")]), _cmd_kill, self)
+	DebugConsole.registry.register_command(ConsoleCommand.new(&"blast",
+			"Set off a test blast (a row of the blasts' table) ahead of the player: it hurts and pushes what it reaches",
+			[ConsoleArg.enum_optional(&"source", BlastTable.names(), &"fighter_death"),
+			ConsoleArg.float_optional(&"ahead_m", 60.0, 0.0, 20000.0)]), _cmd_blast, self)
+	DebugConsole.registry.register_provider(&"blasts", ConsoleVars.new({
+		&"blasts": {"get": func() -> int: return BlastResolver.blasts, "doc": "Blasts landed (deaths, sections, missiles, tests)"},
+		&"hulls_hurt": {"get": func() -> int: return BlastResolver.hulls_hurt, "doc": "Hulls the blasts hurt"},
+		&"pushed": {"get": func() -> int: return BlastResolver.pushed, "doc": "Hulls the blasts pushed"},
+		&"last": {"get": func() -> String: return "%s at %s: %d reached, %d hurt" % [BlastResolver.last_source,
+				BlastResolver.last_centre, BlastResolver.last_reached, BlastResolver.last_hurt], "doc": "The last blast"},
+		&"last_us": {"get": func() -> int: return BlastResolver.last_us, "doc": "The last blast's cost, us"},
+		&"max_us": {"get": func() -> int: return BlastResolver.max_us, "doc": "The costliest blast's, us"},
+		&"mean_us": {"get": func() -> float: return float(BlastResolver.stats()["mean_us"]), "doc": "A blast's mean cost, us"},
+		&"reach_mean_us": {"get": func() -> float: return float(BlastResolver.stats()["reach_mean_us"]),
+				"doc": "Of that, the native core's walk over the hulls, us"},
+	}), self)
 
 
 func _enter_tree() -> void:
@@ -184,19 +201,21 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 		_respawn_at_s = SimClock.now() + RESPAWN_DELAY_S
 	else:
 		pool.release(combatant)
+	var blast: BlastSpec = BlastTable.hull_death(ship.spec.asset_id if ship.spec != null else "")
 	var level: ExplosionLod.Level = _level_at(radius, xform.origin)
 	if level == ExplosionLod.Level.FULL:
 		_spawn_effects(ship, xform, velocity, spin, radius, hardpoints, staged, first)
 	else:
 		last_blast_position = xform.origin
-		_spawn_far(level, xform.origin, velocity, radius, blast_energy_j(ship.mass))
-	set_blast(info, ship.mass, radius, last_blast_position)
+		_spawn_far(level, xform.origin, velocity, radius, blast.energy_j())
+	set_blast(info, blast, last_blast_position)
 	if combatant == player:
 		player_destroyed.emit(info)
 	else:
 		ship_destroyed.emit(combatant, info)
 		if pool.type_of(combatant) == ShipPool.DEFAULT_TYPE:
 			raider_destroyed.emit(combatant, info)
+	BlastResolver.set_off(blast, last_blast_position, combatant.damageable.faction)
 
 
 func _on_capital_destroyed(info: HitInfo, cap: CapitalBody) -> void:
@@ -210,6 +229,7 @@ func _on_capital_destroyed(info: HitInfo, cap: CapitalBody) -> void:
 		var tier: TierDirector = TierDirector.current()
 		if tier != null:
 			tier.forget_capital(cap)
+	var blast: Array = capital_blast(cap, xform)
 	cap.leave_play()
 	var radius: float = cap.damageable.bounding_radius
 	last_blast_position = xform.origin
@@ -217,9 +237,10 @@ func _on_capital_destroyed(info: HitInfo, cap: CapitalBody) -> void:
 	if level == ExplosionLod.Level.FULL:
 		_add_explosion(radius, velocity, xform.origin, false)
 	else:
-		_spawn_far(level, xform.origin, velocity, radius, blast_energy_j(cap.mass))
-	set_blast(info, cap.mass, radius, xform.origin)
+		_spawn_far(level, xform.origin, velocity, radius, (blast[0] as BlastSpec).energy_j())
+	set_blast(info, blast[0], blast[1])
 	capital_destroyed.emit(cap, info)
+	BlastResolver.set_off(blast[0], blast[1], cap.faction)
 
 
 func _on_mine_detonated(index: int, belt: MineStandin) -> void:
@@ -235,7 +256,7 @@ func draw_mine_blast(at: Vector3) -> ExplosionLod.Level:
 	if level != ExplosionLod.Level.FAR and _mine_explosions_alive() >= MINE_BLASTS_MAX:
 		level = ExplosionLod.Level.FAR
 	if level == ExplosionLod.Level.FAR:
-		_spawn_far(level, at, velocity, radius, MineStandin.BLAST_ENERGY_J)
+		_spawn_far(level, at, velocity, radius, _mine_energy_j())
 	else:
 		var explosion: Explosion = _add_explosion(radius, velocity, at, level == ExplosionLod.Level.REDUCED)
 		if explosion != null:
@@ -246,6 +267,12 @@ func draw_mine_blast(at: Vector3) -> ExplosionLod.Level:
 			mine_exploded.emit(at)
 	mine_blasts[level] += 1
 	return level
+
+
+# A mine's blast energy for its far flash: the table's proximity mine (T15 moves the mines' damage onto the blast model).
+static func _mine_energy_j() -> float:
+	var mine: BlastSpec = BlastTable.spec(&"mine_prox")
+	return mine.energy_j() if mine != null else 0.0
 
 
 # Mine explosions still showing; drops the finished ones.
@@ -328,18 +355,34 @@ func _spawn_effects(ship: Ship, xform: Transform3D, velocity: Vector3, spin: Vec
 			debris.burst(StringName(ship.spec.asset_id), pods.debris_entries(), xform, velocity, spin, seed_value + 1, null, false)
 
 
-## A death's blast energy from the hull's mass, J.
-static func blast_energy_j(mass_kg: float) -> float:
-	return maxf(mass_kg, 0.0) * BLAST_J_PER_KG
-
-
-## Writes a death's blast onto its killing hit (M4-T22): energy from the hull's mass, reach from its size, at `at`.
-static func set_blast(info: HitInfo, mass_kg: float, bounding_radius_m: float, at: Vector3) -> void:
-	if info == null:
+## Writes a death's blast onto its killing hit (M4-T22, M10-T09): `blast`'s energy and radius, at `at`.
+static func set_blast(info: HitInfo, blast: BlastSpec, at: Vector3) -> void:
+	if info == null or blast == null:
 		return
-	info.blast_energy_j = blast_energy_j(mass_kg)
-	info.blast_radius_m = maxf(bounding_radius_m, 0.5) * BLAST_RADIUS_FACTOR
+	info.blast_energy_j = blast.energy_j()
+	info.blast_radius_m = blast.radius_m
 	info.blast_point = at
+
+
+## A capital's death blast and its centre (World frame), `[BlastSpec, Vector3]`, with the hull at `xform`: the blast of the
+## section that blew, from that section's centre; without one (a console kill, a stand-in), its first reactor's, else from
+## the hull's centre.
+static func capital_blast(cap: CapitalBody, xform: Transform3D) -> Array:
+	var ship := cap as CapitalShip
+	if ship == null:
+		var cls: StringName = (cap as CapitalStandin).ship_class if cap is CapitalStandin else &""
+		return [BlastTable.capital_death(&"", cls, cap.faction, BlastTable.DEFAULT_KIND), xform.origin]
+	var section: CapitalSection = null
+	if ship.damage != null:
+		section = ship.damage.sections.get(ship.damage.blown)
+		if section == null:
+			for s: CapitalSection in ship.damage.sections.values():
+				if s.kind == CapitalSection.REACTOR:
+					section = s
+					break
+	var kind: String = section.kind if section != null else BlastTable.DEFAULT_KIND
+	var centre: Vector3 = xform * section.box.get_center() if section != null else xform.origin
+	return [BlastTable.capital_death(ship.type_id, ship.capital_class, cap.faction, kind), centre]
 
 
 ## The index in `chunks` of the part the killing hit landed on (`info.point` is World-local, put into the ship's frame by
@@ -356,6 +399,22 @@ static func first_chunk(chunks: Array[Dictionary], info: HitInfo, xform: Transfo
 
 
 # --- console -----------------------------------------------------------------------------------------------------
+
+
+func _cmd_blast(args: Dictionary) -> ConsoleResult:
+	var ship: Ship = player.ship if player != null else null
+	if ship == null or not ship.visible:
+		return ConsoleResult.failure("blast: no player ship")
+	var spec: BlastSpec = BlastTable.spec(StringName(args[&"source"]))
+	if spec == null:
+		return ConsoleResult.failure("blast: no row %s in the table" % args[&"source"])
+	var at: Vector3 = ship.global_position - ship.global_basis.z * float(args[&"ahead_m"])
+	var velocity: Vector3 = world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
+	_add_explosion(spec.radius_m / Explosion.FIREBALL_FINAL_SCALE, velocity, at, false)
+	BlastResolver.set_off(spec, at, Factions.NEUTRAL)
+	return ConsoleResult.line("%s %.0f m ahead: d0 %.0f, radius %.0f m; %d reached, %d hurt (%d us)" % [spec.source,
+			float(args[&"ahead_m"]), spec.d0, spec.radius_m, BlastResolver.last_reached, BlastResolver.last_hurt,
+			BlastResolver.last_us])
 
 
 # A selected target that is not a pooled ship (a capital, M4-T23): destroyed through its owner's hull.

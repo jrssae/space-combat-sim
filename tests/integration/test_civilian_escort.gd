@@ -555,11 +555,19 @@ func test_destroying_a_carrier_is_the_optional_objective() -> void:
 	var run: CarrierRun = _carriers().runs()[0]
 	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
 	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.ACTIVE)
+	# Its death blast (M10-T09: a cruiser's reactor) takes the raiders near it; those out of its reach fight on.
+	var reach: float = BlastTable.capital_death(&"", run.carrier.ship_class, run.carrier.faction, "reactor").radius_m
+	var out_of_reach: Array[Combatant] = []
+	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+		if WAVE_ONE.has(c.display_name) and c.ship.global_position.distance_to(run.carrier.global_position) > reach + 50.0:
+			out_of_reach.append(c)
 	assert_true(_run("carrier kill").ok)
 	await _ticks(4)
 	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.DONE, "a carrier destroyed")
 	assert_false(_api().has_ended(), "an optional objective ends nothing")
-	assert_eq(_alive(WAVE_ONE), 6, "its launched raiders fight on")
+	for c: Combatant in out_of_reach:
+		assert_true(_api().alive(c.display_name), "%s, out of its blast, fights on" % c.display_name)
+	gut.p("raiders alive after the carrier's blast: %d of 6 (%d were out of its reach)" % [_alive(WAVE_ONE), out_of_reach.size()])
 
 
 func test_a_carrier_that_gets_away_is_not_a_kill_and_raiders_gone_home_are_down() -> void:

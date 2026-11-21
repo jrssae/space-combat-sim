@@ -353,6 +353,10 @@ func test_ramming_the_frame_is_a_contact_ram_and_scraping_the_drum_rams_at_the_s
 		rams.append(info)
 		ship_at.append(main.ship.global_position))
 	var player_id: int = main.ship.get_instance_id()
+	var station_hurt: Array[HitInfo] = []  # anything but a blast (M10-T09: the player's death blast may reach it)
+	station.frame_hull.damaged.connect(func(info: HitInfo, _applied: float) -> void:
+		if info.cause != HitInfo.CAUSE_BLAST:
+			station_hurt.append(info))
 	# The frame: the player at 30 m/s straight into the command section's top.
 	var command: AABB = station.sections.sections[station.sections.index_of("command")]["aabb"]
 	var above: Vector3 = station.global_transform * Vector3(command.get_center().x, command.end.y + 300.0, command.get_center().z)
@@ -368,7 +372,7 @@ func test_ramming_the_frame_is_a_contact_ram_and_scraping_the_drum_rams_at_the_s
 		assert_eq(on_player[0].cause, HitInfo.CAUSE_RAM)
 		assert_lt(on_player[0].point.distance_to(ship_at[rams.find(on_player[0])]), 12.0, "where it touched, on the ship's skin")
 		assert_almost_eq(on_player[0].relative_speed_mps, 30.0, 0.5, "at the speed it flew in")
-	assert_eq(station.sections.health[station.sections.index_of("command")], StationSections.SECTION_HEALTH, "rams never hurt the station")
+	assert_eq(station_hurt.size(), 0, "rams never hurt the station")
 	# The drum: a fresh player beside the forward drum's skin, at rest against the station, drifting onto it at 1 m/s.
 	main.respawn()
 	await _ticks(2)

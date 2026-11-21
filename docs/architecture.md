@@ -3505,8 +3505,8 @@ src/combat/destruction_director.gd   a tier death where its row flew; every deat
 - **Deaths.** A tier ship destroyed goes through `DestructionDirector` as a near one does (released to the pool, its row
   with it, `ship_destroyed` and `raider_destroyed`), its pose read from its row (`TierDirector.row_pose`), with no explosion
   or debris (since T23 a far death is drawn by the explosion level of detail). Every pooled ship's or the player's killing hit carries the
-  death's blast (`HitInfo.blast_energy_j`, `blast_radius_m`, `blast_point`; placeholders until M12 sizes a blast by class and
-  cargo: 1e5 J a kilogram of hull, four bounding radii), for T23 and M12.
+  death's blast (`HitInfo.blast_energy_j`, `blast_radius_m`, `blast_point`), for T23; since M10-T09 sized by class and cargo
+  and landed on whatever is near, a tier row too (§22.4).
 - **Cost.** The tier's main-thread work (the integration, the cannons' tier pass, the landing; the far capitals' rolls and
   launches, with their share of the integration) is timed and its means since the bench window began are `tier.cost_us` and
   the bench summary's tier line, beside the tier thinks (count, most in a tick, their time on the step's clock): at `battle`
@@ -7099,3 +7099,55 @@ src/rendering/hull_sheen_material.gd                    HullSheenMaterial
   sheen and differ by a colour set a hull (`HexColours`, handed by the hull task). The contract, the numbers and the looks
   are in `docs/assets-capital.md` ("Organic hulls and the sheen layer"). Tests: `test_sdf`, `test_organic_parts`,
   `test_sheen`, `test_organic_test_hull` (Python); `test_organic_test_hull_asset.gd`.
+
+### 22.4 The blast model (D12.6; T09)
+
+```
+native/src/blast_kernels.rs   the reach, engine-free: the hulls a blast touches and each one's nearest hit volume
+native/src/blast_rows.rs      ScsSimCore.blast_reach, its shell on the core (the rows of the tick's sync, the sweep's order)
+src/combat/blast_spec.gd      BlastSpec, pure: one blast's d0, radius and impulse; the falloff, the damage, the push, the energy
+src/combat/blast_table.gd     BlastTable: the rows of data/capitals/capitals.json `blasts`; a death's blast by class and cargo
+src/combat/blast_resolver.gd  BlastResolver: lands a blast (damage, push), chains, readouts
+```
+
+- **One curve for every explosion.** A blast has a centre damage `d0`, a radius `R` and an impulse `I0`. A hull whose
+  nearest hit volume lies `d` from the centre takes `d0 x f(d)` and gains `dv = I0 x f(d) x A / m` away from the centre (`A`
+  the mean face area of its box, `m` its mass; capped at 50 m/s), with `f(d) = (1 - (d/R)^2)^2`: 1 at the centre or inside
+  the hull, 0 at the radius and beyond, smooth at the rim. A blast's energy, what the far flashes read, is `5e6 J x d0`;
+  `ExplosionLod.FLASH_S_PER_CBRT_J` was refitted so a Starfury's flash lasts as long as before.
+- **The table** (T03, Q53; `docs/assets-capital.md`, "Sections, mounts and blasts") is `blasts` in
+  `data/capitals/capitals.json`: `sources` (the deaths of raiders, fighters, heavy fighters, small craft and civilians;
+  missiles, torpedoes, the three mines), and `sections`, a `[d0, R]` per explosive kind (magazine, fuel, reactor) and an
+  impulse per blast class (cruiser, capital, dreadnought, and the ancients' T04 placeholder). A capital's class is its
+  side's own row (`factions`: Shadows and Vorlons), else its loadout's class (`data/capitals/loadouts.json`), else its
+  catalogue class (`classes` maps destroyer and carrier to capital, the strike carrier to cruiser). A pooled hull's death is
+  `hulls` (the raider, the Thunderbolt as a heavy fighter), else a small craft's when the loadouts say so, else `by_role`; a
+  hull in `cargo` (the Saturn tankers: fuel) is scaled by `cargo_scale`. The manifests' `sections[].blast_energy_j` is no
+  longer read.
+- **Who blows.** Every death through `DestructionDirector`: a pooled hull's (and the player's) from where its explosion
+  starts; a capital's with the row of the section that blew (its first reactor's for a console kill or a stand-in), from that
+  section's centre. A missile's warhead (`HitResolver`, `MissileStandin`'s projectiles) blasts where it struck, on top of the
+  impact, with the missile's shooter on its hits. The mines keep their flat damage until M10-T15 moves them onto this model
+  (their flash already reads the table's `mine_prox` energy). The console's `blast` sets one off ahead of the player.
+- **Landing.** `BlastResolver.set_off(spec, centre, faction, shooter)` asks the core once (`blast_reach`: near hulls then tier
+  rows, skipping hulls out of play and ships sheltered in a station; a big hull measured to its surface's nearest volume,
+  which names the volume, any other hull to its bounding sphere) and then, in GDScript, measures a hull without a surface to
+  its own hit volumes (`HitShape.nearest_point`), keeps one piece per capital (a rotor answers for its ship), and lands each
+  hit through `Damageable.apply_hit` (cause `blast`, `HitInfo.volume` the nearest volume, so a capital's lands on the nearest
+  section through `CapitalDamage`) and the push on the body (`linear_velocity`; a rotor's on its capital; a frozen or
+  kinematic body is not pushed) or on the tier row (`ScsSimCore.tier_add_velocity`). Friend and foe alike; god mode as for any
+  hit. A death's blast has no shooter (no kill credit, no one for a brain to answer).
+- **Chains in the tick.** A hull a blast kills sets off its own blast through the director; it is queued behind the one
+  being landed and lands in the same tick, in the order set off, so a chain is never recursive and always lands the same.
+- **Threads.** Everything runs on the main thread from the rows of the tick's sync, so 1 and 6 threads land the same blasts
+  bit for bit (`test_blast_threads`). Nothing runs per tick: the cost is per blast. Measured in the seeded battle (debug
+  build, 120 ships, a 300 m blast every 12 ticks): 170 to 220 us a blast with two to three hulls hurt and mostly killed,
+  of which the core's walk over the rows is 8 to 13 us; the rest is the landing (`apply_hit` and its listeners).
+- **Console.** Command `blast [source] [ahead_m]`, provider `blasts` (`info.md`).
+- **Tests.** `test_blast_model` (unit: the curve pinned, the push and its cap, the energy, the table's rows, classes, roles
+  and cargo, D12.6's three checks, the nearest point); `test_blasts` (the main scene: a death's falloff and push and nothing past
+  its radius, a chain in the same tick, an Omega's magazine from its section, a blast on a capital's nearest section, a tier
+  row hurt and pushed, a missile's warhead, the console); `test_blast_threads` (1 vs 6 threads); Rust `blast_kernels::tests`
+  (spheres, surfaces, a turned hull, flags and order).
+- **Known gaps.** The staged break-up's secondary blasts are T11's; a dead capital's unblown magazines and fuel do not yet
+  blow with it. Blasts do not see through or around hulls: a hull behind another takes the same blast.

@@ -10,7 +10,7 @@ extends RefCounted
 ## the light it delivers at the switch is what the reduced effect showed (no pop, no gap). Farther it shrinks to its 1 px floor
 ## and then keeps the pixel and dims with the inverse square of distance, as T28's running lights and T11's far dots do, until
 ## the light it delivers drops under `VISIBLE_DELIVERED`. A bigger hull's fireball is bigger, so a capital's death reads across
-## hundreds of km and a fighter's across about ten. The blast's energy stays on the event (M12) and sets how long the flash
+## hundreds of km and a fighter's across about ten. The blast's energy (M10-T09, `BlastSpec.energy_j`) sets how long the flash
 ## lasts. Pure maths; `far_flash.gdshader` draws the same.
 
 enum Level { FULL, REDUCED, FAR }
@@ -25,10 +25,12 @@ const PEAK: float = 2.0
 const COLOR: Color = Color(1.2, 0.85, 0.5)
 ## A flash reads while the light it delivers (brightness times its pixel area) is above this: a pixel at a quarter of its peak.
 const VISIBLE_DELIVERED: float = 0.5
-## Its rise, and its length from the blast's energy: a base plus a part that grows with the energy's cube root.
+## Its rise, and its length from the blast's energy: a base plus a part that grows with the energy's cube root. The part was
+## fitted at M10-T09 so a Starfury's death flashes as long as before, now that a blast's energy is `5e6 J x d0` (D12.6) rather
+## than 1e5 J a kilogram: 1e-4 x cbrt(4.8e9 J / 3e8 J).
 const RISE_S: float = 0.04
 const FLASH_BASE_S: float = 0.4
-const FLASH_S_PER_CBRT_J: float = 0.0001
+const FLASH_S_PER_CBRT_J: float = 0.00025198421
 ## The lines assumed when nothing is drawn (headless runs and tests).
 const DEFAULT_LINES: float = 1080.0
 

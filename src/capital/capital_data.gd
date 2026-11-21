@@ -3,7 +3,8 @@ extends RefCounted
 ## The capital ships' tuning (M8-T08, D83), read once from `data/capitals/capitals.json`: how long each class's jump drive
 ## needs after a jump before it can open another point, each faction's carrier doctrine (when its fighters go home and
 ## when the carrier flees; `CarrierTactics.DEFAULTS` lists the keys), how far each class is heard (M10-T07, Q51), and how its
-## sections and mounts take damage (M10-T08, D12.5). Pure apart from the reads.
+## sections and mounts take damage (M10-T08, D12.5), and the blasts' table (M10-T09, D12.6, `BlastTable`). Pure apart from the
+## reads.
 
 const PATH: String = "res://data/capitals/capitals.json"
 ## The weapons' kinds (M10-T03), for a mount's hit points.
@@ -19,6 +20,7 @@ const DEFAULT_RECHARGE_S: float = 60.0
 static var _data: Dictionary = {}
 static var _loaded: bool = false
 static var _weapons: Dictionary = {}
+static var _hulls: Dictionary = {}
 static var _weapons_loaded: bool = false
 
 
@@ -70,21 +72,43 @@ static func mount_hit_points(weapon: String, mount_kind: String) -> float:
 
 ## The kind of weapon `id` in the loadouts (`bolt_heavy`, `beam_sustained`, ...), "" when it names none.
 static func weapon_kind(id: String) -> String:
-	if not _weapons_loaded:
-		_weapons_loaded = true
-		_weapons = {}
-		var file := FileAccess.open(LOADOUTS_PATH, FileAccess.READ)
-		var parsed: Variant = JSON.parse_string(file.get_as_text()) if file != null else null
-		if parsed is Dictionary and (parsed as Dictionary).get("weapons") is Dictionary:
-			_weapons = (parsed as Dictionary)["weapons"]
+	_read_loadouts()
 	var entry: Variant = _weapons.get(id)
 	return str((entry as Dictionary).get("kind", "")) if entry is Dictionary else ""
+
+
+## The class the loadouts give hull `id` (`fighter`, `small_craft`, `cruiser`, `capital`, `dreadnought`), "" when they do not
+## list it (M10-T09: what a death's blast is sized by).
+static func hull_class(id: String) -> String:
+	_read_loadouts()
+	var entry: Variant = _hulls.get(id)
+	return str((entry as Dictionary).get("class", "")) if entry is Dictionary else ""
+
+
+## The file's table under `key` (M10-T09: `blasts`), empty when it has none. Shared and read-only to the caller.
+static func table(key: String) -> Dictionary:
+	var found: Variant = _read().get(key)
+	return found if found is Dictionary else {}
 
 
 ## Reads the files again on the next call (tests).
 static func reload() -> void:
 	_loaded = false
 	_weapons_loaded = false
+
+
+static func _read_loadouts() -> void:
+	if _weapons_loaded:
+		return
+	_weapons_loaded = true
+	_weapons = {}
+	_hulls = {}
+	var file := FileAccess.open(LOADOUTS_PATH, FileAccess.READ)
+	var parsed: Variant = JSON.parse_string(file.get_as_text()) if file != null else null
+	if parsed is Dictionary and (parsed as Dictionary).get("weapons") is Dictionary:
+		_weapons = (parsed as Dictionary)["weapons"]
+	if parsed is Dictionary and (parsed as Dictionary).get("hulls") is Dictionary:
+		_hulls = (parsed as Dictionary)["hulls"]
 
 
 static func _read() -> Dictionary:

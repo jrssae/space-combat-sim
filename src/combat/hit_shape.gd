@@ -114,3 +114,18 @@ func contains(p_body: Vector3, inflate: float = 0.0) -> bool:
 	var nearest_y: float = clampf(p.y, -half_segment, half_segment)
 	var limit: float = maxf(radius + inflate, 0.0)
 	return p.x * p.x + p.z * p.z + (p.y - nearest_y) * (p.y - nearest_y) <= limit * limit
+
+
+## The shape's point nearest the body-frame point `p_body`, body frame (`p_body` itself when inside): where a blast reaches
+## it (M10-T09).
+func nearest_point(p_body: Vector3) -> Vector3:
+	var p: Vector3 = _inverse * p_body
+	var near: Vector3
+	if kind == Kind.BOX:
+		near = p.clamp(-half_extents, half_extents)
+	else:
+		var on_axis := Vector3(0.0, clampf(p.y, -half_segment, half_segment), 0.0)
+		var off: Vector3 = p - on_axis
+		var d: float = off.length()
+		near = p if d <= radius else on_axis + off * (radius / d)
+	return transform * near

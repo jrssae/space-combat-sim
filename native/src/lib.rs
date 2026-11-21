@@ -83,3 +83,7 @@ mod surface_rows;
 // M12-T19: a carrier's docking, an engine-free kernel and its rows for GDScript.
 mod dock_kernels;
 mod dock_rows;
+
+// M10-T09: the blast model's reach, an engine-free kernel and its shell on the core.
+mod blast_kernels;
+mod blast_rows;

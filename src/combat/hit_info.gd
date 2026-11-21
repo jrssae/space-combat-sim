@@ -16,6 +16,8 @@ const CAUSE_VORTEX_COLLAPSE: StringName = &"vortex_collapse"
 const CAUSE_VORTEX: StringName = &"vortex"
 ## The ship sat docked on a carrier that was destroyed (M12-T19, Q28, `CarrierDock`): no shooter, no kill credit.
 const CAUSE_CARRIER_LOST: StringName = &"carrier_lost"
+## A blast's damage (M10-T09, `BlastResolver`): a death, a section blowing, a missile's warhead.
+const CAUSE_BLAST: StringName = &"blast"
 
 ## Instance id of the `Damageable` (or its ship) that was hit.
 var target_id: int = 0
@@ -32,18 +34,18 @@ var point: Vector3 = Vector3.ZERO
 var normal: Vector3 = Vector3.ZERO
 ## Speed of the bolt (or the other body) relative to the target at impact.
 var relative_speed_mps: float = 0.0
-## What did it: `bolt` (`HitResolver`), `ram` (`RamResolver`), `console` (`damage`, `kill`), `planet` (`PlanetImpact`)
-## or `vortex_collapse` (a collapsing jump point).
+## What did it: `bolt` (`HitResolver`), `ram` (`RamResolver`), `console` (`damage`, `kill`), `planet` (`PlanetImpact`),
+## `vortex_collapse` (a collapsing jump point) or `blast` (`BlastResolver`).
 var cause: StringName = CAUSE_BOLT
 ## Hull points actually removed; 0 until the `Damageable` has applied the hit (and for god mode or a dead hull).
 var applied: float = 0.0
-## On the hit that destroyed a ship (M4-T22, set by `DestructionDirector` before its signals): the death's blast, its energy
-## (J), its radius (m) and its centre (`World`-local), for the far explosions (M4-T23) and blast damage (M12). 0 otherwise.
+## On the hit that destroyed a ship (M4-T22, set by `DestructionDirector` before its signals): the death's blast (M10-T09,
+## `BlastTable`), its energy (J), its radius (m) and its centre (`World`-local), for the far explosions (M4-T23). 0 otherwise.
 var blast_energy_j: float = 0.0
 var blast_radius_m: float = 0.0
 var blast_point: Vector3 = Vector3.ZERO
 ## The big hull's surface volume the bolt entered first, as the core's sweep found it (a capital's hit lands on that volume's
-## section, M10-T08); -1 for any other hit.
+## section, M10-T08), or the one nearest a blast (M10-T09); -1 for any other hit.
 var volume: int = -1
 
 

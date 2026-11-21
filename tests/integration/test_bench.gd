@@ -667,11 +667,6 @@ func test_transit_carrier_grows_the_raider_pool_in_free_flight() -> void:
 	# The raiders' carrier is the strike carrier (M12-T19, merged by M8-T07): it holds its arrival point for about a second,
 	# then stands off instead of jumping straight back, so its point is collapsed while held and nobody is in its funnel.
 	await _ticks(30)
-	assert_true(_exec("vortex collapse").ok)
-	await _ticks(30)
-	assert_eq(int(_read("vortex.collapses")), 1)
-	assert_eq(int(_read("vortex.collapse_kills")), 0, "its fighters are already out of the funnel")
-	assert_eq(String(_read("vortex.last_collapse")), "opener_destroyed")
 	var alive: Array[Combatant] = main.ships.alive()
 	assert_gt(alive.size(), 1, "the raiders it brought are alive")
 	var before: int = alive.size()
@@ -679,6 +674,12 @@ func test_transit_carrier_grows_the_raider_pool_in_free_flight() -> void:
 	assert_true(victim.damageable.kill(), "a pooled raider the tool built can be killed")
 	await _ticks(10)
 	assert_lt(main.ships.alive().size(), before, "killing one removes it")
+	# The collapse destroys the carrier, whose reactor's blast (M10-T09) takes the fighters standing by it: checked after them.
+	assert_true(_exec("vortex collapse").ok)
+	await _ticks(30)
+	assert_eq(int(_read("vortex.collapses")), 1)
+	assert_eq(int(_read("vortex.collapse_kills")), 0, "its fighters are already out of the funnel")
+	assert_eq(String(_read("vortex.last_collapse")), "opener_destroyed")
 
 
 func test_a_capital_caught_in_its_own_funnel_dies_by_the_collapse() -> void:

@@ -21,7 +21,8 @@ extends Node
 ## that reaches one first is spent there (rocks never break; any bolt of another faction stops on one). The mines' bodies
 ## (M7-T64) share that grid, every belt's mines after the rocks: a shot of any side that reaches one first is spent there and
 ## sets it off (`MineStandin.strike`). The bolt is spent,
-## `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the HUD and sound. Nothing is cached
+## `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the HUD and sound; a missile's
+## warhead then blasts there too (M10-T09, `BlastResolver`). Nothing is cached
 ## between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
 ## tick is ignored. A big hull with a surface (the station's frame and drum, M7-T06) is swept by the core against its
 ## volumes: only a bolt that hits one reaches GDScript, with where it entered.
@@ -35,6 +36,8 @@ extends Node
 signal hit_resolved(info: HitInfo)
 
 const LATE_PRIORITY: int = 200
+## A missile's warhead blasts where it strikes (M10-T09, D12.6): this row of `BlastTable`.
+const MISSILE_BLAST: StringName = &"missile"
 const TARGET_CHOICES: Array[StringName] = [&"player", &"target"]
 const HEAL_CHOICES: Array[StringName] = [&"player", &"target", &"all"]
 const TRANSPONDER_ACTIONS: Array[StringName] = [&"reveal", &"hide"]
@@ -539,6 +542,7 @@ func _land(i: int, delta: float) -> void:
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
 	info.volume = _best_volume
+	var warhead: bool = _is_missile(i)
 	_spend(i)
 	if _best_stop:
 		friendly_stops += 1
@@ -553,6 +557,14 @@ func _land(i: int, delta: float) -> void:
 	if fx != null:
 		_throw_sparks(info, t0 + move * t, move / maxf(delta, 1e-6))
 	hit_resolved.emit(info)
+	if warhead:
+		BlastResolver.set_off(BlastTable.spec(MISSILE_BLAST), info.point, info.faction, shooter_id)  # on top of the impact (D12.6)
+
+
+# Whether candidate `c` is a missile, whose warhead blasts where it strikes (M10-T09).
+func _is_missile(c: int) -> bool:
+	var bolt: Projectile = _bolt_node(_bolt_index[c], _bolt_ids[c])
+	return bolt != null and bolt.kind == Projectile.KIND_MISSILE
 
 
 # The bolt's flash where it struck, sized to its damage, riding with the hull. A destroyed hull is hidden and the explosion replaces the flash; a

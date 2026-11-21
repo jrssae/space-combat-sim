@@ -61,5 +61,152 @@
    "missile": 1200.0,
    "mine": 1200.0
   }
+ },
+ "blasts": {
+  "_doc": "M10-T09 (D12.6, Q18, Q53; docs/assets-capital.md 'Sections, mounts and blasts'): every explosion is a falloff blast, damage d0 x f(d) and push dv = impulse x f(d) x A / m (A the mean face area of the hull's box, capped at push_cap_mps), f(d) = (1 - (d/R)^2)^2 with d measured to the hull's nearest hit volume. sources: d0 (hull points at the centre), radius_m, impulse (N s/m^2) by source. sections: per blast class, [d0, radius_m] by explosive section kind and one impulse; a capital's death is the blast of the section that blew (its reactor's without one). classes: a capital class with no row of its own -> the row it takes; factions: a side whose capitals take a row of their own (the ancients: T04's placeholder). A pooled hull's death: hulls (asset id -> source) first, else small_craft_death for a hull the loadouts class as small craft, else by_role from the catalogue's role; cargo (asset id -> kind) scales it by cargo_scale (placeholders until the maintainer sets them). flash_j_per_d0: a blast's energy for the far flashes.",
+  "flash_j_per_d0": 5000000.0,
+  "push_cap_mps": 50.0,
+  "sources": {
+   "raider_death": {
+    "d0": 40.0,
+    "radius_m": 80.0,
+    "impulse": 1500.0
+   },
+   "fighter_death": {
+    "d0": 60.0,
+    "radius_m": 100.0,
+    "impulse": 2000.0
+   },
+   "heavy_fighter_death": {
+    "d0": 78.0,
+    "radius_m": 100.0,
+    "impulse": 2000.0
+   },
+   "small_craft_death": {
+    "d0": 100.0,
+    "radius_m": 150.0,
+    "impulse": 2500.0
+   },
+   "civilian_death": {
+    "d0": 400.0,
+    "radius_m": 300.0,
+    "impulse": 3000.0
+   },
+   "missile": {
+    "d0": 20.0,
+    "radius_m": 20.0,
+    "impulse": 500.0
+   },
+   "torpedo": {
+    "d0": 100.0,
+    "radius_m": 60.0,
+    "impulse": 1500.0
+   },
+   "mine_prox": {
+    "d0": 300.0,
+    "radius_m": 120.0,
+    "impulse": 2000.0
+   },
+   "mine_energy": {
+    "d0": 250.0,
+    "radius_m": 300.0,
+    "impulse": 4000.0
+   },
+   "mine_guided": {
+    "d0": 400.0,
+    "radius_m": 60.0,
+    "impulse": 1500.0
+   }
+  },
+  "sections": {
+   "cruiser": {
+    "magazine": [
+     900.0,
+     400.0
+    ],
+    "fuel": [
+     600.0,
+     500.0
+    ],
+    "reactor": [
+     1800.0,
+     1000.0
+    ],
+    "impulse": 6000.0
+   },
+   "capital": {
+    "magazine": [
+     1800.0,
+     600.0
+    ],
+    "fuel": [
+     1200.0,
+     800.0
+    ],
+    "reactor": [
+     4500.0,
+     2500.0
+    ],
+    "impulse": 10000.0
+   },
+   "dreadnought": {
+    "magazine": [
+     2400.0,
+     800.0
+    ],
+    "fuel": [
+     1800.0,
+     1000.0
+    ],
+    "reactor": [
+     7500.0,
+     3500.0
+    ],
+    "impulse": 12000.0
+   },
+   "ancients": {
+    "magazine": [
+     9000.0,
+     3000.0
+    ],
+    "fuel": [
+     9000.0,
+     3000.0
+    ],
+    "reactor": [
+     9000.0,
+     3000.0
+    ],
+    "impulse": 12000.0
+   }
+  },
+  "classes": {
+   "destroyer": "capital",
+   "carrier": "capital",
+   "strike_carrier": "cruiser"
+  },
+  "factions": {
+   "shadows": "ancients",
+   "vorlons": "ancients"
+  },
+  "hulls": {
+   "raider_fighter": "raider_death",
+   "ea_thunderbolt": "heavy_fighter_death"
+  },
+  "by_role": {
+   "fighter": "fighter_death",
+   "civilian": "civilian_death"
+  },
+  "cargo": {
+   "saturn_4_tanker": "fuel",
+   "saturn_8_tanker": "fuel"
+  },
+  "cargo_scale": {
+   "fuel": {
+    "d0": 1.5,
+    "radius_m": 1.25,
+    "impulse": 1.25
+   }
+  }
  }
 }
