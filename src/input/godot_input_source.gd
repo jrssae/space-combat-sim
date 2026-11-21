@@ -193,7 +193,7 @@ func _event_strength(event: InputEvent) -> float:
 	if event is InputEventJoypadButton:
 		var button := event as InputEventJoypadButton
 		for pad: int in _pads_for(button.device):
-			if Input.is_joy_button_pressed(pad, button.button_index):
+			if Input.is_joy_button_pressed(pad, PadLayout.button_index(PadLayout.active, button.button_index) as JoyButton):
 				device = Device.PAD
 				return 1.0
 		return 0.0

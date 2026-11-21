@@ -359,7 +359,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 |---|---|---|---|---|---|
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
-| T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | in progress |
+| T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | in progress |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -479,6 +479,11 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   (`GodotInputSource`), recorded (`BindingCapture`), lit (`PadPresses`) and for the menus' own `ui_*` actions
   (`PadUiBindings`). `PadLegend.tag_of` words every label (prompts, comms, hints, Controls page, diagram) per layout.
 - **Done when:** the tests pass and the maintainer's (H) check in `docs/playtest.md` ("Controller layout") passes.
+- **Done (2026-11-21):** the maintainer's pad reports as `Nintendo Switch Pro Controller`, GUID `0500d71f7e05...`, so Auto
+  picks Switch. Tests: `test_pad_layout.gd` (9: detection, labels per layout, the swap, prompts, `ui_*` retarget, the setting),
+  one each added to `test_joypad_report.gd`, `test_joypads.gd` and `test_controls_screen.gd` (the layout row, its cycle). The
+  Controls page's tests now step down one row to the profile. Menus keep Godot's `ui_*` actions, retargeted by `PadUiBindings`.
+  Open: the live press (H) in `docs/playtest.md`.
 
 ### M10-T02 Factions as data
 

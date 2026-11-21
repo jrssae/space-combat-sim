@@ -27,6 +27,9 @@ const GROUPS: Array[Dictionary] = [
 ## press moves a number) and `percent: true` (a 0..1 number the menu shows as 0..100 %).
 
 const ENTRIES: Dictionary = {
+	&"pad_layout": {"type": TYPE_ENUM, "default": &"auto", "choices": [&"auto", &"xbox360", &"xbox_one", &"switch", &"playstation", &"generic"],
+		"category": &"controls", "label": "Controller layout", "menu": false,
+		"doc": "Which pad the button names and face-button positions follow: auto (guessed from the pad's name and GUID), xbox360, xbox_one, switch, playstation or generic. The Controls page's first row cycles it (M10-T63)"},
 	&"control_profile": {"type": TYPE_STRING, "default": "default", "pattern": "^[a-z0-9_]{1,32}$",
 		"category": &"controls", "label": "Control profile", "menu": false,
 		"doc": "Control profile applied at start-up and on change (console: controls list)"},

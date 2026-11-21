@@ -84,9 +84,10 @@ static func label_of_action(action: StringName) -> String:
 	return String(action).replace("_", " ").capitalize()
 
 
-## The short name of a pad part as printed on the pad ("A", "LT", "D-pad up").
-static func tag_of(widget: StringName) -> String:
-	return _TAGS.get(widget, String(widget))
+## The short name of a pad part as printed on the pad ("A", "LT", "D-pad up"): the active layout's wording (M10-T63), the Xbox
+## 360's when `layout` is left out and none is active.
+static func tag_of(widget: StringName, layout: StringName = PadLayout.active) -> String:
+	return PadLayout.tag(layout, widget, _TAGS.get(widget, String(widget)))
 
 
 ## The pad parts that have something bound, in diagram order.

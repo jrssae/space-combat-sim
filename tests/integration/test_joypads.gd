@@ -203,3 +203,24 @@ func test_the_front_end_shows_the_notice_only_while_no_pad_is_connected() -> voi
 	_unplug(0)
 	assert_eq(front.joypad_notice(), JoypadReport.NONE_NOTICE)
 	assert_true(label.visible)
+
+
+# --- Controller layout (M10-T63) ---------------------------------------------------------------------------------
+
+
+func test_a_nintendo_pad_sets_the_layout_and_a_manual_pick_wins() -> void:
+	var saved: StringName = PadLayout.active
+	Settings.reset(&"pad_layout")
+	_boot()
+	assert_eq(PadLayout.active, PadLayout.XBOX_360, "no pad: the layout the game was built on")
+	devices.plugged[0] = {"name": "Nintendo Switch Pro Controller", "guid": "0500d71f7e0500000920000000006803", "known": true}
+	joypads.on_joy_connection_changed(0, true)
+	assert_eq(joypads.detected_layout(), PadLayout.SWITCH)
+	assert_eq(PadLayout.active, PadLayout.SWITCH, "Auto follows the pad")
+	assert_true(_run("joypads")[-1].contains("Auto (detected: Nintendo Switch)"))
+	Settings.set_value(&"pad_layout", &"playstation")
+	assert_eq(PadLayout.active, PadLayout.PLAYSTATION, "a manual pick overrides the guess")
+	Settings.reset(&"pad_layout")
+	_unplug(0)
+	assert_eq(PadLayout.active, PadLayout.XBOX_360)
+	PadLayout.active = saved

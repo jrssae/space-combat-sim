@@ -580,6 +580,13 @@ flight. `JoypadReport` (pure) holds the pads and the last events and words the l
 hardware is read. In the menus `PadPresses` (pure) follows the joypad events `MenuFrame._input` receives and `PadDiagram` lights
 those parts, so a player sees which button is which.
 
+**Pad layout (M10-T63).** Bindings are positional (the Xbox 360 layout: `a` bottom, `b` right, `x` left, `y` top). `PadLayout`
+(pure) names the layout in force (setting `pad_layout`: auto, xbox360, xbox_one, switch, playstation, generic; `Joypads` keeps
+`PadLayout.active` current from the setting and the first pad's name and GUID) and words each pad part through
+`PadLegend.tag_of`, so prompts, comms lines, hints and the Controls page show the printed labels. SDL3 reports a Nintendo pad's
+face buttons by label, so under the Switch layout A/B and X/Y are swapped where buttons are read, captured and lit, and on the
+menus' `ui_*` pad actions (`PadUiBindings`).
+
 ### 6.2 Commands
 
 ```

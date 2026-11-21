@@ -47,6 +47,11 @@ static func row_text(profile: ControlProfile, action: StringName) -> String:
 	return "%s: %s" % [action_title(action), ", ".join(names) if not names.is_empty() else "(unbound)"]
 
 
+## The first row of the page: the controller layout and, for Auto, what was found.
+static func layout_row_text(setting: StringName, detected: StringName) -> String:
+	return "Controller layout: %s" % PadLayout.setting_text(setting, detected)
+
+
 static func profile_row_text(profile_name: String, unsaved: bool) -> String:
 	return "Profile: %s%s" % [profile_name, " (unsaved changes)" if unsaved else ""]
 

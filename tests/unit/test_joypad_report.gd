@@ -120,3 +120,10 @@ func test_the_summary_lists_pads_then_events() -> void:
 func test_the_event_line_of_no_event() -> void:
 	assert_eq(JoypadReport.event_line({}), "none")
 	assert_eq(JoypadReport.toast_text({}), "")
+
+
+func test_the_layout_is_the_first_pads_and_xbox_360_with_none() -> void:
+	var report := JoypadReport.new()
+	assert_eq(report.layout(), PadLayout.XBOX_360)
+	report.note_connected(0, "Nintendo Switch Pro Controller", "0500d71f7e0500000920000000006803", true, 5.0)
+	assert_eq(report.layout(), PadLayout.SWITCH)

@@ -17,7 +17,7 @@ var _axes: Dictionary = {}  # "device:axis" -> value, for the axes off rest
 func feed(event: InputEvent) -> bool:
 	var button := event as InputEventJoypadButton
 	if button != null:
-		return feed_button(button.device, button.button_index, button.pressed)
+		return feed_button(button.device, PadLayout.button_index(PadLayout.active, button.button_index), button.pressed)
 	var motion := event as InputEventJoypadMotion
 	if motion != null:
 		return feed_axis(motion.device, motion.axis, motion.axis_value)

@@ -92,7 +92,7 @@ func _key(event: InputEventKey) -> void:
 
 
 func _button(event: InputEventJoypadButton) -> void:
-	var index: int = event.button_index
+	var index: int = PadLayout.button_index(PadLayout.active, event.button_index)  # raw press -> positional binding
 	if index < 0 or index > ControlProfile.MAX_PAD_BUTTON or index == ControlProfile.GUIDE_BUTTON:
 		if event.pressed:
 			hint = "That button is not used by the game"

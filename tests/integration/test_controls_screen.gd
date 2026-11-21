@@ -23,12 +23,14 @@ func before_each() -> void:
 	ControlProfiles.store.user_dir = USER_DIR
 	_clean()
 	ControlProfiles.use(ControlProfile.DEFAULT_NAME)
+	Settings.reset(&"pad_layout")
 	game = RecordingGame.new()
 	autofree(game)
 
 
 func after_each() -> void:
 	get_tree().paused = false
+	Settings.reset(&"pad_layout")
 	ControlProfiles.use(ControlProfile.DEFAULT_NAME)  # a test that rebinds leaves the project's map as it found it
 	ControlProfiles.store.user_dir = saved_user_dir
 	Settings.config_path = saved_settings_path
@@ -59,6 +61,7 @@ func _open_controls() -> void:
 	screen.persist = false
 	frame.push_screen(screen)
 	await wait_process_frames(2)
+	await _pad(&"ui_down")  # the first row is the controller layout (M10-T63); most tests start on the profile below it
 
 
 func _dispatch(event: InputEvent) -> void:
@@ -154,11 +157,12 @@ func test_every_game_action_is_listed_with_its_bindings() -> void:
 	for child: Node in screen.get_children():
 		if child is Button:
 			texts.append((child as Button).text)
-	assert_eq(texts.size(), InputAdapter.ACTIONS.size() + 4, "the profile, every action, save as, the controls settings and back")
+	assert_eq(texts.size(), InputAdapter.ACTIONS.size() + 5, "the layout, the profile, every action, save as, the controls settings and back")
 	var live: ControlProfile = ControlProfile.from_input_map("live")
 	for action: StringName in InputAdapter.ACTIONS:
 		assert_has(texts, ControlsModel.row_text(live, action))
-	assert_string_contains(texts[0], "Profile: default")
+	assert_string_contains(texts[0], "Controller layout: Auto", "the layout is the first option (M10-T63)")
+	assert_string_contains(texts[1], "Profile: default")
 	assert_eq(screen.title, "Controls")
 	assert_eq(frame.current_page(), screen)
 
@@ -186,6 +190,31 @@ func test_the_diagram_lights_the_buttons_of_the_action_in_focus() -> void:
 	assert_eq(frame.pad_diagram().highlighted(), [&"a"] as Array[StringName])
 	await _pad(&"ui_cancel")
 	assert_eq(frame.pad_diagram().highlighted().size(), 0, "nothing stays lit once the page is left")
+
+
+# --- Controller layout (M10-T63) ----------------------------------------------------------------------------------
+
+
+func test_the_first_row_cycles_the_controller_layout_and_every_button_name_follows() -> void:
+	await _open_controls()
+	await _pad(&"ui_up")
+	assert_string_contains(_focused_text(), "Controller layout: Auto (detected:")
+	var saved: StringName = PadLayout.active
+	await _pad(&"ui_accept")
+	assert_eq(Settings.get_value(&"pad_layout"), &"xbox360", "the next choice after Auto")
+	assert_string_contains(_focused_text(), "Controller layout: Xbox 360", "the row keeps the focus and shows the pick")
+	for _step: int in 2:
+		await _pad(&"ui_accept")
+	assert_eq(Settings.get_value(&"pad_layout"), &"switch")
+	assert_eq(PadLayout.active, PadLayout.SWITCH, "Joypads applied it at once")
+	var fire_row: String = ""
+	for child: Node in screen.get_children():
+		if child is Button and (child as Button).text.begins_with("Fire:"):
+			fire_row = (child as Button).text
+	assert_string_contains(fire_row, "B", "the bottom button of a Switch pad is printed B")
+	Settings.reset(&"pad_layout")
+	await get_tree().process_frame
+	assert_eq(PadLayout.active, saved, "back to the detected layout")
 
 
 # --- Profiles ----------------------------------------------------------------------------------------------------

@@ -53,6 +53,14 @@ see a pad, Steam included.
 4. The pad switches itself off after 10 minutes without input (flying on the keyboard, reading, waiting for a run), and the
    game says `Gamepad disconnected`. Press Home and wait again.
 
+**Controller layout (M10-T63).** The first row of Settings, Controls is the controller layout: Auto (guessed from the pad's
+name and GUID, shown as `Auto (detected: Nintendo Switch)`) or Xbox 360, Xbox One/Series, Nintendo Switch, PlayStation,
+Generic; `joypads` prints the layout in force. Every default binding is by position (bottom face button fires, right toggles
+assist, left auto-tracks, top camera), and every button name on screen is the printed one for the layout. (H) With the Nova
+Lite in Switch mode: fly with Auto, the bottom button must fire and the screen must call it `B`; the right one toggles assist
+(`A`). If it is reversed, pick Xbox 360 in that row and tell the maintainer. Also check Xbox 360 mode shows `A`/`LB`, and
+that menus confirm on the bottom button.
+
 **Any pad.** `joypads` shows `mapping unknown`: Godot has no button layout for it, so buttons may be swapped; put the pad in
 its XInput (Xbox) mode. Nothing listed at all: check `ls /dev/input/js*`; with no `js` node the kernel has no pad, and the
 fault is the pad, its mode, its cable or its receiver, not the game.

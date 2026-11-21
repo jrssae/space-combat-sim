@@ -24,6 +24,7 @@ var _elapsed_s: float = 0.0
 var _start_logged: bool = false
 var _logged: PackedStringArray = PackedStringArray()
 var _toast: JoypadToast = null
+var _settings: SettingsScript = null
 
 
 func _ready() -> void:
@@ -35,18 +36,24 @@ func _ready() -> void:
 	_toast = JoypadToast.new()
 	add_child(_toast)
 	var settings: SettingsScript = get_node_or_null(^"/root/Settings") as SettingsScript
+	_settings = settings
+	if settings != null:
+		settings.changed.connect(_on_setting_changed)
 	if devices == null and not (settings != null and settings.test_run):
 		devices = JoypadDevices.new()
 		Input.joy_connection_changed.connect(on_joy_connection_changed)
 	if devices != null:
 		for id: int in devices.ids():
 			on_joy_connection_changed(id, true)
+	refresh_layout()
 	_register_console()
 
 
 func _exit_tree() -> void:
 	if registry != null:
 		registry.unregister_owner(self)
+	if _settings != null and _settings.changed.is_connected(_on_setting_changed):
+		_settings.changed.disconnect(_on_setting_changed)
 
 
 func _process(delta: float) -> void:
@@ -69,12 +76,32 @@ func on_joy_connection_changed(device: int, connected: bool) -> void:
 	if event["kind"] != JoypadReport.START:
 		_log("%s %s" % [event["kind"], JoypadReport.pad_line(event)])
 	_toast.show_text(JoypadReport.toast_text(event))
+	refresh_layout()
 	changed.emit()
 
 
 ## What the front end shows while no pad is connected; "" when one is.
 func none_notice() -> String:
 	return report.none_notice()
+
+
+## The layout the first connected pad looks like (Xbox 360 with none).
+func detected_layout() -> StringName:
+	return report.layout()
+
+
+## The pad layout setting: `auto` or one of `PadLayout.LAYOUTS`.
+func layout_setting() -> StringName:
+	return StringName(String(_settings.get_value(&"pad_layout"))) if _settings != null else PadLayout.AUTO
+
+
+## Works out the layout in force from the setting and the pad, and makes labels, button reads and the menus' own pad actions
+## follow it. Called on connect, disconnect and when the setting changes.
+func refresh_layout() -> void:
+	var before: StringName = PadLayout.active
+	var now: StringName = PadLayout.resolve(layout_setting(), detected_layout())
+	PadUiBindings.retarget(before, now)
+	PadLayout.active = now
 
 
 func toast() -> JoypadToast:
@@ -84,6 +111,12 @@ func toast() -> JoypadToast:
 ## The lines logged so far (without the prefix), oldest first.
 func logged() -> PackedStringArray:
 	return _logged
+
+
+func _on_setting_changed(key: StringName, _value: Variant) -> void:
+	if key == &"pad_layout":
+		refresh_layout()
+		changed.emit()
 
 
 func _log(line: String) -> void:
@@ -98,11 +131,17 @@ func _register_console() -> void:
 		return
 	registry.register_command(ConsoleCommand.new(&"joypads",
 			"List the gamepads the game sees (name, GUID, button mapping) and the last connect and disconnect events"),
-			func(_args: Dictionary) -> ConsoleResult: return ConsoleResult.success(report.summary_lines()), self)
+			func(_args: Dictionary) -> ConsoleResult:
+				var lines: PackedStringArray = report.summary_lines()
+				lines.append("layout: %s -> %s" % [PadLayout.setting_text(layout_setting(), detected_layout()),
+						PadLayout.display_name(PadLayout.active)])
+				return ConsoleResult.success(lines), self)
 	registry.register_provider(&"joypads", ConsoleVars.new({
 		&"count": {"get": report.count, "doc": "Gamepads connected"},
 		&"names": {"get": func() -> String: return _joined("name"), "doc": "Their names, by device id"},
 		&"guids": {"get": func() -> String: return _joined("guid"), "doc": "Their SDL GUIDs, by device id"},
+		&"layout": {"get": func() -> String: return String(PadLayout.active), "doc": "Pad layout in force (xbox360, xbox_one, switch, playstation, generic)"},
+		&"detected_layout": {"get": func() -> String: return String(detected_layout()), "doc": "Layout guessed from the first pad's name and GUID"},
 		&"unmapped": {"get": report.unmapped_count, "doc": "Connected pads with no known button mapping"},
 		&"events": {"get": report.events_seen, "doc": "Connect and disconnect events since launch"},
 		&"last_event": {"get": func() -> String: return JoypadReport.event_line(report.last_event()),

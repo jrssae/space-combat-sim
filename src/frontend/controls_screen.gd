@@ -19,6 +19,7 @@ const ControlProfilesScript := preload("res://src/autoload/control_profiles.gd")
 const GRACE_S: float = 0.35
 const ERROR_COLOR: Color = Color(1.0, 0.55, 0.4)
 const NAME_MAX_LENGTH: int = 32  # ControlProfile.NAME_PATTERN
+const KEY_LAYOUT: StringName = &"@layout"
 const KEY_PROFILE: StringName = &"@profile"
 const KEY_SAVE: StringName = &"@save"
 const KEY_SETTINGS: StringName = &"@settings"
@@ -166,6 +167,7 @@ func _row(text: String, on_accept: Callable, key: StringName = &"") -> Button:
 func _show_list(focus_key: StringName = &"") -> void:
 	_begin_view(View.LIST, "")
 	var live: ControlProfile = _live()
+	_row(ControlsModel.layout_row_text(_layout_setting(), _detected_layout()), _cycle_layout, KEY_LAYOUT)
 	_row(ControlsModel.profile_row_text(profiles.active_name, profiles.is_unsaved()), _show_profiles, KEY_PROFILE)
 	for action: StringName in InputAdapter.ACTIONS:
 		_row(ControlsModel.row_text(live, action), _open_action.bind(action), action)
@@ -178,6 +180,29 @@ func _show_list(focus_key: StringName = &"") -> void:
 # The `controls` settings (invert pitch, deadzones, hold time, mouse speeds) open over this page (M5-T45).
 func _open_settings() -> void:
 	push_requested.emit(MenuScreens.settings_screen(&"controls"))
+
+
+# The controller layout (M10-T63) steps to the next choice and the list is redrawn, so every button name on the page follows.
+func _cycle_layout() -> void:
+	var choices: Array[StringName] = PadLayout.CHOICES
+	var next: StringName = choices[(choices.find(_layout_setting()) + 1) % choices.size()]
+	if profiles.settings == null or profiles.settings.set_value(&"pad_layout", next) != OK:
+		_say("The controller layout cannot be changed.", true)
+		return
+	var problem: String = _keep_choice()
+	_show_list(KEY_LAYOUT)
+	_say(problem, not problem.is_empty())
+
+
+func _layout_setting() -> StringName:
+	if profiles.settings == null:
+		return PadLayout.AUTO
+	return StringName(String(profiles.settings.get_value(&"pad_layout")))
+
+
+func _detected_layout() -> StringName:
+	var joypads: Node = get_node_or_null(^"/root/Joypads")
+	return joypads.detected_layout() if joypads != null and joypads.has_method(&"detected_layout") else PadLayout.XBOX_360
 
 
 func _show_profiles() -> void:

@@ -53,6 +53,14 @@ func pads() -> Array[Dictionary]:
 	return out
 
 
+## The layout the first connected pad looks like (`PadLayout.XBOX_360` with none).
+func layout() -> StringName:
+	var listed: Array[Dictionary] = pads()
+	if listed.is_empty():
+		return PadLayout.XBOX_360
+	return PadLayout.detect(String(listed[0]["name"]), String(listed[0]["guid"]))
+
+
 ## Connected pads Godot has no button mapping for: their buttons may be laid out wrong.
 func unmapped_count() -> int:
 	var n: int = 0
