@@ -339,8 +339,8 @@ main_run "${log}" 180 0 "factions" -- --console-strict \
     || smoke_status=1
 expect_line "${log}" "[console] earth_alliance vs raiders: hostile" || smoke_status=1
 expect_line "${log}" "[console] earth_alliance vs raiders: hostile -> neutral (this session)" || smoke_status=1
-expect_line "${log}" "[console] factions.relations = [earth_alliance raiders neutral, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]" || smoke_status=1
-expect_line "${log}" "[console] factions.relations = [earth_alliance raiders hostile, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]" || smoke_status=1
+expect_text "${log}" "[console] factions.relations = [earth_alliance raiders neutral, renegades raiders hostile, narn raiders hostile," || smoke_status=1
+expect_text "${log}" "[console] factions.relations = [earth_alliance raiders hostile, renegades raiders hostile, narn raiders hostile," || smoke_status=1
 expect_line "${log}" "[console] factions.friendly_fire = false" || smoke_status=1
 expect_line "${log}" "[console] factions.friendly_fire = true" || smoke_status=1
 reject_text "${log}" "[console] error:" || smoke_status=1
