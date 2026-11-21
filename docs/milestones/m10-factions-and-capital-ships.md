@@ -367,7 +367,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | done |
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | done |
 | T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | done |
-| T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | not started |
+| T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | in progress |
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | not started |
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | not started |
 | T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
