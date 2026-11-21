@@ -156,6 +156,7 @@ var _pushed_cohesion: float = 0.0
 var _pushed_leash: float = 0.0
 var _pushed_rejoined: float = 0.0
 var _pushed_catch_up: Vector2 = Vector2.ZERO
+var _pushed_form_fire: Vector3 = Vector3.ZERO
 var _pushed_objective: String = ""
 var _pushed_guard_post: UniversePos = null
 var _pushed_guard_name: String = ""
@@ -544,6 +545,7 @@ func prepare_native(p: Perception) -> int:
 		_pushed_cohesion = context.cohesion_m
 		_pushed_rejoined = context.rejoined_m
 		_pushed_catch_up = Vector2(context.catch_up_m, context.catch_up_mps)
+		_pushed_form_fire = Vector3(context.form_engage_m, context.form_leash_m, context.form_off_slot_s)
 		_pushed_leash = context.leash_m
 		_pushed_objective = ""
 		_pushed_guard_radius = -1.0
@@ -865,6 +867,9 @@ func _sync_context(host: Object) -> void:
 	if Vector2(c.catch_up_m, c.catch_up_mps) != _pushed_catch_up:
 		_pushed_catch_up = Vector2(c.catch_up_m, c.catch_up_mps)
 		host.set_catch_up(_slot, c.catch_up_m, c.catch_up_mps)
+	if Vector3(c.form_engage_m, c.form_leash_m, c.form_off_slot_s) != _pushed_form_fire:
+		_pushed_form_fire = Vector3(c.form_engage_m, c.form_leash_m, c.form_off_slot_s)
+		host.set_form_fire(_slot, c.form_engage_m, c.form_leash_m, c.form_off_slot_s)
 	if c.objective_name != _pushed_objective:
 		_pushed_objective = c.objective_name
 		host.set_objective(_slot, c.objective_name)
@@ -963,6 +968,7 @@ static func native_push_context(host: Object, slot: int, ctx: AiContext) -> void
 	host.set_flight(slot, ctx.cover, ctx.cohesion_m, ctx.rejoined_m)
 	host.set_leash(slot, ctx.leash_m)
 	host.set_catch_up(slot, ctx.catch_up_m, ctx.catch_up_mps)
+	host.set_form_fire(slot, ctx.form_engage_m, ctx.form_leash_m, ctx.form_off_slot_s)
 	host.set_objective(slot, ctx.objective_name)
 	_push_guard(host, slot, ctx)
 	_push_route(host, slot, ctx.route)

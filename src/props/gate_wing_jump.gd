@@ -62,6 +62,8 @@ func begin(p_main: Main, p_gate: Jumpgate) -> void:
 		wing.leader_away = true
 		main.wings.refresh(wing)
 		return
+	wing.jumping = true  # in formation through the gate: no breaking off to fight (M8-T13)
+	main.wings.refresh(wing)
 	for member: Combatant in wing.members():
 		if _usable(member) and wing.dock_status(member).is_empty():
 			followers.append(member)
@@ -266,6 +268,9 @@ func finish() -> void:
 			_restore(member, gate.arrival_transform(), gate.arrival_velocity() + main.world.rest_velocity())
 	if detached and wing != null:
 		wing.leader_away = false
+		main.wings.refresh(wing)
+	if wing != null and wing.jumping:
+		wing.jumping = false
 		main.wings.refresh(wing)
 	followers.clear()
 	sent.clear()

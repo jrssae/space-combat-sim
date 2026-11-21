@@ -17,6 +17,11 @@ var lead_spacing: float = 4.0
 ## formation's own closing in time.
 var catch_up_beyond_m: float = 5000.0
 var catch_up_mps: float = 1000.0
+## Weapons free in formation (M8-T13): under FORM ON ME a wingman shoots at hostiles within `form_engage_m` of the player, its slot
+## slipping at most `form_leash_m` for at most `form_off_slot_s`.
+var form_engage_m: float = 1500.0
+var form_leash_m: float = 400.0
+var form_off_slot_s: float = 6.0
 
 static var _shared: FlightRules = null
 
@@ -49,6 +54,9 @@ static func from_dict(d: Dictionary, source: String = "flights") -> FlightRules:
 	rules.lead_spacing = _positive(d, "lead_spacing", rules.lead_spacing, source)
 	rules.catch_up_beyond_m = _positive(d, "catch_up_beyond_m", rules.catch_up_beyond_m, source)
 	rules.catch_up_mps = _positive(d, "catch_up_mps", rules.catch_up_mps, source)
+	rules.form_engage_m = _positive(d, "form_engage_m", rules.form_engage_m, source)
+	rules.form_leash_m = _positive(d, "form_leash_m", rules.form_leash_m, source)
+	rules.form_off_slot_s = _positive(d, "form_off_slot_s", rules.form_off_slot_s, source)
 	if rules.rejoined_m >= rules.cohesion_m:
 		push_warning("FlightRules: %s: rejoined_m must be less than cohesion_m; half of it used" % source)
 		rules.rejoined_m = 0.5 * rules.cohesion_m

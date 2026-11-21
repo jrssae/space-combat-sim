@@ -1,8 +1,11 @@
-{"_doc": "Flights of three (M8-T19, D85). Starfuries a station launches that are not under the player's command fly in flights of `size` (a lead and its wingmen), and so does the rest of a wing whose scenario says the player commands only a flight (`wings[].flight`). Lengths in metres. cohesion_m: a wingman farther than this from its flight's lead breaks off and rejoins; it fights again once it is back within rejoined_m. lead_spacing: with nothing to fight, the leads of a squadron's later flights form on its first AI lead, their slots this many times the formation's spacing apart. catch_up_beyond_m, catch_up_mps (M8-T17, maintainer 2026-11-20): a ship in formation (the player's wing or a flight) farther than catch_up_beyond_m from its slot closes at up to catch_up_mps (never past its ShipSpec), braking back to formation's own closing in time (a respawn's fly-back, a wing left at a gate, a recall).",
+{"_doc": "Flights of three (M8-T19, D85). Starfuries a station launches that are not under the player's command fly in flights of `size` (a lead and its wingmen), and so does the rest of a wing whose scenario says the player commands only a flight (`wings[].flight`). Lengths in metres. cohesion_m: a wingman farther than this from its flight's lead breaks off and rejoins; it fights again once it is back within rejoined_m. lead_spacing: with nothing to fight, the leads of a squadron's later flights form on its first AI lead, their slots this many times the formation's spacing apart. catch_up_beyond_m, catch_up_mps (M8-T17, maintainer 2026-11-20): a ship in formation (the player's wing or a flight) farther than catch_up_beyond_m from its slot closes at up to catch_up_mps (never past its ShipSpec), braking back to formation's own closing in time (a respawn's fly-back, a wing left at a gate, a recall). form_engage_m, form_leash_m, form_off_slot_s (M8-T13, maintainer 2026-11-21): under FORM ON ME the player's wingmen shoot at hostiles within form_engage_m of the player from any bearing, turning their guns on them while their thrusters keep the slot; a slot may slip at most form_leash_m, for at most form_off_slot_s, before the wingman flies back to it first. Not during a long catch-up or a jump. FORM UP, HOLD FIRE never shoots.",
  "size": 3,
  "cohesion_m": 2500.0,
  "rejoined_m": 1000.0,
  "lead_spacing": 4.0,
  "catch_up_beyond_m": 5000.0,
- "catch_up_mps": 1000.0
+ "catch_up_mps": 1000.0,
+ "form_engage_m": 1500.0,
+ "form_leash_m": 400.0,
+ "form_off_slot_s": 6.0
 }

@@ -6804,6 +6804,13 @@ native/src/brain.rs              + ScsBrains.set_flight
     let a ship in formation fire: FORM ON ME gated every attack and the formation behaviour never pulled the trigger. A
     passive pilot does not shoot from its slot, a big hull is left to an attack run on its mounts, and avoidance still
     filters the wish.
+  - **Weapons free under FORM ON ME (M8-T13, maintainer 2026-11-21).** The arc rule alone left a formation silent at anything
+    off the player's nose. Under FORM ON ME (`WingDirector` sets `AiContext.form_engage_m`, `form_leash_m`, `form_off_slot_s`
+    from data/wings/flights.json: 1 500 m, 400 m, 6 s; 0 under any other order and while the wing follows the player through a
+    gate, `Wing.jumping`) a ship in formation also takes the nearest hostile within `form_engage_m` of its leader, from any
+    bearing, turning its guns on it while its thrusters keep the slot. Once the slot slips past the leash or stays off longer
+    than the limit it flies back to it first (`FormationState::weapons_free`). Never during a long catch-up. HOLD FIRE never
+    shoots: no gunner, and attack stands down under both form orders.
   - **The hold-fire orders.** `ORDER_FORM_HOLD_FIRE` is FORM ON ME without the shot from the slot. `ORDER_HOLD_POSITION` makes
     the formation behaviour score with or without a leader and command the brake, so the flight model stops the ship against
     the reference (§19.5) and keeps it there; rally stands down. Both gate attack and retreat as FORM ON ME does. Any other

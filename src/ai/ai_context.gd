@@ -146,6 +146,27 @@ var catch_up_mps: float = 0.0:
 			return
 		catch_up_mps = value
 		_changed()
+## Weapons free in formation (M8-T13; `WingDirector` sets it from `FlightRules` under FORM ON ME): the ship shoots at hostiles
+## within `form_engage_m` of its leader from any bearing, its slot slipping at most `form_leash_m` for at most `form_off_slot_s`
+## (0: only what crosses its leader's nose).
+var form_engage_m: float = 0.0:
+	set(value):
+		if value == form_engage_m:
+			return
+		form_engage_m = value
+		_changed()
+var form_leash_m: float = 0.0:
+	set(value):
+		if value == form_leash_m:
+			return
+		form_leash_m = value
+		_changed()
+var form_off_slot_s: float = 0.0:
+	set(value):
+		if value == form_off_slot_s:
+			return
+		form_off_slot_s = value
+		_changed()
 ## Whether this wingman is too far from its lead to fight (`refresh` works it out every think).
 var strayed: bool = false
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
@@ -345,6 +366,9 @@ func clear_wing() -> void:
 	rejoined_m = 0.0
 	catch_up_m = 0.0
 	catch_up_mps = 0.0
+	form_engage_m = 0.0
+	form_leash_m = 0.0
+	form_off_slot_s = 0.0
 	strayed = false
 
 

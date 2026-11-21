@@ -1107,6 +1107,65 @@ fn a_ship_in_its_slot_leaves_alone_what_is_out_of_reach_or_out_of_its_arc_or_beh
     assert!(!out.fire, "a friend is in the lane");
 }
 
+// Weapons free in formation (M8-T13): FORM ON ME with the data's radius shoots at a hostile near its leader from any bearing,
+// lets the slot slip only within the leash and the time limit, and never chases one beyond the radius.
+fn weapons_free_member() -> Brain {
+    let mut brain = flight_member(ORDER_FORM_ON_ME);
+    brain.ctx.form_engage_m = 1500.0;
+    brain.ctx.form_leash_m = 400.0;
+    brain.ctx.form_off_slot_s = 6.0;
+    brain
+}
+
+#[test]
+fn under_form_on_me_a_wingman_turns_its_guns_on_a_hostile_near_its_leader_from_any_bearing() {
+    for (at, why) in [(Vector3::new(600.0, 0.0, -300.0), "off the arc"), (Vector3::new(0.0, 0.0, 600.0), "astern")] {
+        let mut bench = flight_bench(&[(BANDIT, at)]);
+        let mut brain = weapons_free_member();
+        let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+        assert_eq!(brain.current_kind(), i32::from(KIND_FORMATION), "{why}: it keeps formation");
+        assert_eq!(brain.wanted_target_id, BANDIT, "{why}: its guns follow the hostile");
+        assert!(out.flight.rot.length() > 0.1, "{why}: the nose turns to it: {:?}", out.flight.rot);
+        assert!(brain.desired_all_axes, "{why}: the thrusters keep the slot");
+    }
+    // Hold fire with the same radius: nothing is shot at.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(600.0, 0.0, -300.0))]);
+    let mut brain = weapons_free_member();
+    brain.ctx.order = ORDER_FORM_HOLD_FIRE;
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert!(!out.fire);
+    assert_eq!(brain.wanted_target_id, TARGET_NONE, "hold fire: silent");
+}
+
+#[test]
+fn under_form_on_me_a_wingman_never_chases_past_the_radius_the_leash_or_the_time() {
+    // A hostile farther than the radius from the leader (and beyond the guns): left alone.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(1800.0, 0.0, -600.0))]);
+    let mut brain = weapons_free_member();
+    bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, TARGET_NONE, "beyond the radius: not chased");
+    // Off its slot past the leash: it flies back first, guns off the hostile.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(600.0, 0.0, -300.0))]);
+    let own = row_of(&bench, RAIDER);
+    let at = bench.rows.positions[own];
+    move_row(&mut bench, own, at + Vector3::new(500.0, 0.0, 0.0));
+    let mut brain = weapons_free_member();
+    let out = bench.think(&mut brain, 0.0, 0, NEVER, 12);
+    assert_eq!(brain.wanted_target_id, TARGET_NONE, "past the leash: back to the slot first");
+    assert!(!out.fire);
+    // Within the leash but off the slot longer than the limit: back to the slot too.
+    let mut bench = flight_bench(&[(BANDIT, Vector3::new(600.0, 0.0, -300.0))]);
+    move_row(&mut bench, own, at + Vector3::new(200.0, 0.0, 0.0));
+    let mut brain = weapons_free_member();
+    let mut kept_on = 0;
+    for k in 0..40 {
+        bench.think(&mut brain, 0.25 * f64::from(k), 0, NEVER, 12);
+        kept_on += i32::from(brain.wanted_target_id == BANDIT);
+    }
+    assert!(kept_on > 0 && kept_on <= 25, "at most the limit off the slot (6 s of thinks at 0.25 s): {kept_on}");
+    assert_eq!(brain.wanted_target_id, TARGET_NONE, "then back to the slot");
+}
+
 #[test]
 fn the_hold_fire_orders_keep_the_guns_silent_and_hold_position_stops_the_ship() {
     // Form up, hold fire: the slot is flown, nothing is shot at or shown.

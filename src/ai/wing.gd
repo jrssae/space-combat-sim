@@ -342,6 +342,10 @@ func slot_offset(slot: int) -> Vector3:
 var leader_away: bool = false
 
 
+## The wing is following its leader through a gate (M8-T17, `GateWingJump`): it keeps its slots and shoots at nothing on the way.
+var jumping: bool = false
+
+
 ## Whether the wing's order is one of the hold-fire orders.
 func holds_fire() -> bool:
 	return order == AiContext.Order.FORM_HOLD_FIRE or order == AiContext.Order.HOLD_POSITION

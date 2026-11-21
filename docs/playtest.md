@@ -1406,11 +1406,13 @@ do it: `spawn raider ai 1500`).
 - [ ] **(H) A wing in flights:** `launch wing zeta` sends twelve Starfuries that fly as four vics of three (ZETA 1, 4, 7 and 10
       lead), the three later leads spread behind ZETA 1 while there is nothing to fight. Say if the spacing between the flights
       (160 m steps) looks right. `traffic raid 6` then: each flight goes in together and its ships stay near their lead.
-- [ ] **(H) Shooting from the slot:** key 2 (form on me) with your wingmen on their slots, then fly at a raider (`spawn raider idle
-      900`): they keep their slots and fire once it is ahead of you within about 40 degrees and 1.8 km. Say if that reads as a
-      formation attacking, and if the noses turning toward the target while the ships hold their places looks right.
+- [ ] **(H) Shooting from the slot:** key 2 (form on me) with your wingmen on their slots and a raider near you (`spawn raider idle
+      700`), on any side: they turn their guns on it and fire while staying in formation (M8-T13, maintainer 2026-11-21: weapons
+      free within 1.5 km of you; a slot may slip up to 400 m for up to 6 s, then they fly back to it; data/wings/flights.json).
+      A raider farther than that is not chased. Not during a long catch-up or while following you through a gate. Say if that
+      reads as a formation fighting, and if the noses turning toward the target while the ships hold their places looks right.
 - [ ] **(H) Form up, hold fire:** key 7 (or FORM UP on the comms ring, `wing order form_hold`): `ALPHA 2: COPY, FORMING UP,
-      HOLDING FIRE`; they keep their slots and do not fire at the same raider.
+      HOLDING FIRE`; they keep their slots and do not fire at the same raider, on any side, not one shot.
 - [ ] **(H) Hold position, hold fire:** key 8 (HOLD POSITION, `wing order hold`): `COPY, HOLDING POSITION, HOLDING FIRE`; they
       brake to a stop where they are and stay while you fly off; their roster rows read HOLD. Any other order (key 2) brings
       them back.

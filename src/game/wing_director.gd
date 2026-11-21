@@ -648,6 +648,11 @@ func refresh(wing: Wing) -> void:
 		ctx.catch_up_m = flight_rules.catch_up_beyond_m
 		ctx.catch_up_mps = minf(flight_rules.catch_up_mps, member.ship.spec.assist_speed_max_mps) if member.ship.spec != null \
 				else flight_rules.catch_up_mps
+		# FORM ON ME is weapons free near the player (M8-T13); not while the wing follows the player through a gate.
+		var weapons_free: bool = order == AiContext.Order.FORM_ON_ME and alive and not wing.jumping
+		ctx.form_engage_m = flight_rules.form_engage_m if weapons_free else 0.0
+		ctx.form_leash_m = flight_rules.form_leash_m if weapons_free else 0.0
+		ctx.form_off_slot_s = flight_rules.form_off_slot_s if weapons_free else 0.0
 		if alive and wing.leader.is_player:
 			member.ship.running_lights = wing.leader.ship.running_lights
 	if leader_pilot != null and wing.flight > 0:
