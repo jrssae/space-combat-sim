@@ -1571,7 +1571,7 @@ too quiet or right, against the engines (the bed the rest sits on).
       (`wing order hold` with the gate behind you) and `gate open arrival`: the arms keep glowing until it has flown out, then
       the vortex forms.
 - [ ] **(H) A jump at speed and a busy gate:** fly at the gate fast from the side and hold X just inside 10 km: the autopilot
-      takes you round and through, never into an arm. Die in a run-in (`god off`, `damage 200`) and respawn: your wing is back
-      in formation round you at once. Jump while civilians come and go: none flies in as you come out; they wait clear of the
+      takes you round and through, never into an arm. Die in a run-in (`god off`, `damage 200`) and respawn: your wing flies
+      back to you from the gate (about 4 to 5 minutes from 50 km at its cruise) and re-forms; nobody is placed. Jump while civilians come and go: none flies in as you come out; they wait clear of the
       mouth and go after.
 

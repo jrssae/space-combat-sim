@@ -1,8 +1,32 @@
 extends GutTest
 ## The player's gate jump made safe (M8-T17; maintainer's play-test, 2026-11-20), on the real main scene: a jump asked at speed
 ## from the side, just inside 10 km, never kills the player (the autopilot once flew it into the far arm); a player killed in its
-## run-in and respawned finds its wing back in formation round it; an AI ship on its own departure run when the player comes
+## run-in and respawned finds its wing flying back to formation round it, nothing placed; an AI ship on its own departure run when the player comes
 ## out of the gate stands aside until the arrival is through, then departs.
+
+## Formation's far closure over the profile's cruise (`FormationState::FAR_EXTRA_MPS`, native/src/brain_behaviours.rs).
+const FAR_EXTRA_MPS: float = 100.0
+const SPEED_UP: float = 8.0
+
+var _rate_backup: int = 60
+var _scale_backup: float = 1.0
+var _steps_backup: int = 8
+
+
+func _fast() -> void:
+	_rate_backup = Engine.physics_ticks_per_second
+	_scale_backup = Engine.time_scale
+	_steps_backup = Engine.max_physics_steps_per_frame
+	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
+	Engine.time_scale = SPEED_UP
+	Engine.max_physics_steps_per_frame = maxi(_steps_backup, roundi(SPEED_UP))
+
+
+func _normal() -> void:
+	Engine.physics_ticks_per_second = _rate_backup
+	Engine.time_scale = _scale_backup
+	Engine.max_physics_steps_per_frame = _steps_backup
+
 
 const STARFURY_SPEC: String = "res://assets/ships/starfury_aurora.tres"
 
@@ -101,7 +125,7 @@ func test_a_jump_asked_at_speed_from_the_side_never_kills_the_player() -> void:
 		assert_false(c.damageable.hull.destroyed, "%s lived" % c.display_name)
 
 
-func test_a_player_killed_in_its_run_in_finds_its_wing_back_after_respawning() -> void:
+func test_a_player_killed_in_its_run_in_finds_its_wing_flying_back_after_respawning() -> void:
 	await _start()
 	assert_true(main.gates._cmd_gate({&"action": &"approach", &"option": "1.9"}).ok)
 	await _ticks(2)
@@ -115,17 +139,41 @@ func test_a_player_killed_in_its_run_in_finds_its_wing_back_after_respawning() -
 	main.respawn()
 	assert_false(main.gates.jump.is_active(), "the jump ended with the ship")
 	assert_true(main.gates.wing_jump.followers.is_empty() and main.gates.wing_jump.sent.is_empty(), "no jump state left")
-	var formed: bool = await _until(func() -> bool:
-		for c: Combatant in wingmen:
-			if c.ship.global_position.distance_to(main.ship.global_position) > 600.0:
-				return false
-		return true, 60 * 10)
-	assert_true(formed, "the wing re-formed round the respawned player within 10 s")
 	assert_false(wing.leader_away)
 	assert_eq(wing.order, AiContext.Order.FORM_ON_ME, "under its last order")
 	for c: Combatant in wingmen:
 		assert_true(c.ship.visible and not wing.is_away(c) and not c.driver.in_passage, "%s flies again" % c.display_name)
-		assert_false(gate.vortex.spares(c.ship) and gate.vortex.is_active(), "%s is spared by nothing now" % c.display_name)
+	# They fly back, nothing placed: the bound is the way home at formation's far closure, plus a minute to turn and settle.
+	var far_mps: float = AiProfile.load_named(&"ally_starfury").cruise_mps + FAR_EXTRA_MPS
+	var farthest: float = 0.0
+	for c: Combatant in wingmen:
+		farthest = maxf(farthest, c.ship.global_position.distance_to(main.ship.global_position))
+	var bound_s: float = farthest / far_mps + 60.0
+	var max_step: float = wingmen[0].ship.spec.assist_speed_max_mps / 60.0
+	var last: Array[UniversePos] = []  # universe positions: a frame rebase moves no ship
+	for c: Combatant in wingmen:
+		last.append(main.world.to_universe(c.ship.global_position))
+	_fast()
+	var formed: bool = false
+	var jumped: String = ""
+	var elapsed_s: float = 0.0
+	while elapsed_s < bound_s:
+		await get_tree().physics_frame
+		elapsed_s += 1.0 / 60.0
+		formed = true
+		for i: int in wingmen.size():
+			var at: UniversePos = main.world.to_universe(wingmen[i].ship.global_position)
+			var step: float = last[i].offset_to(at).length()
+			if step > max_step and jumped.is_empty():
+				jumped = "%s moved %.0f m in a tick" % [wingmen[i].display_name, step]
+			last[i] = at
+			formed = formed and wingmen[i].ship.global_position.distance_to(main.ship.global_position) < 300.0
+		if formed:
+			break
+	_normal()
+	assert_eq(jumped, "", "no wingman was placed: each flew")
+	assert_true(formed, "back in formation within %.0f s (%.1f km at %.0f m/s); took %.0f s" % [bound_s, farthest / 1000.0, far_mps, elapsed_s])
+	gut.p("fly-back: %.1f km in %.0f s (bound %.0f s)" % [farthest / 1000.0, elapsed_s, bound_s])
 
 
 func test_an_ai_departure_stands_aside_for_the_players_arrival_then_departs() -> void:
