@@ -377,7 +377,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | not started |
 | T16 | E | The `capital` brain and fighters' attacks on capitals | T12, T14 | Opus | not started |
 | T17 | E | Carriers launch fighters from bays and tubes | T07, T16 | Opus | not started |
-| T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | in progress |
+| T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | done |
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
@@ -717,6 +717,21 @@ parity green.
 - **T16 and T17 (AI):** D12.10: the `capital` brain and fighters' attacks on capitals (tests on its choices and T03's
   balance fights); carriers launching by faction (tests on the launch poses and rates). Done when AC10.
 - **T18 (HUD):** Q17, on the radial framework; the M5 menu tests pass. Done when AC12.
+- **T18 done (2026-11-21).** A capital's subsystems are targets (Q17, `docs/architecture.md` §18.19 "Subsystems"). Picking an
+  identified capital on a ship ring opens a ring of WHOLE SHIP, BRIDGE, REACTOR, ENGINES, LAUNCH BAYS, TURRETS, BEAM EMITTERS and
+  MISSILES (the groups it has); a group of one is picked at once, a group of several opens its members (first eight, nearest the
+  pilot first) with state and points; B backs out a ring. `CapitalSubsystems` (pure) lists them from `CapitalDamage`;
+  `TargetMenu.subsystems_of` is the director's source (empty for an unidentified hull); `TargetingController.subsystem_key`
+  (`select_subsystem`, `cycle_subsystem`, cleared on a new selection) feeds `TargetReadout.subsystem` and `aim_offset`. The HUD
+  shows `NAME  STATE %` under the box (and on the screen panel), a square marker on the hull, and the lead and auto-track aim at the
+  point (`aim_position()`). New action `subsystem_next` (edge): pad L3, key 9 (m1_classic too; the pad has no free button, and the
+  maintainer's has no stick clicks, so he picks in the menu), and `set targeting.subsystem next|whole|<key>`, `targeting.subsystems`
+  in the console (`info.md`). Tests (staged copy): GUT 483 of 483 over 29 files (new: `test_capital_subsystems` 9 incl. the menu's
+  rings, `test_hud_subsystem` 5, `test_capital_subsystem_targeting` 5 on the Omega; the input map, adapter, parity, profile, target
+  menu, preview and HUD files green); compile check 1 085 scripts clean. Screenshots: `references/screenshots/M10-T18 subsystems/`.
+  **Open:** the pad's L3 is shared with free look; subsystem points are those of the rotating pieces at rest (a drum turret is
+  marked where it sits at rest); engines and bays use their section's centre; no subsystem on a mine; destroyed subsystems stay
+  selectable (the point still exists).
 
 ### M10-T49 The player at a capital's helm
 
