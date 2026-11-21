@@ -68,6 +68,37 @@ func _fly(seconds: float, done: Callable = Callable()) -> void:
 	Engine.max_physics_steps_per_frame = _steps_backup
 
 
+# The painted letters on `cap`'s shields: one node per shield, each showing `letter`'s cell of the glyph atlas.
+func _letters(cap: CapitalShip) -> Array[HullMarkNode]:
+	var out: Array[HullMarkNode] = []
+	for node: Node in cap.hull_piece.get_children():
+		if node is HullMarkNode:
+			out.append(node)
+	return out
+
+
+func test_each_omega_wears_its_names_first_letter_on_both_shields() -> void:
+	var rest: Vector3 = main.world.rest_velocity()
+	var atlas: Dictionary = {}
+	for pair: Array in [["EAS Agamemnon", "A"], ["EAS Hector", "H"]]:
+		var cap: CapitalShip = CapitalShip.create(TYPE, Factions.EARTH_ALLIANCE, pair[0], rest)
+		assert_not_null(cap)
+		if cap == null:
+			continue
+		main.world.spawn(cap, main.world.to_universe(main.ship.global_position + Vector3(0.0, 0.0, -9000.0)), Basis.IDENTITY)
+		atlas = cap._hardpoints["mark_atlas"]
+		var letters: Array[HullMarkNode] = _letters(cap)
+		assert_eq(letters.size(), 2, "%s: a letter on each shield" % pair[0])
+		var cell: Vector2i = HullMarks.cell_of(pair[1], atlas)
+		for node: HullMarkNode in letters:
+			var m: StandardMaterial3D = node.material_override as StandardMaterial3D
+			assert_almost_eq(m.uv1_offset.x, float(cell.x) / 6.0, 1e-5, "%s shows its own letter" % pair[0])
+			assert_almost_eq(m.uv1_offset.y, float(cell.y) / 6.0, 1e-5)
+		assert_lt(letters[0].position.x * letters[1].position.x, 0.0, "one to each side")
+		assert_lt(letters[0].position.y, -100.0, "at the bottom of the shield")
+	assert_false(atlas.is_empty())
+
+
 func test_it_spawns_named_with_its_drum_on_its_own_body() -> void:
 	var spawned: ConsoleResult = DebugConsole.registry.execute_tokens(["capital", "spawn", String(TYPE), "4000"])
 	assert_true(spawned.ok, spawned.error)

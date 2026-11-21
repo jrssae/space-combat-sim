@@ -267,6 +267,7 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	hull_piece.build(_dir, entry)
 	hull_piece.set_skin_variant(skin_variant)
 	add_child(hull_piece)
+	_add_marks(display_name)
 	targetable = Targetable.new()
 	targetable.name = "Targetable"
 	targetable.display_name = display_name
@@ -287,6 +288,15 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	damageable.hit_taken.connect(_on_hit)
 	_packed_volumes = Station.pack_volumes(volumes)
 	_packed_hulls = Station.pack_hulls(shapes, volumes)
+
+
+## The painted lettering the hull carries (an Omega's name letter on each shield), chosen by the name it spawns under. A type with
+## no name list has no name of its own to letter.
+func _add_marks(display_name: String) -> void:
+	if ShipNames.names_for(type_id).is_empty() or not _hardpoints.get("mark_atlas") is Dictionary:
+		return
+	for node: HullMarkNode in HullMarkNode.build_all(HullMarks.marks_of(_hardpoints), _hardpoints["mark_atlas"], _dir, display_name):
+		hull_piece.add_child(node)
 
 
 func _build_rotor(piece_name: String, entry: Dictionary) -> void:
