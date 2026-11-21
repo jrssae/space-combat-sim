@@ -293,6 +293,9 @@ func _hull_from(body_id: int, hull_id: int, rigid: bool, position: Vector3, velo
 
 # What body `body_id`'s own forces do to its velocity this tick (`Ship.applied_force`), so thrust is never a ram.
 func _accel(body_id: int) -> Vector3:
+	var capital := instance_from_id(body_id) as CapitalShip
+	if capital != null:
+		return capital.applied_force() / maxf(capital.mass, 1.0)  # its engines, flown by `CapitalFlight` (M10-T07)
 	var ship := instance_from_id(body_id) as Ship
 	if ship == null or ship.mass <= 0.0:
 		return Vector3.ZERO

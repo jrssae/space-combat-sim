@@ -58,7 +58,7 @@ var _seed_given: int = -1
 var rams_landed: int = 0
 
 var _tiered_ships: Dictionary[int, Combatant] = {}
-var _tiered_capitals: Dictionary[int, CapitalStandin] = {}
+var _tiered_capitals: Dictionary[int, CapitalBody] = {}
 ## The world's origin when each body was parked, so a body restored with no row left lands in the frame of now.
 var _park_origins: Dictionary[int, UniversePos] = {}
 ## The world's `boost_sum` when each body was parked: the velocity rebases it sat out are settled when it comes back.
@@ -235,7 +235,7 @@ func demote_body(body_id: int) -> bool:
 	var c: Combatant = _ship_of(body_id)
 	if c != null:
 		return _demote_ship(sim, c)
-	var cap: CapitalStandin = _capital_of(body_id)
+	var cap: CapitalBody = _capital_of(body_id)
 	if cap != null:
 		return _demote_capital(sim, cap)
 	return false
@@ -289,7 +289,7 @@ func forget(c: Combatant) -> void:
 
 
 ## A capital leaves play while it is in the tier (destroyed, M4-T23): its row goes with it.
-func forget_capital(cap: CapitalStandin) -> void:
+func forget_capital(cap: CapitalBody) -> void:
 	if cap == null:
 		return
 	var body_id: int = cap.get_instance_id()
@@ -373,7 +373,7 @@ func _demote_ship(sim: SimCore, c: Combatant) -> bool:
 	return true
 
 
-func _demote_capital(sim: SimCore, cap: CapitalStandin) -> bool:
+func _demote_capital(sim: SimCore, cap: CapitalBody) -> bool:
 	if not is_instance_valid(cap) or not cap.is_inside_tree() or not cap.can_process() or not cap.visible or cap.tier_exempt:
 		return false
 	var body_id: int = cap.get_instance_id()
@@ -414,7 +414,7 @@ func _restore(body_id: int, state: Dictionary) -> void:
 			if bool(state.get("hulk", false)):
 				_make_hulk(c)
 		return
-	var cap: CapitalStandin = _tiered_capitals.get(body_id)
+	var cap: CapitalBody = _tiered_capitals.get(body_id)
 	if cap != null:
 		_tiered_capitals.erase(body_id)
 		if is_instance_valid(cap):
@@ -622,7 +622,7 @@ func _prune(sim: SimCore) -> void:
 		return  # nothing left the tree since the last walk
 	_pruned_removals = sim.removals
 	for body_id: int in _tiered_capitals.keys():
-		var cap: CapitalStandin = _tiered_capitals[body_id]
+		var cap: CapitalBody = _tiered_capitals[body_id]
 		if not is_instance_valid(cap) or not cap.is_inside_tree():
 			_tiered_capitals.erase(body_id)
 			_park_origins.erase(body_id)
@@ -648,7 +648,10 @@ func _ship_of(body_id: int) -> Combatant:
 	return _ships_by_body.get(body_id)
 
 
-func _capital_of(body_id: int) -> CapitalStandin:
+func _capital_of(body_id: int) -> CapitalBody:
+	var ship: CapitalShip = CapitalShip.of_body(body_id)
+	if ship != null:
+		return ship
 	if standins == null or not is_instance_valid(standins):
 		return null
 	var capitals: Array[CapitalStandin] = standins.capitals()

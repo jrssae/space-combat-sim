@@ -6928,3 +6928,56 @@ scripts/class_budget_probe.sh            the GPU test behind the budgets (a flee
 - The contract in full, the test hull and the GPU test's numbers are in `docs/assets-capital.md` ("Capital framework", "Class
   budgets"). Tests: `test_capital_parts`, `test_capital_style`, `test_capital_framework`, `test_budgets`,
   `test_capital_test_cruiser` (Python); `test_capital_framework_asset.gd` (the hull loads, both sets).
+
+### 22.2 Capital ships in the game (D12.4; T07)
+
+```
+src/capital/capital_body.gd        CapitalBody (RigidBody3D): what every capital shares (no damping, Targetable, Damageable, side,
+                                   jump drive, tier hand-over); CapitalStandin (bench, until T45) and CapitalShip extend it
+src/capital/capital_ship.gd        CapitalShip: a catalogue capital built from its spec and manifest (T05's framework)
+src/capital/capital_rotor.gd       CapitalRotor (AnimatableBody3D): one rotating section, turned about its pivot each tick
+src/capital/capital_flight.gd      CapitalFlight (World child, priority -1): every capital through ScsFlightStep in one call
+src/capital/capital_helm.gd        CapitalHelm, pure: heading and velocity to a FlightCommand (flips a hull with no retros)
+src/capital/capital_propulsion.gd  CapitalPropulsion, pure: the engines as the step's nozzles; the gravitic flight spec (Q51)
+src/capital/capital_sections.gd    CapitalSections, pure: the collision pieces as sections per body; a point named by its section
+src/capital/capital_console.gd     the `capital` provider and command
+```
+
+- **The body.** `CapitalShip.create(type, faction, name, velocity)` reads the catalogue entry (`role: capital`, its
+  `capital_class`), the `ShipSpec` and the manifest: mass and inertia from the spec, the centre of mass from the hardpoints, no
+  damping (`DAMP_MODE_REPLACE`), the hull piece's sections as `CollisionShape3D`s on the one body (Jolt's compound), drawn as
+  the hull piece (`RenderPiece`). `Targetable` of kind capital, heard as far as its class broadcasts (`CapitalData`,
+  Q51: cruiser 200 km, capital 500 km, dreadnought 1 000 km); hull points only until T08.
+- **Flight.** The hardpoints' `engines[]` become the step's mains with a stand-in retro at each main's place, pointing the other
+  way (`CapitalPropulsion.layout`; an engine on the centre line counts on both sides). A `reaction` spec flies as written: its
+  `pod_retro_thrust` is its retros (0: none, and `CapitalHelm` flips it: it turns toward the change, burns, turns back once it
+  is met; under 3 m/s it coasts rather than turning). A `gravitic` spec flies a copy whose retros and RCS give
+  `gravitic_fraction` of the forward thrust, so the helm pushes along every axis with the bow held. `CapitalFlight` packs each
+  ship's helm command and calls `step_core` once a tick on its own `ScsFlightStep` (the fighters' slots and parity recordings
+  untouched); forces are re-applied every tick, the core adds the frame's pull. The helm's turns are paced to what the torque can
+  stop. Nothing steers a capital but its helm (`set_course`) until the `capital` brain (T16).
+- **Rotating sections.** Each rotating piece is a `CapitalRotor`: a kinematic body under the capital but placed by script
+  (`top_level`), aimed one tick ahead of the hull (its velocity and spin) so the two move together through Jolt's step, its
+  collision the piece's sections in its own frame, no collision with its own hull. Its picture turns on a pivot under the hull,
+  interpolated each frame. A rebase or the tier's return puts it beside the hull as a teleport (static, placed, kinematic again),
+  as the station's drum. Its `Damageable` shares the capital's hull points and passes its signals on. Its break-up chunk draws
+  with its own piece's maps (`MeshAssets.chunk_mesh`'s `piece`).
+- **Hit volumes in the core.** The hull's and each rotor's section volumes, with the convex hulls they are fitted to, are the
+  bodies' surfaces (`ScsSimCore.set_surface`, §20.1; the rotor named by its hull): the hit sweep lands bolts on the shape Jolt
+  collides with, the fire lane and avoidance go round it, the brains range to it. A hit or a ram is named by its section
+  (`section_hit`, `CapitalSections.section_at`) for T08. No native change: the surfaces already follow a moving row.
+- **The tier.** A capital beyond the radius is a capital row (§17.14) holding `cruise_velocity`, the velocity its helm holds;
+  parked, hull and rotors leave Jolt and the flight step; promoted, it comes back where its row is with the rotors placed.
+- **Jump points.** `can_open_jump_point` per hull type (Q22; the test cruiser can, as a test hull); `open_own_point(pool)` opens
+  a point at its `jump_point` anchor, sized for its anchor's mouth, held by it (hold range a length past the anchor) and
+  collapsing as M6-T23 says; its drive recharges by class (`CapitalData`).
+- **Per tick and per event.** Native: the flight step, the surfaces, the rams. GDScript per tick and per capital: the helm
+  (a few vector operations) and the rotors' placing.
+- **Console.** Command `capital [info|list|spawn|helm|jump|focus]`, provider `capital` (`info.md`).
+- **Tests.** `test_capital_propulsion`, `test_capital_helm`, `test_capital_sections` (unit); `test_capital_ship` (the main
+  scene: the body and damping, both drives flown natively, a flip, a rebase, the tier hand-over, a ram on the bow, a held point,
+  the console).
+- **Known gaps.** A rotor is kinematic, so as heavy as the world to Jolt: a capital ramming another's rotor is stopped as by a
+  wall, and a ram on a rotor takes the rotor's motion but not its skin's own turn (a few m/s at the test hull). The tier's
+  capital law caps at 2 m/s^2 whatever the hull. Engines with unequal shares fly as equal until the step takes a thrust per
+  nozzle. The raider strike carrier still rides `CapitalStandin`.

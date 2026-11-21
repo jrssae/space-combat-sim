@@ -1,8 +1,9 @@
 class_name CapitalData
 extends RefCounted
 ## The capital ships' tuning (M8-T08, D83), read once from `data/capitals/capitals.json`: how long each class's jump drive
-## needs after a jump before it can open another point, and each faction's carrier doctrine (when its fighters go home and
-## when the carrier flees; `CarrierTactics.DEFAULTS` lists the keys). Pure apart from the read.
+## needs after a jump before it can open another point, each faction's carrier doctrine (when its fighters go home and
+## when the carrier flees; `CarrierTactics.DEFAULTS` lists the keys), and how far each class is heard (M10-T07, Q51). Pure
+## apart from the read.
 
 const PATH: String = "res://data/capitals/capitals.json"
 ## A class the file does not name recharges this long, s.
@@ -17,6 +18,16 @@ static func jump_recharge_s(cls: StringName) -> float:
 	var table: Variant = _read().get("jump_recharge_s")
 	var value: Variant = (table as Dictionary).get(String(cls)) if table is Dictionary else null
 	return maxf(float(value), 0.0) if value is float or value is int else DEFAULT_RECHARGE_S
+
+
+## How far a capital of `cls` is heard, by every side, m (M10-T07, Q51): the file's `broadcast_range_m` for the class, or its
+## `capital` value for a class it does not name (destroyers, carriers).
+static func broadcast_range_m(cls: StringName) -> float:
+	var table: Variant = _read().get("broadcast_range_m")
+	if not (table is Dictionary):
+		return 0.0
+	var value: Variant = (table as Dictionary).get(String(cls), (table as Dictionary).get("capital"))
+	return maxf(float(value), 0.0) if value is float or value is int else 0.0
 
 
 ## The carrier doctrine of `faction`: the options its raids start from (empty: `CarrierTactics.DEFAULTS` alone).

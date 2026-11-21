@@ -135,7 +135,7 @@ func test_a_far_capitals_death_flashes_leaves_play_and_keeps_its_blast_on_the_ev
 	await _ticks(4)
 	assert_true(cap.is_tier_parked(), "(14 km: a tier row)")
 	var events: Array[HitInfo] = []
-	main.director.capital_destroyed.connect(func(_c: CapitalStandin, info: HitInfo) -> void: events.append(info))
+	main.director.capital_destroyed.connect(func(_c: CapitalBody, info: HitInfo) -> void: events.append(info))
 	assert_true(cap.damageable.kill())
 	assert_eq(events.size(), 1, "the death is an event")
 	assert_almost_eq(events[0].blast_energy_j, cap.mass * DestructionDirector.BLAST_J_PER_KG, 1.0, "its blast energy on it")

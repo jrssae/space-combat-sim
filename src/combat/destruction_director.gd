@@ -40,7 +40,7 @@ signal player_destroyed(info: HitInfo)
 ## `RESPAWN_DELAY_S` of sim time passed since the player died.
 signal respawn_due
 ## A capital stand-in was destroyed (it has left play) (M4-T23).
-signal capital_destroyed(capital: CapitalStandin, info: HitInfo)
+signal capital_destroyed(capital: CapitalBody, info: HitInfo)
 ## A mine's explosion was drawn as an explosion at `at` (M7-T64): once a tick, so a chain sounds as one blast.
 signal mine_exploded(at: Vector3)
 
@@ -73,7 +73,7 @@ var last_blast_position: Vector3 = Vector3.ZERO
 var mine_blasts := PackedInt32Array([0, 0, 0])
 
 var _watched: Array[Combatant] = []
-var _watched_capitals: Array[CapitalStandin] = []
+var _watched_capitals: Array[CapitalBody] = []
 var _respawn_at_s: float = INF
 var _mine_explosions: Array[Explosion] = []
 var _mine_sound_frame: int = -1
@@ -136,7 +136,7 @@ func watch_buoy(buoy: NavBuoy) -> void:
 
 
 ## Reacts to this capital's `destroyed` from now on (M4-T23): its blast at its level of detail, then it leaves play.
-func watch_capital(cap: CapitalStandin) -> void:
+func watch_capital(cap: CapitalBody) -> void:
 	if cap == null or cap.damageable == null or _watched_capitals.has(cap):
 		return
 	_watched_capitals.append(cap)
@@ -199,7 +199,7 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 			raider_destroyed.emit(combatant, info)
 
 
-func _on_capital_destroyed(info: HitInfo, cap: CapitalStandin) -> void:
+func _on_capital_destroyed(info: HitInfo, cap: CapitalBody) -> void:
 	var xform: Transform3D = cap.global_transform
 	var velocity: Vector3 = cap.linear_velocity
 	if cap.is_tier_parked():

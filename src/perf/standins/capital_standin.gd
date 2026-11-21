@@ -1,5 +1,5 @@
 class_name CapitalStandin
-extends RigidBody3D
+extends CapitalBody
 ## A capital ship stand-in for the battle benchmark (M4-T07, Q19, Q22): bench-only, built by code with no assets, replaced by
 ## M12's capital ships. A box hull 300 m (cruiser), 600 m (destroyer) or 1 200 m (carrier) long with a `Targetable` of kind
 ## capital and a `Damageable` (hull points only), cruising on a fixed heading, with its gun turrets and interceptors as
@@ -8,7 +8,8 @@ extends RigidBody3D
 ##
 ## M12-T19: the class `strike_carrier` is the first real hull: the raiders' strike carrier, drawn and collided from its generated
 ## asset (`CompoundCollision`), with its numbers in a `ShipSpec`, no weapons, a `CarrierDock` for its fighters and a helm that
-## turns it (`heading`). It rides this class until M12-T07 gives capitals their own.
+## turns it (`heading`). It rides this class until it moves onto `CapitalShip` (M10-T07); what every capital shares is
+## `CapitalBody`.
 ##
 ## Newtonian like every body (§15.16): no damping; gravity pulls it like any mover (D66, M6-T07), and the engines hold the
 ## cruise velocity with a force each tick that also holds off that pull.
@@ -44,27 +45,11 @@ const LOOK_BOX: StringName = &"box"
 const LOOK_MESH: StringName = &"mesh"
 
 var ship_class: StringName = &"cruiser"
-var faction: StringName = Factions.NEUTRAL
-## The velocity the engines hold, World frame, m/s.
-var cruise_velocity: Vector3 = Vector3.ZERO
-## For the environment's pull; null means none.
-var world: WorldFrame = null
-var targetable: Targetable = null
-var damageable: Damageable = null
 
-## A real hull's numbers (M12-T19), null for the bench's boxes; its docking cradles, null for a hull with none; and where it
-## opens its own jump point (`{position, mouth_radius_m}` in its frame), empty for a hull that gives none.
-var spec: ShipSpec = null
+## Its docking cradles (M12-T19), null for a hull with none.
 var dock: CarrierDock = null
-var jump_anchor: Dictionary = {}
 ## The way the helm turns the bow, World frame; zero: it holds no heading (the bench's capitals never turn).
 var heading: Vector3 = Vector3.ZERO
-## Its jump drive (M8-T08): it needs its class's recharge after a jump before it opens another point.
-var jump_drive: JumpDrive = JumpDrive.new()
-
-## Kept out of the low-attention tier (M6-T23): while it flies a jump vortex's funnel, as a pooled ship is (`VortexTransits`).
-var tier_exempt: bool = false
-
 ## How the hull is drawn: the plain box, or the generated class's textured hull (`set_look`).
 var look: StringName = LOOK_BOX
 
@@ -103,26 +88,8 @@ static func hull_radius(cls: StringName) -> float:
 	return 0.5 * Vector3(float(spec["width"]), float(spec["height"]), float(spec["length"])).length()
 
 
-func _init() -> void:
-	gravity_scale = 0.0
-	linear_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
-	angular_damp_mode = RigidBody3D.DAMP_MODE_REPLACE
-	linear_damp = 0.0
-	angular_damp = 0.0
-	can_sleep = false
-	collision_layer = CollisionLayers.layer_of(&"capital")
-	collision_mask = CollisionLayers.mask_of(&"capital")
-
-
 func length_m() -> float:
 	return float((CLASSES[ship_class] as Dictionary)["length"])
-
-
-## Changes its side (a pooled carrier taken by another faction's raid, M6-T23).
-func set_faction(p_faction: StringName) -> void:
-	faction = p_faction
-	targetable.faction = p_faction
-	damageable.faction = p_faction
 
 
 ## Whether this class can open a jump point (M6-T23, `JumpCapability`).
@@ -167,43 +134,6 @@ func is_carrier() -> bool:
 func bay_position() -> Vector3:
 	var spec: Dictionary = CLASSES[ship_class]
 	return global_position - global_basis.y * (float(spec["height"]) * 0.5 + BAY_DROP_M)
-
-
-## Parks the body for the low-attention tier (M4-T21): hidden and not processing, its turrets and emitters with it, so it
-## leaves Jolt, the scan and the weapon rows while its tier row cruises on.
-func park_for_tier() -> void:
-	ShiftableRegistry.set_out(self, &"_scs_tier_row", true)
-	visible = false
-	process_mode = Node.PROCESS_MODE_DISABLED
-
-
-## Brings the body back from its tier row exactly where the row left it.
-func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> void:
-	ShiftableRegistry.set_out(self, &"_scs_tier_row", false)
-	process_mode = Node.PROCESS_MODE_INHERIT
-	visible = true
-	global_transform = xform
-	linear_velocity = velocity
-	angular_velocity = spin
-	reset_physics_interpolation()
-
-
-## A velocity rebase (`WorldFrame.boost`): the hull and the cruise its engines hold keep their universe velocity.
-func frame_boost(dv: Vector3) -> void:
-	linear_velocity -= dv
-	cruise_velocity -= dv
-
-
-## Takes a destroyed capital out of play (M4-T23): hidden and not processing, its turrets and emitters with it, for good.
-func leave_play() -> void:
-	ShiftableRegistry.set_out(self, &"_scs_tier_row", false)
-	visible = false
-	process_mode = Node.PROCESS_MODE_DISABLED
-
-
-## Whether the body is parked for the tier now.
-func is_tier_parked() -> bool:
-	return has_meta(&"_scs_tier_row")
 
 
 ## The force the engines apply this tick: back toward the cruise velocity, plus what holds off the environment's pull.

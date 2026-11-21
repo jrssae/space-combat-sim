@@ -7,8 +7,9 @@ extends GutTest
 const SHIPS_DIR: String = "res://assets/ships/"
 
 
-## Designed capital hulls that may open points (M12-T19: the raiders' strike carrier, the maintainer's Q25).
-const JUMP_CAPABLE: PackedStringArray = ["raider_strike_carrier.tres"]
+## Designed capital hulls that may open points (M12-T19: the raiders' strike carrier, the maintainer's Q25; M10-T07: the test
+## cruiser, Q51).
+const JUMP_CAPABLE: PackedStringArray = ["raider_strike_carrier.tres", "capital_test_cruiser.tres"]
 
 
 func test_no_designed_fighter_or_civilian_hull_can_open_a_jump_point() -> void:

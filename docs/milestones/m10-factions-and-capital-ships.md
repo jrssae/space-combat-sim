@@ -77,6 +77,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q48 | Starting beside M8 (2026-11-20) | M10 starts now, in a worktree on branch `m10`, while M8 finishes in the main checkout; `m8` is merged into `m10` (no more fast-forwards of `m8` onto `m10`). T01 stops after the lengths table and the gate-mouth check for the maintainer's approval, then writes the per-hull descriptions while the first generators start. At most two agents at a time; Fable tasks first once unblocked |
 | Q49 | T01's lengths and identifications (2026-11-20) | `docs/assets-capital.md`, "M10 lengths (T01)", approved with these changes. Sunhawk and Firehawk both **197 m** (the files' 350 m are wrong). Drakh carrier **3 316 m** (the Drakh cruiser's figure, same shape), uses gates (canon). Victory **2 012 m** (fits a gate, still opens its own points as a destroyer). **Vorlon remap**: T36 is the **Vorlon destroyer**, 131 m, from `Vorlon_Destroyer (missing pedals) - 131m.stl` and the two petal STLs; T60 is the **Vorlon heavy cruiser**, 1 528 m, from `Vorlon Dreadnought - 1528m.stl`; there is no separate Vorlon dreadnought. Battlecrab: 1 500 m is the leg span (largest extent). **Launches follow the sources strictly**: Hyperion 6 Starfuries and 2 shuttles; Avioki, Firehawk and Primus none (so the Falkosi and the Sentri have no carrier in M10). Pipelines: the Panama and the construction tender on the civilian pipeline; the Shadow scout on the capital framework with the battlecrab's organic parts; T53 and T56 one generator with a liner and a mining variant (doors moving, Q43). The jump-point first list is T03's starting point, the White Star opening its own points included |
 | Q50 | T01's open points (2026-11-20) | The White Star launches **4 Nials** and the Victory **Starfuries, Thunderbolts and Kestrel shuttles**, as the sources give (the Thunderbolt flies once M11 makes it flyable; until then its slots launch Starfuries). The mining transport is **632 m** closed (716 m open), sharing the Asimov liner's sphere and scale. The Explorer's **bow is the end with the dome and the launch bay** |
+| Q51 | T07's capital flight (2026-11-20) | **Broadcast** by class, heard by every side: cruiser 200 km, capital 500 km, dreadnought 1 000 km (`data/capitals/capitals.json`); small craft keep today's rules. **Propulsion** per hull in its `ShipSpec`: `reaction` (EA, Drazi and other reaction drives: mains, and retros where the hull has room, stand-ins at the mains' places at 50 % of a main by default; one with no retros flips and burns) or `gravitic` (e.g. Minbari, Vorlon, Shadow, ISA: thrust along any axis at a per-hull fraction, no flip); the hull tasks take the mode and the retros from T01's notes, T03 confirms. The test cruiser is reaction with stand-in retros and opens its own jump points (test hull only) |
 
 ## The hulls
 
@@ -211,6 +212,8 @@ Out:
 - Hit volumes per section in the native core, so the hit sweep, the rams and the turrets' line of fire see the real
   shape; `Targetable` kind `CAPITAL`, broadcast range by class; the low-attention tier carries capitals and hulks as rows.
 - Jump capability per class (Q22).
+- Propulsion per hull (Q51): `reaction` hulls brake on retros where they have them, else flip and burn; `gravitic` hulls push
+  along any axis at a fraction of their forward thrust and never flip. Broadcast range by class (Q51).
 
 ### D12.5 Sections and subsystems
 
@@ -323,7 +326,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T61 | A | Ship catalogue as data: `data/ships/catalogue.json` read by `ShipCatalog`, `docs/catalogue/ships.md` generated (Q33) | - | Opus | done |
 | T05 | A | Capital asset framework: parts library, section model, hardpoints, collision per section, texel tiers, class budgets (Q38) | T01, M7-T03 | Fable | done |
 | T06 | A | Organic part library (SDF, metaballs, swept bodies) and the view-dependent sheen | T05 | Fable | not started |
-| T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | not started |
+| T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | in progress |
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | not started |
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | not started |
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | not started |

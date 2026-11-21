@@ -36,6 +36,8 @@
       "look_sheet": "pool", "callsign": "BOKMAI"},
     {"id": "raider_strike_carrier", "spec": "res://assets/ships/raider_strike_carrier.tres", "asset": "raider_strike_carrier",
       "faction": "raiders", "role": "capital", "capital_class": "strike_carrier", "pooled": false, "look_sheet": "hull"},
+    {"id": "capital_test_cruiser", "spec": "res://assets/ships/capital_test_cruiser.tres", "asset": "capital_test_cruiser",
+      "faction": "earth_alliance", "role": "capital", "capital_class": "cruiser", "pooled": false, "name": "Test cruiser"},
     {"id": "ea_shuttle", "spec": "res://assets/ships/ea_shuttle.tres", "asset": "ea_shuttle",
       "faction": "earth_alliance", "role": "civilian", "ai_profile": "civilian", "name": "EA shuttle",
       "look_sheet": "pool", "callsign": "SHUTTLE", "random_pool": false},

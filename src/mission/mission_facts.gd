@@ -23,7 +23,7 @@ func setup(p_main: Main) -> void:
 	(main.get_node(^"Combat/HitResolver") as HitResolver).hit_resolved.connect(_on_hit)
 	main.director.ship_destroyed.connect(_on_ship_destroyed)
 	main.director.buoy_destroyed.connect(func(_buoy: NavBuoy, _info: HitInfo) -> void: counts[&"buoys_lost"] += 1)
-	main.director.capital_destroyed.connect(func(_capital: CapitalStandin, _info: HitInfo) -> void: counts[&"capitals_destroyed"] += 1)
+	main.director.capital_destroyed.connect(func(_capital: CapitalBody, _info: HitInfo) -> void: counts[&"capitals_destroyed"] += 1)
 	if main.docking != null:
 		main.docking.dock_offered.connect(func() -> void: counts[&"dock_offers"] += 1)
 		main.docking.player_relaunched.connect(func() -> void: counts[&"repairs"] += 1)

@@ -5,6 +5,11 @@
   "carrier": 120.0,
   "strike_carrier": 240.0
  },
+ "broadcast_range_m": {
+  "cruiser": 200000.0,
+  "capital": 500000.0,
+  "dreadnought": 1000000.0
+ },
  "carrier_doctrine": {
   "raiders": {
    "standoff_m": 2500.0,

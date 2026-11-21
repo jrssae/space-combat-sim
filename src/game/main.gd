@@ -547,6 +547,7 @@ func _setup_perf() -> void:
 	standins.player = ship
 	world.add_child(standins)
 	TierDirector.attach(world, ships, standins)  # the low-attention tier (M4-T21): far ships as core rows
+	CapitalFlight.attach(world)  # capital ships fly here, and its `capital` console is in every flight scene (M10-T07)
 	perf_probe = PerfProbe.new()
 	perf_probe.name = "PerfProbe"
 	perf_probe.process_mode = Node.PROCESS_MODE_PAUSABLE

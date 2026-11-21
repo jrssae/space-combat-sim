@@ -411,7 +411,7 @@ func _build_nav_points() -> void:
 func _hull(volumes: Array[HitShape], layout: StringName) -> Damageable:
 	var entries: Array[Dictionary] = []
 	for v: HitShape in volumes:
-		entries.append(_entry(v))
+		entries.append(volume_entry(v))
 	var hull := Damageable.new()
 	hull.setup(entries, HULL_MAX, Factions.EARTH_ALLIANCE, false, false, layout)
 	hull.invulnerable = true
@@ -419,8 +419,8 @@ func _hull(volumes: Array[HitShape], layout: StringName) -> Damageable:
 	return hull
 
 
-# A hit volume back in `Hardpoints.collision`'s form, for `Damageable.setup`.
-static func _entry(v: HitShape) -> Dictionary:
+## A hit volume back in `Hardpoints.collision`'s form, for `Damageable.setup`.
+static func volume_entry(v: HitShape) -> Dictionary:
 	if v.kind == HitShape.Kind.CAPSULE:
 		var capsule := CapsuleShape3D.new()
 		capsule.radius = v.radius

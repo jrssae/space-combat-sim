@@ -53,7 +53,11 @@ static func for_asset(asset_id: String, asset_root: String = ShipSpec.ASSET_ROOT
 
 ## A break-up chunk's textured mesh (M4-T30d): `file` (the chunk's glb, under `dir`) drawn with its parent's materials, so it shares
 ## the parent's maps and instances with the hull. `dir` is the parent asset's directory. Null when either mesh is missing.
-static func chunk_mesh(dir: String, file: String) -> Mesh:
+## A chunk of another piece than the hull (a capital's rotating section, M10-T07) passes that piece's `mesh` entry as `piece`
+## and is drawn with that piece's maps instead.
+static func chunk_mesh(dir: String, file: String, piece: Dictionary = {}) -> Mesh:
+	if not piece.is_empty() and piece != read_manifest(dir.get_file(), dir.get_base_dir()).get("mesh", {}):
+		return section_mesh(dir, piece, file)
 	var path: String = dir.path_join(file)
 	if _cache.has(path):
 		return _cache[path]

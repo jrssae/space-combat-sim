@@ -79,6 +79,14 @@ const ASSET_ROOT: String = "res://assets/generated"
 @export var jump_hold_range_m: float = 0.0
 
 
+## How a capital hull moves (M10-T07, Q51): `reaction` (EA, Drazi and other reaction drives: mains, and retros where the hull
+## has room, else it flips and burns) or `gravitic` (Minbari, Vorlon, Shadow, ISA: thrust along any axis, no flip). Fighters
+## and civilian ships ignore it.
+@export var propulsion: StringName = &"reaction"
+## A gravitic hull's thrust along any axis other than forward, as a fraction of its forward thrust (Q51); unused for reaction.
+@export_range(0.0, 1.0) var gravitic_fraction: float = 0.0
+
+
 ## Whether the asset has a first-person `cockpit_interior.obj` (the Starfury does; AI ships such as the raider do not,
 ## so the ship does not look for it or warn about it).
 @export var has_cockpit_interior: bool = true
