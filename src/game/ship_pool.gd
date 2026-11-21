@@ -145,7 +145,9 @@ func acquire(display_name: String, at: UniversePos, basis: Basis = Basis.IDENTIT
 	var section: Dictionary = MeshAssets.livery_section(ship.spec.asset_id)
 	if not section.is_empty():
 		var wing_and_number: Array = Livery.parse_name(display_name) if type == ALLY_TYPE else ["", 0]
-		ship.set_livery(Livery.for_wing(wing_and_number[0], wing_and_number[1], section))
+		# A faction with a marking (the renegades) wears it instead of a wing's paint (M10-T02).
+		var marked: Livery = Livery.for_marking(Factions.table().marking(combatant.faction), section)
+		ship.set_livery(marked if marked != null else Livery.for_wing(wing_and_number[0], wing_and_number[1], section))
 	_set_brain(combatant, brain)
 	_in_use.append(combatant)
 	acquired.emit(combatant)

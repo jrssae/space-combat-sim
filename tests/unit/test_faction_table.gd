@@ -40,7 +40,9 @@ func test_the_shipped_file_validates() -> void:
 	assert_true(result["ok"], result["error"])
 	assert_eq(result["error"], "")
 	var table: FactionTable = result["table"]
-	assert_eq(table.ids(), [EA, RA, NE, &"narn", &"centauri", &"brakiri"] as Array[StringName], "M2's three, then Q24's peoples")
+	assert_eq(table.ids().size(), 14, "D12.3's fourteen factions")
+	for id: StringName in [EA, RA, NE, &"narn", &"centauri", &"brakiri", &"renegades", &"shadows", &"vorlons", &"drakh"]:
+		assert_true(table.has(id), String(id))
 	assert_eq(table.display_name(EA), "Earth Alliance")
 	assert_eq(table.display_name(RA), "Raiders")
 	assert_eq(table.display_name(NE), "Neutral")
@@ -52,7 +54,6 @@ func test_the_shipped_file_is_the_built_in_m2_rule() -> void:
 	# civilians' peoples after them.
 	var file_table: FactionTable = FactionTable.load_file(FILE_PATH)["table"]
 	var built_in: FactionTable = FactionTable.builtin()
-	assert_eq(file_table.ids().slice(0, 3), built_in.ids())
 	assert_eq(file_table.default_relation(), built_in.default_relation())
 	var probes: Array[StringName] = [EA, RA, NE, &"pirates", &""]
 	for a: StringName in probes:
@@ -65,7 +66,6 @@ func test_the_civilians_peoples_are_hostile_to_raiders_only() -> void:
 	# M5-T16 (Q24, D58): every civilian has its people's faction; raiders prey on all of them, the rest is neutral.
 	var file_table: FactionTable = FactionTable.load_file(FILE_PATH)["table"]
 	var peoples: Array[StringName] = [&"narn", &"centauri", &"brakiri"]
-	assert_eq(file_table.ids().slice(3), peoples)
 	for p: StringName in peoples:
 		assert_eq(file_table.relation(p, RA), Factions.Relation.HOSTILE, "%s against raiders" % p)
 		assert_eq(file_table.relation(p, p), Factions.Relation.FRIENDLY)

@@ -19,6 +19,14 @@ func after_each() -> void:
 	Settings.set_value(&"friendly_fire", settings_backup)
 
 
+# The listed pairs as the provider prints them, read straight from the shipped file.
+func _file_pairs() -> String:
+	var lines: PackedStringArray = PackedStringArray()
+	for pair: Dictionary in (FactionTable.load_file(Factions.TABLE_PATH)["table"] as FactionTable).listed_pairs():
+		lines.append("%s %s %s" % [pair["a"], pair["b"], FactionTable.relation_name(int(pair["relation"]))])
+	return ", ".join(lines)
+
+
 func _run(line: String) -> ConsoleResult:
 	var results: Array[ConsoleResult] = registry.execute(line)
 	assert_eq(results.size(), 1, "one statement: " + line)
@@ -29,14 +37,15 @@ func _run(line: String) -> ConsoleResult:
 
 
 func test_the_provider_lists_ids_and_listed_pairs() -> void:
-	assert_eq(registry.format_path("factions.ids"), "factions.ids = [earth_alliance, raiders, neutral, narn, centauri, brakiri]")
-	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders hostile, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]")
+	assert_eq(registry.format_path("factions.ids"), "factions.ids = [%s]" % ", ".join(FactionConsole.ids()))
+	assert_string_starts_with(registry.format_path("factions.ids"), "factions.ids = [earth_alliance, renegades, raiders, narn,")
+	assert_eq(registry.format_path("factions.relations"), "factions.relations = [%s]" % _file_pairs())
 
 
 func test_the_provider_follows_session_changes() -> void:
 	Factions.table().set_relation(&"neutral", &"raiders", Factions.Relation.FRIENDLY)
 	assert_eq(registry.format_path("factions.relations"),
-			"factions.relations = [earth_alliance raiders hostile, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile, neutral raiders friendly]")
+			"factions.relations = [%s, neutral raiders friendly]" % _file_pairs())
 
 
 func test_the_provider_mirrors_the_friendly_fire_setting() -> void:
@@ -48,7 +57,7 @@ func test_the_provider_mirrors_the_friendly_fire_setting() -> void:
 
 func test_the_provider_is_read_only() -> void:
 	var provider: ConsoleStateProvider = registry.get_provider(&"factions")
-	for key: StringName in [&"ids", &"relations", &"friendly_fire"]:
+	for key: StringName in [&"ids", &"relations", &"profiles", &"friendly_fire"]:
 		assert_true(provider.has_key(key), str(key))
 		assert_false(provider.is_writable(key), "%s is read-only; settings.friendly_fire is the writable one" % key)
 	assert_false(provider.has_key(&"table"))
@@ -72,7 +81,7 @@ func test_relation_sets_a_pair_for_the_session() -> void:
 	assert_eq(result.lines, PackedStringArray(["earth_alliance vs raiders: hostile -> neutral (this session)"]))
 	assert_eq(Factions.relation(Factions.EARTH_ALLIANCE, Factions.RAIDERS), Factions.Relation.NEUTRAL)
 	assert_eq(Factions.relation(Factions.RAIDERS, Factions.EARTH_ALLIANCE), Factions.Relation.NEUTRAL)
-	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders neutral, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]")
+	assert_eq(registry.format_path("factions.relations"), "factions.relations = [%s]" % _file_pairs().replace("earth_alliance raiders hostile", "earth_alliance raiders neutral"))
 	assert_eq(_run("relation raiders earth_alliance").lines, PackedStringArray(["raiders vs earth_alliance: neutral"]))
 
 
@@ -95,7 +104,7 @@ func test_relation_reset_reloads_the_file() -> void:
 	assert_true(result.ok, result.error)
 	assert_string_contains(result.lines[0], "res://data/factions.json")
 	assert_true(Factions.is_hostile(Factions.EARTH_ALLIANCE, Factions.RAIDERS))
-	assert_eq(registry.format_path("factions.relations"), "factions.relations = [earth_alliance raiders hostile, narn raiders hostile, centauri raiders hostile, brakiri raiders hostile]")
+	assert_eq(registry.format_path("factions.relations"), "factions.relations = [%s]" % _file_pairs())
 
 
 func test_relation_reset_says_so_when_the_file_is_broken_and_keeps_the_table() -> void:
@@ -141,7 +150,7 @@ func test_relation_rejects_bad_arguments() -> void:
 func test_an_unknown_faction_gets_a_suggestion() -> void:
 	var result: ConsoleResult = _run("relation raiderz earth_alliance")
 	assert_false(result.ok)
-	assert_string_contains(result.error, "known: earth_alliance, raiders, neutral")
+	assert_string_contains(result.error, "known: earth_alliance, renegades, raiders")
 	assert_string_contains(result.error, "did you mean raiders?")
 
 
@@ -157,6 +166,6 @@ func test_the_command_is_documented_and_completes_faction_ids() -> void:
 	var completer := ConsoleCompleter.new(registry)
 	var offered: PackedStringArray = completer.complete("relation ra")
 	assert_eq(offered, PackedStringArray(["relation raiders "]))
-	assert_eq(completer.complete("relation re"), PackedStringArray(["relation reset "]))
+	assert_eq(completer.complete("relation res"), PackedStringArray(["relation reset "]))
 	assert_eq(completer.complete("relation raiders earth_alliance h"),
 			PackedStringArray(["relation raiders earth_alliance hostile "]))

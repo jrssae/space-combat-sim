@@ -208,7 +208,7 @@ Read with `get <provider>.<key>`, list with `state <provider>`. Keys marked writ
 | `autopilot` | The autopilots' abort (M8-T32): which one a hold of X aborts now (`offered`: gate, dock or none), the hold time (`hold_s`), the prompt on screen (`prompt`) and its bar (`progress`), aborts so far (`aborts`) and the last one (`last`) | in flight |
 | `combat` | Bolts swept, hits resolved, mines a shot set off (`mines_struck`, M7-T64), the last hit and the cost of resolving them | in flight |
 | `ram` | Rams resolved, the last one and the cost of the ram checks | in flight |
-| `factions` | The faction ids, their listed relations and the friendly-fire mirror | in flight |
+| `factions` | The faction ids, their listed relations, each faction's profile (style, fighters, weapons, mines, marking; M10-T02) and the friendly-fire mirror | in flight |
 | `raiders` | The raider pool: size, free, alive, a list with hull and range, and the selected one's brain | in flight |
 | `encounters` | Free-flight encounters: on, pools built, seed, interval, cap, ships in play by kind, the next event and its time, the one waiting, events started, ships released, the last event, the release check's work, the pools' build time, and the events through the jumpgate and ships waiting for it (`gate_events`, `gate_in_transit`) | free flight |
 | `allies` | The allied pool, the same way | in flight |

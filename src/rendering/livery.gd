@@ -67,6 +67,14 @@ static func for_wing(p_wing: String, p_number: int, section: Dictionary) -> Live
 	return out
 
 
+## The marking a faction's ships wear (`FactionTable.marking`, M10-T02: the renegades' paint over EA hulls) from the section's
+## named liveries, or null when `marking` is empty or the hull's table has no such row, so the hull keeps its own paint.
+static func for_marking(marking: String, section: Dictionary) -> Livery:
+	if marking.is_empty() or not (section.get("liveries", {}) as Dictionary).has(marking):
+		return null
+	return for_wing(marking, 0, section)
+
+
 ## The player's own livery until the paint-scheme choice exists: Alpha 01.
 static func player(section: Dictionary) -> Livery:
 	return for_wing(PLAYER_WING, PLAYER_NUMBER, section)

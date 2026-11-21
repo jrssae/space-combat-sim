@@ -55,6 +55,8 @@ extends RefCounted
 ##                                                  #       the input `BeltLayout.place` takes; may be empty
 ##      "civilian_names": Dictionary,               # (M5-T30) civilian hull -> PackedStringArray of names; may be empty
 ##      "placeholders": Dictionary,                 # (M5-T30) filled by `resolve_random_civilian`: "{civilian}" -> name
+##      "relations": Array[Dictionary],             # (M10-T02) per-scenario faction relation overrides, `{a, b, relation}` with
+##                                                  #       `Factions.Relation` values; `Factions.apply_overrides` lays them over the file
 ##      "hud": Dictionary,                          # (M8-T08) HUD options: {"capital_markers": bool} turns the far capitals' markers
 ##                                                  #       on or off for this scenario (absent: `data/hud/capital_markers.json`)
 ##      "frame": Dictionary}                        # (M6-T09) the `anchor` and `epoch` blocks: where the World anchors and
@@ -236,8 +238,13 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if hud is String:
 		return _failure(hud as String)
 
+	var relations: Variant = Factions.table().overrides_from(root.get("relations", []), "%s: relations" % source)
+	if relations is String:
+		return _failure(relations as String)
+
 	var result: Dictionary = _empty()
 	result["ok"] = true
+	result["relations"] = relations
 	result["scenario_id"] = StringName(scenario_id as String)
 	result["system_id"] = system
 	result["player"] = {"position": player_pos as UniversePos, "forward": forward_unit,
@@ -877,7 +884,7 @@ static func _empty() -> Dictionary:
 			"props": [] as Array[Dictionary], "jumpgates": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
-			"civilian_names": {}, "placeholders": {}, "station": {}, "hud": {}}
+			"civilian_names": {}, "placeholders": {}, "station": {}, "hud": {}, "relations": [] as Array[Dictionary]}
 
 
 static func _failure(message: String) -> Dictionary:

@@ -5,9 +5,15 @@ extends RefCounted
 ##
 ## File shape:
 ##
-##     {"factions":  [{"id": "earth_alliance", "name": "Earth Alliance"}, ...],
+##     {"factions":  [{"id": "earth_alliance", "name": "Earth Alliance", "style": "earthforce", "fighters": [...],
+##                     "weapons": [...], "mine": "ea_mine", "battle_mine": "", "marking": ""}, ...],
 ##      "relations": [{"a": "earth_alliance", "b": "raiders", "relation": "hostile"}, ...],
 ##      "default":   "neutral"}
+##
+## The profile keys after `name` are optional and are what hulls read instead of code (M10-T02, D12.3): `style` (the
+## procgen paint family), `fighters` (hull ids), `weapons` (weapon ids of `data/capitals/loadouts.json`), `mine` (the
+## minefield mine's weapon id) and `battle_mine` (a hull's in-battle mine), `marking` (the livery row its ships wear, "" for
+## the hull's own paint). An absent key is "" or [].
 ##
 ## Rule, checked in this order (M2's rule with the data behind it):
 ## 1. Same faction id -> FRIENDLY, always (this includes two identical unknown ids).
@@ -27,6 +33,8 @@ const ID_PATTERN: String = "^[a-z0-9_]{1,32}$"
 var _names: Dictionary = {}
 # id -> {other id -> relation (int)}, symmetric: both directions are stored so a lookup allocates nothing.
 var _matrix: Dictionary = {}
+# id -> {"style": String, "fighters": Array[StringName], "weapons": Array[StringName], "mine", "battle_mine", "marking": String}.
+var _profiles: Dictionary = {}
 # The listed pairs in the order they were set: {"a": StringName, "b": StringName, "relation": int}.
 var _pairs: Array[Dictionary] = []
 var _default: int = Factions.Relation.NEUTRAL
@@ -94,7 +102,11 @@ static func from_dict(data: Variant) -> Dictionary:
 		if listed_at.has(id):
 			return _failure("%s.id %s repeats %s.id" % [path, JSON.stringify(id), listed_at[id]])
 		listed_at[id] = path
+		var profile: Variant = _profile(entry, path)
+		if profile is String:
+			return _failure(profile as String)
 		table._add_faction(StringName(id as String), display as String)
+		table._profiles[StringName(id as String)] = profile
 
 	var default_name: Variant = root.get("default")
 	var default_relation: int = relation_from_name(default_name)
@@ -176,6 +188,63 @@ func display_name(id: StringName) -> String:
 	return _names.get(id, String(id))
 
 
+## Checks a scenario's `relations[]` (`{a, b, relation}`, the same shape as the file's) against this table's factions.
+## Returns the list as {"a", "b", "relation"} with StringName ids and the `Factions.Relation` value, or the path-qualified error.
+func overrides_from(raw: Variant, where: String = "relations") -> Variant:
+	if not (raw is Array):
+		return "%s must be an array" % where
+	var out: Array[Dictionary] = []
+	var index: int = 0
+	for item: Variant in raw as Array:
+		var path: String = "%s[%d]" % [where, index]
+		index += 1
+		if not (item is Dictionary):
+			return "%s must be an object" % path
+		var entry: Dictionary = item
+		for side: String in ["a", "b"]:
+			var id: Variant = entry.get(side)
+			if not (id is String) or not has(StringName(id as String)):
+				return "%s.%s must be one of the listed faction ids (%s), got %s" % [path, side,
+						", ".join(PackedStringArray(ids())), JSON.stringify(id)]
+		if entry["a"] == entry["b"]:
+			return "%s pairs %s with itself" % [path, JSON.stringify(entry["a"])]
+		var rel: int = relation_from_name(entry.get("relation"))
+		if rel < 0:
+			return "%s.relation must be one of %s, got %s" % [path, _choices(), JSON.stringify(entry.get("relation"))]
+		out.append({"a": StringName(entry["a"] as String), "b": StringName(entry["b"] as String), "relation": rel})
+	return out
+
+
+## The paint family of a faction's hulls ("" for none or an unlisted id).
+func style(id: StringName) -> String:
+	return String(_profile_of(id)["style"])
+
+
+## The fighter hull ids a faction flies.
+func fighters(id: StringName) -> Array[StringName]:
+	return _profile_of(id)["fighters"]
+
+
+## The weapon ids a faction's hulls carry (`data/capitals/loadouts.json`).
+func weapons(id: StringName) -> Array[StringName]:
+	return _profile_of(id)["weapons"]
+
+
+## The weapon id of the faction's minefield mine, "" for none.
+func mine(id: StringName) -> String:
+	return String(_profile_of(id)["mine"])
+
+
+## The weapon id of the mine a faction's hull lays mid-battle, "" for none.
+func battle_mine(id: StringName) -> String:
+	return String(_profile_of(id)["battle_mine"])
+
+
+## The livery row a faction's ships wear over their hull's own paint ("" for none), as `Livery.for_faction` reads it.
+func marking(id: StringName) -> String:
+	return String(_profile_of(id)["marking"])
+
+
 ## The relation of a known pair that `relations` does not list.
 func default_relation() -> Factions.Relation:
 	return _default as Factions.Relation
@@ -199,6 +268,38 @@ func set_relation(a: StringName, b: StringName, rel: Factions.Relation) -> Strin
 		return "a faction is always friendly to itself"
 	_store_pair(a, b, rel)
 	return ""
+
+
+func _profile_of(id: StringName) -> Dictionary:
+	if _profiles.has(id):
+		return _profiles[id]
+	var none: Array[StringName] = []
+	return {"style": "", "fighters": none, "weapons": none, "mine": "", "battle_mine": "", "marking": ""}
+
+
+# The optional profile keys of one `factions[]` entry, or the path-qualified error.
+static func _profile(entry: Dictionary, path: String) -> Variant:
+	var out: Dictionary = {}
+	for key: String in ["style", "mine", "battle_mine", "marking"]:
+		var text: Variant = entry.get(key, "")
+		if not (text is String) or ((text as String) != "" and id_regex().search(text as String) == null):
+			return "%s.%s must be \"\" or match %s, got %s" % [path, key, ID_PATTERN, JSON.stringify(text)]
+		out[key] = text
+	for key: String in ["fighters", "weapons"]:
+		var list: Variant = entry.get(key, [])
+		var ids: Array[StringName] = []
+		if not (list is Array):
+			return "%s.%s must be an array of ids" % [path, key]
+		for item: Variant in list as Array:
+			if not (item is String) or id_regex().search(item as String) == null:
+				return "%s.%s must hold ids matching %s, got %s" % [path, key, ID_PATTERN, JSON.stringify(item)]
+			ids.append(StringName(item as String))
+		out[key] = ids
+	return out
+
+
+static func id_regex() -> RegEx:
+	return RegEx.create_from_string(ID_PATTERN)
 
 
 func _add_faction(id: StringName, display: String) -> void:

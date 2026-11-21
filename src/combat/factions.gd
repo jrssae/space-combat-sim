@@ -38,6 +38,8 @@ const HUD_LINE_COLOR: Color = Color(0.55, 1.0, 0.6)
 
 ## The active table; null until the first query (or after `reset`), then loaded from `TABLE_PATH`.
 static var _table: FactionTable = null
+## True while a scenario's overrides sit on the table.
+static var _overridden: bool = false
 
 
 ## How a ship of faction `a` regards a ship of faction `b`. Symmetric.
@@ -74,6 +76,7 @@ static func use_table(new_table: FactionTable) -> void:
 ## Forgets the active table, and with it every session change made through the console: the next query reloads the file.
 static func reset() -> void:
 	_table = null
+	_overridden = false
 
 
 ## Loads and validates the file at `path`. On success it becomes the active table and "" comes back; on failure the
@@ -84,6 +87,17 @@ static func load_table(path: String = TABLE_PATH) -> String:
 		return String(result["error"])
 	_table = result["table"]
 	return ""
+
+
+## Applies a scenario's relation overrides (`FactionTable.overrides_from`) on top of the file for as long as the scenario
+## runs. The next call starts from the file again, so one scenario's overrides never reach the next; an empty list on a
+## table nothing was overridden on changes nothing (a session's console `relation` edits stay).
+static func apply_overrides(pairs: Array[Dictionary]) -> void:
+	if _overridden:
+		load_table(TABLE_PATH)
+	_overridden = not pairs.is_empty()
+	for pair: Dictionary in pairs:
+		table().set_relation(pair["a"], pair["b"], pair["relation"])
 
 
 ## The HUD colour for a contact: its relation's, but a civilian hull's own unless it is hostile.

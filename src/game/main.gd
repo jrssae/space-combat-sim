@@ -171,6 +171,7 @@ func _ready() -> void:
 	if not bool(scenario.get("ok", false)):
 		push_warning("Main: %s; spawning at the origin with no props" % scenario.get("error", "no scenario"))
 	else:
+		Factions.apply_overrides(scenario["relations"])
 		var player: Dictionary = scenario["player"]
 		_spawn_position = player["position"]
 		_spawn_basis = player["basis"]
