@@ -387,6 +387,7 @@ impl ScsWeaponRows {
                         rows,
                         fighters,
                         row_of(rows.faction_ix[r]),
+                        rows.faction_ix[r],
                         capitals.body_ids[c],
                         at,
                     );
@@ -1025,7 +1026,7 @@ fn strike(
         || tick.saturating_sub(capitals.strike_tick[c]) >= wk::STRIKE_RETARGET_TICKS;
     if stale {
         capitals.strike_target[c] =
-            wk::strike_target(rows, &core.hull_rows, hostile, rows.positions[r]);
+            wk::strike_target(rows, &core.hull_rows, hostile, rows.faction_ix[r], rows.positions[r]);
         capitals.strike_tick[c] = tick;
         capitals.strike_known[c] = true;
     }

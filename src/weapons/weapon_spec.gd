@@ -52,6 +52,8 @@ extends Resource
 @export var weapon_id: StringName = &""
 @export var role: StringName = &""
 @export var weapon_trait: StringName = &""
+## M10-T14: bolts (or missiles) a capital gun (or launcher) fires together each shot, side by side; the loadouts' `barrels`.
+@export var barrels: int = 1
 
 @export_group("Beam")
 ## M10-T12 (D12.9): 0 not a beam, 1 pulsed (one tick, `damage` on the first hull on the line), 2 sustained (on for `beam_on_s`,
@@ -65,6 +67,16 @@ extends Resource
 @export var beam_range_m: float = 0.0
 @export var beam_width_m: float = 3.0
 
+@export_group("Missile")
+## M10-T14 (D12.9): 0 a gun's bolt, 1 a guided missile, 2 a torpedo; a missile's or torpedo's warhead blasts where it strikes
+## (`BlastTable`'s `missile` or `torpedo` row). Guided by proportional navigation at `missile_nav_gain`, turning at most
+## `missile_turn_rad_s`, at `muzzle_speed_mps` for `lifetime_s`; launched at targets within `turret_range_m` inside the
+## launcher's arc. `toughness`: interceptor pulses it takes to stop one of these shots (T13).
+@export_enum("none", "missile", "torpedo") var warhead: int = 0
+@export var missile_nav_gain: float = 4.0
+@export var missile_turn_rad_s: float = 0.6
+@export var toughness: int = 1
+
 
 ## A capacitor sized for this weapon, full.
 func make_capacitor() -> WeaponCapacitor:
@@ -75,6 +87,9 @@ const WEAPON_DIR: String = "res://assets/weapons"
 const BEAM_NONE: int = 0
 const BEAM_PULSED: int = 1
 const BEAM_SUSTAINED: int = 2
+const WARHEAD_NONE: int = 0
+const WARHEAD_MISSILE: int = 1
+const WARHEAD_TORPEDO: int = 2
 
 
 ## The spec of capital weapon `id` (`assets/weapons/<id>.tres`), or null.

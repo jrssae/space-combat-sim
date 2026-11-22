@@ -134,11 +134,13 @@ pub fn fighter_rows(rows: &Rows, out: &mut Vec<u32>) {
 }
 
 /// `TurretStandin.retarget`: the nearest hostile fighter within reach of `at` among `fighters`, not `own_body`, as a body
-/// id (0 for none). `hostile` is the capital's row of the hostility table; equal distances go to the earlier row.
+/// id (0 for none). `hostile` is the capital's row of the hostility table; equal distances go to the earlier row. A ship is
+/// judged by the faction `observer` (the capital's own faction index) perceives it to have, so a disguise fools it (M10-T14).
 pub fn retarget(
     rows: &Rows,
     fighters: &[u32],
     hostile: &[bool],
+    observer: u32,
     own_body: i64,
     at: Vector3,
 ) -> i64 {
@@ -147,7 +149,7 @@ pub fn retarget(
     let mut best = 0;
     for &i in fighters {
         let j = i as usize;
-        if rows.body_ids[j] == own_body || !flagged(hostile, rows.faction_ix[j]) {
+        if rows.body_ids[j] == own_body || !flagged(hostile, rows.seen_ix(j, observer)) {
             continue;
         }
         let d_sq = f64::from(dist_sq(rows.positions[j], at));
@@ -271,8 +273,9 @@ pub fn intercept_pick(candidates: &[Candidate], spent: &[bool]) -> Option<Candid
 }
 
 /// `StandinDirector._nearest_hostile_fighter`: the nearest hostile hull of fighter size within a missile's reach of a
-/// capital at `at`, among the rigid active hulls in `hull_rows`' order, as a body id (0 for none).
-pub fn strike_target(rows: &Rows, hull_rows: &[u32], hostile: &[bool], at: Vector3) -> i64 {
+/// capital at `at`, among the rigid active hulls in `hull_rows`' order, as a body id (0 for none). A ship is judged by the
+/// faction `observer` (the capital's own faction index) perceives it to have, so a disguise fools it (M10-T14).
+pub fn strike_target(rows: &Rows, hull_rows: &[u32], hostile: &[bool], observer: u32, at: Vector3) -> i64 {
     let mut best_sq = STRIKE_RANGE_M * STRIKE_RANGE_M;
     let mut best = 0;
     for &r in hull_rows {
@@ -284,7 +287,7 @@ pub fn strike_target(rows: &Rows, hull_rows: &[u32], hostile: &[bool], at: Vecto
         if d_sq > best_sq {
             continue;
         }
-        if flagged(hostile, rows.faction_ix[j]) {
+        if flagged(hostile, rows.seen_ix(j, observer)) {
             best_sq = d_sq;
             best = rows.body_ids[j];
         }

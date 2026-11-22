@@ -423,3 +423,31 @@ fn a_far_guns_pick_is_fooled_by_a_transponder_until_the_reveal() {
     rows.flags[1] = FLAG_TIER | FLAG_HULL; // revealed
     assert_eq!(pick(&rows, &ea, 0), Some(1), "revealed, it is the nearest hostile");
 }
+
+// M10-T14: a near capital stand-in's missile strike and its guns pick by the faction its own side perceives, as the far
+// guns do, so a disguised renegade is passed by until it is revealed.
+#[test]
+fn a_near_strike_and_gun_pick_are_fooled_by_a_transponder_until_the_reveal() {
+    let mut rows = rows_with(&[1, 2, 3, 4]);
+    rows.faction_ix = vec![0, 1, 2, 0]; // a capital (EA), a renegade, a raider, an EA fighter
+    for at in 0..4 {
+        rows.is_static[at] = false;
+        rows.radii[at] = 5.0;
+        rows.flags[at] = FLAG_RIGID | FLAG_HULL | FLAG_HULL_ACTIVE;
+    }
+    rows.positions[0] = Vector3::ZERO;
+    rows.positions[1] = Vector3::new(100.0, 0.0, 0.0);
+    rows.positions[2] = Vector3::new(500.0, 0.0, 0.0);
+    rows.positions[3] = Vector3::new(50.0, 0.0, 0.0);
+    rows.flags[1] |= 1 << FLAG_DISGUISE_SHIFT; // broadcasts faction 0
+    let ea = [false, true, true];
+    let hull_rows = [0_u32, 1, 2, 3];
+    let fighters = [1_u32, 2, 3];
+    let strike = |rows: &Rows| crate::weapon_kernels::strike_target(rows, &hull_rows, &ea, 0, Vector3::ZERO);
+    let gun = |rows: &Rows| crate::weapon_kernels::retarget(rows, &fighters, &ea, 0, rows.body_ids[0], Vector3::ZERO);
+    assert_eq!(strike(&rows), rows.body_ids[2], "the disguised renegade is no strike target for the Earth Alliance");
+    assert_eq!(gun(&rows), rows.body_ids[2], "nor a gun's");
+    rows.flags[1] = FLAG_RIGID | FLAG_HULL | FLAG_HULL_ACTIVE; // revealed
+    assert_eq!(strike(&rows), rows.body_ids[1], "revealed, it is the nearest hostile");
+    assert_eq!(gun(&rows), rows.body_ids[1]);
+}

@@ -91,3 +91,7 @@ mod blast_rows;
 // M10-T12: the capital beams, an engine-free kernel and its rows for GDScript.
 mod beam_kernels;
 mod beam_rows;
+
+// M10-T14: the capital turrets and missile launchers, an engine-free kernel and its rows for GDScript.
+mod capital_gun_kernels;
+mod capital_gun_rows;

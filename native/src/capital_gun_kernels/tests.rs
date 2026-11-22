@@ -1,0 +1,421 @@
+// The capital turrets and launchers (M10-T14), beside the kernel and outside its engine-free guard (test builds only).
+use std::collections::HashMap;
+use std::sync::Arc;
+
+use godot::builtin::Basis;
+
+use super::*;
+use crate::rows::{FLAG_DISGUISE_SHIFT, FLAG_RIGID, ROLE_COMBAT, ROLE_SURFACE, Surface};
+use crate::surface::from_packed;
+
+const LIVE: u32 = FLAG_RIGID | FLAG_HULL_ACTIVE;
+const DT: f64 = 1.0 / 60.0;
+
+fn v(x: f32, y: f32, z: f32) -> Vector3 {
+    Vector3::new(x, y, z)
+}
+
+// One row per (body, position, radius, kind, faction, flags); body 1 (the shooter) holds `surface` when one is given.
+fn rows_of(bodies: &[(i64, Vector3, f64, u8, u32, u32)], surface: Option<Surface>) -> Rows {
+    let mut rows = Rows::default();
+    for &(body, at, radius, kind, faction, flags) in bodies {
+        rows.body_ids.push(body);
+        rows.ids.push(body + 5000); // the target marker's id
+        rows.faction_ix.push(faction);
+        rows.positions.push(at);
+        rows.velocities.push(Vector3::ZERO);
+        rows.bases.push(Basis::IDENTITY);
+        rows.angular.push(Vector3::ZERO);
+        rows.radii.push(radius);
+        rows.kinds.push(kind);
+        rows.flags.push(flags);
+        rows.hull_ids.push(body + 1000);
+        rows.handles.push(body);
+        rows.rigid.push(flags & FLAG_RIGID != 0);
+        rows.is_static.push(false);
+        rows.is_mine.push(false);
+        rows.hull_fraction.push(1.0);
+        rows.target_ids.push(-1);
+        rows.reach.push(0.0);
+        rows.name_ids.push(0);
+        rows.roles.push(if body == 1 && surface.is_some() { ROLE_SURFACE } else { ROLE_COMBAT });
+    }
+    rows.node_count = bodies.len();
+    if let Some(s) = surface {
+        let mut map = HashMap::new();
+        map.insert(1_i64, Arc::new(s));
+        rows.surfaces = Some(Arc::new(map));
+    }
+    rows
+}
+
+// The shooter's hull: a long box along z (half extents 20 x 10 x 200) round its centre.
+fn hull() -> Surface {
+    from_packed(&[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 20.0, 10.0, 200.0], 0.0)
+}
+
+fn gun(role: u8) -> GunSpec {
+    GunSpec {
+        launcher: false,
+        role,
+        damage: 12.0,
+        barrels: 1,
+        burst_shots: 1,
+        burst_spacing_s: 0.0,
+        cycle_s: 2.0,
+        speed_mps: 1800.0,
+        range_m: 4000.0,
+        lifetime_s: 2.5,
+        hit_radius_m: 1.0,
+        spread_rad: 0.0,
+        traverse_rad_s: 360f64.to_radians(),
+        elevation_rad_s: 360f64.to_radians(),
+        nav_gain: 0.0,
+        turn_rad_s: 0.0,
+        warhead: WARHEAD_NONE,
+        color: [1.0; 4],
+        look: 0,
+    }
+}
+
+fn launcher(role: u8) -> GunSpec {
+    GunSpec {
+        launcher: true,
+        speed_mps: 350.0,
+        range_m: 6000.0,
+        lifetime_s: 20.0,
+        cycle_s: 12.0,
+        damage: 40.0,
+        nav_gain: 4.0,
+        turn_rad_s: 0.6,
+        warhead: WARHEAD_MISSILE,
+        ..gun(role)
+    }
+}
+
+// Factions 0 and 1 hostile to each other, 2 friendly to everyone.
+fn table() -> Vec<bool> {
+    vec![false, true, false, true, false, false, false, false, false]
+}
+
+struct Run {
+    rows: Rows,
+    mounts: Vec<Mount>,
+    owners: Vec<Owner>,
+    owner_of: Vec<u32>,
+    hostile: Vec<bool>,
+    now_s: f64,
+    tick: i64,
+}
+
+impl Run {
+    // A shooter at the origin (body 1, faction 0) with one turret on its top (20 m up), its base facing up, the usual
+    // 200 deg cone (elevation down to -10 deg).
+    fn new(rows: Rows, spec: GunSpec) -> Run {
+        let mount = Mount::new(1, 1, v(0.0, 10.0, 0.0), v(0.0, 1.0, 0.0), v(0.0, 0.0, -1.0), 100f64.to_radians(), false, 5.0, spec);
+        Run::with(rows, mount)
+    }
+
+    fn with(rows: Rows, mount: Mount) -> Run {
+        Run {
+            rows,
+            mounts: vec![mount],
+            owners: vec![Owner { body: 1, bodies: vec![1], order: 0 }],
+            owner_of: vec![0],
+            hostile: table(),
+            now_s: 0.0,
+            tick: 0,
+        }
+    }
+
+    fn tick(&mut self) -> (Vec<Shot>, Tally) {
+        let rows = &self.rows;
+        let owner_rows: Vec<i32> = self
+            .owners
+            .iter()
+            .map(|o| rows.body_ids.iter().position(|&b| b == o.body).map_or(-1, |r| r as i32))
+            .collect();
+        let hull_rows: Vec<u32> = (0..rows.body_ids.len() as u32).collect();
+        let world = GunWorld {
+            rows,
+            hull_rows: &hull_rows,
+            owner_rows: &owner_rows,
+            hostile: &self.hostile,
+            factions: 3,
+            row_of: |id: i64| rows.body_ids.iter().position(|&b| b == id),
+            rest: Vector3::ZERO,
+        };
+        let mut shots = Vec::new();
+        let mut tally = Tally::default();
+        step(&mut self.mounts, &self.owners, &self.owner_of, &world, self.now_s, DT, self.tick, &mut shots, &mut tally);
+        self.now_s += DT;
+        self.tick += 1;
+        (shots, tally)
+    }
+
+    // Ticks until the first shot (at most `limit` ticks): the shots and the tick they came on.
+    fn first_shots(&mut self, limit: usize) -> Option<(Vec<Shot>, usize)> {
+        for t in 0..limit {
+            let (shots, _) = self.tick();
+            if !shots.is_empty() {
+                return Some((shots, t));
+            }
+        }
+        None
+    }
+}
+
+#[test]
+fn a_turret_leads_a_hostile_and_fires_on_its_cycle() {
+    let rows = rows_of(&[(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 400.0, -2000.0), 8.0, 0, 1, LIVE)], None);
+    let mut run = Run::new(rows, gun(ROLE_DUAL));
+    let (shots, _) = run.first_shots(60).expect("it fires at a hostile in range and arc");
+    assert_eq!(shots.len(), 1);
+    assert_eq!(run.mounts[0].target, 2);
+    let dir = normalized(shots[0].velocity);
+    let want = normalized(sub(v(0.0, 400.0, -2000.0), shots[0].start));
+    assert!(f64::from(dot(dir, want)) > 0.9999, "it fires along the line to a still target");
+    // Not again until its cycle has passed.
+    let mut again = 0;
+    for _ in 0..119 {
+        again += run.tick().0.len();
+    }
+    assert_eq!(again, 0, "silent for the rest of its 2 s cycle");
+    assert!(run.first_shots(3).is_some(), "and fires again once it has");
+}
+
+#[test]
+fn a_friend_or_a_target_out_of_range_is_never_picked() {
+    let rows = rows_of(
+        &[(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 300.0, -1000.0), 8.0, 0, 2, LIVE), (3, v(0.0, 300.0, -6000.0), 8.0, 0, 1, LIVE)],
+        None,
+    );
+    let mut run = Run::new(rows, gun(ROLE_DUAL));
+    assert!(run.first_shots(120).is_none());
+    assert_eq!(run.mounts[0].target, 0);
+}
+
+#[test]
+fn a_target_below_the_base_is_outside_the_arc() {
+    // 30 deg below the base plane: past the cone's -10 deg edge.
+    let rows = rows_of(&[(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, -1145.0, -2000.0), 8.0, 0, 1, LIVE)], None);
+    let mut run = Run::new(rows, gun(ROLE_DUAL));
+    assert!(run.first_shots(120).is_none());
+    // Moved up into the arc, it is taken.
+    run.rows.positions[1] = v(0.0, 200.0, -2000.0);
+    assert!(run.first_shots(60).is_some());
+}
+
+#[test]
+fn an_anti_fighter_gun_takes_fighters_first_and_an_anti_capital_gun_capitals_first() {
+    let bodies = [
+        (1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE),
+        (2, v(0.0, 500.0, -1500.0), 300.0, 1, 1, LIVE), // a capital, nearer
+        (3, v(0.0, 500.0, 2500.0), 8.0, 0, 1, LIVE),    // a fighter, further
+    ];
+    let mut af = Run::new(rows_of(&bodies, None), gun(ROLE_AF));
+    af.tick();
+    assert_eq!(af.mounts[0].target, 3);
+    let mut ac = Run::new(rows_of(&bodies, None), gun(ROLE_AC));
+    ac.tick();
+    assert_eq!(ac.mounts[0].target, 2);
+    let mut dual = Run::new(rows_of(&bodies, None), gun(ROLE_DUAL));
+    dual.tick();
+    assert_eq!(dual.mounts[0].target, 2, "a dual gun takes the nearer");
+}
+
+#[test]
+fn the_ships_order_comes_first_for_its_heavy_guns_but_not_its_anti_fighter_guns() {
+    let bodies = [
+        (1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE),
+        (2, v(0.0, 500.0, -1000.0), 8.0, 0, 1, LIVE),
+        (3, v(0.0, 500.0, -3000.0), 8.0, 0, 1, LIVE),
+    ];
+    let mut run = Run::new(rows_of(&bodies, None), gun(ROLE_AC));
+    run.owners[0].order = 3;
+    run.tick();
+    assert_eq!(run.mounts[0].target, 3);
+    let mut af = Run::new(rows_of(&bodies, None), gun(ROLE_AF));
+    af.owners[0].order = 3;
+    af.tick();
+    assert_eq!(af.mounts[0].target, 2);
+}
+
+#[test]
+fn a_lost_mount_or_no_rate_of_fire_holds_fire() {
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 400.0, -2000.0), 8.0, 0, 1, LIVE)];
+    let mut run = Run::new(rows_of(&bodies, None), gun(ROLE_DUAL));
+    run.mounts[0].works = false;
+    assert!(run.first_shots(120).is_none());
+    run.mounts[0].works = true;
+    run.mounts[0].rate = 0.0;
+    assert!(run.first_shots(120).is_none());
+}
+
+#[test]
+fn half_the_rate_of_fire_doubles_the_cycle() {
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 400.0, -2000.0), 8.0, 0, 1, LIVE)];
+    let mut run = Run::new(rows_of(&bodies, None), gun(ROLE_DUAL));
+    run.mounts[0].rate = 0.5;
+    let (_, t0) = run.first_shots(60).unwrap();
+    let mut gap = 0;
+    while run.tick().0.is_empty() {
+        gap += 1;
+        assert!(gap < 400);
+    }
+    let _ = t0;
+    assert!((gap as f64 * DT - 4.0).abs() < 0.05, "4 s between shots at half rate, got {}", gap as f64 * DT);
+}
+
+#[test]
+fn a_disguised_hostile_is_left_alone_until_it_is_revealed() {
+    // Body 2 is faction 1 broadcasting faction 2 (friendly): flags carry 2 + 1.
+    let disguised = LIVE | (3 << FLAG_DISGUISE_SHIFT);
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 400.0, -2000.0), 8.0, 0, 1, disguised)];
+    let mut run = Run::new(rows_of(&bodies, None), gun(ROLE_DUAL));
+    assert!(run.first_shots(120).is_none());
+    run.rows.flags[1] = LIVE;
+    assert!(run.first_shots(60).is_some());
+}
+
+#[test]
+fn its_own_hull_hides_a_target_behind_it() {
+    // A turret on the hull's top; the target below the hull, inside the cone's lower edge but the box in the way.
+    let bodies = [(1, v(0.0, 0.0, 0.0), 200.0, 1, 0, LIVE), (2, v(0.0, -60.0, -3000.0), 8.0, 0, 1, LIVE)];
+    let mut run = Run::new(rows_of(&bodies, Some(hull())), gun(ROLE_DUAL));
+    run.mounts[0].local_at = v(0.0, 10.0, 150.0); // aft on the top: the line runs down past the bow
+    assert!(run.first_shots(120).is_none(), "the hull hides it");
+    run.rows.positions[1] = v(0.0, 300.0, -3000.0);
+    assert!(run.first_shots(60).is_some());
+}
+
+#[test]
+fn a_fixed_gun_holds_its_gimbal_and_a_burst_fires_its_shots_then_waits() {
+    let mut spec = gun(ROLE_AC);
+    spec.burst_shots = 3;
+    spec.burst_spacing_s = 0.35;
+    spec.cycle_s = 10.0;
+    spec.elevation_rad_s = 6f64.to_radians();
+    // On the bow, axis forward, 8 deg each way, resting on the axis.
+    let mount = Mount::new(1, 1, v(0.0, 0.0, -200.0), v(0.0, 0.0, -1.0), v(0.0, 1.0, 0.0), 8f64.to_radians(), true, 10.0, spec);
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(1500.0, 0.0, -3000.0), 400.0, 1, 1, LIVE)];
+    let mut run = Run::with(rows_of(&bodies, None), mount);
+    assert!(run.first_shots(120).is_none(), "26 deg off the bow: outside its gimbal");
+    run.rows.positions[1] = v(200.0, 0.0, -3000.0);
+    let mut times = Vec::new();
+    for t in 0..800 {
+        if !run.tick().0.is_empty() {
+            times.push(t);
+        }
+    }
+    assert!(times.len() >= 4, "a burst of three and the next burst's first: {times:?}");
+    let s = |k: usize| (times[k] - times[0]) as f64 * DT;
+    assert!((s(1) - 0.35).abs() < 0.03 && (s(2) - 0.7).abs() < 0.03, "{times:?}");
+    assert!((s(3) - 10.0).abs() < 0.03, "the next burst a cycle after the first began: {times:?}");
+}
+
+#[test]
+fn twin_barrels_fire_together_with_their_own_spread() {
+    let mut spec = gun(ROLE_DUAL);
+    spec.barrels = 2;
+    spec.spread_rad = 0.5f64.to_radians();
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 400.0, -2000.0), 30.0, 0, 1, LIVE)];
+    let mut run = Run::new(rows_of(&bodies, None), spec);
+    let (shots, _) = run.first_shots(60).unwrap();
+    assert_eq!(shots.len(), 2);
+    assert_ne!(shots[0].velocity, shots[1].velocity);
+}
+
+#[test]
+fn a_launcher_fires_a_salvo_at_its_target_between_its_cell_and_the_target() {
+    let mut spec = launcher(ROLE_AF);
+    spec.barrels = 2;
+    // Cells facing up on the top, a hemisphere.
+    let mount = Mount::new(1, 1, v(0.0, 10.0, 0.0), v(0.0, 1.0, 0.0), v(0.0, 0.0, -1.0), 90f64.to_radians(), true, 0.0, spec);
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 10.0, -5000.0), 8.0, 0, 1, LIVE)];
+    let mut run = Run::with(rows_of(&bodies, None), mount);
+    let (shots, _) = run.first_shots(30).expect("it launches");
+    assert_eq!(shots.len(), 2);
+    for s in &shots {
+        assert_eq!(s.target, 2);
+        let d = normalized(s.velocity);
+        assert!(d.y > 0.5 && d.z < -0.5, "between straight up and the target: {d:?}");
+        assert!((f64::from(length(s.velocity)) - 350.0).abs() < 0.01);
+    }
+    assert!(run.first_shots(600).is_none(), "reloading for 12 s");
+}
+
+#[test]
+fn a_torpedo_takes_capitals_only() {
+    let mut spec = launcher(ROLE_AC);
+    spec.warhead = WARHEAD_TORPEDO;
+    let mount = Mount::new(1, 1, v(0.0, 0.0, -200.0), v(0.0, 0.0, -1.0), v(0.0, 1.0, 0.0), 45f64.to_radians(), true, 0.0, spec);
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 0.0, -2000.0), 8.0, 0, 1, LIVE)];
+    let mut run = Run::with(rows_of(&bodies, None), mount);
+    assert!(run.first_shots(60).is_none());
+    run.rows.radii[1] = 400.0;
+    run.rows.kinds[1] = 1;
+    assert!(run.first_shots(60).is_some());
+}
+
+#[test]
+fn a_missile_turns_toward_its_target_and_leaves_the_list_once_its_bolt_is_gone() {
+    let rows = rows_of(&[(2, v(1000.0, 0.0, -3000.0), 8.0, 0, 1, LIVE)], None);
+    let mut bolts = Bolts::default();
+    bolts.insert_owned(-1, v(0.0, 0.0, 0.0), v(0.0, 0.0, -350.0), 0, 1, 3, 2.0, 40.0, [1.0; 4], 0, 20.0, 0);
+    let mut missiles = vec![Missile { bolt: -1, target: 2, mount: 0, nav_gain: 4.0, turn_rad_s: 0.6, warhead: WARHEAD_MISSILE }];
+    let hull_rows = [0_u32];
+    let hostile = table();
+    let world = GunWorld {
+        rows: &rows,
+        hull_rows: &hull_rows,
+        owner_rows: &[],
+        hostile: &hostile,
+        factions: 3,
+        row_of: |id: i64| rows.body_ids.iter().position(|&b| b == id),
+        rest: Vector3::ZERO,
+    };
+    // A still target off to the side: PN alone turns a missile flying straight at the line's start, so move the target.
+    let mut moving = rows.clone();
+    moving.velocities[0] = v(-100.0, 0.0, 0.0);
+    moving.rigid[0] = true;
+    let world_moving = GunWorld { rows: &moving, ..world };
+    let mut out = Vec::new();
+    steer_missiles(&mut missiles, &bolts, &world_moving, DT, &mut out);
+    assert_eq!(out.len(), 1);
+    let (i, vel) = out[0];
+    assert_eq!(i, 0);
+    assert!((f64::from(length(vel)) - 350.0).abs() < 1e-3, "same speed");
+    assert_ne!(vel, v(0.0, 0.0, -350.0), "turned");
+    bolts.spent[0] = true;
+    out.clear();
+    steer_missiles(&mut missiles, &bolts, &world_moving, DT, &mut out);
+    assert!(missiles.is_empty());
+}
+
+#[test]
+fn a_ship_out_of_the_rows_holds_its_state_and_two_runs_fire_alike() {
+    let bodies = [
+        (1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE),
+        (2, v(300.0, 400.0, -2000.0), 8.0, 0, 1, LIVE),
+        (3, v(-300.0, 600.0, -1500.0), 8.0, 0, 1, LIVE),
+    ];
+    let mut spec = gun(ROLE_DUAL);
+    spec.spread_rad = 0.3f64.to_radians();
+    let mut a = Run::new(rows_of(&bodies, None), spec);
+    let mut b = Run::new(rows_of(&bodies, None), spec);
+    let mut shots_a = Vec::new();
+    let mut shots_b = Vec::new();
+    for _ in 0..400 {
+        shots_a.extend(a.tick().0);
+        shots_b.extend(b.tick().0);
+    }
+    assert!(!shots_a.is_empty());
+    assert_eq!(shots_a, shots_b);
+    assert_eq!(a.mounts, b.mounts);
+    // Out of the rows: nothing moves.
+    let mut parked = Run::new(rows_of(&bodies[1..], None), spec);
+    let before = parked.mounts.clone();
+    assert!(parked.first_shots(60).is_none());
+    assert_eq!(parked.mounts, before);
+}
