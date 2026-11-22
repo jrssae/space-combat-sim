@@ -86,6 +86,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q57 | Hulks and handling (2026-11-22) | Hulk stage times stay (2/6/3 s); **no hulk cap**; scuttling is **silent** (the ship stops firing and becomes a hulk); a destroyed hulk blasts like any ship of its kind; Vorlon and Shadow ships never become hulks, they always explode. The Omega is fast, brakes well for its size, but turns slowly. Subsystem aim points (rotors at rest, engines and bays at their section's centre) are fine for now (T10, T18) |
 | Q58 | Bays and hulls (2026-11-22) | Omega and Nova: **one forward-facing bay** on the forward hull's front face above the two oval retro thrusters; both need refinement (the Nova's bay-mouth cut 0.80-0.84 is not accepted). Omega name letter fixed grey-white; no far marker (the HUD marker is enough). **Hyperion**: new reference `references/EA-Hyperion-V5c.stl` and colour stills in `references/Hyperion/`; 6 Starfuries from 3 single-fury bays (like Cobra bays) on **each side of the mid-spine bump**, re-docking in their own bays; a shuttle docking bay on the **rear of the conning tower**, launching over the Starfury bays. V5c's groove round the hull is not in the ship (paint lines only); its ball turrets are wrongly single-barrel (take the double-barrel turrets from `EA Hyperion Class Heavy Cruiser.stl`); the front antenna array: compare both STLs and **discuss with the maintainer** before building (T21, T22, T23, T17) |
 | Q59 | Ship line-up (2026-11-21) | The comparison mission is `ship_showcase`: every finalized hull is parked still in its faction's row beside Babylon 5 for fly-bys of scale and look; each hull task adds its own (T64) |
+| Q60 | Subsystem targeting by kind (2026-11-22) | **No sub-targeting of single parts**: the target menu offers a subsystem only by kind (weapons, engines, bays, and any other kind with several parts), never one part. Targeting a kind aims at **the nearest of its parts that is still active**, re-picked as parts are lost, until none is left. Single-part subsystems (bridge, reactor) are targeted as now (T18, T65) |
 
 ## The hulls
 
@@ -366,6 +367,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
 | T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | done |
+| T65 | E | Subsystems targeted by kind: the nearest still-active part of a weapons, engines or bays kind, no single-part picks (Q60) | T18 | Sonnet | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -527,6 +529,17 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   Capitals are not invulnerable (a player's shots can hurt them). Shots: `references/screenshots/M10-T64 ship showcase/`.
   **Thunderbolt added (2026-11-22):** a catalogue entry (`finalized`, a fighter, not player-flyable), `assets/ships/ea_thunderbolt.tres` (Starfury flight
   values as placeholders, M11 replaces them) and three parked in row 3 beside the Starfuries (x 2960 to 3040, z -2800 to -2880).
+
+### M10-T65 Subsystems targeted by kind (Q60)
+
+- **Goal:** the target menu's second level (T18) lists a capital's subsystems by kind only: weapons, engines, bays and any
+  other kind with several parts as one entry each, plus the single-part subsystems (bridge, reactor). No ring of members.
+- **Aim:** a kind aims at its nearest part that is still active (nearest to the player, by the T18 aim points), picked again
+  when that part is lost or another becomes nearer; the target box names the kind, the part being hit, and how many of
+  the kind remain active. With none active the entry shows the kind destroyed and the aim falls back to the whole ship.
+- **Input:** the X long-press cycle (T18 follow-up) steps through kinds, not parts; key 9 the same; parity kept.
+- **Done when:** GUT tests for the kind list, the nearest-active pick and re-pick, and the fallback; the menu and box
+  screenshots; T18's Done notes point here.
 
 ### M10-T02 Factions as data
 
