@@ -360,7 +360,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
-| T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | not started |
+| T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -488,8 +488,8 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 
 ### M10-T64 Ship line-up beside Babylon 5
 
-- **Goal (maintainer 2026-11-21):** the ship comparison mission (`civilian_showcase`, the hulls parked in a row) becomes the
-  line-up of every finalized ship: each faction's ships in their own row next to Babylon 5, every hull held still (no AI
+- **Goal (maintainer 2026-11-21):** the ship comparison mission (`civilian_showcase`, the hulls parked in a row) is renamed
+  `ship_showcase` (scenario id, file, menu title, tests and docs that name it) and becomes the line-up of every finalized ship: each faction's ships in their own row next to Babylon 5, every hull held still (no AI
   movement, no drift, no raider attack in the line-up), so the player flies past each one to judge scale and look.
 - **First pass:** move the line-up beside the station; add the hulls finalized so far (the civilians already there, the raider
   strike carrier, the Omega, Hyperion and Nova, the Thunderbolt, Panama, construction tender and both EA shuttles), spaced so
