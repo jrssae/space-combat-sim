@@ -30,7 +30,8 @@ func count() -> int:
 
 ## Sets the glow to `p_level` of its strength as built.
 func apply(p_level: float) -> void:
-	if is_equal_approx(p_level, level):
+	# Exact compare: an approximate one would skip the last step from a faint glow to fully dark.
+	if p_level == level:
 		return
 	level = p_level
 	for entry: Dictionary in _entries:
