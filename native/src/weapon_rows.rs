@@ -523,6 +523,7 @@ impl ScsWeaponRows {
                 if let Some(j) = tier_fire::nearest_hostile_fighter(
                     rows,
                     hostile,
+                    rows.faction_ix[r],
                     at,
                     tier_fire::GUN_RANGE_M,
                     body,
@@ -547,6 +548,7 @@ impl ScsWeaponRows {
                     && let Some(j) = tier_fire::nearest_hostile_fighter(
                         rows,
                         hostile,
+                        rows.faction_ix[r],
                         at,
                         tier_fire::STRIKE_RANGE_M,
                         body,
@@ -668,6 +670,7 @@ impl ScsWeaponRows {
                         let Some(j) = tier_fire::nearest_hostile_fighter(
                             rows,
                             hostile,
+                            rows.faction_ix[t],
                             at,
                             tier_fire::STRIKE_RANGE_M,
                             body,

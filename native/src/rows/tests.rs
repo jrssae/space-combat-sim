@@ -321,12 +321,12 @@ fn a_sheltered_row_is_out_of_the_brains_lists_and_the_tier_guns_pick() {
     assert_eq!(field.ship_rows, vec![0, 1, 3]);
     assert_eq!(field.broadcasters, vec![0, 1, 3]);
     let hostile = vec![true; 3];
-    let pick = crate::tier_fire::nearest_hostile_fighter(&rows, &hostile, rows.positions[2], 1.0e6, 0);
+    let pick = crate::tier_fire::nearest_hostile_fighter(&rows, &hostile, 0, rows.positions[2], 1.0e6, 0);
     assert!(pick.is_some_and(|r| r != 2), "the nearest live fighter, not the sheltered one on the spot: {pick:?}");
     rows.flags[2] = FLAG_RIGID | FLAG_HULL | FLAG_HULL_ACTIVE;
     field.build(&rows, &Bolts::default(), 500.0);
     assert_eq!(field.ship_rows, vec![0, 1, 2, 3], "out of the station, a contact again");
-    assert_eq!(crate::tier_fire::nearest_hostile_fighter(&rows, &hostile, rows.positions[2], 1.0e6, 0), Some(2));
+    assert_eq!(crate::tier_fire::nearest_hostile_fighter(&rows, &hostile, 0, rows.positions[2], 1.0e6, 0), Some(2));
 }
 
 // M10-T02: a renegade (faction 1) broadcasting the Earth Alliance (faction 0) transponder looks Earth Alliance to everyone
@@ -394,4 +394,32 @@ fn the_nearest_hostile_pick_is_fooled_by_a_transponder() {
     flags[1] = 0;
     let seen = pick(0, &flags);
     assert!(seen.contains(&1) && !seen.contains(&2), "revealed, the renegade is the nearest hostile: {seen:?}");
+}
+
+// M10-T02: a far capital's guns pick by the faction its own side perceives, so an Earth Alliance one passes a disguised
+// renegade by until it is revealed, while a renegade still engages the Earth Alliance.
+#[test]
+fn a_far_guns_pick_is_fooled_by_a_transponder_until_the_reveal() {
+    let mut rows = rows_with(&[1, 2, 3, 4]);
+    rows.faction_ix = vec![0, 1, 2, 0]; // a capital (EA), a renegade, a raider, an EA fighter
+    for at in 0..4 {
+        rows.is_static[at] = false;
+        rows.reach[at] = 100.0;
+        rows.radii[at] = 5.0;
+        rows.flags[at] = FLAG_TIER | FLAG_HULL;
+    }
+    rows.positions[1] = Vector3::new(10.0, 0.0, 0.0);
+    rows.positions[2] = Vector3::new(50.0, 0.0, 0.0);
+    rows.positions[3] = Vector3::new(5.0, 0.0, 0.0);
+    rows.flags[1] |= 1 << FLAG_DISGUISE_SHIFT; // broadcasts faction 0
+    let ea = [false, true, true];
+    let renegade = [true, false, true];
+    let at = rows.positions[0];
+    let pick = |rows: &Rows, hostile: &[bool], observer: u32| {
+        crate::tier_fire::nearest_hostile_fighter(rows, hostile, observer, at, 1.0e6, 1001)
+    };
+    assert_eq!(pick(&rows, &ea, 0), Some(2), "the disguised renegade is no target for the Earth Alliance");
+    assert_eq!(pick(&rows, &renegade, 1), Some(3), "a renegade still engages the Earth Alliance fighter");
+    rows.flags[1] = FLAG_TIER | FLAG_HULL; // revealed
+    assert_eq!(pick(&rows, &ea, 0), Some(1), "revealed, it is the nearest hostile");
 }

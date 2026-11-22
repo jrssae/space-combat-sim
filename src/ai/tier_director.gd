@@ -182,6 +182,7 @@ static func land_hits(targets: PackedInt64Array, shooters: PackedInt64Array, dam
 		var shooter: Damageable = _damageable_of(shooters[k])
 		if shooter != null:
 			faction = shooter.faction
+		Transponder.note_hit(shooters[k], target)  # a disguised tier shooter that hit its own side's friend is found out (M10-T02)
 		target.apply_hit(HitInfo.new(targets[k], shooters[k], faction, damage[k], points[k], Vector3.ZERO, 0.0, HitInfo.CAUSE_BOLT))
 		landed += 1
 	return landed

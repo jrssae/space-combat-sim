@@ -350,6 +350,24 @@ func test_a_hit_does_not_wake_a_tier_think_outside_its_beat() -> void:
 		assert_between(thinks, 3, 5, "%s: hit every tick, a tier ship still thinks on its beat only (%d in a second)" % [schedule, thinks])
 
 
+func test_a_disguised_tier_shooters_hit_on_its_own_sides_friend_reveals_it() -> void:
+	for schedule: StringName in SCHEDULES:
+		await _world(0, 1)
+		_use_schedule(schedule)
+		assert_eq(w.pool.prepare(ShipPool.RENEGADE_TYPE, 1), 1)
+		var renegade: Combatant = w.pool.acquire("RENEGADE 1", w.world.to_universe(Vector3(0.0, 0.0, -20000.0)), Basis.IDENTITY,
+				Vector3.ZERO, IdleBrain.new(), ShipPool.RENEGADE_TYPE)
+		var ally: Combatant = w.pool.acquire("ALPHA 2", w.world.to_universe(Vector3(0.0, 0.0, -21000.0)), Basis.IDENTITY,
+				Vector3.ZERO, IdleBrain.new(), ShipPool.ALLY_TYPE)
+		renegade.damageable.invulnerable = true
+		ally.damageable.invulnerable = true
+		await _ticks(10)
+		assert_true(renegade.targetable.is_disguised(), "%s: it passes for Earth Alliance" % schedule)
+		TierDirector.land_hits(PackedInt64Array([ally.ship.get_instance_id()]), PackedInt64Array([renegade.ship.get_instance_id()]),
+				PackedFloat64Array([1.0]), PackedVector3Array([Vector3.ZERO]))
+		assert_false(renegade.targetable.is_disguised(), "%s: a tier hit on an Earth Alliance ship gives it away" % schedule)
+
+
 func test_a_far_capitals_missile_is_shot_down_by_its_targets_interceptors() -> void:
 	for schedule: StringName in SCHEDULES:
 		await _world(2, 0)

@@ -524,8 +524,10 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   HUD faction line. Hits, friendly fire and mines use the true faction. Reveal: a shot at the player or the broadcast faction's side
   (the target the ship holds, `Transponder.note_shot`) or a bolt that hits them (`note_hit`); console `transponder <reveal|hide>
   [target|player|all]`; `targeting.faction` is what is shown, `targeting.true_faction` and `targeting.revealed` the truth. Limits:
-  station grids and turrets, and a tier ship's own brain (its guns), still read the true faction (a grid opens fire on renegades after
-  one fires on it).
+  station grids and turrets still read the true faction (a grid opens fire on renegades after one fires on it). A far (tier) ship's guns
+  are disguise-aware (2026-11-21): the tier brains already were, and a far capital's guns, beams and missile launches pick their
+  target by what the capital's faction perceives (`tier_fire::nearest_hostile_fighter` takes the observer); a tier hit
+  (`TierDirector.land_hits`) reveals a disguised shooter as a bolt hit does. A near capital's missile strike pick stays on the true faction.
 
 ### M10-T03 Weapons and balance concept (discussion with the maintainer)
 

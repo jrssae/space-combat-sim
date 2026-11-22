@@ -229,10 +229,12 @@ pub fn hits_of(seed: u64, tick: i64, key: i64, shots: i64, chance: f64) -> i64 {
 }
 
 /// The nearest live fighter hostile to `hostile` (a flag per faction index) within `reach_m` of `at`, near (a rigid body)
-/// or in the tier (not a hulk), `own_body` left out: its row, or none. Ties go to the earlier row.
+/// or in the tier (not a hulk), `own_body` left out: its row, or none. Ties go to the earlier row. A ship is judged by the
+/// faction `observer` (the shooter's own faction index) perceives it to have, so a disguise fools the far guns too (M10-T02).
 pub fn nearest_hostile_fighter(
     rows: &Rows,
     hostile: &[bool],
+    observer: u32,
     at: Vector3,
     reach_m: f64,
     own_body: i64,
@@ -248,7 +250,7 @@ pub fn nearest_hostile_fighter(
             || rows.radii[i] > FIGHTER_RADIUS_MAX_M
             || rows.body_ids[i] == own_body
             || !hostile
-                .get(rows.faction_ix[i] as usize)
+                .get(rows.seen_ix(i, observer) as usize)
                 .copied()
                 .unwrap_or(false)
         {
