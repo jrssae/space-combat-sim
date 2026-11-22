@@ -35,6 +35,9 @@ extends RefCounted
 ##      "spawns": Array[Dictionary],                # ships placed at load (M3-T09): a wave spawn's fields plus
 ##                                                  #       "invulnerable" (bool, false) and "route" (a route's name, "" none);
 ##                                                  #       the members of `wings[]` come last, in their order
+##      "capitals": Array[Dictionary],              # (M10-T64) `capitals[]`, capital ships parked at load, held still: each {type,
+##                                                  #       name ("" = its class's names), offset (from the origin), forward,
+##                                                  #       standin (bool, false: build the class's `CapitalStandin`, as the raiders' strike carrier is)}
 ##      "wings": Array[Dictionary],                 # `wings[]` (M3-T10): {name, faction (StringName, &"" for any), leader
 ##                                                  #       ("player", a spawn's name, or "" for its first ship), formation
 ##                                                  #       (Formation.Shape), order (AiContext.Order), home (StringName, M8-T06: the
@@ -238,6 +241,10 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	if hud is String:
 		return _failure(hud as String)
 
+	var capitals: Variant = _capitals(root.get("capitals", []), source)
+	if capitals is String:
+		return _failure(capitals as String)
+
 	var relations: Variant = Factions.table().overrides_from(root.get("relations", []), "%s: relations" % source)
 	if relations is String:
 		return _failure(relations as String)
@@ -245,6 +252,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	var result: Dictionary = _empty()
 	result["ok"] = true
 	result["relations"] = relations
+	result["capitals"] = capitals
 	result["scenario_id"] = StringName(scenario_id as String)
 	result["system_id"] = system
 	result["player"] = {"position": player_pos as UniversePos, "forward": forward_unit,
@@ -737,6 +745,28 @@ static func _waves(raw: Variant, pools: Dictionary, system: StringName, source: 
 	return out
 
 
+## `capitals[]` (M10-T64): capital ships placed at load and held where they stand (the ship line-up), or an error string.
+static func _capitals(raw: Variant, source: String) -> Variant:
+	if not (raw is Array):
+		return "%s: capitals must be an array" % source
+	var out: Array[Dictionary] = []
+	for i: int in (raw as Array).size():
+		var where: String = "%s: capitals[%d]" % [source, i]
+		if not ((raw as Array)[i] is Dictionary):
+			return "%s must be an object" % where
+		var entry: Dictionary = (raw as Array)[i]
+		var type: Variant = entry.get("type")
+		if not (type is String) or ShipCatalog.entry_text(StringName(type as String), "role") != "capital":
+			return "%s: type must be a capital in the catalogue, got %s" % [where, JSON.stringify(type)]
+		var offset: Variant = _vector3(entry.get("offset", [0.0, 0.0, 0.0]))
+		var forward: Variant = _vector3(entry.get("forward", [0.0, 0.0, -1.0]))
+		if offset == null or forward == null or (forward as Vector3).is_zero_approx():
+			return "%s: offset and forward must be [x, y, z] (numbers), forward not zero" % where
+		out.append({"type": StringName(type as String), "name": str(entry.get("name", "")),
+				"offset": offset as Vector3, "forward": forward as Vector3, "standin": bool(entry.get("standin", false))})
+	return out
+
+
 ## One spawn, or an error string. The behaviour is checked by building it once (its own errors are returned with the path).
 static func _spawn(raw: Variant, where: String, system: StringName) -> Variant:
 	if not (raw is Dictionary):
@@ -884,7 +914,8 @@ static func _empty() -> Dictionary:
 			"props": [] as Array[Dictionary], "jumpgates": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
-			"civilian_names": {}, "placeholders": {}, "station": {}, "hud": {}, "relations": [] as Array[Dictionary]}
+			"civilian_names": {}, "placeholders": {}, "station": {}, "hud": {}, "relations": [] as Array[Dictionary],
+			"capitals": [] as Array[Dictionary]}
 
 
 static func _failure(message: String) -> Dictionary:

@@ -764,3 +764,22 @@ func test_hud_options() -> void:
 		if file_name.ends_with(".json"):
 			var file: Dictionary = ScenarioLoader.load("res://data/scenarios/" + file_name)
 			assert_false(bool((file["hud"] as Dictionary).get("capital_markers", false)), "%s keeps the markers off" % file_name)
+
+
+func test_capitals_are_read_for_the_line_up() -> void:
+	var data: Dictionary = {"scenario_id": "t", "player": {"position": [0, 0, 0]}}
+	assert_eq(ScenarioLoader.from_data(data)["capitals"], [], "none given")
+	data["capitals"] = [{"type": "ea_omega", "offset": [4000, -1200, -3000]},
+			{"type": "raider_strike_carrier", "name": "CARRIER", "forward": [1, 0, 0], "standin": true}]
+	var made: Array = ScenarioLoader.from_data(data)["capitals"]
+	assert_eq(made.size(), 2)
+	assert_eq(made[0]["offset"], Vector3(4000, -1200, -3000))
+	assert_eq(made[0]["forward"], Vector3(0, 0, -1), "the bow faces -Z unless told")
+	assert_false(bool(made[0]["standin"]))
+	assert_true(bool(made[1]["standin"]))
+	data["capitals"] = [{"type": "starfury_ally"}]
+	_assert_fails(data, "type must be a capital in the catalogue")
+	data["capitals"] = [{"type": "ea_omega", "forward": [0, 0, 0]}]
+	_assert_fails(data, "forward not zero")
+	data["capitals"] = {}
+	_assert_fails(data, "capitals must be an array")

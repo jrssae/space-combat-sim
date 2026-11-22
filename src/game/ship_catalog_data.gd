@@ -16,13 +16,15 @@ extends RefCounted
 ## - `callsign`: the name an encounter or station civilian of this type calls in under.
 ## - `random_pool`: false keeps a civilian out of the hulls random traffic, encounters and `random_civilian` spawns draw from
 ##   (default true); a mission names such a hull itself (the shuttles, M10-T57).
+## - `finalized`: the hull's look is approved, so it belongs in the ship line-up (`ship_showcase`, M10-T64); a test fails
+##   until the scenario parks every finalized hull. Default false.
 ## Entry order matters: every list built from the file keeps it, and seeded picks index into those lists.
 
 const ROLES: Array[String] = ["fighter", "civilian", "capital"]
 const DOCKING: Array[String] = ["", "tunnel", "cargo_bay"]
 const LOOK_SHEETS: Array[String] = ["", "pool", "hull"]
 const REQUIRED: Array[String] = ["id", "spec", "asset", "faction", "role"]
-const OPTIONAL: Array[String] = ["ai_profile", "capital_class", "pooled", "name", "look_sheet", "docking", "callsign", "random_pool"]
+const OPTIONAL: Array[String] = ["ai_profile", "capital_class", "pooled", "name", "look_sheet", "docking", "callsign", "random_pool", "finalized"]
 
 ## Why the file was refused ("" when it is good); a refused file has no entries.
 var error: String = ""
@@ -96,6 +98,11 @@ func ids_where(key: String, value: String) -> Array[StringName]:
 	return _list("%s=%s" % [key, value], func(e: Dictionary) -> bool: return str(e.get(key, "")) == value)
 
 
+## The hulls whose look is approved (`finalized`), in file order: the ship line-up must hold each of them.
+func finalized_ids() -> Array[StringName]:
+	return _list("finalized", func(e: Dictionary) -> bool: return bool(e.get("finalized", false)))
+
+
 ## A text field of `id`'s entry, "" when absent or for an unknown id.
 func text(id: StringName, key: String) -> String:
 	return str(_by_id[id].get(key, "")) if _by_id.has(id) else ""
@@ -156,6 +163,8 @@ func _add(raw: Variant) -> String:
 		return "pooled must be true or false"
 	if e.has("random_pool") and not (e["random_pool"] is bool):
 		return "random_pool must be true or false"
+	if e.has("finalized") and not (e["finalized"] is bool):
+		return "finalized must be true or false"
 	_entries.append(e)
 	_by_id[id] = e
 	return ""

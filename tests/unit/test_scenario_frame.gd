@@ -11,7 +11,7 @@ const PLANET_RADIUS_M: float = 4.78e6
 const PLANET_GM: float = 1.68e14
 const STATION_ORBIT_M: float = 2.75e7
 const AT: Array = [5500, -1200, -6000]
-const SCENARIOS: Array[String] = ["free_flight", "combat_sandbox", "instructor_route", "dogfight", "civilian_showcase",
+const SCENARIOS: Array[String] = ["free_flight", "combat_sandbox", "instructor_route", "dogfight", "ship_showcase",
 		"belt_showcase"]
 
 var system: StarSystem

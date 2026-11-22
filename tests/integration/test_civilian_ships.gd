@@ -3,9 +3,10 @@ extends TestSteps
 ## and slow, turning by torque alone; in play each carries its people's faction with the civilian role, shows its running
 ## lights, takes hull damage and breaks into its chunks; raiders attack them through the faction data; a Bokmai flies with
 ## its 0-3 cargo pods (mass, collision, hit volumes, the far dot) and sheds them as debris when it breaks up. The in-play
-## half runs the real main scene on `civilian_showcase`. Skips, saying why, without the generated assets.
+## half runs the real main scene on `civilian_row`. Skips, saying why, without the generated assets.
 
-const SHOWCASE: String = "res://data/scenarios/civilian_showcase.json"
+# The old civilian showcase, kept as a fixture: the real `ship_showcase` is a held line-up (M10-T64) where nobody flees.
+const SHOWCASE: String = "res://tests/fixtures/civilian_row.json"
 const BOKMAI: StringName = &"brakiri_bokmai"
 ## Ticks per real tick: the physics rate and the time scale raised together, so each step is still 1/60 s of sim time.
 const SPEED_UP: float = 4.0

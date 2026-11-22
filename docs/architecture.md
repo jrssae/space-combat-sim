@@ -4476,7 +4476,8 @@ src/ship/cargo_pods.gd           CargoPods: the Bokmai's 0-3 pods (mass, inertia
 native/src/rows.rs               the role column (ROLE_COMBAT, ROLE_CIVILIAN), fed from SimCore.set_civilian, kept in the tier
 native/src/civilian.rs           the civilian flight: kin, shelter, group, alarm; engine-free, tests in civilian/tests.rs
 native/src/brain_behaviours.rs   the retreat runs the civilian flight for a civilian row; Field marks the fleeing civilians
-data/scenarios/civilian_showcase.json   all nine parked in view, a Bokmai with three pods and one with none
+data/scenarios/ship_showcase.json   the ship line-up beside Babylon 5 (M10-T64): every finalized hull parked and held still, a row per faction
+tests/fixtures/civilian_row.json     the old civilian showcase (civilians parked, they flee a raider) kept for test_civilian_ships.gd
 tests/integration/test_civilian_flight.gd, test_civilian_ships.gd, test_turret_balance.gd (GUT_SLOW)
 ```
 
@@ -5013,7 +5014,7 @@ start it. A shot playing, no ship or the setting off leave the still frame.
 
 ```
 FrontEnd root list   New game | Load game (disabled, tooltip) | Free flight | Settings | Quit; show_pad = show_right = false
-NewGameSelect        missions of MissionCatalog, then SCENES (combat_sandbox, dogfight, instructor_route, civilian_showcase);
+NewGameSelect        missions of MissionCatalog, then SCENES (combat_sandbox, dogfight, instructor_route, ship_showcase);
                      scene text = "description" in data/scenarios/<id>.json; chosen -> mission or sandbox request
 MenuScreen           show_pad, show_right (the frame hides those panels); push_requested(page) (the frame pushes it)
 MenuFrame            _apply_layout(): panels per top page; right panel hidden -> Detail label under the list (detail_text())

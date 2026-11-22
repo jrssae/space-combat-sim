@@ -8,7 +8,7 @@ const SCENES: Array[Dictionary] = [
 	{"id": &"combat_sandbox", "text": "Combat sandbox"},
 	{"id": &"dogfight", "text": "Dogfight"},
 	{"id": &"instructor_route", "text": "Instructor route"},
-	{"id": &"civilian_showcase", "text": "Civilian ships"},
+	{"id": &"ship_showcase", "text": "Ship line-up"},
 	{"id": &"station_showcase", "text": "Babylon 5 station"},
 ]
 

@@ -360,7 +360,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
-| T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | not started |
+| T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | in progress |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |

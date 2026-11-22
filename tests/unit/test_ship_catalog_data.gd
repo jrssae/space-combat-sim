@@ -102,3 +102,13 @@ func test_a_bad_file_is_empty() -> void:
 	var data: ShipCatalogData = _parse("[1]")
 	assert_eq(data.ids(), [] as Array[StringName])
 	assert_false(data.has(&"a"))
+
+
+func test_finalized_hulls_are_listed_for_the_line_up() -> void:
+	var marked: String = GOOD.replace('"docking": "tunnel", "callsign": "BEE"', '"docking": "tunnel", "callsign": "BEE", "finalized": true')
+	var data: ShipCatalogData = _parse(marked)
+	assert_eq(data.error, "")
+	assert_eq(data.finalized_ids(), [&"b_hauler"] as Array[StringName])
+	assert_eq(_parse(GOOD).finalized_ids(), [] as Array[StringName], "default: not finalized")
+	assert_string_contains(_parse(_with('{"id": "a", "spec": "res://a.tres", "asset": "a", "faction": "x", "role": "civilian", "finalized": "yes"}')).error,
+			"finalized must be true or false")

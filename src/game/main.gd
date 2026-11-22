@@ -12,7 +12,7 @@ const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
-		&"civilian_showcase", &"belt_showcase", &"station_launch", &"station_showcase"]
+		&"ship_showcase", &"belt_showcase", &"station_launch", &"station_showcase"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -116,6 +116,9 @@ var _system_id: StringName = &"local"
 ## The far capital markers' rules, on as the scenario's `hud.capital_markers` says, else as the data file (M8-T08: off).
 var _capital_rules: CapitalMarkerRules = null
 var _scenario_spawns: Array[Dictionary] = []
+var _scenario_capitals: Array[Dictionary] = []
+## The capital hulls the scenario's `capitals[]` parked (M10-T64), each tagged with its catalogue type in meta `line_up_type`.
+var scenario_capitals: Array[CapitalBody] = []
 var _scenario_routes: Array[Route] = []
 var _scenario_wings: Array[Dictionary] = []
 # By `scenario_ships` index: the brain each was given, to tell when the pool has reused the ship, and the spawn it came from.
@@ -181,6 +184,7 @@ func _ready() -> void:
 		# Every position the scenario places is in its own system, the World's origin too (M8-T23).
 		world.origin = UniversePos.new(world.origin.x, world.origin.y, world.origin.z, _system_id)
 		_scenario_spawns = scenario["spawns"]
+		_scenario_capitals = scenario["capitals"]
 		_scenario_routes = scenario["routes"]
 		_scenario_wings = scenario["wings"]
 	_spawn_ship()
@@ -555,6 +559,7 @@ func _setup_perf() -> void:
 	world.add_child(standins)
 	TierDirector.attach(world, ships, standins)  # the low-attention tier (M4-T21): far ships as core rows
 	CapitalFlight.attach(world)  # capital ships fly here, and its `capital` console is in every flight scene (M10-T07)
+	_spawn_scenario_capitals()
 	perf_probe = PerfProbe.new()
 	perf_probe.name = "PerfProbe"
 	perf_probe.process_mode = Node.PROCESS_MODE_PAUSABLE
@@ -773,6 +778,38 @@ func route_active() -> bool:
 func _spawn_scenario_ships() -> void:
 	for entry: Dictionary in _scenario_spawns:
 		_place_spawn(entry)
+
+
+# Parks the scenario's capital hulls at their places with the helm holding still (the ship line-up, M10-T64).
+func _spawn_scenario_capitals() -> void:
+	var anchor := UniversePos.new(0.0, 0.0, 0.0, _system_id)
+	var named: Dictionary = {}
+	for entry: Dictionary in _scenario_capitals:
+		var type: StringName = entry["type"]
+		var faction: StringName = ShipCatalog.data().faction(type)
+		var label: String = String(entry["name"])
+		if label.is_empty():
+			label = ShipNames.pick(type, faction, int(named.get(type, 0)))
+			named[type] = int(named.get(type, 0)) + 1
+		if label.is_empty():
+			label = ShipCatalog.entry_text(type, "name").to_upper()
+		var at: UniversePos = anchor.plus_local(entry["offset"])
+		var basis: Basis = ScenarioLoader.basis_facing(entry["forward"])
+		var cap: CapitalBody = null
+		if bool(entry["standin"]):
+			cap = (world.get_node(^"Standins") as StandinDirector).add_capital(StringName(ShipCatalog.entry_text(type, "capital_class")), faction, label, at, basis,
+					world.rest_velocity())
+		else:
+			var made: CapitalShip = CapitalShip.create(type, faction, label, world.rest_velocity())
+			if made != null:
+				world.spawn(made, at, basis)
+				made.set_course(Vector3.ZERO, world.rest_velocity())
+				cap = made
+		if cap == null:
+			push_warning("Main: capital %s could not be built" % type)
+			continue
+		cap.set_meta(&"line_up_type", type)
+		scenario_capitals.append(cap)
 
 
 # A respawn restarts the lessons: the ships leading a route are placed again. Wing ships and fighting ships stay in play.

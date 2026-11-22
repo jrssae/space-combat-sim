@@ -679,7 +679,7 @@ How to start and what is new come first; everything for you to judge is in one l
 
 ```
 .tools/godot/godot --path .                                  # the start screen
-.tools/godot/godot --path . -- --scenario=civilian_showcase   # straight into a scene, as scripts and tests start
+.tools/godot/godot --path . -- --scenario=ship_showcase   # straight into a scene, as scripts and tests start
 ```
 
 - **Start screen:** New game (Civilian escort, then the sandbox scenes), Load game (greyed out), Free flight (encounters on
@@ -762,8 +762,8 @@ known.
 **The preview panel (M5-T43).** On a category's ring, the highlighted entry shows at the right: its hull as a slowly turning
 green wireframe (only the near side's lines), its name in the IFF colour, class and faction, a hull bar, range and closing
 speed (`+` closing). A Bokmai adds its cargo pods, a buoy and an objective have no hull bar, an unknown contact shows `NO ID`
-and nothing about what it is, and a ship attacking you is flagged `ATTACKING YOU`. `play civilian_showcase` has every civilian
-hull; `targetmenu highlight "saturn 8 tanker"` points at an entry without picking it and `state target_preview` shows the panel.
+and nothing about what it is, and a ship attacking you is flagged `ATTACKING YOU`. `play ship_showcase` has every civilian
+hull parked (the line-up, M10-T64); `targetmenu highlight "saturn 8 tanker"` points at an entry without picking it and `state target_preview` shows the panel.
 
 From the console: `targetmenu open`, `targetmenu pick enemies`, `targetmenu pick 1` (an entry in page order, 0 at the top, clockwise) or
 `targetmenu pick "raider 2"`, `targetmenu back`, `targetmenu close`; `state target_menu` shows it.
@@ -793,8 +793,9 @@ one; `state encounters` shows the schedule; `encounters clear` sends every encou
 
 ## Civilian ships, turrets and the belt
 
-- `play civilian_showcase` (or **New game**, **Civilian ships**): all nine hulls parked in view, a Bokmai with three pods and
-  one with none. `set settings.texture_detail low` and `high` switch every ship's surface detail live (Settings, Video, "Ship
+- `play ship_showcase` (or **New game**, **Ship line-up**): every finalized hull parked and held still beside Babylon 5, a row
+  per faction (the civilians, a Bokmai with three pods and one with none, in row 1). `goto "ROW 4 EA CAPITALS"` (nav buoys
+  name each row) and fly down the rows. `set settings.texture_detail low` and `high` switch every ship's surface detail live (Settings, Video, "Ship
   texture detail"); `set settings.hull_sheen 0` shows the old flat paint.
 - Civilians carry no guns of their own but have light turrets, which fire only at ships that attacked them or a civilian or
   ally within 2 km. The showcase starts with no raiders (its hulls sit 1.8 km ahead: fly up to them); `spawn raider ai
@@ -896,7 +897,7 @@ T20's own, taken at the end on the RX 6950 XT, are in `references/screenshots/T2
 - [x] **T06 Subtitles:** the callsign and line at the bottom read in cockpit and chase views and during the cinematic; the
       radio squelch before and after a line is at the right level.
 
-**Civilian ships and turrets** (`civilian_showcase`; `T40 seams/`, `Civilian colours and hull sheen/`, `M5 civilian ships review/`)
+**Civilian ships and turrets** (`ship_showcase`; `T40 seams/`, `Civilian colours and hull sheen/`, `M5 civilian ships review/`)
 
 - [x] **T12 to T15, T22, T27 The nine hulls** look like their ships: the Saturn 3 (its added engine section and raised pod
       stack, Q20, Q23), the Saturn 4 and 8 transports and tankers, the Skylark (sand), the Narn transport (dark green; which

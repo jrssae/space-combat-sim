@@ -235,7 +235,7 @@ func test_new_game_lists_the_missions_then_the_five_scenes() -> void:
 	assert_eq(_page_title(front), "New game")
 	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
 	assert_eq(page.option_ids(), [&"mission_demo", &"mission_second", &"combat_sandbox", &"dogfight", &"instructor_route",
-			&"civilian_showcase", &"station_showcase"] as Array[StringName])
+			&"ship_showcase", &"station_showcase"] as Array[StringName])
 	assert_eq(_focused_text(front), "Demo Run")
 	assert_true(page.show_right, "the text sits in its own box beside the list (M7-T31)")
 
@@ -273,7 +273,7 @@ func test_new_game_starts_each_sandbox_scene() -> void:
 	var front: FrontEnd = await _front_end()
 	await _pad(&"ui_accept")
 	var page: NewGameSelect = front.frame().current_page() as NewGameSelect
-	assert_eq(page.option_ids(), [&"combat_sandbox", &"dogfight", &"instructor_route", &"civilian_showcase", &"station_showcase"] as Array[StringName],
+	assert_eq(page.option_ids(), [&"combat_sandbox", &"dogfight", &"instructor_route", &"ship_showcase", &"station_showcase"] as Array[StringName],
 			"with no missions the scenes alone")
 	for id: StringName in page.option_ids():
 		page.button_of(id).pressed.emit()
@@ -281,7 +281,7 @@ func test_new_game_starts_each_sandbox_scene() -> void:
 		GameFlow.make_request(&"sandbox", &"combat_sandbox"),
 		GameFlow.make_request(&"sandbox", &"dogfight"),
 		GameFlow.make_request(&"sandbox", &"instructor_route"),
-		GameFlow.make_request(&"sandbox", &"civilian_showcase"),  # M5-T16
+		GameFlow.make_request(&"sandbox", &"ship_showcase"),  # M5-T16
 		GameFlow.make_request(&"sandbox", &"station_showcase"),  # M7-T12
 	] as Array[Dictionary])
 	for request: Dictionary in game.played:
