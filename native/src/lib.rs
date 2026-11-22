@@ -87,3 +87,7 @@ mod dock_rows;
 // M10-T09: the blast model's reach, an engine-free kernel and its shell on the core.
 mod blast_kernels;
 mod blast_rows;
+
+// M10-T12: the capital beams, an engine-free kernel and its rows for GDScript.
+mod beam_kernels;
+mod beam_rows;

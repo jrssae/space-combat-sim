@@ -87,6 +87,11 @@ func ships() -> Array[CapitalShip]:
 	return _ships
 
 
+## The ship the `capital` console has in focus, or null.
+func focused() -> CapitalShip:
+	return _console.focused() if _console != null else null
+
+
 ## The flight step's output row of `ship` in the last tick, or -1.
 func row_of(ship: CapitalShip) -> int:
 	return _out_slots.find(ship.flight_slot) if flown.has(ship) else -1

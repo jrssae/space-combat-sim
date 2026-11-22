@@ -46,6 +46,25 @@ extends Resource
 @export var burst_shots: int = 1
 @export var burst_spacing_s: float = 0.0
 
+@export_group("Capital")
+## M10-T12 to T16 (D12.9): the weapon's `loadouts.json` id and role (`ac` anti-capital: the hull's `damage_scale` multiplies
+## it, Q54; `af` anti-fighter; `dual`; `fighter`) and its one trait (`kinetic`, `push`, or none).
+@export var weapon_id: StringName = &""
+@export var role: StringName = &""
+@export var weapon_trait: StringName = &""
+
+@export_group("Beam")
+## M10-T12 (D12.9): 0 not a beam, 1 pulsed (one tick, `damage` on the first hull on the line), 2 sustained (on for `beam_on_s`,
+## `beam_dps` each tick to the first hull under the line). A beam fires every `shot_interval_s` (its cycle), after
+## `beam_charge_s` of charge, as far as `beam_range_m`, its emitter turning at `turret_traverse_deg_s`; it is drawn in
+## `bolt_color`, `beam_width_m` across. A pulsed emitter with `burst_shots` barrels lands them as one pulse.
+@export_enum("none", "pulsed", "sustained") var beam_kind: int = 0
+@export var beam_dps: float = 0.0
+@export var beam_on_s: float = 0.0
+@export var beam_charge_s: float = 0.0
+@export var beam_range_m: float = 0.0
+@export var beam_width_m: float = 3.0
+
 
 ## A capacitor sized for this weapon, full.
 func make_capacitor() -> WeaponCapacitor:
@@ -53,9 +72,19 @@ func make_capacitor() -> WeaponCapacitor:
 
 
 const WEAPON_DIR: String = "res://assets/weapons"
+const BEAM_NONE: int = 0
+const BEAM_PULSED: int = 1
+const BEAM_SUSTAINED: int = 2
 
 
-## The bolt colour of every weapon spec under `assets/weapons`, each once: what the impact flashes are warmed for at load.
+## The spec of capital weapon `id` (`assets/weapons/<id>.tres`), or null.
+static func of_weapon(id: StringName) -> WeaponSpec:
+	var path: String = "%s/%s.tres" % [WEAPON_DIR, id]
+	return load(path) as WeaponSpec if ResourceLoader.exists(path) else null
+
+
+## The bolt colour of every bolt weapon's spec under `assets/weapons` (not the beams'), each once: what the impact flashes
+## are warmed for at load.
 static func known_bolt_colors() -> Array[Color]:
 	var out: Array[Color] = []
 	for file: String in DirAccess.get_files_at(WEAPON_DIR):
@@ -63,6 +92,6 @@ static func known_bolt_colors() -> Array[Color]:
 		if not path.ends_with(".tres"):
 			continue
 		var spec := load(path) as WeaponSpec
-		if spec != null and not out.has(spec.bolt_color):
+		if spec != null and spec.beam_kind == BEAM_NONE and not out.has(spec.bolt_color):
 			out.append(spec.bolt_color)
 	return out

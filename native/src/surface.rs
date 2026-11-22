@@ -569,9 +569,20 @@ fn capsule_entry(a: V, b: V, h: f64, r: f64) -> Option<f64> {
 /// none. Ties go to the earlier volume.
 pub fn sweep(s: &Surface, a: V, b: V, inflate: f64) -> Option<(f64, usize)> {
     let mut best: Option<(f64, usize)> = None;
+    let ab = sub3(b, a);
+    let len = len3(ab);
     for (k, v) in s.volumes.iter().enumerate() {
-        if segment_point_distance(a, b, v.centre) > v.reach + inflate.abs() * 1.8 {
+        let grown = v.reach + inflate.abs() * 1.8;
+        if segment_point_distance(a, b, v.centre) > grown {
             continue; // the grown volume lies within its reach plus the growth at a corner
+        }
+        // A volume the segment cannot reach before the best entry so far cannot be first (M10-T12: a beam's long line
+        // along a hull passes near most of its volumes).
+        if let Some((t_best, _)) = best
+            && len > 1e-9
+            && (dot3(sub3(v.centre, a), ab) / len - grown) / len > t_best
+        {
+            continue;
         }
         if let Some(planes) = s.hulls.get(k).filter(|p| !p.is_empty()) {
             if let Some(t) = hull_entry(a, b, planes, inflate)

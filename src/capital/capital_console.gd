@@ -63,7 +63,7 @@ func register() -> void:
 				"doc": "Wall-clock cost of the last tick's capital flight, us (a readout)"},
 	}), flight)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Capital ships (M10-T07): info, list, spawn <type> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>, disable, scuttle, hulks",
+			"Capital ships (M10-T07): info, list, spawn <type[:faction]> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>, disable, scuttle, hulks",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"a"),
 					ConsoleArg.float_optional(&"b", null)]), _cmd, flight)
 
@@ -198,7 +198,10 @@ func _hulk_text() -> String:
 
 
 # A capital of `type` ahead of the player, at the player's velocity, flying on.
-func _spawn(type: StringName, ahead_m: float) -> ConsoleResult:
+func _spawn(type_text: StringName, ahead_m: float) -> ConsoleResult:
+	# `<type>:<faction>` spawns it for another side (M10-T12: a renegade Omega for the beams to fight).
+	var parts: PackedStringArray = String(type_text).split(":", false, 1)
+	var type: StringName = StringName(parts[0]) if not parts.is_empty() else &""
 	if ShipCatalog.entry_text(type, "role") != "capital":
 		return ConsoleResult.failure("capital spawn <%s> [ahead_m]" % "|".join(PackedStringArray(ShipCatalog.data().ids_where("role", "capital"))))
 	var world: WorldFrame = flight.get_parent() as WorldFrame
@@ -206,7 +209,7 @@ func _spawn(type: StringName, ahead_m: float) -> ConsoleResult:
 	if world == null or player == null or not is_instance_valid(player.ship):
 		return ConsoleResult.failure("capital spawn: no player to place it by")
 	_spawned += 1
-	var faction: StringName = ShipCatalog.data().faction(type)
+	var faction: StringName = StringName(parts[1]) if parts.size() > 1 else ShipCatalog.data().faction(type)
 	# A class with a name list gives its ships their names (the Omegas' Greek ones); the rest are numbered by type.
 	var label: String = ShipNames.pick(type, faction, _named.get(type, 0))
 	if label.is_empty():
@@ -254,6 +257,11 @@ func _pool() -> JumpPointPool:
 		flight.get_parent().add_child(_points)
 		_points.prepare(2)
 	return _points
+
+
+## The ship in focus (the newest when none was named), or null: what `beam` acts on too (M10-T12).
+func focused() -> CapitalShip:
+	return _focused()
 
 
 func _focused() -> CapitalShip:

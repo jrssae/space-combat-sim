@@ -112,7 +112,7 @@ static func _land(spec: BlastSpec, centre: Vector3, faction: StringName, shooter
 		var picks: Dictionary = {}  # the hull that answers for a piece -> [distance, point, volume, place, damageable]
 		var order: Array[int] = []
 		for k: int in hull_ids.size():
-			var damageable: Damageable = _hurtable(hull_ids[k])
+			var damageable: Damageable = hurtable(hull_ids[k])
 			if damageable == null:
 				continue
 			var near: Array = [distances[k], points[k]]
@@ -145,8 +145,9 @@ static func _land(spec: BlastSpec, centre: Vector3, faction: StringName, shooter
 	max_us = maxi(max_us, last_us)
 
 
-# The hull of instance `hull_id` when a blast can still hurt it: in play, or flying in the tier; null otherwise.
-static func _hurtable(hull_id: int) -> Damageable:
+## The hull of instance `hull_id` when a blast (or a beam, M10-T12) can still hurt it: in play, or flying in the tier; null
+## otherwise.
+static func hurtable(hull_id: int) -> Damageable:
 	var damageable := instance_from_id(hull_id) as Damageable if is_instance_id_valid(hull_id) else null
 	if damageable == null or damageable.hull.destroyed:
 		return null

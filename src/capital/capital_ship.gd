@@ -14,6 +14,8 @@ extends CapitalBody
 ##   points, a mount within reach, what a lost section takes with it. An engine lost or the reactor's power down a stage refits
 ##   the drive (the live engines' nozzles at the power left); a section that blows destroys the hull. `mount_works`, `bay_works`
 ##   and `damage.fire_rate()` are what its weapons and launches read (T12 to T17).
+## - **Beams** (M10-T12, D12.9): its beam mounts are emitters on the native beam rows (`CapitalBeams`), from its `_ready` until
+##   it leaves the tree; a lost mount or section, a disabled or destroyed ship stops them.
 ## - **Disabled** (M10-T10, D12.7), it winds down in stages (`hulk_stages`): power first (weapons, bays; its lights die,
 ##   `CapitalHulkLights`), then control (the helm stops steering), then thrust (the mains' last setting winds down to cold), and
 ##   then it drifts on its last motion with no force, still a target whose sections can be hit and blow. In the tier it is a
@@ -129,6 +131,7 @@ func _ready() -> void:
 	_register_surfaces()
 	if _world_signals != null:
 		CapitalFlight.attach(_world_signals).join(self)
+		CapitalBeams.attach(_world_signals).join(self)  # its beam emitters on the native rows (M10-T12)
 	var destruction: DestructionDirector = DestructionDirector.current()
 	if destruction != null:
 		destruction.watch_capital(self)  # its death is drawn and takes it out of play (M10-T21)
@@ -142,6 +145,9 @@ func _exit_tree() -> void:
 		var flight: CapitalFlight = CapitalFlight.of(_world_signals)
 		if flight != null:
 			flight.leave(self)
+		var beams: CapitalBeams = CapitalBeams.of(_world_signals)
+		if beams != null:
+			beams.leave(self)
 	_world_signals = null
 	if _core != null and is_instance_valid(_core):
 		_core.clear_surface(get_instance_id())
@@ -281,6 +287,11 @@ func chunk_mesh(chunk_name: String) -> Mesh:
 
 
 ## Whether weapon mount `mount` can fire, and bay `bay` launch (M10-T08: alive, its section standing, the ship fighting).
+## Its hardpoints as generated (`hardpoints.json`): weapons, bays, engines, ... Shared and read-only to the caller.
+func hardpoints() -> Dictionary:
+	return _hardpoints
+
+
 func mount_works(mount: String) -> bool:
 	return damage.mount_works(mount)
 

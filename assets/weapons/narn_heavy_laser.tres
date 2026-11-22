@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://bsfm2yga6u8tr" path="res://src/weapons/weapon_spec.gd" id="1_weapon_spec"]
+
+[resource]
+script = ExtResource("1_weapon_spec")
+shot_interval_s = 12.0
+damage = 0.0
+bolt_color = Color(3.0, 0.7, 0.25, 1)
+capacitor_cost_per_shot = 0.0
+turret_range_m = 8000.0
+turret_spread_deg = 0.0
+turret_traverse_deg_s = 3.0
+weapon_id = &"narn_heavy_laser"
+role = &"ac"
+beam_kind = 2
+beam_dps = 117.0
+beam_on_s = 4.0
+beam_charge_s = 1.0
+beam_range_m = 8000.0
+beam_width_m = 4.0

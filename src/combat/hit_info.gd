@@ -18,6 +18,8 @@ const CAUSE_VORTEX: StringName = &"vortex"
 const CAUSE_CARRIER_LOST: StringName = &"carrier_lost"
 ## A blast's damage (M10-T09, `BlastResolver`): a death, a section blowing, a missile's warhead.
 const CAUSE_BLAST: StringName = &"blast"
+## A capital's beam (M10-T12, `CapitalBeams`): a pulse, or a sustained beam's share of one tick.
+const CAUSE_BEAM: StringName = &"beam"
 ## A ship that never becomes a hulk (Vorlons, Shadows; M10-T10, `CapitalData.never_hulk`) was disabled and blew instead: no
 ## shooter, no kill credit.
 const CAUSE_NO_HULK: StringName = &"no_hulk"
@@ -38,7 +40,7 @@ var normal: Vector3 = Vector3.ZERO
 ## Speed of the bolt (or the other body) relative to the target at impact.
 var relative_speed_mps: float = 0.0
 ## What did it: `bolt` (`HitResolver`), `ram` (`RamResolver`), `console` (`damage`, `kill`), `planet` (`PlanetImpact`),
-## `vortex_collapse` (a collapsing jump point) or `blast` (`BlastResolver`).
+## `vortex_collapse` (a collapsing jump point), `blast` (`BlastResolver`) or `beam` (`CapitalBeams`).
 var cause: StringName = CAUSE_BOLT
 ## Hull points actually removed; 0 until the `Damageable` has applied the hit (and for god mode or a dead hull).
 var applied: float = 0.0

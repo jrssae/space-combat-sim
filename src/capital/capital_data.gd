@@ -99,6 +99,14 @@ static func weapon_kind(id: String) -> String:
 	return str((entry as Dictionary).get("kind", "")) if entry is Dictionary else ""
 
 
+## Weapon `id`'s row in the loadouts (`kind`, `damage`, `arc_deg`, ...), empty when they do not list it (M10-T12). Shared and
+## read-only to the caller.
+static func weapon_entry(id: String) -> Dictionary:
+	_read_loadouts()
+	var entry: Variant = _weapons.get(id)
+	return entry if entry is Dictionary else {}
+
+
 ## The class the loadouts give hull `id` (`fighter`, `small_craft`, `cruiser`, `capital`, `dreadnought`), "" when they do not
 ## list it (M10-T09: what a death's blast is sized by).
 static func hull_class(id: String) -> String:

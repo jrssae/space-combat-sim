@@ -649,6 +649,12 @@ const DOCK_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vec
 const BLAST_KERNEL_FILE: String = "res://native/src/blast_kernels.rs"
 const BLAST_KERNEL_USER: String = "res://native/src/blast_rows.rs"
 const BLAST_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::rows::", "use crate::surface::"]
+## The capital beams (M10-T12): the emitters' cycle, pick and line, held to the kernels' rules; they import the row tables, the
+## surfaces' maths and the vector maths only. The shell (`beam_rows.rs`) is what GDScript reaches.
+const BEAM_KERNEL_FILE: String = "res://native/src/beam_kernels.rs"
+const BEAM_KERNEL_USER: String = "res://native/src/beam_rows.rs"
+const BEAM_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::rows::", "use crate::surface::",
+		"use crate::v3::"]
 ## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
 ## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
@@ -719,6 +725,9 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(BLAST_KERNEL_FILE, KERNEL_FORBIDDEN, BLAST_KERNEL_USE_ALLOWED))
 	assert_true(FileAccess.get_file_as_string(BLAST_KERNEL_USER).contains("use crate::blast_kernels"), "the shell reads the blast kernel")
 	assert_false(FileAccess.get_file_as_string(BLAST_KERNEL_FILE).contains("static mut"), "no shared state in the blast kernel")
+	violations.append_array(_engine_free_violations(BEAM_KERNEL_FILE, KERNEL_FORBIDDEN, BEAM_KERNEL_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string(BEAM_KERNEL_USER).contains("use crate::beam_kernels"), "the shell reads the beam kernel")
+	assert_false(FileAccess.get_file_as_string(BEAM_KERNEL_FILE).contains("static mut"), "no shared state in the beam kernel")
 	assert_false(FileAccess.get_file_as_string(DOCK_KERNEL_FILE).contains("static mut"), "no shared state in the docking kernel")
 	assert_true(FileAccess.get_file_as_string(RAM_TRACKER_USER).contains("use crate::ram_tracker::"), "the shell reads the ram tracker")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_FILE).contains("pub fn ships_near("), "the voice kernel holds ships_near")

@@ -7239,3 +7239,72 @@ src/ai/tier_director.gd             a disabled capital demoted as a hulk row; ma
 - **Known gaps.** Fighters have no sections, so nothing disables one yet (a `Ship.hulk` row and promotion exist since M4). A near
   hulk's body row carries no `FLAG_HULK` (only tier rows do), so a near brain still sees it as a ship. A hulk demoted mid-wind-down
   skips the rest of its few seconds of thrust.
+
+### 22.6 Beams (D12.9; T12)
+
+```
+native/src/beam_kernels.rs   the emitters, engine-free: cycle (charge, fire, cool), target pick, the turn, the line to the first hull
+native/src/beam_rows.rs      ScsBeamRows, the shell: emitters added and removed per ship, works and rate, orders, one step a tick
+src/capital/beam_mounts.gd   BeamMounts, pure: a hull's beam mounts with their WeaponSpec, arc and damage scale, packed for the rows
+src/capital/capital_beams.gd CapitalBeams: joins each CapitalShip's emitters, steps the rows, lands the hits, hands the lines over
+src/capital/beam_console.gd  the `beam` command and the `beams` provider
+src/weapons/beam_draw.gd     BeamDraw: one multimesh per kind (pulsed, sustained), visual only
+assets/shaders/beam.gdshader the tube: additive, bright where it faces the eye
+assets/weapons/<id>.tres     a WeaponSpec per capital beam weapon of data/capitals/loadouts.json (20; fighter beams wait for T04)
+```
+
+- **Kinds** (T03, Q53; `docs/assets-capital.md`, "Kinds and base numbers"). A **pulsed** beam lands `damage` once on the first hull
+  on its line (a twin array's barrels as one pulse); a **sustained** beam stays on for `beam_on_s` and lands `beam_dps x delta` each
+  tick on the first hull under its line. Each emitter charges (`beam_charge_s`: 0.5 s pulsed, 1 s sustained, placeholders), fires,
+  and is ready again `shot_interval_s` (the cycle) after a pulse, or the cycle less its time on after a sustained beam ends; a lower
+  rate of fire (`CapitalDamage.fire_rate()`, half with the bridge lost) stretches the cooldown. The `WeaponSpec`'s new groups:
+  `weapon_id`, `role`, `weapon_trait` (Capital) and `beam_kind`, `beam_dps`, `beam_on_s`, `beam_charge_s`, `beam_range_m`,
+  `beam_width_m` (Beam); the turn is `turret_traverse_deg_s` (4 deg/s pulsed, 3 deg/s sustained), the colour `bolt_color`.
+- **Mounts.** `BeamMounts` reads the hull's `hardpoints.json` `weapons[]` of kind `beam`: the place and `forward` in the body frame
+  (rotating pieces at rest), the arc's half angle from the mount's `arc_deg`, else half the weapon's `arc_deg` in the loadouts, else a
+  hemisphere. An anti-capital weapon's damage is multiplied by the hull's `damage_scale` (Q54). The Omega's six `ea_sweep_beam`s: two
+  fore and four aft hemispheres.
+- **Aim and pick.** An emitter's aim is a unit vector in its ship's frame, turned toward its target at its turn rate (resting forward
+  with none; a sustained beam that loses its target holds its line for the rest of its time on), so a beam sweeps after a crossing
+  target. It fires once its aim is within half a degree of the target's centre (or the angle half the target's size subtends). It
+  holds its ship's order (`CapitalBeams.set_order`, the `capital` brain's target from T16) when that bears, else picks the nearest
+  hostile capital, else the nearest hostile ship, in range and inside the mount's arc, every 15 ticks while it has none (staggered by
+  emitter). Hostility is by what its ship perceives (`rows::seen_ix`, so a disguised renegade is left alone until it is revealed),
+  from a table by the core's faction indices kept in step with `Factions`. Only a row with a target marker is a target: a hull-only
+  piece (a capital's rotor) still stops a line.
+- **The line.** From the emitter along its aim to its range, over the core's hulls in the sweep's order (near hulls, then tier rows):
+  a big hull is met on its surface volumes (`surface::sweep` on the part of the line inside its bounding sphere; the volume names the
+  section, as a bolt's does), any other on 0.7 of its bounding sphere; its own ship's bodies (hull and rotors) never stop it; mines
+  and sheltered ships do not. `surface::sweep` now skips a volume the segment cannot reach before the best entry so far (same answers,
+  about a third less work on a long line along a hull).
+- **Landing** (`CapitalBeams`, main thread, priority 195: after the flight, before the hit resolver). Each hit in the step's order
+  through the hull's `Damageable` (`BlastResolver.hurtable`: in play or in the tier) with cause `beam` and `HitInfo.volume`, so a
+  capital's lands on that volume's section through `CapitalDamage`; friend or foe stops the line, but only a hull a bolt of the
+  shooter's side could hurt takes damage (`can_be_hit_by`, friendly fire). The turrets' attacker memory (`SimCore.note_hit`) and
+  the disguise (`Transponder.note_hit`: a renegade's beam on Earth Alliance gives it away) as for a bolt.
+- **Works.** A lost mount, a lost section, a disabled (hulk) or destroyed ship stops its beams: `mount_lost`, `section_changed`,
+  `ship_disabled`, `restored` and `destroyed` push each emitter's `works` and the rate to the rows. `CapitalBeams.hold(ship, held)`
+  holds a ship's fire (an order for the AI and the missions). A ship out of the rows (parked in a pool) holds its state; a far ship in
+  the tier keeps firing from its tier row, against the rows around it.
+- **Drawing** (`BeamDraw`, a child of `World`, `_process`). One `MultiMeshInstance3D` per kind, so every beam of a kind is one draw
+  call: each beam two tubes (the colour's glow, and a core a third as wide, whiter), never thinner than 2 px on screen. A sustained
+  beam is drawn as the last tick left it; a pulse, one tick in the game, is drawn for 0.4 s, fading. A rebase moves the lines held.
+- **Threads.** All of it on the main thread from the rows of the tick's sync, in emitter order, with no randomness: 1 and 6 threads
+  land the same hits byte for byte (`test_beam_threads`, two Omegas beaming each other across the seeded battle, a third of the
+  hits on fighters crossing the lines). The parity recordings are untouched.
+- **Cost** (release library, debug Godot, beside the seeded battle's 106 rows, Omega pairs 3.2 km apart beaming each other): the
+  native step about 4 us per firing beam (12 emitters, 4 firing: 18 us; 96 emitters, 32 firing: 127 us), mostly the line through
+  the target's surface volumes; an idle emitter well under 1 us. Landing in GDScript about 6 to 9 us per hit (a sustained beam lands
+  every tick): 93 us with 4 beams on, 302 us with 32. On the maintainer's GPU (Forward+) beams add two draw calls.
+- **Console.** Command `beam [info|fire [player|selection|<capital name>]|clear]` on the `capital` command's focus; provider `beams`;
+  `capital spawn <type>:<faction>` spawns a capital for another side (`info.md`).
+- **Tests.** Rust `beam_kernels::tests` (a pulse charges, lands once, cools; a sustained beam's ticks and dps; the first hull on the
+  line, friend or foe; arcs and the turn; a lost mount; half rate; the disguise; capitals before fighters and an order before both; a
+  hull-only piece; its own hull; a ship out of the rows; determinism); GUT `test_beam_mounts` (every capital beam's spec against the
+  loadouts, the Omega's mounts, the damage scale, arcs); `test_capital_beams` (the main scene on the Omega: fore emitters beam a
+  hull dead ahead by section; a lost mount stops while its sister fires; a disabled ship is silent; a disguised renegade left alone
+  until its beam gives it away; the console); `test_beam_threads`; `test_sim_core`'s guard holds the kernel to the kernels' rules.
+- **Known gaps.** The `capital` brain (T16) gives no orders yet, so beams pick their own targets; a renegade capital is not disguised
+  at spawn (T02 disguises fighters; a test or the console does it); mounts on a rotating piece would aim from the piece at rest; the
+  `push` trait (Brakiri) is carried but not applied; charging draws nothing and a hit draws no impact flash; the far tier's own beam
+  rolls (`tier_fire`, the stand-ins) stay until T45; interceptors never stop beams (D12.9), so T13 has nothing to do here.

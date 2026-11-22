@@ -47,7 +47,8 @@ func test_warming_makes_every_weapon_colour_and_a_first_flash_builds_nothing() -
 	for file: String in DirAccess.get_files_at(WeaponSpec.WEAPON_DIR):
 		if file.ends_with(".tres"):
 			var spec := load("%s/%s" % [WeaponSpec.WEAPON_DIR, file]) as WeaponSpec
-			if spec != null and not from_files.has(spec.bolt_color):
+			# A beam (M10-T12) makes no impact flash: its colour is not warmed.
+			if spec != null and spec.beam_kind == WeaponSpec.BEAM_NONE and not from_files.has(spec.bolt_color):
 				from_files.append(spec.bolt_color)
 	assert_gt(from_files.size(), 5, "the station grid's and the ships' weapons have their own colours")
 	assert_eq(colours.size(), from_files.size(), "every spec's colour is known")

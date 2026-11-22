@@ -1,0 +1,21 @@
+[gd_resource type="Resource" script_class="WeaponSpec" load_steps=2 format=3]
+
+[ext_resource type="Script" uid="uid://bsfm2yga6u8tr" path="res://src/weapons/weapon_spec.gd" id="1_weapon_spec"]
+
+[resource]
+script = ExtResource("1_weapon_spec")
+shot_interval_s = 8.0
+damage = 80.0
+bolt_color = Color(0.8, 2.8, 0.7, 1)
+capacitor_cost_per_shot = 0.0
+turret_range_m = 6000.0
+turret_spread_deg = 0.0
+turret_traverse_deg_s = 4.0
+weapon_id = &"drazi_particle_beam"
+role = &"ac"
+beam_kind = 1
+beam_dps = 0.0
+beam_on_s = 0.0
+beam_charge_s = 0.5
+beam_range_m = 6000.0
+beam_width_m = 3.0
