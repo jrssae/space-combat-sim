@@ -63,6 +63,16 @@ func jump_hold_range_m() -> float:
 	return JumpCapability.hold_range_m(length_m(), spec.jump_hold_range_m if spec != null else 0.0, anchor_m)
 
 
+## Whether it is a disabled hulk (M10-T10, D12.7): no power or no control, not destroyed. The bench's boxes never are.
+func is_hulk() -> bool:
+	return false
+
+
+## It is going into the low-attention tier as a hulk: from now it drifts with no force (M10-T10).
+func settle_as_hulk() -> void:
+	pass
+
+
 ## The mesh its far proxy draws (M4-T23).
 func drawn_mesh() -> Mesh:
 	return null

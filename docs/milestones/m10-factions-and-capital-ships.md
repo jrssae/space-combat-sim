@@ -369,7 +369,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T07 | E | Capital ships in the game: `ShipSpec`, native flight, compound collision, section hit volumes, tier, jump points | T05, T61 | Opus | done |
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | done |
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | done |
-| T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | in progress |
+| T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | done |
 | T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
 | T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | not started |
 | T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | not started |
@@ -711,6 +711,23 @@ parity green.
   confirm: the Thunderbolt as the heavy fighter (x1.3 on `d0` only) and the tankers' fuel cargo (x1.5 `d0`, x1.25 radius and
   impulse); a strike carrier's death (cruiser reactor, 1 800 at the centre out to 1 km) now kills its own fighters within
   about 750 m (in the escort mission a carrier killed at its standoff takes all six raiders it launched).
+- **T10 done (2026-11-21).** Disabled hulks (`docs/architecture.md` §22.5, D12.7, Q19): `HulkStages` (pure) winds a disabled
+  capital down: power at once (weapons, bays; its lights die over 3 s, stuttering, through `CapitalHulkLights`, its glowing
+  surfaces on material copies of its own so its sisters stay lit), control at 2 s (no steering, no assist; the mains hold their
+  last setting), the drive's share falling evenly to cold at 6 s, then a drift on its last motion and tumble with no force (the
+  pull aside). Numbers in `data/capitals/capitals.json` `hulks`. Its brain is released (`set_course` ignored); it stays
+  `Targetable` and its sections still blow it up later; a point it held collapses (`JumpCapability.is_disabled` reads
+  `CapitalBody.is_hulk`). In the tier a hulk row (`FLAG_HULK`, cruise ignored), cold at once when demoted, marked when disabled in
+  the tier (`TierDirector.mark_hulk`), a hulk again when promoted. Q19's cap: `CapitalFlight.hulks` (`HulkRoster`, cap 8), the
+  oldest scuttled at the next tick (`Damageable.kill`, new cause `scuttle`, its death and blast through the director). Console
+  `capital disable`, `capital hulks [cap]`, provider `hulk`, `hulks` (`info.md`). No native code: the drift was native already
+  (Jolt, the tier); a Rust test pins a capital hulk row. Tests (staged copy): cargo 278 (new: the capital hulk row); GUT 192/192 over 22 files (new:
+  `test_hulk_stages` 7, `test_capital_hulks` 6, `test_hulk_threads` 1; with the capital, tier, blast, jump, destruction, strike
+  carrier, subsystem, core, parity and thread files); compile check 1 091 scripts clean. Cost: GDScript per capital per tick (debug build), about 0.9 us more while live, about 2 us more while winding
+  down, less once cold (no helm); the capital flight's tick with one hulk beside the seeded battle 46 us. **Open:** the stage times
+  and the cap of 8 are placeholders to confirm; fighters have no sections, so none is disabled yet; a near hulk's body row has no
+  `FLAG_HULK` (near brains still see a ship); the lights' copies miss a later `texture_detail` change, and a far hull in the tier
+  is drawn lit.
 - **T12 to T15 (weapons):** D12.9 with T03's numbers: beams and their batched draw, interceptors and the EA hulls'
   screens, capital turrets and missiles, mines placed by scenario data and laid in battle, with the radar's short range
   (Q20). Done when AC9, apart from the stand-ins' removal (T45).

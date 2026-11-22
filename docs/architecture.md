@@ -3380,8 +3380,8 @@ src/perf/standins/capital_standin.gd   park_for_tier, unpark_from_tier; the dire
   its row with it (`ShipPool.release`); a capital freed by the bench's `clear` loses its row at the next tick.
 - **A hulk's promotion** brings the body back as a hulk: `Ship.hulk` (its assist off for good; `set_hulk` clears its command),
   its pilot dropped, its trigger released, so it coasts under Jolt as it drifted in the tier; demoted again it goes back into a
-  row as a hulk. The pool clears `hulk` when it hands the ship out again. Today nothing disables a ship without destroying it, so this
-  is a row state and a test, not gameplay.
+  row as a hulk. The pool clears `hulk` when it hands the ship out again. Since M10-T10 a disabled capital goes in as a hulk row
+  (§22.5); no fighter is disabled without being destroyed yet.
 - **What a tier ship is not, in T21.** Not hittable (no sweep, no ram, no blast: T22), not drawn (T23: a dot from its row; its
   far dot leaves with its hidden body), not on the player's radar or targetable by the player (both read active markers; T23),
   not fuelled, not heard. It stays a wing member: `WingDirector` counts a tier-parked, undestroyed ship as in play, so a
@@ -7020,6 +7020,9 @@ src/capital/capital_damage.gd      CapitalDamage, pure: damage by section (T08, 
 src/capital/capital_section.gd     CapitalSection, pure: one section's points, state and what it holds
 src/capital/capital_mount.gd       CapitalMount, pure: one weapon mount's own points and reach
 src/capital/capital_console.gd     the `capital` provider and command
+src/capital/hulk_stages.gd         HulkStages, pure: a disabled hull's wind-down (T10, §22.5)
+src/capital/hulk_roster.gd         HulkRoster, pure: the hulks kept, oldest first, and the cap (T10)
+src/capital/capital_hulk_lights.gd CapitalHulkLights: one disabled ship's own glow materials, dimmed (T10)
 ```
 
 - **The body.** `CapitalShip.create(type, faction, name, velocity)` reads the catalogue entry (`role: capital`, its
@@ -7056,7 +7059,7 @@ src/capital/capital_console.gd     the `capital` provider and command
   disables only with every engine gone too. A hit on a lost section passes half on to the nearest live section, as does damage
   past a section's last point. The rules are `section_damage` in the same file. Effects: an engine lost or a power stage refits
   the drive (`CapitalPropulsion.live_layout`: the live engines' nozzles at their thrust as built, an engine left alone on one
-  side listed on both, scaled by the power), a disabled hull gets no command and drifts; `mount_works`, `bay_works`,
+  side listed on both, scaled by the power), a disabled hull winds down and drifts (§22.5); `mount_works`, `bay_works`,
   `damage.fire_rate()` and the signals `section_changed`, `mount_lost`, `ship_disabled` are what T09 to T18 build on. All of it
   runs per event in GDScript (about 6 us a hit); the native change is the sweep's volume column.
 - **The tier.** A capital beyond the radius is a capital row (§17.14) holding `cruise_velocity`, the velocity its helm holds;
@@ -7164,3 +7167,52 @@ src/combat/blast_resolver.gd  BlastResolver: lands a blast (damage, push), chain
   (spheres, surfaces, a turned hull, flags and order).
 - **Known gaps.** The staged break-up's secondary blasts are T11's; a dead capital's unblown magazines and fuel do not yet
   blow with it. Blasts do not see through or around hulls: a hull behind another takes the same blast.
+
+### 22.5 Disabled hulks (D12.7; T10)
+
+```
+src/capital/hulk_stages.gd          HulkStages, pure: the stages, the drive's and the lights' share, the command shaped by stage
+src/capital/hulk_roster.gd          HulkRoster, pure: the hulks kept, oldest first; the ones past the cap
+src/capital/capital_hulk_lights.gd  CapitalHulkLights: a disabled ship's glowing surfaces on materials of its own, dimmed
+src/capital/capital_ship.gd         the wind-down wired in: flight_command, flight_assist, advance_hulk, is_hulk, settle_as_hulk, scuttle
+src/capital/capital_flight.gd       advances each disabled ship's wind-down before its command; keeps the roster and the cap
+src/ai/tier_director.gd             a disabled capital demoted as a hulk row; mark_hulk for one disabled in the tier
+```
+
+- **Staged loss** (`HulkStages`, numbers in `data/capitals/capitals.json` `hulks`). A capital is disabled when its power or its
+  control is gone (D12.5, §22.2). From that tick: **power** goes at once (`mount_works` and `bay_works` false, so it stops
+  fighting; its lights die over `lights_fade_s`, 3 s, stuttering); the helm still steers on its last orders with what the drive has
+  left. **Control** goes at `control_loss_s` (2 s): no steering, no thrusters, the assist off; the mains hold the setting the helm
+  last gave. **Thrust**: the drive's share falls evenly from 1 at the loss to 0 at `cold_s` (6 s), scaling the command (the drive
+  keeps the power it had before the loss until then, `_power_for_drive`); cold, the drive is refitted to no thrust and the hull
+  drifts on its last motion and tumble with no force, the pull aside (it stays in the flight step with an empty command, so the
+  core's pull still acts; zero damping as every body). Its brain is released: `set_course` is ignored from the loss.
+- **Still in play.** It stays `Targetable` (kind capital) and its sections take hits as before, so a magazine or fuel section at
+  0, or the reactor's overload, blows it up later through the destruction director (D12.8's break-up is T11's). A jump point it
+  held collapses (`JumpCapability.is_disabled` reads `CapitalBody.is_hulk`; M6-T23's rule).
+- **The lights.** On the loss its hull's and rotors' glowing surfaces (a `StandardMaterial3D` with emission, a shader with
+  `emission_energy` or the sheen's `glow_energy`) get copies of their materials as surface overrides, and `_process` sets their
+  strength to the stage's lights level while it changes; whole again (`Damageable.restore`), the shared materials come back. The
+  copies do not follow a later `texture_detail` change, and a hulk drawn as a far hull in the tier (`FarHulls`) shares the lit mesh.
+- **Rows.** In the low-attention tier it is a `FLAG_HULK` row (§17.14): no force, no brain, never removed for being idle, its cruise
+  ignored, the pull still on it. A hulk demoted goes cold at once (`settle_as_hulk`); one disabled while in the tier has its row
+  marked (`TierDirector.mark_hulk`) and goes cold; promoted, its own damage keeps it a hulk. The drift is native already (Jolt near,
+  the tier's integrator far); T10 adds no native code, only a Rust test that a capital hulk row ignores its cruise.
+- **The cap (Q19).** `CapitalFlight.hulks` (`HulkRoster`) notes each disabled ship in order; past `cap` (8) the oldest are scuttled
+  (`Damageable.kill`, cause `scuttle`, no shooter, no kill credit) at the start of the next tick, so a scuttle's blast never lands
+  inside the hit that disabled the newest. Destroyed or healed hulks leave the roster.
+- **Threads and cost.** All of it is per event or per disabled ship on the main thread; the rows it changes are the ones a body
+  or a tier row already gives, so 1 and 6 threads give the same rows (`test_hulk_threads`). Per capital per tick in GDScript (debug
+  build): about 0.9 us more while live (two calls beside the helm's 2.7 us), about 2 us more while winding down, and less than
+  before once cold (no helm).
+- **Console.** `capital disable` (shuts the focused ship's reactors down), `capital hulks [cap]`; provider fields `hulk` and
+  `hulks` (`info.md`).
+- **Tests.** `test_hulk_stages` (unit: the file's numbers, the stages in order, the drive's even wind-down and steering only with
+  control, the lights' stutter and fade, finish and reset, the roster's cap); `test_capital_hulks` (the main scene, on the Omega:
+  the stages and the cold drift, still a target that blows on its magazine, the lights out beside a lit sister and back whole, a
+  held point collapsing, a hulk row ignoring its cruise and coming back a hulk, one disabled in the tier, the cap's scuttle, the
+  console); `test_hulk_threads` (1 vs 6 threads beside the seeded battle); `test_capital_damage` (the reactor's loss now winds
+  down before it drifts); Rust `tier::tests` (a capital hulk row drifts and falls, its cruise ignored).
+- **Known gaps.** Fighters have no sections, so nothing disables one yet (a `Ship.hulk` row and promotion exist since M4). A near
+  hulk's body row carries no `FLAG_HULK` (only tier rows do), so a near brain still sees it as a ship. A hulk demoted mid-wind-down
+  skips the rest of its few seconds of thrust.

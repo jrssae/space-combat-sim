@@ -2,10 +2,11 @@ class_name CapitalConsole
 extends RefCounted
 ## The `capital` provider and command (M10-T07): the capital ships in play, one in focus (the newest by default), and ways to
 ## spawn one, set its helm, open its own jump point, list its sections and hurt a section or a mount (M10-T08), so the capital
-## path can be driven from a live build.
+## path can be driven from a live build; disable one and read or set the hulks kept (M10-T10).
 
 const PROVIDER: StringName = &"capital"
-const ACTIONS: Array[StringName] = [&"info", &"list", &"spawn", &"helm", &"jump", &"focus", &"sections", &"damage"]
+const ACTIONS: Array[StringName] = [&"info", &"list", &"spawn", &"helm", &"jump", &"focus", &"sections", &"damage",
+		&"disable", &"hulks"]
 ## How far ahead of the player `capital spawn` places a ship, m, unless told.
 const SPAWN_AHEAD_M: float = 2000.0
 
@@ -49,6 +50,9 @@ func register() -> void:
 				"doc": "Weapon mounts that work, of all"},
 		&"bays": {"get": func() -> String: return _live_text(_focused().damage.live_bays().size(), _focused().damage.bay_sections.size()) if _focused() != null else "",
 				"doc": "Launch bays that work, of all"},
+		&"hulk": {"get": _hulk_text, "doc": "A disabled hull's wind-down (M10-T10): its stage (live, power lost, control lost, cold), its lights and drive left"},
+		&"hulks": {"get": func() -> String: return "%d of %d, %d scuttled" % [_live_hulks(), flight.hulks.cap, flight.scuttled],
+				"doc": "Disabled hulks kept, the cap (Q19; the oldest past it scuttled), and how many were scuttled"},
 		&"collision": {"get": _collision_text, "doc": "Hull shapes, rotors, sections, and whether the core holds the surfaces"},
 		&"broadcast_km": {"get": func() -> float: return _focused().targetable.broadcast_range_m / 1000.0 if _focused() != null else 0.0,
 				"type": TYPE_FLOAT, "doc": "How far it is heard, km (by class)"},
@@ -59,7 +63,7 @@ func register() -> void:
 				"doc": "Wall-clock cost of the last tick's capital flight, us (a readout)"},
 	}), flight)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Capital ships (M10-T07): info, list, spawn <type> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>",
+			"Capital ships (M10-T07): info, list, spawn <type> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>, disable, hulks [cap]",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"a"),
 					ConsoleArg.float_optional(&"b", null)]), _cmd, flight)
 
@@ -85,6 +89,10 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 			return _sections()
 		&"damage":
 			return _damage(a, args[&"b"])
+		&"disable":
+			return _disable()
+		&"hulks":
+			return _hulks(a)
 	var ship: CapitalShip = _focused()
 	if ship == null:
 		return ConsoleResult.line("no capital ships")
@@ -128,6 +136,56 @@ func _damage(target: String, amount: Variant) -> ConsoleResult:
 	var s: CapitalSection = ship.damage.sections[section]
 	return ConsoleResult.line("%s: %.0f on %s, now %s %.0f/%.0f; %s" % [ship.targetable.display_name, info.applied, target,
 			CapitalSection.state_name(s.state), s.hp, s.max_hp, _state_text()])
+
+
+# Disables the focused ship as a lost reactor does: each reactor takes a console hit of its points left (god mode aside).
+func _disable() -> ConsoleResult:
+	var ship: CapitalShip = _focused()
+	if ship == null:
+		return ConsoleResult.failure("capital disable: no capital ship")
+	if ship.is_hulk():
+		return ConsoleResult.line("%s is already disabled (%s)" % [ship.targetable.display_name, _hulk_text()])
+	for s: CapitalSection in ship.damage.sections.values():
+		if s.kind == CapitalSection.REACTOR and not s.lost():
+			var info := HitInfo.new(ship.get_instance_id(), 0, &"", s.hp, ship.global_transform * s.box.get_center(), Vector3.ZERO,
+					0.0, HitInfo.CAUSE_CONSOLE)
+			info.set_meta(CapitalShip.SECTION_META, s.name)
+			info.set_meta(CapitalShip.REST_POINT_META, s.box.get_center())
+			ship.damageable.apply_hit(info)
+	if not ship.is_hulk():
+		return ConsoleResult.failure("capital disable: %s has no reactor to shut down (%s)" % [ship.targetable.display_name, _state_text()])
+	return ConsoleResult.line("%s disabled: %s" % [ship.targetable.display_name, _hulk_text()])
+
+
+# Lists the hulks kept, oldest first; with a number, sets the cap first (below 0: keep every one).
+func _hulks(cap_text: String) -> ConsoleResult:
+	if not cap_text.is_empty():
+		if not cap_text.is_valid_int():
+			return ConsoleResult.failure("capital hulks [cap]")
+		flight.set_hulk_cap(int(cap_text))
+	var lines := PackedStringArray()
+	for key: int in flight.hulks.keys():
+		var ship: CapitalShip = CapitalShip.of_body(key)
+		if ship != null and ship.is_hulk():
+			lines.append("%s: %s%s" % [ship.targetable.display_name, ship.hulk_stages.stage_name(), ", in the tier" if ship.is_tier_parked() else ""])
+	lines.append("%d of %d kept, %d scuttled" % [_live_hulks(), flight.hulks.cap, flight.scuttled])
+	return ConsoleResult.success(lines)
+
+
+func _live_hulks() -> int:
+	var count: int = 0
+	for key: int in flight.hulks.keys():
+		var ship: CapitalShip = CapitalShip.of_body(key)
+		if ship != null and ship.is_hulk():
+			count += 1
+	return count
+
+
+func _hulk_text() -> String:
+	var ship: CapitalShip = _focused()
+	if ship == null:
+		return ""
+	return "%s, lights %.2f, drive %.2f" % [ship.hulk_stages.stage_name(), ship.hulk_stages.lights_level(), ship.hulk_stages.thrust_level()]
 
 
 # A capital of `type` ahead of the player, at the player's velocity, flying on.

@@ -38,6 +38,13 @@
   "power_stage_level": 0.5,
   "mount_reach_m": 10.0
  },
+ "hulks": {
+  "_doc": "M10-T10 (D12.7, Q19): a disabled capital loses power at once (its weapons, bays and lights), control at control_loss_s (the helm stops steering, the mains hold their last setting), and its drive winds down to cold at cold_s, after which it drifts with no force; its lights die over lights_fade_s. cap: hulks kept at once, the oldest scuttled past it.",
+  "control_loss_s": 2.0,
+  "cold_s": 6.0,
+  "lights_fade_s": 3.0,
+  "cap": 8
+ },
  "mount_hit_points": {
   "_doc": "M10-T08 (Q53, docs/assets-capital.md 'Sections, mounts and blasts'): a mount's own hit points, by its weapon's kind (data/capitals/loadouts.json), else by the hardpoint's kind.",
   "by_weapon_kind": {

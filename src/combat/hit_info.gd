@@ -18,6 +18,8 @@ const CAUSE_VORTEX: StringName = &"vortex"
 const CAUSE_CARRIER_LOST: StringName = &"carrier_lost"
 ## A blast's damage (M10-T09, `BlastResolver`): a death, a section blowing, a missile's warhead.
 const CAUSE_BLAST: StringName = &"blast"
+## A disabled hulk scuttled past the cap on hulks kept (M10-T10, Q19, `CapitalFlight`): no shooter, no kill credit.
+const CAUSE_SCUTTLE: StringName = &"scuttle"
 
 ## Instance id of the `Damageable` (or its ship) that was hit.
 var target_id: int = 0

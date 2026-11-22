@@ -19,7 +19,9 @@ extends Node
 ## fighter as a sphere, a capital as its hull box (fix round 1).
 ##
 ## A hulk (M12 groundwork): a tier row flagged a hulk drifts with no force and no brain and is never removed for being idle;
-## promotion brings it back as a hulk (`Ship.hulk`: no pilot, no thrust, no assist), not a live ship.
+## promotion brings it back as a hulk (`Ship.hulk`: no pilot, no thrust, no assist), not a live ship. A disabled capital
+## (M10-T10, D12.7) goes in as a hulk row, cold at once, and one disabled while in the tier becomes one (`mark_hulk`); promoted,
+## its own damage keeps it a hulk.
 ##
 ## Tier brains and fire (M4-T22): a tier fighter's hosted driver is handed to the tier (`AiPilotDriver.set_tiered`), so the
 ## AI step thinks for it at `tier_brain_hz` on the same contact grid as the near brains; its parked cannon's gate fires and
@@ -301,6 +303,15 @@ func forget_capital(cap: CapitalBody) -> void:
 		_sim.core.tier_remove(body_id)  # dies, not a promotion (fix round 1)
 
 
+## Makes capital `cap`'s tier row a hulk (it was disabled while in the tier: it drifts from now) or a live row again (whole
+## again). False when it has no row.
+func mark_hulk(cap: CapitalBody, on: bool) -> bool:
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	if cap == null or sim == null or sim.core == null or not _tiered_capitals.has(cap.get_instance_id()):
+		return false
+	return bool(sim.core.tier_set_hulk(cap.get_instance_id(), on))
+
+
 ## Fighters and capitals in the tier now.
 func tier_fighters() -> int:
 	return _tiered_ships.size()
@@ -385,6 +396,9 @@ func _demote_capital(sim: SimCore, cap: CapitalBody) -> bool:
 			cap.damageable.bounding_radius, cap.targetable.broadcast_range_m, cap.damageable.hull.fraction())
 	sim.core.tier_set_control(body_id, cap.cruise_velocity, PackedFloat64Array(), 0.0, false)
 	sim.core.tier_set_box(body_id, cap.half_extents())  # cleared of rocks by its hull, not its bounding sphere (fix round 1)
+	if cap.is_hulk():
+		sim.core.tier_set_hulk(body_id, true)
+		cap.settle_as_hulk()
 	var hulls: FarHulls = FarHulls.attach(world)
 	sim.core.tier_set_proxy(body_id, hulls.class_of(cap.drawn_mesh()) if hulls != null else -1, FarDots.DEFAULT_PAINT)
 	FarDots.attach(world)

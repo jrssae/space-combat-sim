@@ -131,3 +131,28 @@ fn a_row_with_no_far_hull_is_always_a_dot_and_no_view_keeps_every_hull() {
     t.remove(7);
     assert!(t.dotted.is_empty(), "the column follows the rows");
 }
+
+// M10-T10 (D12.7): a disabled capital is a hulk row: its cruise is ignored, it keeps its velocity and its tumble bit for bit
+// with nothing pulling, and falls with the pull like any body.
+#[test]
+fn a_capital_hulk_drifts_on_its_last_motion_and_ignores_its_cruise() {
+    let v = Vector3::new(40.25, -3.5, 12.0);
+    let spin = Vector3::new(0.0, 0.002, 0.001);
+    let mut t = TierRows::default();
+    t.add(KIND_CAPITAL, 9, 0, -9, 0, Vector3::new(9000.0, 0.0, 0.0), v, Basis::IDENTITY, spin, 0);
+    t.cruise[0] = Vector3::new(-200.0, 0.0, 0.0);
+    t.hulk[0] = true;
+    run(&mut t, &[], 600);
+    assert_eq!(t.velocities[0], v, "its cruise does not pull it");
+    assert_eq!(t.angular[0], spin, "it keeps its tumble");
+    assert_eq!(t.accel[0], Vector3::ZERO);
+    assert_ne!(t.bases[0], Basis::IDENTITY, "and turns with it");
+    let g = Vector3::new(0.0, -0.05, 0.0);
+    let mut falling = TierRows::default();
+    falling.add(KIND_CAPITAL, 9, 0, -9, 0, Vector3::ZERO, v, Basis::IDENTITY, spin, 0);
+    falling.cruise[0] = v;
+    falling.hulk[0] = true;
+    run(&mut falling, &[g], 600);
+    let dv = sub(falling.velocities[0], v);
+    assert!(f64::from(length(sub(dv, scale(g, 10.0)))) < 0.01, "it falls with the pull, nothing holding it off: {dv:?}");
+}

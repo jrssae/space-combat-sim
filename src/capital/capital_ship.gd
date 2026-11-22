@@ -12,8 +12,12 @@ extends CapitalBody
 ##   of fire see the real shape; a hit or ram is named by its section (`section_hit`), by the volume the core's sweep entered.
 ## - **Damage by section** (M10-T08, D12.5). Its `Damageable` routes every hit to `damage` (`CapitalDamage`): the section's
 ##   points, a mount within reach, what a lost section takes with it. An engine lost or the reactor's power down a stage refits
-##   the drive (the live engines' nozzles at the power left); a disabled ship gets no thrust and drifts; a section that blows
-##   destroys the hull. `mount_works`, `bay_works` and `damage.fire_rate()` are what its weapons and launches read (T12 to T17).
+##   the drive (the live engines' nozzles at the power left); a section that blows destroys the hull. `mount_works`, `bay_works`
+##   and `damage.fire_rate()` are what its weapons and launches read (T12 to T17).
+## - **Disabled** (M10-T10, D12.7), it winds down in stages (`hulk_stages`): power first (weapons, bays; its lights die,
+##   `CapitalHulkLights`), then control (the helm stops steering), then thrust (the mains' last setting winds down to cold), and
+##   then it drifts on its last motion with no force, still a target whose sections can be hit and blow. In the tier it is a
+##   hulk row. `CapitalFlight` keeps the cap on hulks (Q19) and scuttles the oldest past it.
 ## - **In play.** `Targetable` of kind capital, heard as far as its class broadcasts (`CapitalData.broadcast_range_m`); in the
 ##   low-attention tier it is a capital row (`CapitalBody`); it opens and holds its own jump point at its anchor when its type
 ##   can (`open_own_point`). Destroyed, the `DestructionDirector` draws its blast and it leaves play (`leave_play`).
@@ -26,6 +30,8 @@ signal section_hit(section: String, info: HitInfo)
 signal section_changed(section: String, state: int)
 signal mount_lost(mount: String)
 signal ship_disabled
+## Its drive is cold: from now it drifts with no force (M10-T10).
+signal hulk_cold
 
 const GROUP: StringName = &"capital_ships"
 ## Contact points Jolt keeps for the hull, which the ram tracker reads by body RID (as a ship's, `Ship.CONTACTS_REPORTED`).
@@ -56,6 +62,8 @@ var section_hits: Dictionary = {}
 var flight_slot: int = -1
 ## Its damage by section (M10-T08): states, mounts, engines and bays that still work.
 var damage: CapitalDamage = null
+## How it winds down once disabled (M10-T10).
+var hulk_stages: HulkStages = null
 
 static var _by_body: Dictionary[int, CapitalShip] = {}
 
@@ -70,6 +78,8 @@ var _core: Object = null
 var _world_signals: WorldFrame = null
 var _volume_sections: Dictionary[String, PackedStringArray] = {}  # per body: each surface volume's section, as the core holds them
 var _full_layout: ThrusterLayout = null  # every engine's nozzles, as built
+var _drive_power: float = 1.0  # the power the drive last had; kept while a disabled hull winds down
+var _lights: CapitalHulkLights = null  # its own glow, dimming, while disabled
 
 
 ## The capital ship of catalogue type `type`, for `p_faction`, called `display_name`, holding `velocity` (World frame). Null
@@ -144,6 +154,8 @@ func _process(_delta: float) -> void:
 	var fraction: float = Engine.get_physics_interpolation_fraction()
 	for rotor: CapitalRotor in rotors:
 		rotor.visual_pivot.transform = Transform3D(Basis(rotor.axis, rotor.visual_angle(fraction)), rotor.pivot)
+	if _lights != null and hulk_stages.lights_fading():
+		_lights.apply(hulk_stages.lights_level())
 
 
 func half_extents() -> Vector3:
@@ -161,18 +173,56 @@ func set_faction(p_faction: StringName) -> void:
 	_show_marks_for_faction()
 
 
-## Sets the helm: the bow toward `heading` (World; zero holds the bow where it is) and `velocity` to hold (World frame).
+## Sets the helm: the bow toward `heading` (World; zero holds the bow where it is) and `velocity` to hold (World frame). A
+## disabled hull's brain is released: no new orders reach its helm.
 func set_course(heading: Vector3, velocity: Vector3) -> void:
+	if is_hulk():
+		return
 	helm.heading = heading.normalized() if heading.length_squared() > 1e-12 else Vector3.ZERO
 	cruise_velocity = velocity
 
 
-## This tick's command for the flight step (the helm on `cruise_velocity`); none for a disabled or destroyed hull, which drifts.
+## This tick's command for the flight step: the helm on `cruise_velocity`, shaped by the stage a disabled hull has reached
+## (`HulkStages.shape`); none for a destroyed or cold hull, which drifts.
 func flight_command() -> FlightCommand:
-	if damage.is_disabled or damage.is_destroyed:
+	if damage.is_destroyed or hulk_stages.is_cold():
 		return FlightCommand.new()
-	helm.velocity = cruise_velocity
-	return helm.command(global_basis, linear_velocity)
+	var asked: FlightCommand = null
+	if hulk_stages.has_control():
+		helm.velocity = cruise_velocity
+		asked = helm.command(global_basis, linear_velocity)
+	return hulk_stages.shape(asked)
+
+
+## Whether the flight step flies its assist this tick: the helm's, gone with control.
+func flight_assist() -> bool:
+	return hulk_stages.assist_on()
+
+
+## One tick of a disabled hull's wind-down (`CapitalFlight` calls it before the command); cold, the drive is refitted to none.
+func advance_hulk(delta: float) -> void:
+	if hulk_stages.advance(delta) and hulk_stages.is_cold():
+		_refit_drive()
+		hulk_cold.emit()
+
+
+func is_hulk() -> bool:
+	return damage != null and damage.is_disabled and not damage.is_destroyed
+
+
+func settle_as_hulk() -> void:
+	if hulk_stages.is_cold():
+		return
+	hulk_stages.finish()
+	_refit_drive()
+	if _lights != null:
+		_lights.apply(0.0)
+	hulk_cold.emit()
+
+
+## Scuttled past the cap on hulks (Q19): destroyed with no shooter, so the destruction director draws its death and blast.
+func scuttle() -> bool:
+	return damageable.kill(HitInfo.CAUSE_SCUTTLE)
 
 
 ## The force its engines applied on the last tick, World frame (the ram resolver takes it off a contact's velocity change).
@@ -292,6 +342,8 @@ func _build(loaded: ShipSpec, display_name: String) -> bool:
 	damage = CapitalDamage.build(sections, _hardpoints, spec.hull_max)
 	damage.section_changed.connect(section_changed.emit)
 	damage.mount_lost.connect(mount_lost.emit)
+	hulk_stages = HulkStages.from_rules(hash(display_name))
+	damage.disabled.connect(_on_disabled)  # before the signal, so its listeners see the wind-down started
 	damage.disabled.connect(ship_disabled.emit)
 	damage.drive_changed.connect(_refit_drive)
 	damageable.hit_router = route_hit
@@ -436,7 +488,7 @@ func _refit_drive() -> void:
 	var live: Dictionary = CapitalPropulsion.live_layout(_hardpoints, damage.live_engines())
 	var refit: ThrusterLayout = live["layout"] if (live["layout"] as ThrusterLayout).valid else _full_layout
 	var base: ShipSpec = CapitalPropulsion.flight_spec(spec, CapitalPropulsion.main_count(_full_layout))
-	var power: float = damage.power() if not damage.is_disabled and not damage.is_destroyed else 0.0
+	var power: float = _power_for_drive()
 	var per_nozzle: float = power * float(live["nozzle_scale"])
 	var scaled: ShipSpec = base.duplicate() as ShipSpec
 	scaled.pod_main_thrust = base.pod_main_thrust * per_nozzle
@@ -457,10 +509,46 @@ func _refit_drive() -> void:
 		flight.join(self)
 
 
-# Whole again (the console's heal, a rebuild): every section and mount, and the drive as built.
-func _on_restored() -> void:
-	damage.restore()
+# The power the drive flies with: the reactors' while it fights; while a disabled hull winds down, what it had before the loss
+# (its thrust then falls by the stage's share of the command); none once cold or destroyed.
+func _power_for_drive() -> float:
+	if damage.is_destroyed:
+		return 0.0
+	var power: float = damage.power()
+	if not damage.is_disabled and power > 0.0:
+		_drive_power = power
+		return power
+	return 0.0 if hulk_stages.is_cold() else _drive_power
+
+
+# Disabled: the wind-down starts, its lights get their own materials to dim; a hull already in the tier is a hulk row at once.
+func _on_disabled() -> void:
+	hulk_stages.start()
+	var roots: Array[Node] = [hull_piece]
+	for rotor: CapitalRotor in rotors:
+		roots.append(rotor.visual_pivot)
+	if _lights == null:
+		_lights = CapitalHulkLights.collect(roots)
 	_refit_drive()
+	if is_tier_parked():
+		var tier: TierDirector = TierDirector.current()
+		if tier != null:
+			tier.mark_hulk(self, true)
+		settle_as_hulk()
+
+
+# Whole again (the console's heal, a rebuild): every section and mount, the drive as built, its lights back on.
+func _on_restored() -> void:
+	var was_hulk: bool = is_hulk()
+	damage.restore()
+	hulk_stages.reset()
+	_drive_power = 1.0
+	if _lights != null:
+		_lights.release()
+		_lights = null
+	_refit_drive()
+	if was_hulk and is_tier_parked() and TierDirector.current() != null:
+		TierDirector.current().mark_hulk(self, false)
 
 
 # After a rebase moved the hull, the rotors are put beside it at once (they are not in the shifted group).

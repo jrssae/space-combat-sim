@@ -109,4 +109,4 @@ static func is_destroyed(ship: Node) -> bool:
 
 
 static func is_disabled(ship: Node) -> bool:
-	return ship is Ship and (ship as Ship).hulk
+	return (ship is Ship and (ship as Ship).hulk) or (ship is CapitalBody and (ship as CapitalBody).is_hulk())

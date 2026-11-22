@@ -3,8 +3,8 @@ extends RefCounted
 ## The capital ships' tuning (M8-T08, D83), read once from `data/capitals/capitals.json`: how long each class's jump drive
 ## needs after a jump before it can open another point, each faction's carrier doctrine (when its fighters go home and
 ## when the carrier flees; `CarrierTactics.DEFAULTS` lists the keys), how far each class is heard (M10-T07, Q51), and how its
-## sections and mounts take damage (M10-T08, D12.5), and the blasts' table (M10-T09, D12.6, `BlastTable`). Pure apart from the
-## reads.
+## sections and mounts take damage (M10-T08, D12.5), the blasts' table (M10-T09, D12.6, `BlastTable`) and how a disabled hull
+## winds down and how many hulks stay (M10-T10, D12.7, Q19). Pure apart from the reads.
 
 const PATH: String = "res://data/capitals/capitals.json"
 ## The weapons' kinds (M10-T03), for a mount's hit points.
@@ -12,6 +12,9 @@ const LOADOUTS_PATH: String = "res://data/capitals/loadouts.json"
 ## The section rules a file without `section_damage` falls back on (D12.5's numbers).
 const SECTION_DEFAULTS: Dictionary = {"reactor_overload": 0.5, "pass_on": 0.5, "headless_fire_rate": 0.5,
 		"power_stage_at": 0.5, "power_stage_level": 0.5, "mount_reach_m": 10.0}
+## The hulk rules a file without `hulks` falls back on (D12.7, Q19): when control goes and when the drive is cold after the ship
+## is disabled, how long its lights take to die, s, and how many hulks stay before the oldest is scuttled.
+const HULK_DEFAULTS: Dictionary = {"control_loss_s": 2.0, "cold_s": 6.0, "lights_fade_s": 3.0, "cap": 8}
 ## A mount neither table names has this many hit points (a medium mount's).
 const DEFAULT_MOUNT_HP: float = 800.0
 ## A class the file does not name recharges this long, s.
@@ -46,6 +49,13 @@ static func doctrine(faction: StringName) -> Dictionary:
 	var table: Variant = _read().get("carrier_doctrine")
 	var found: Variant = (table as Dictionary).get(String(faction)) if table is Dictionary else null
 	return (found as Dictionary).duplicate() if found is Dictionary else {}
+
+
+## Hulk rule `key` (`HULK_DEFAULTS` lists them): the file's `hulks` value, else the default.
+static func hulk_rule(key: String) -> float:
+	var table: Variant = _read().get("hulks")
+	var value: Variant = (table as Dictionary).get(key) if table is Dictionary else null
+	return float(value) if value is float or value is int else float(HULK_DEFAULTS.get(key, 0.0))
 
 
 ## Section rule `key` (`SECTION_DEFAULTS` lists them): the file's `section_damage` value, else the default.

@@ -1,8 +1,8 @@
 extends GutTest
 ## Damage by section on the Omega in the real main scene (M10-T08, D12.5, AC8's first clause): the player's bolts land on the
 ## section of the surface volume the core's sweep entered, and its points and the hull's go down together; engines lost take
-## their nozzles off the flight step and their mounts with them; the reactor shut down disables the hull, which then drifts,
-## and blows on its overload; a magazine at 0 blows and the destruction director takes the ship; the console lists and hurts
+## their nozzles off the flight step and their mounts with them; the reactor shut down disables the hull, which winds down and
+## then drifts (M10-T10), and blows on its overload; a magazine at 0 blows and the destruction director takes the ship; the console lists and hurts
 ## sections.
 
 const TYPE: StringName = &"ea_omega"
@@ -125,13 +125,16 @@ func test_engines_lost_take_their_nozzles_and_a_dead_reactor_leaves_a_drifting_h
 	assert_true(out.ok, out.error)
 	assert_eq(cap.damage.sections["reactor"].state, CapitalSection.State.DISABLED, "the reactor shut down")
 	assert_eq(disabled, [true], "power gone: disabled")
-	assert_eq(cap.flight_spec.pod_main_thrust, 0.0, "no thrust")
 	assert_false(cap.mount_works("beam_aft_top_r"), "the reactor's beams are gone")
 	assert_false(cap.mount_works("plasma_top_1"), "and nothing fires without power")
+	assert_eq(cap.hulk_stages.stage, HulkStages.Stage.POWER_LOST, "it winds down in stages (M10-T10)")
+	await _fly(cap.hulk_stages.cold_s + 0.5, func() -> bool: return cap.hulk_stages.is_cold())
+	assert_true(cap.hulk_stages.is_cold())
+	assert_eq(cap.flight_spec.pod_main_thrust, 0.0, "cold: no thrust")
 	assert_eq(cap.flight_command().rot, Vector3.ZERO, "the helm gives no command")
 	var v0: Vector3 = cap.linear_velocity
 	cap.set_course(Vector3.FORWARD, v0 + Vector3(0.0, 0.0, -20.0))
-	await _fly(6.0)
+	await _fly(3.0)
 	assert_lt((cap.linear_velocity - v0).length(), 0.05, "it drifts on its last motion")
 	assert_false(cap.damageable.hull.destroyed)
 	var destroyed: Array[CapitalBody] = []
