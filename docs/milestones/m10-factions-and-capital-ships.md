@@ -87,6 +87,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q58 | Bays and hulls (2026-11-22) | Omega and Nova: **one forward-facing bay** on the forward hull's front face above the two oval retro thrusters; both need refinement (the Nova's bay-mouth cut 0.80-0.84 is not accepted). Omega name letter fixed grey-white; no far marker (the HUD marker is enough). **Hyperion**: new reference `references/EA-Hyperion-V5c.stl` and colour stills in `references/Hyperion/`; 6 Starfuries from 3 single-fury bays (like Cobra bays) on **each side of the mid-spine bump**, re-docking in their own bays; a shuttle docking bay on the **rear of the conning tower**, launching over the Starfury bays. V5c's groove round the hull is not in the ship (paint lines only); its ball turrets are wrongly single-barrel (take the double-barrel turrets from `EA Hyperion Class Heavy Cruiser.stl`); the front antenna array: compare both STLs and **discuss with the maintainer** before building (T21, T22, T23, T17) |
 | Q59 | Ship line-up (2026-11-21) | The comparison mission is `ship_showcase`: every finalized hull is parked still in its faction's row beside Babylon 5 for fly-bys of scale and look; each hull task adds its own (T64) |
 | Q60 | Subsystem targeting by kind (2026-11-22) | **No sub-targeting of single parts**: the target menu offers a subsystem only by kind (weapons, engines, bays, and any other kind with several parts), never one part. Targeting a kind aims at **the nearest of its parts that is still active**, re-picked as parts are lost, until none is left. Single-part subsystems (bridge, reactor) are targeted as now (T18, T65) |
+| Q61 | Omega and Nova forward hull (2026-11-22) | The Omega and the Nova are the same ship with a rotating section inserted, and the launch bay and face details of both disagree with their STLs. **Checks first** (T66: slice sweeps, front-face depth maps, STL against STL, screenshot sheets), then **one shared EA forward hull** built from the best source per detail (T67), carrying the Omega's hull-letter placement on the Nova |
 
 ## The hulls
 
@@ -368,6 +369,8 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
 | T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | done |
 | T65 | E | Subsystems targeted by kind: the nearest still-active part of a weapons, engines or bays kind, no single-part picks (Q60) | T18 | Sonnet | not started |
+| T66 | A | Fidelity checks: slice sweeps, front-face depth maps, STL against STL and screenshot sheets (`tools/refview/fidelity.py`, Q61) | - | Sonnet | in progress |
+| T67 | A | Shared EA forward hull for the Omega and the Nova: best source per detail from T66, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement carried on the Nova (Q61) | T66 | Fable | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -529,6 +532,19 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   Capitals are not invulnerable (a player's shots can hurt them). Shots: `references/screenshots/M10-T64 ship showcase/`.
   **Thunderbolt added (2026-11-22):** a catalogue entry (`finalized`, a fighter, not player-flyable), `assets/ships/ea_thunderbolt.tres` (Starfury flight
   values as placeholders, M11 replaces them) and three parked in row 3 beside the Starfuries (x 2960 to 3040, z -2800 to -2880).
+
+### M10-T66 Fidelity checks (Q61)
+
+- **Goal:** find where the Omega's and Nova's launch bay and bow face depart from their STLs, and which STL holds which detail, with
+  a reusable tool: `tools/refview/fidelity.py` (`sweep`, `depth`, `shots`; STL against STL with `--align-bow --scale-search`).
+- **Done when:** the tool and its Python tests (`tools/procgen/tests/test_refview_fidelity.py`); outputs for both hulls and the
+  Omega STL against the Nova STL under `references/screenshots/M10-T66 fidelity checks/`. No hull changes.
+
+### M10-T67 Shared EA forward hull (Q61)
+
+- **Goal:** one forward hull for the Omega and the Nova from T66's results (the best source per detail), the Omega's hull-letter
+  placement carried on the Nova. **Done when:** face slices >= 0.90 against the chosen source, a depth-diff limit on the bow face,
+  both hulls building from the one definition.
 
 ### M10-T65 Subsystems targeted by kind (Q60)
 
