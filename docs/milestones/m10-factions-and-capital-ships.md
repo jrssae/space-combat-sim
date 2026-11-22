@@ -369,7 +369,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
 | T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | done |
 | T65 | E | Subsystems targeted by kind: the nearest still-active part of a weapons, engines or bays kind, no single-part picks (Q60) | T18 | Sonnet | not started |
-| T66 | A | Fidelity checks: slice sweeps, front-face depth maps, STL against STL and screenshot sheets (`tools/refview/fidelity.py`, Q61) | - | Sonnet | in progress |
+| T66 | A | Fidelity checks: slice sweeps, front-face depth maps, STL against STL and screenshot sheets (`tools/refview/fidelity.py`, Q61) | - | Sonnet | done |
 | T67 | A | Shared EA forward hull for the Omega and the Nova: best source per detail from T66, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement carried on the Nova (Q61) | T66 | Fable | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
@@ -539,6 +539,17 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   a reusable tool: `tools/refview/fidelity.py` (`sweep`, `depth`, `shots`; STL against STL with `--align-bow --scale-search`).
 - **Done when:** the tool and its Python tests (`tools/procgen/tests/test_refview_fidelity.py`); outputs for both hulls and the
   Omega STL against the Nova STL under `references/screenshots/M10-T66 fidelity checks/`. No hull changes.
+- **Done:** usage `python3 -m tools.refview.fidelity sweep|depth|shots <ref> <model> ...` (presets `omega`, `nova` STLs, `-build`
+  assets; `--outline` fills an open-shell STL). Findings: (1) the **Omega STL's bow is a solid armoured front plate** (flat face, the
+  launch bay's octagonal mouth flush in it, three spheres and two oval nozzles below, side pods); the **Nova STL's bow is an open frame**
+  with the deck structure, greebles and the bay's framed octagon with wedge fins visible behind (it is not watertight, so it needs
+  `--outline`). So the Nova STL holds the interior and bay-frame detail, the Omega STL the outer plate, pods and the hull letter.
+  (2) Against its own STL the build's face (z 170 to 320 m) scores slice IoU 0.62 to 0.73 (Omega) and 0.55 to 0.74 (Nova, open-shell
+  reference), front-face depth within 2 m only 28 % (Omega) and 23 % (Nova) over the first 400 m, the bay region carrying most of the
+  missing and extra area. (3) Nova STL fitted to the Omega STL's forward hull (outline IoU 0.73 over z 150 to 450): **scale 1.16**
+  about the bow tip, **30 m further forward**; the width ratio is 1.13 and the length ratio 1.14, so the forward hulls are the same
+  ship at about one scale. The Omega STL's drum is squared up by turning z 560 to 880 m by 45 degrees (a coarse span).
+  Screenshot sheets use fixed views, not camera-matched.
 
 ### M10-T67 Shared EA forward hull (Q61)
 
