@@ -33,6 +33,7 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `ea_panama` | earth_alliance | civilian | 180.0 x 44.8 x 29.6 | 600 | none | no | no |
 | `ea_construction_tender` | earth_alliance | civilian | 50.0 x 69.7 x 24.0 | 300 | none | no | no |
 | `starfury_renegade` | renegades | fighter | 9.8 x 15.4 x 7.5 | 300 | fixed `pulse_cannon_ef` | no | no |
+| `ea_thunderbolt` | earth_alliance | fighter | 16.2 x 12.0 x 6.3 | 300 | fixed `pulse_cannon_ef` | no | no |
 
 ## What other code reads from each entry
 
@@ -65,3 +66,4 @@ civilian's radio name.
 | `ea_panama` | `res://assets/ships/ea_panama.tres` | civilian | yes | no | - | pool | Panama transport | PANAMA |
 | `ea_construction_tender` | `res://assets/ships/ea_construction_tender.tres` | civilian | yes | no | - | pool | EA construction tender | TENDER |
 | `starfury_renegade` | `res://assets/ships/starfury_renegade.tres` | ally_starfury | yes | - | - | pool | - | - |
+| `ea_thunderbolt` | `res://assets/ships/ea_thunderbolt.tres` | ally_starfury | yes | - | - | pool | Thunderbolt | - |

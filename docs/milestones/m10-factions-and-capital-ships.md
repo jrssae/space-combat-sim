@@ -519,9 +519,9 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   `scripts/gen_ship_catalog.sh`. `tests/integration/test_ship_showcase.gd` fails until every finalized hull is parked,
   checks the capitals do not overlap and that all 24 hulls move under 0.5 m over 60 s with no hit landing (0.000 m
   measured). The old flee tests moved with the old file to `tests/fixtures/civilian_row.json` (`test_civilian_ships.gd`).
-  **Not added:** the Thunderbolt has a generated asset (`ea_thunderbolt`) but no catalogue entry or `ShipSpec` yet (M11 makes it
-  flyable), so it has no row spot; its hull task or M11 adds it. Capitals are not invulnerable (a player's shots can hurt
-  them). Shots: `references/screenshots/M10-T64 ship showcase/`.
+  Capitals are not invulnerable (a player's shots can hurt them). Shots: `references/screenshots/M10-T64 ship showcase/`.
+  **Thunderbolt added (2026-11-22):** a catalogue entry (`finalized`, a fighter, not player-flyable), `assets/ships/ea_thunderbolt.tres` (Starfury flight
+  values as placeholders, M11 replaces them) and three parked in row 3 beside the Starfuries (x 2960 to 3040, z -2800 to -2880).
 
 ### M10-T02 Factions as data
 

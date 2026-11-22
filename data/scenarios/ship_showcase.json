@@ -10,7 +10,7 @@
   {"type": "nav_buoy", "name": "ROW 3 EA SMALL CRAFT", "position": [3000, -1200, -2150]},
   {"type": "nav_buoy", "name": "ROW 4 EA CAPITALS", "position": [4000, -1200, -2150]}],
  "relations": [{"a": "raiders", "b": "earth_alliance", "relation": "neutral"}, {"a": "raiders", "b": "narn", "relation": "neutral"}, {"a": "raiders", "b": "centauri", "relation": "neutral"}, {"a": "raiders", "b": "brakiri", "relation": "neutral"}],
- "pools": {"saturn_8_transport": 1, "saturn_8_tanker": 1, "saturn_4_transport": 1, "saturn_4_tanker": 1, "saturn_3_freighter": 1, "skylark_transport": 1, "narn_transport": 1, "centauri_brezebel": 1, "brakiri_bokmai": 2, "raider_fighter": 3, "starfury_ally": 3, "ea_panama": 1, "ea_construction_tender": 1, "ea_shuttle": 1, "ea_atmo_shuttle": 1},
+ "pools": {"saturn_8_transport": 1, "saturn_8_tanker": 1, "saturn_4_transport": 1, "saturn_4_tanker": 1, "saturn_3_freighter": 1, "skylark_transport": 1, "narn_transport": 1, "centauri_brezebel": 1, "brakiri_bokmai": 2, "raider_fighter": 3, "starfury_ally": 3, "ea_thunderbolt": 3, "ea_panama": 1, "ea_construction_tender": 1, "ea_shuttle": 1, "ea_atmo_shuttle": 1},
  "capitals": [
   {"type": "raider_strike_carrier", "name": "RAIDER STRIKE CARRIER", "offset": [2000, -1200, -2800], "forward": [0, 0, -1], "standin": true},
   {"type": "ea_omega", "offset": [4000, -1200, -3957], "forward": [0, 0, -1]},
@@ -33,6 +33,9 @@
   {"type": "starfury_ally", "name": "STARFURY 1", "anchor": "origin", "offset": [2970, -1200, -2600], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
   {"type": "starfury_ally", "name": "STARFURY 2", "anchor": "origin", "offset": [3000, -1200, -2640], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
   {"type": "starfury_ally", "name": "STARFURY 3", "anchor": "origin", "offset": [3030, -1200, -2680], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
+  {"type": "ea_thunderbolt", "name": "THUNDERBOLT 1", "anchor": "origin", "offset": [2960, -1200, -2800], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
+  {"type": "ea_thunderbolt", "name": "THUNDERBOLT 2", "anchor": "origin", "offset": [3000, -1200, -2840], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
+  {"type": "ea_thunderbolt", "name": "THUNDERBOLT 3", "anchor": "origin", "offset": [3040, -1200, -2880], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
   {"type": "ea_panama", "name": "PANAMA TRANSPORT", "anchor": "origin", "offset": [3000, -1200, -2990], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
   {"type": "ea_construction_tender", "name": "CONSTRUCTION TENDER", "anchor": "origin", "offset": [3000, -1200, -3255], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
   {"type": "ea_shuttle", "name": "EA SHUTTLE", "anchor": "origin", "offset": [3000, -1200, -3440], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
