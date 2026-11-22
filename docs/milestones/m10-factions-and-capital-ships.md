@@ -372,7 +372,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | done |
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | done |
 | T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
-| T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | in progress |
+| T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | done |
 | T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | not started |
 | T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | not started |
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | not started |
@@ -781,6 +781,34 @@ parity green.
 - **T12 to T15 (weapons):** D12.9 with T03's numbers: beams and their batched draw, interceptors and the EA hulls'
   screens, capital turrets and missiles, mines placed by scenario data and laid in battle, with the radar's short range
   (Q20). Done when AC9, apart from the stand-ins' removal (T45).
+- **T12 done (2026-11-22).** Beams as native rows (`docs/architecture.md` §22.6, D12.9): every `CapitalShip`'s beam mounts are
+  emitters in the core (`beam_kernels.rs`, engine-free under the guard; `ScsBeamRows`), stepped once a tick on the main thread after
+  the sync. Pulsed (one tick, `damage` on the first hull on the line) and sustained (`beam_dps` each tick for `beam_on_s`, the
+  emitter sweeping after its target at its traverse); charge, fire, cool (the cycle stretched by `fire_rate()`); arcs from the
+  mount (`arc_deg` half angle, else half the weapon's, else a hemisphere); targets: the ship's order (`CapitalBeams.set_order`, for
+  T16), else the nearest hostile capital, else ship, by what the ship perceives (`rows::seen_ix`); the line meets a capital on its
+  surface volumes, so the hit lands on that section through T08 (cause `beam`), a fighter on 0.7 of its sphere; friend or foe stops
+  it, only a hull its side may hurt takes damage; a renegade's beam on Earth Alliance reveals it (`Transponder.note_hit`). A lost
+  mount or section, a hulk (T10) or a destroyed ship stops its beams (`CapitalBeams` pushes them on the ship's signals);
+  `CapitalBeams.hold` holds a ship's fire. `BeamMounts` (pure) and a `WeaponSpec` per capital beam weapon in `assets/weapons/`
+  (20; new groups Capital and Beam; the hull's `damage_scale` on anti-capital weapons, Q54). `BeamDraw`: one multimesh per kind
+  (two draw calls), glow and core tubes, at least 2 px wide, a pulse shown 0.4 s. `surface::sweep` now skips volumes the segment
+  cannot reach before its best entry (same answers). Console `beam [info|fire [player|selection|<capital>]|clear]`, provider
+  `beams`, `capital spawn <type>:<faction>` (`info.md`). Tests (staged copy): cargo 292 (new: `beam_kernels` 13); GUT
+  `test_beam_mounts` 6, `test_capital_beams` 4 (on the Omega: the fore emitters beam a hull dead ahead by section; a lost mount
+  stops while its sister fires; a disabled ship is silent; a disguised renegade left alone until its beam gives it away; the
+  console), `test_beam_threads` 1 (1 vs 6 threads byte for byte, 1 171 hits, 451 on fighters crossing the lines), with the sim
+  core guard, impact flash, weapon spec, console list, parity fixture, core threads and state, capital, blast, hit resolver,
+  flight parity fight, strike carrier, station and turret files: 21 + 176 + 112 passing; all unit tests 3 077 of 3 083 (the 6
+  failures `test_organic_test_hull_asset`, an asset the shared tree lacks); compile check 1 101 scripts clean. Cost (release
+  library, beside the seeded battle's 106 rows): the native step about 4 us per firing beam (12 emitters, 4 firing: 18 us; 96
+  emitters, 32 firing: 127 us), an idle emitter well under 1 us; landing in GDScript 6 to 9 us per hit (93 us with 4 beams on,
+  302 us with 32). GPU (RX 6950 XT, Forward+): an Omega and a renegade Omega beaming each other, 122 to 145 fps at 960x540;
+  shots `references/screenshots/M10-T12 beams/` (judging the look is (H)). **Open:** charge times (0.5 s pulsed, 1 s sustained),
+  colours and widths are placeholders; the `push` trait is carried, not applied; charging draws nothing and a hit no flash; a
+  renegade capital is not disguised at spawn (T02 does fighters only); a capital's rotor rows broadcast no disguise (beams skip
+  hull-only rows as targets for it); mounts on a rotating piece would aim from the piece at rest; fighter beams (Shadow, Vorlon)
+  wait for T04; the far stand-ins' beam rolls stay until T45.
 - **T16 and T17 (AI):** D12.10: the `capital` brain and fighters' attacks on capitals (tests on its choices and T03's
   balance fights); carriers launching by faction (tests on the launch poses and rates). Done when AC10.
 - **T18 (HUD):** Q17, on the radial framework; the M5 menu tests pass. Done when AC12.
