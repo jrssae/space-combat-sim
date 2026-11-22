@@ -17,9 +17,6 @@
       "Agamemnon", "Achilles", "Alexander", "Apollo", "Athena", "Charon", "Heracles", "Hector", "Jason", "Leonidas",
       "Nemesis", "Odysseus", "Orion", "Pericles", "Perseus", "Prometheus", "Poseidon", "Themistocles", "Theseus", "Ajax"
     ],
-    "ea_nova": [
-      "Schwarzkopf", "Nimitz", "Halsey", "Spruance", "Patton", "Bradley", "Eisenhower", "Montgomery", "Slim", "Zhukov",
-      "Foch", "Leclerc", "Garibaldi", "Bolivar", "Nelson", "Wellington", "Yi Sun-sin", "Togo", "Kutuzov", "Suvorov"
-    ]
+    "ea_nova": ["Schwarzkopf", "Einstein", "Bohr", "Curie", "Newton", "Galileo", "Kepler", "Copernicus", "Darwin", "Faraday", "Maxwell", "Planck", "Feynman", "Hawking", "Fermi", "Rutherford", "Tesla", "Pasteur", "Heisenberg", "Sagan"]
   }
 }

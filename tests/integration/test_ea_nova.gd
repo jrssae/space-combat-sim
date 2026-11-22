@@ -1,6 +1,6 @@
 extends GutTest
 ## The Nova-class dreadnought in the real main scene (M10-T23; the hull checklist's headless test), on its generated asset: it
-## spawns from its catalogue entry under the show's Schwarzkopf and then the next general on its list, each Nova wearing its own
+## spawns from its catalogue entry under the show's Schwarzkopf and then the next scientist on its list, each Nova wearing its own
 ## name's first letter, flies on the native flight step, takes the player's fire on its sections (flown by the renegades, so the
 ## Starfury's guns can hurt it, and wearing their red X) and, when destroyed, leaves play by the destruction director's plan
 ## with its sections gone from the core. Its own guns wait for T14.
@@ -112,10 +112,10 @@ func test_it_spawns_named_and_two_novas_wear_their_own_letters() -> void:
 	var spawned_again: ConsoleResult = DebugConsole.registry.execute_tokens(["capital", "spawn", String(TYPE), "9000"])
 	assert_true(spawned_again.ok)
 	var second: CapitalShip = flight.ships()[-1]
-	assert_eq(second.targetable.display_name, "EAS Nimitz", "the next name on the list")
+	assert_eq(second.targetable.display_name, "EAS Einstein", "the next name on the list")
 	var atlas: Dictionary = first._hardpoints["mark_atlas"]
 	assert_eq(_cell(first), HullMarks.cell_of("S", atlas), "the Schwarzkopf wears an S")
-	assert_eq(_cell(second), HullMarks.cell_of("N", atlas), "the Nimitz an N")
+	assert_eq(_cell(second), HullMarks.cell_of("E", atlas), "the Einstein an E")
 	var letters: Array[HullMarkNode] = _letters(first)
 	if letters.size() == 2:
 		assert_lt(letters[0].position.x * letters[1].position.x, 0.0, "one to each side")
