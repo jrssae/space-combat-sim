@@ -383,7 +383,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
 | T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
 | T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | not started |
-| T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | in progress |
+| T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | done |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
 | T25 | F | Narn G'Quan-class heavy cruiser | T19, T62 | Fable | not started |
 | T26 | F | Centauri Vorchan-class warship | T19, T62 | Fable | not started |
@@ -802,6 +802,28 @@ On top of it:
   spawn); sheet `references/screenshots/M10-T21 Omega/letters/letters_sheet.png`. **Open:** its weapons fire with T12 to T14 (the numbers
   are T03's loadout; no `WeaponSpec`s yet); the renegades' marking is T02's (the `livery` hook unused); at 100 km it is under
   a pixel (no far representation); the bay lights are hardpoints only until a light rig reads capital lights.
+- **T23 done (2026-11-21).** `ea_nova`, the Nova-class dreadnought (1 502.1 m; 14 182 triangles; one 4 096 px atlas, measured
+  56 MB high and 16 MB low): `tools/procgen/assets/ea_nova.py` on `parts/ea_nova.py` (measured off the STL), in the Omega's parts
+  and its look A (`styles/ea_capital.py`, unchanged: the Hyperion's palette is its own, `styles/ea_hyperion.py`), with the
+  loadout's 18 twin plasma turrets, 6 sweep beams at 80 % (2 fore, 4 aft) and 6 interceptors. **Bays** (the maintainer: the
+  Omega's launch bay, facing forward): six of the Omega's lit bays (`launch_bay(lit=True)`, 18 by 12 m mouths) facing the bow
+  from the hangar block's fore face, in the band the block stands out of the collar (roof, keel, four corners;
+  `parts/ea_nova.front_bays`), 4 Starfuries each (24). Compare 0.951 / 0.948 / 0.965, sizes within 1.1 %; 33 part sections at
+  0.903 or over, no exemptions (the hangar's fore plane moved from 575 to 600 m, aft of the bays' 32 m halls; planes through
+  the halls score 0.86 to 0.88). As built in `docs/assets-capital.md`, "`ea_nova`". In the game: `assets/ships/ea_nova.tres`
+  (6.8e8 kg by the Omega's skin rule, 1.0 m/s2, reaction with stand-in retros, 1.5 deg/s, 36 000 hull points, own jump
+  points), catalogue `ea_nova` (class `dreadnought`: 1 000 km broadcast; `capitals.json` gains a 120 s dreadnought recharge),
+  `capital spawn ea_nova`; names: twenty generals and admirals, `EAS Schwarzkopf` first; the name letter (its first letter, as
+  the Omega's) on each lower armour plate and the renegades' red X on both vertical plates and the roof (`hull_mark(...,
+  only_faction="renegades")`). Tests (staged copy): Python 75 (`test_ea_nova` 11 with the STL sections, `test_ea_omega`, the
+  capital parts, framework, loadouts, solids, style and glyph files); GUT `test_ea_nova` 4 (spawns named, two Novas show S and
+  N, flies and brakes, takes the Starfury's fire on the hangar and dies by the plan), with `test_hull_marks` 6,
+  `test_ship_names` 3, `test_ship_catalog_doc` 3, `test_jump_capability` 8, `test_blast_model` 9, `test_carrier_logic` 23,
+  `test_ea_omega` 5, `test_console_command_list` 7, `test_capital_ship` 10, all passing; compile check 1 092 scripts clean.
+  Build 3 min 44 s. Look sheet `references/screenshots/M10-T23 Nova/look_sheet_v2.png` (50 m in both sets, 1 km, 10 km,
+  100 km, the forward bays lit and back-lit, beside the Omega). **Open:** a Starfury leaving a roof or corner bay meets the
+  command block about 200 m ahead and must climb or turn (T17's launch path); the guns fire with T12 to T14; at 100 km it is
+  under a pixel; judging the look is (H).
 - **Faction fighters (T38 to T42):** the fighter pipeline (the generator as `raider_fighter`, not the capital framework),
   with T06's parts where organic; its `ShipSpec`, thruster layout, guns per T03, a pilot profile, break-up chunks. Done
   when a seeded fight against Starfuries also runs headless; its carriers launch it in T17.
