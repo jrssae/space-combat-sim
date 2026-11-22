@@ -10,7 +10,8 @@ Three measures, all on the generator's frame (x to starboard, y up from the spin
 * ``stl-vs-stl``: the same two measures between two STLs after their bows are aligned (the tip and the spine's axis), and a search
   for the scale that makes the forward hulls match.
 
-A mesh is named by a preset (``omega``, ``nova`` the STLs; ``omega-build``, ``nova-build`` the built assets) or by a path to an STL.
+A mesh is named by a preset (``omega``, ``nova``, ``hyperion`` the STLs; ``omega-build``, ``nova-build`` the built assets), by a path to an
+STL, or by a ``.npy`` of triangles already in the generator's frame.
 Needs Pillow for the images (the scores and CSVs do not). Development only; outputs go under the gitignored ``references/screenshots/``.
 """
 
@@ -45,6 +46,10 @@ PRESETS: dict[str, dict] = {
               "asset": "ea_omega", "turn": (560.0, 880.0, 45.0)},
     "nova": {"stl": "EA Nova class destroyer.STL", "mapping": ("-x", "+z", "+y"), "length": 1502.1, "axis": (0.0, 43.3, 0.0),
              "asset": "ea_nova", "turn": None},
+    "hyperion": {"stl": "EA-Hyperion-V5c.stl", "mapping": ("-x", "+z", "+y"), "length": 1025.39, "axis": (0.0, 0.0, 0.0),
+                 "asset": "ea_hyperion", "turn": None},
+    "hyperion1": {"stl": "EA Hyperion Class Heavy Cruiser.stl", "mapping": ("+x", "+z", "-y"), "length": 1025.39, "axis": (-3.4, 0.0, 0.0),
+                  "asset": "ea_hyperion", "turn": None},
 }
 DEFAULT_TOLERANCE_M = 2.0
 
@@ -78,6 +83,8 @@ def load_mesh(spec: str, rest_drum: bool = True) -> np.ndarray:
         tris = load_stl(REFERENCES / p["stl"], p["mapping"], p["length"], p["axis"])
         return turn_span(tris, *p["turn"]) if p["turn"] and rest_drum else tris
     path = Path(spec)
+    if path.suffix == ".npy" and path.is_file():  # triangles already in the generator's frame, (n, 3, 3)
+        return np.load(path)
     if not path.is_file():
         raise ValueError(f"{spec!r} is neither a preset ({', '.join(PRESETS)} with an optional -build) nor an STL file")
     # A bare STL: the file's axes as they are (x across, y up, z aft), its box centred and its nose at z = 0.

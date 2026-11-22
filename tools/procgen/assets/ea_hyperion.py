@@ -11,12 +11,13 @@ and names the damage sections. The loadout is ``data/capitals/loadouts.json``, `
 * 2 medium plasma dome turrets, one on each flank;
 * 4 light pulse dome turrets: on the turret deck, the tower's drum, the reactor module and the engine block;
 * 2 torpedo tubes in the bow face;
-* 4 interceptors: one on each ventral pod's flank and one on each sponson's aft face;
-* a Starfury bay (3) over a shuttle bay (1) in each hangar sponson: 6 Starfuries and 2 shuttles.
+* 4 interceptors: one on each pod under the tower and one on each sponson's aft face;
+* three single-Starfury bays in each flank of the hangar bump on the spine, and a shuttle bay for both shuttles in the
+  tower's aft face (Q58): 6 Starfuries and 2 shuttles.
 
-Sections: bow, magazine (the forward hull's aft half, over the torpedo stowage), bridge (the tower, the blade, the ventral fin
-and its pods), the hangar sponsons, the truss, the reactor (the module), the aft spine, the fuel tanks either side and the
-engines.
+Sections: bow, magazine (the forward hull's aft half and the sponsons, over the torpedo stowage), bridge (the tower, its
+pods and the shuttle bay), the hangar bays either side, the truss, the reactor (the module), the aft spine, the fuel tanks
+either side and the engines.
 
 Options: ``look`` (``styles/ea_hyperion.LOOKS``), ``spacing``, ``atlas_px``, ``detail_px`` (``core/capital.build``).
 """
@@ -67,35 +68,35 @@ def weapon_modules(s: Style) -> list[cp.Module]:
         out.append(m.in_section(section).on_side(side))
 
     add("bow", hy.bow_guns(s).with_params(weapon=PLASMA_HEAVY), cp.RIGHT)
-    add("bow", weapons.missile_launcher("torpedo_r", (1, 1), 6.0, s).mounted((7.0, 19.0, hy.BOW_Z), FORE, UP).with_params(weapon=TORPEDO), cp.RIGHT)
-    add("bow", hy.particle_cannon("particle_top", (0.0, 44.0, 205.0), (0.0, 54.0, 152.0), s).with_params(weapon=PARTICLE))
-    add("bow", hy.particle_cannon("particle_low", (0.0, -31.0, 205.0), (0.0, -46.0, 125.0), s, spread=5.5, normal=DOWN).with_params(weapon=PARTICLE))
-    add("magazine", hy.dome_turret("plasma_flank_r", 15.0, s).mounted((61.0, -4.0, 304.0), RIGHT).with_params(weapon=PLASMA_MEDIUM), cp.RIGHT)
+    add("bow", weapons.missile_launcher("torpedo_r", (1, 1), 6.0, s).mounted((7.0, 8.0, hy.BOW_Z), FORE, UP).with_params(weapon=TORPEDO), cp.RIGHT)
+    add("bow", hy.particle_cannon("particle_top", (0.0, 33.0, 125.0), (0.0, 41.0, 70.0), s).with_params(weapon=PARTICLE))
+    add("bow", hy.particle_cannon("particle_low", (0.0, -44.0, 118.0), (0.0, -46.0, 60.0), s, spread=3.7, normal=DOWN).with_params(weapon=PARTICLE))
+    add("magazine", hy.dome_turret("plasma_flank_r", 14.0, s).mounted((62.2, -22.0, 283.0), RIGHT).with_params(weapon=PLASMA_MEDIUM), cp.RIGHT)
     # The deck's and the tower's turrets rest facing forward, the module's and the engine block's aft (the reference's).
-    for name, section, at, r, rest in (("pulse_deck", "magazine", (0.0, hy.DECK_H - 0.5, 304.0), 14.5, FORE),
-                                       ("pulse_tower", "bridge", (0.0, hy.TOWER_DRUM_Y, 462.0), 12.75, FORE),
-                                       ("pulse_module", "reactor", (0.0, hy.MODULE_Y[1] - 0.5, 714.5), 14.5, AFT),
-                                       ("pulse_engines", "engines", (0.0, hy.BLOCK_Y[1] - 0.5, 929.5), 14.5, AFT)):
-        add(section, hy.dome_turret(name, r, s).mounted(at, UP, rest).with_params(weapon=PULSE))
-    add("bridge", weapons.interceptor_dome("interceptor_pod_1", 4.5, s).mounted((13.3, -112.0, 437.0), RIGHT).with_params(weapon=INTERCEPTOR), cp.LONE)
-    add("bridge", weapons.interceptor_dome("interceptor_pod_2", 4.5, s).mounted((-13.3, -112.0, 465.5), (-1.0, 0.0, 0.0)).with_params(weapon=INTERCEPTOR),
+    for name, section, at, r, collar, rest in (("pulse_deck", "magazine", (0.0, hy.DECK_H - 0.5, 283.0), 16.0, 3.0, FORE),
+                                               ("pulse_tower", "bridge", (0.0, hy.TOWER_DRUM_Y, hy.TOWER_DRUM_Z), 12.0, 3.0, FORE),
+                                               ("pulse_module", "reactor", (0.0, hy.MODULE_Y[1] - 0.5, 697.0), 14.0, 6.0, AFT),
+                                               ("pulse_engines", "engines", (0.0, hy.BLOCK_Y[1] - 0.5, 935.0), 15.0, 6.0, AFT)):
+        add(section, hy.dome_turret(name, r, s, collar).mounted(at, UP, rest).with_params(weapon=PULSE))
+    add("bridge", weapons.interceptor_dome("interceptor_pod_1", 4.5, s).mounted((10.0, -140.0, 407.5), RIGHT).with_params(weapon=INTERCEPTOR), cp.LONE)
+    add("bridge", weapons.interceptor_dome("interceptor_pod_2", 4.5, s).mounted((-21.0, -140.0, 444.0), (-1.0, 0.0, 0.0)).with_params(weapon=INTERCEPTOR),
         cp.LONE)
-    sponson = weapons.interceptor_dome("interceptor_sponson_r", 4.5, s).mounted((78.0, -31.0, hy.FORE_END_Z), AFT, UP).with_params(weapon=INTERCEPTOR)
-    out.append(sponson.in_section("hangar_r").on_side(cp.RIGHT))
+    sponson = weapons.interceptor_dome("interceptor_sponson_r", 4.5, s).mounted((66.0, -47.5, hy.SPONSON_Z[1]), AFT, UP).with_params(weapon=INTERCEPTOR)
+    out.append(sponson.in_section("magazine").on_side(cp.RIGHT))
     return out
 
 
 def light_modules() -> list[cp.Module]:
     """The running lights: red to port and green to starboard on the sponsons, white on the tower, the show's red-orange
-    beacons under the fin and on the engine block."""
+    beacons under the big pod and on the engine block."""
     lamp = fittings.lamp
     return [
-        lamp("light_starboard", "starboard", (0.05, 1.0, 0.1), 300.0, 3.0).mounted((84.6, -9.0, 402.0), RIGHT).in_section("hangar_r").on_side(cp.LONE),
-        lamp("light_port", "port", (1.0, 0.05, 0.03), 300.0, 3.0).mounted((-84.6, -9.0, 402.0), (-1.0, 0.0, 0.0)).in_section("hangar_l")
+        lamp("light_starboard", "starboard", (0.05, 1.0, 0.1), 300.0, 3.0).mounted((88.3, -47.0, 400.0), RIGHT).in_section("magazine").on_side(cp.LONE),
+        lamp("light_port", "port", (1.0, 0.05, 0.03), 300.0, 3.0).mounted((-88.3, -47.0, 400.0), (-1.0, 0.0, 0.0)).in_section("magazine")
         .on_side(cp.LONE),
         lamp("light_top", "top", (1.0, 1.0, 1.0), 300.0, 3.0).mounted((0.0, hy.TOWER_TOP, 425.0), UP).in_section("bridge"),
-        lamp("light_keel", "beacon", RUNNING_RED, 450.0, 3.0).mounted((0.0, hy.FIN_BOTTOM, 476.0), DOWN).in_section("bridge"),
-        lamp("light_stern", "beacon", RUNNING_RED, 450.0, 3.0).mounted((0.0, hy.BLOCK_Y[1], 948.0), UP).in_section("engines"),
+        lamp("light_keel", "beacon", RUNNING_RED, 450.0, 3.0).mounted((0.0, hy.FIN_BOTTOM, 444.0), DOWN).in_section("bridge"),
+        lamp("light_stern", "beacon", RUNNING_RED, 450.0, 3.0).mounted((0.0, hy.BLOCK_Y[1], 958.0), UP).in_section("engines"),
     ]
 
 
@@ -117,7 +118,7 @@ def spec(look: str = DEFAULT_LOOK) -> cap.CapitalSpec:
         modules=tuple(modules(look)),
         sections=SECTIONS,
         style=ea_hyperion(look),
-        bridge=cap.Pose((0.0, 96.0, 420.0)),
+        bridge=cap.Pose((0.0, 96.0, 385.0)),
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=1000.0, mouth_radius_m=300.0),
         notes=("the renegades' red X marks (M10-T02) are `mark` hardpoints with `only_faction`: the game draws them on a renegade ship",),

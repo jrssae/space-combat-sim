@@ -5,7 +5,8 @@ The show (``references/show/m10/ea_hyperion/``, gitignored) paints it light grey
 hull and the command tower. The ``stripe`` role is the band.
 
 Look A is the maintainer's (2026-11-21): the show's light grey and royal blue, plated in the fleet's standard mosaic
-(``ea_capital.fleet_mosaic``) rather than the show's long planks. B and C stay from the option sheet, each with its own plating
+(``ea_capital.fleet_mosaic``) rather than the show's long planks; its colours re-read from the stills in
+``references/ships/Hyperion/`` (Q58): a warmer grey and a deeper, slightly violet blue. B and C stay from the option sheet, each with its own plating
 (:data:`PLATING`). ``livery`` repaints roles as ``ea_capital``'s does.
 """
 
@@ -30,8 +31,8 @@ class Plating:
 
 
 LOOKS: dict[str, Look] = {
-    "a": Look("a", "A: show livery, light grey and royal-blue bands, the fleet's mosaic",
-              {"hull": 0xB2B6BC, "hull_panel": 0xA2A7AF, "hull_dark": 0x4A4E56, "stripe": 0x2452B4},
+    "a": Look("a", "A: show livery, warm light grey and deep royal-blue bands, the fleet's mosaic",
+              {"hull": 0xBCBDB5, "hull_panel": 0xA9AAA3, "hull_dark": 0x4A4A46, "stripe": 0x3A41A6},
               plate_tone=0.08, plate_grime=0.06, metallic=0.3, edge_wear=0.25, streaks=0.12, grime=0.06),
     "b": Look("b", "B: fleet white, navy bands, square plates",
               {"hull": 0xD0D2D4, "hull_panel": 0xBDC0C4, "hull_dark": 0x585C64, "stripe": 0x1A2C66},

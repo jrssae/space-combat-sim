@@ -1,5 +1,6 @@
 """``ea_hyperion`` (M10-T22, Q49, Q53; D12.1): the Hyperion-class heavy cruiser on the capital framework. Files, size, the
-sections, the hardpoints against the loadout (16 mounts, a Starfury bay and a shuttle bay in each sponson), a symmetric hull,
+sections, the hardpoints against the loadout (16 mounts, three Starfury bays a side in the hangar bump and a shuttle bay in the
+tower's aft face, Q58), a symmetric hull,
 collision coverage, the class budget, its own style and looks on the fleet's mosaic, the name and the renegades' marks, and each
 part's sections against the reference STL (CLAUDE.md, "STL fidelity").
 
@@ -33,9 +34,9 @@ from tools.procgen.tests.budget_table import read_budgets
 from tools.refview.sections import PASS_IOU, section_score
 
 ROOT = Path(__file__).resolve().parents[3]
-STL = ROOT / "references" / "EA Hyperion Class Heavy Cruiser.stl"
+STL = ROOT / "references" / fid.REFERENCE
 TEST_OPTIONS = {"atlas_px": 512, "detail_px": 128}  # the default sample spacing: the coverage check needs it
-LENGTH, SPAN, HEIGHT = 1025.39, 249.4, 266.25  # T01's length; the tank frame's outriggers, the tower's turret to the pods' domes
+LENGTH, SPAN, HEIGHT = 1025.39, 254.4, 319.5  # T01's length; the engine block, the tower's turret to the big pod's interceptor
 SECTIONS = ("bow", "magazine", "bridge", "hangar_r", "hangar_l", "truss", "reactor", "spine_aft", "fuel_r", "fuel_l", "engines")
 MOUNTS = {"turret": 8, "beam": 2, "missile": 2, "interceptor": 4}
 LAUNCHES = {"starfury_ally": 6, "ea_shuttle": 2}
@@ -90,10 +91,18 @@ class HyperionBuildTests(unittest.TestCase):
         launched: dict[str, int] = {}
         for bay in self.hp["bays"]:
             launched[bay["craft"]] = launched.get(bay["craft"], 0) + bay["capacity"]
-            self.assertIn(bay["section"], ("hangar_r", "hangar_l"))
-            side = 1.0 if bay["section"] == "hangar_r" else -1.0
-            self.assertGreater(side * (bay["exit"][0] - bay["position"][0]), 0.0, f"{bay['name']} opens outward through the sponson's face")
+            if bay["craft"] == "starfury_ally":
+                self.assertIn(bay["section"], ("hangar_r", "hangar_l"))
+                self.assertEqual(bay["capacity"], 1, "one Starfury per bay, re-docking in its own")
+                side = 1.0 if bay["section"] == "hangar_r" else -1.0
+                self.assertGreater(side * (bay["exit"][0] - bay["position"][0]), 0.0, f"{bay['name']} opens outward through the bump's flank")
+            else:
+                self.assertEqual(bay["section"], "bridge")
+                self.assertGreater(bay["exit"][2] - bay["position"][2], 0.0, "the shuttle bay opens aft, over the Starfury bays")
+                exit_z = float(self.authored(bay["exit"])[2])
+                self.assertAlmostEqual(exit_z, hy.TOWER_Z[1], delta=0.5, msg="in the tower's aft face")
         self.assertEqual(launched, LAUNCHES)
+        self.assertEqual(len(self.hp["bays"]), 7, "six Starfury bays and one shuttle bay")
         heavy = [w for w in self.hp["weapons"] if w["weapon"] == "ea_plasma_heavy"]
         self.assertTrue(all(w["traverse_deg"] <= 5.0 for w in heavy), "the heavy plasma cannons are fixed forward (X)")
 
@@ -105,13 +114,13 @@ class HyperionBuildTests(unittest.TestCase):
         np.testing.assert_allclose(xs, sorted(eh.hy.NOZZLE_XS), atol=1e-3)
         self.assertAlmostEqual(xs[0], -xs[2], msg="the bells stand symmetric about the hull's axis")
         roles = sorted(light["role"] for light in self.hp["lights"])
-        self.assertEqual(roles, ["bay"] * 4 + ["beacon", "beacon", "port", "starboard", "top"], "and one red light in each bay")
+        self.assertEqual(roles, ["bay"] * 7 + ["beacon", "beacon", "port", "starboard", "top"], "and one red light in each bay")
         port = next(light for light in self.hp["lights"] if light["role"] == "port")
         self.assertLess(port["position"][0], 0.0, "red to port")
 
     def test_the_renegades_red_x_marks_are_for_renegades_only(self) -> None:
         xs = [m for m in self.hp["marks"] if m["text"] == "X"]
-        self.assertEqual(sorted(m["name"] for m in xs), ["mark_x_l", "mark_x_r", "mark_x_roof"], "one on each flank of the tower, one on the roof")
+        self.assertEqual(sorted(m["name"] for m in xs), ["mark_x_l", "mark_x_r", "mark_x_roof"], "one on each flank of the tower, one on the deck")
         for m in xs:
             self.assertEqual(m["only_faction"], "renegades")
             self.assertGreater(m["colour"][0], 0.6)
@@ -119,30 +128,37 @@ class HyperionBuildTests(unittest.TestCase):
 
     def test_the_ship_wears_its_name_on_the_roof_and_the_tower(self) -> None:
         names = {m["name"]: m for m in self.hp["marks"] if m["text"] == "name"}
-        self.assertEqual(sorted(names), ["mark_name_l", "mark_name_r", "mark_name_roof"], "as the show paints HYPERION")
+        self.assertEqual(sorted(names), ["mark_name_l", "mark_name_r", "mark_name_roof"], "as the stills paint HYPERION")
         for m in names.values():
             self.assertNotIn("only_faction", m, "every faction's hull carries its name")
-            self.assertGreater(m["colour"][2], m["colour"][0], "in the bands' blue")
+        for key in ("mark_name_r", "mark_name_l"):
+            self.assertGreater(names[key]["colour"][2], names[key]["colour"][0], "the tower's in the bands' blue")
+        self.assertGreater(min(names["mark_name_roof"]["colour"]), 0.8, "light across the bow's roof")
+        roof_z = float(self.authored(names["mark_name_roof"]["position"])[2])
+        self.assertTrue(hy.BOW_Z < roof_z < hy.FORE_BANDS[0][0], "between the bow rim and the bow band")
         r, l = self.authored(names["mark_name_r"]["position"]), self.authored(names["mark_name_l"]["position"])
         self.assertAlmostEqual(float(r[0]), -float(l[0]), places=3)
-        self.assertGreater(float(r[1]), 52.0, "on the tower, above the roof")
+        self.assertGreater(float(r[1]), hy.ROOF_Y + 10.0, "on the tower, above the roof")
 
-    def test_the_hull_number_is_painted_on_both_flanks_between_the_bands(self) -> None:
+    def test_the_hull_number_is_painted_on_both_flanks_aft_of_the_bow_band(self) -> None:
         nums = {m["name"]: m for m in self.hp["marks"] if m["text"] == "number"}
         self.assertEqual(sorted(nums), ["mark_number_l", "mark_number_r"])
         r, l = self.authored(nums["mark_number_r"]["position"]), self.authored(nums["mark_number_l"]["position"])
         self.assertAlmostEqual(float(r[0]), -float(l[0]), places=3)
-        self.assertTrue(hy.FORE_BANDS[0][1] < hy.NUMBER_Z < 270.0, "between the bow band and the flank dome turret")
+        self.assertTrue(hy.FORE_BANDS[0][1] < hy.NUMBER_Z < 263.0, "between the bow band and the flank dome turret")
         self.assertEqual(nums["mark_number_r"]["normal"][0], 1.0)
 
     def test_the_bands_wrap_the_hull_belly_included(self) -> None:
         keels = hy.keel(ea_hyperion(DEFAULT_LOOK).style)
-        self.assertGreaterEqual(len(keels), 4, "the keel is cut at the bands so they close under the belly")
+        ends = {round(float(m.part.mesh.bounds()[1][2]), 1) for m in keels}
+        self.assertIn(hy.FORE_BANDS[0][1], ends, "the keel is cut at the bow band so the ring closes under the belly")
 
-    def test_the_aft_band_is_painted_in_every_length_it_spans(self) -> None:
+    def test_the_bow_rim_and_both_bands_are_painted_round_the_hull(self) -> None:
         hull = hy.fore_hull(ea_hyperion(DEFAULT_LOOK).style)
-        for k in (1, 2):
-            self.assertTrue([m for m in hull if m.name.startswith(f"fore_band_{k}_")], f"band {k} is painted round the hull")
+        painted = [m for m in hull if m.name.startswith("fore_band_")]
+        for lo, hi in (hy.BOW_RIM, *hy.FORE_BANDS):
+            inside = [m for m in painted if lo - 0.01 <= float(m.part.mesh.bounds()[0][2]) and float(m.part.mesh.bounds()[1][2]) <= hi + 0.01]
+            self.assertTrue(inside, f"the band from {lo} to {hi} m is painted")
 
     def test_the_hull_is_inside_the_capital_budget(self) -> None:
         budget = self.manifest["budget"]
