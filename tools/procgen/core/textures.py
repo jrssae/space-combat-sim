@@ -414,35 +414,45 @@ def _to8(values: np.ndarray) -> np.ndarray:
 
 
 def _texel_metric(filled: np.ndarray, pos: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """Per texel: the world step along +u and +v (metres per texel), finite differences inside the filled region."""
+    """Per texel: the world step along +u and +v (metres per texel), finite differences inside the filled region. Built in strips
+    of rows (rows wrap round), so the temporaries stay small at 4 096 px."""
+    n = len(pos)
+    du, dv = np.empty_like(pos), np.empty_like(pos)
+    step_u, step_v = np.empty(filled.shape), np.empty(filled.shape)
 
-    def step(axis: int) -> np.ndarray:
-        forward = np.roll(pos, -1, axis=axis) - pos
-        backward = pos - np.roll(pos, 1, axis=axis)
-        has_forward = np.roll(filled, -1, axis=axis) & filled
-        has_backward = np.roll(filled, 1, axis=axis) & filled
+    def blend(here: np.ndarray, f: np.ndarray, p_fwd: np.ndarray, p_bwd: np.ndarray, f_fwd: np.ndarray, f_bwd: np.ndarray) -> np.ndarray:
+        forward, backward = p_fwd - here, here - p_bwd
+        has_forward, has_backward = f_fwd & f, f_bwd & f
         out = np.where(has_forward[..., None], forward, np.where(has_backward[..., None], backward, 0.0))
         both = has_forward & has_backward
-        out = np.where(both[..., None], 0.5 * (forward + backward), out)
-        return out
+        return np.where(both[..., None], 0.5 * (forward + backward), out)
 
-    du = step(1)  # along u: columns
-    dv = step(0)  # along v: rows
-    return du, dv, np.linalg.norm(du, axis=-1), np.linalg.norm(dv, axis=-1)
+    for r0 in range(0, n, 256):
+        rr = np.arange(r0, min(r0 + 256, n))
+        prev, nxt = (rr - 1) % n, (rr + 1) % n
+        here, f = pos[rr], filled[rr]
+        du[rr] = blend(here, f, np.roll(here, -1, axis=1), np.roll(here, 1, axis=1), np.roll(f, -1, axis=1), np.roll(f, 1, axis=1))
+        dv[rr] = blend(here, f, pos[nxt], pos[prev], filled[nxt], filled[prev])
+    step_u[:] = np.linalg.norm(du, axis=-1)
+    step_v[:] = np.linalg.norm(dv, axis=-1)
+    return du, dv, step_u, step_v
 
 
-def _gradient(height: np.ndarray, filled: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
-    """d height / d texel along u (columns) and v (rows), one-sided at the region's border."""
+def _gradient_rows(height: np.ndarray, filled: np.ndarray, rr: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """d height / d texel along u (columns) and v (rows) for the rows ``rr``, one-sided at the region's border; rows wrap round."""
+    n = len(height)
+    prev, nxt = (rr - 1) % n, (rr + 1) % n
+    h, f = height[rr], filled[rr]
 
-    def along(axis: int) -> np.ndarray:
-        forward = np.roll(height, -1, axis=axis) - height
-        backward = height - np.roll(height, 1, axis=axis)
-        has_forward = np.roll(filled, -1, axis=axis) & filled
-        has_backward = np.roll(filled, 1, axis=axis) & filled
+    def blend(h_fwd: np.ndarray, h_bwd: np.ndarray, f_fwd: np.ndarray, f_bwd: np.ndarray) -> np.ndarray:
+        forward, backward = h_fwd - h, h - h_bwd
+        has_forward, has_backward = f_fwd & f, f_bwd & f
         out = np.where(has_forward, forward, np.where(has_backward, backward, 0.0))
         return np.where(has_forward & has_backward, 0.5 * (forward + backward), out)
 
-    return along(1), along(0)
+    du = blend(np.roll(h, -1, axis=1), np.roll(h, 1, axis=1), np.roll(f, -1, axis=1), np.roll(f, 1, axis=1))
+    dv = blend(height[nxt], height[prev], filled[nxt], filled[prev])
+    return du, dv
 
 
 def _occlusion(atlas: Atlas, seed: int) -> np.ndarray:
@@ -586,13 +596,13 @@ def _chart_normals(buffers: AtlasBuffers) -> np.ndarray:
 
 def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: int = NORMAL_SCALE,
                 seam_height: np.ndarray | None = None) -> np.ndarray:
-    """The tangent-space normal map at ``scale`` times the atlas: the plating's relief (grooves, hatches, rivets) from a
+    """The tangent-space normal map, as 8-bit texels, at ``scale`` times the atlas: the plating's relief (grooves, hatches, rivets) from a
     height field sampled at the finer texels, over the fine mesh's shape for a coarse render mesh. ``seam_height`` is that height
     field already evaluated (at the atlas's own size, without the generic plating)."""
     b = atlas.buffers
     size = b.size
     big = size * scale
-    du, dv, step_u, step_v = _kept(_shared(b), ("texel_metric",), lambda: _texel_metric(b.filled, b.position))
+    du, dv, step_u, step_v = _texel_metric(b.filled, b.position)
     paneled_table = np.array([m.paneled for m in atlas.materials], dtype=bool)
     chart_normal = _kept(_shared(b), ("chart_normals",), lambda: _chart_normals(b))
     # Where each fine texel falls in the atlas: its nearest atlas texel, and a bilinear position inside one chart.
@@ -605,6 +615,7 @@ def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: 
     # At the atlas's own size the fine grid is the atlas's: its arrays as they are, not gathered copies.
     grid = (lambda a: a) if scale == 1 else (lambda a: a[np.ix_(near, near)])
     filled_big = grid(b.filled)
+    grid_rows = (lambda a, rr: a[rr]) if scale == 1 else (lambda a, rr: a[np.ix_(near[rr], near)])
     strip = 256
     for r0 in range(0, big if seam_height is None else 0, strip):
         rr = np.arange(r0, min(r0 + strip, big))
@@ -642,16 +653,22 @@ def _normal_map(atlas: Atlas, style: Style, platings: Sequence[Plating], scale: 
             drawn = layout.evaluate(position[sel], normal[sel], *seam_size(atlas.texel_m))
             strip_h[sel] += np.where(paneled_table[material[sel]], drawn.height, 0.0)
         height[rr] = strip_h
-    hu, hv = _gradient(height, filled_big)
-    su = np.maximum(grid(step_u) / scale, 1e-6)
-    sv = np.maximum(grid(step_v) / scale, 1e-6)
-    relief = unit(np.stack([-hu / su, hv / sv, np.ones((big, big))], axis=-1))
     fine = _fine_normals(atlas, du, dv)
-    if fine is not None:
-        shape = grid(fine)
-        relief = unit(np.stack([relief[..., 0] + shape[..., 0], relief[..., 1] + shape[..., 1], relief[..., 2] * shape[..., 2]], axis=-1))
-    relief[~filled_big] = (0.0, 0.0, 1.0)
-    return relief
+    del du, dv
+    out = np.empty((big, big, 3), dtype=np.uint8)
+    # In strips of rows, so the float intermediates (the gradients, the stacked and normalised vectors) stay small at 8 192 px.
+    for r0 in range(0, big, strip):
+        rr = np.arange(r0, min(r0 + strip, big))
+        hu, hv = _gradient_rows(height, filled_big, rr)
+        su = np.maximum(grid_rows(step_u, rr) / scale, 1e-6)
+        sv = np.maximum(grid_rows(step_v, rr) / scale, 1e-6)
+        relief = unit(np.stack([-hu / su, hv / sv, np.ones(hu.shape)], axis=-1))
+        if fine is not None:
+            shape = grid_rows(fine, rr)
+            relief = unit(np.stack([relief[..., 0] + shape[..., 0], relief[..., 1] + shape[..., 1], relief[..., 2] * shape[..., 2]], axis=-1))
+        relief[~filled_big[rr]] = (0.0, 0.0, 1.0)
+        out[rr] = _to8(relief * 0.5 + 0.5)
+    return out
 
 
 def metal_finish(finish: dict[str, float], pos: np.ndarray, painted: np.ndarray, roughness: np.ndarray, metallic: np.ndarray,
@@ -761,8 +778,10 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         across = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], np.floor(noise_fine * 7.0).astype(np.int64), seeds + 3)
         fade = np.exp(-np.where(np.isfinite(lattice_aft), lattice_aft, 1e3) / (float(extra.get("streak_length_m", 0.2)) * k))
         streak = style.streaks * streak_on * fade * (across > 0.45) * paneled
+        del streak_seed, streak_on, across, fade
     else:
         streak = np.zeros(n)
+    del seeds, lattice_cell, lattice_aft  # per-texel arrays only the streaks read
     if float(extra.get("smudge", 0.0)):
         smudge_scale = float(extra.get("smudge_scale_m", 0.45)) * k
         smudge_noise = _kept(memo, ("smudge", smudge_scale, seed + 5),
@@ -844,6 +863,18 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
             metallic[sel] *= 1.0 - 0.6 * cover
             marked[np.flatnonzero(sel)] = np.maximum(marked[np.flatnonzero(sel)], cover)
 
+    def glow_map() -> np.ndarray:  # the same in every texture set
+        surface_strength = np.where(glass, surface_emissive_strength(table, True), surface_emissive_strength(table, False, atlas.markings))
+        scale = np.where(surface_strength > 0.0, strength / np.maximum(surface_strength, 1e-9), 0.0)
+        window_scale = np.where(surface_strength > 0.0, window_strength / np.maximum(surface_strength, 1e-9), 0.0)
+        glow = np.clip(np.maximum(emissive * scale[:, None], window_glow * window_scale[:, None]), 0.0, 1.0)
+        emissive_map = np.zeros((size, size, 3))
+        emissive_map[idx] = glow
+        return _to8(linear_to_srgb(emissive_map))
+
+    emissive_map8 = _kept(memo, ("emissive", seed), glow_map)  # made now so its per-texel inputs can go
+    del emissive, strength, window_glow, window_strength
+
     # Painted metal (M7-T16, the styles that ask for it): roughness per panel, dirt rough and dull.
     finish = extra.get("metal_finish")
     if finish:
@@ -854,7 +885,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         roughness, metallic = metal_finish(finish, pos, paneled & ~glass, roughness, metallic, dirt * dirty, seed, memo)
 
     # The normal map: the plating's relief at twice the atlas's resolution, Godot's +Y up (Q34).
-    normal_ts = _normal_map(atlas, style, platings, normal_scale, seam_height)
+    normal8 = _normal_map(atlas, style, platings, normal_scale, seam_height)
 
     # Occlusion, roughness and metal; emissive scaled per surface so one map serves both.
     occ = _occlusion(atlas, seed) if occlusion else np.ones((size, size))
@@ -874,15 +905,6 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     orm_metal[idx] = np.clip(metallic, 0.0, 1.0)
     orm[..., 2] = orm_metal
 
-    def glow_map() -> np.ndarray:  # the same in every texture set
-        surface_strength = np.where(glass, surface_emissive_strength(table, True), surface_emissive_strength(table, False, atlas.markings))
-        scale = np.where(surface_strength > 0.0, strength / np.maximum(surface_strength, 1e-9), 0.0)
-        window_scale = np.where(surface_strength > 0.0, window_strength / np.maximum(surface_strength, 1e-9), 0.0)
-        glow = np.clip(np.maximum(emissive * scale[:, None], window_glow * window_scale[:, None]), 0.0, 1.0)
-        emissive_map = np.zeros((size, size, 3))
-        emissive_map[idx] = glow
-        return _to8(linear_to_srgb(emissive_map))
-
     mean = albedo[~glass].mean(axis=0) if (~glass).any() else albedo.mean(axis=0)
     # Converted texel by texel, so only the filled texels and the one colour round them (the same bytes as the whole map's).
     albedo8 = np.empty((size, size, 3), dtype=np.uint8)
@@ -895,9 +917,9 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         albedo8 = np.concatenate([albedo8, _to8(paint)[..., None]], axis=-1)
     return {
         "albedo": albedo8,
-        "normal": _to8(normal_ts * 0.5 + 0.5),
+        "normal": normal8,
         "orm": _to8(orm),
-        "emissive": _kept(memo, ("emissive", seed), glow_map),
+        "emissive": emissive_map8,
         "mean_albedo": mean,
     }
 
