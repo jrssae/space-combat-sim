@@ -88,6 +88,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q59 | Ship line-up (2026-11-21) | The comparison mission is `ship_showcase`: every finalized hull is parked still in its faction's row beside Babylon 5 for fly-bys of scale and look; each hull task adds its own (T64) |
 | Q60 | Subsystem targeting by kind (2026-11-22) | **No sub-targeting of single parts**: the target menu offers a subsystem only by kind (weapons, engines, bays, and any other kind with several parts), never one part. Targeting a kind aims at **the nearest of its parts that is still active**, re-picked as parts are lost, until none is left. Single-part subsystems (bridge, reactor) are targeted as now (T18, T65) |
 | Q61 | Omega and Nova forward hull (2026-11-22) | The Omega and the Nova are the same ship with a rotating section inserted, and the launch bay and face details of both disagree with their STLs. **Checks first** (T66: slice sweeps, front-face depth maps, STL against STL, screenshot sheets), then **one shared EA forward hull** built from the best source per detail (T67), carrying the Omega's hull-letter placement on the Nova |
+| Q62 | Omega and Nova bows; ship names (2026-11-22) | No shared builder after all: the Omega and the Nova keep their own generators; their lengths are right and their scales differ. Both bows are the **open frame**, with the **octagonal launch bay** (not the red square). Names: Novas after scientists (Schwarzkopf, Einstein, Bohr, ...; done), Warlocks after magic and lore creatures and elements (Foxfire, Titan, ...; T24), Explorers after explorers (Cortez, De Soto, ...; T52) |
 
 ## The hulls
 
@@ -370,7 +371,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | done |
 | T65 | E | Subsystems targeted by kind: the nearest still-active part of a weapons, engines or bays kind, no single-part picks (Q60) | T18 | Sonnet | not started |
 | T66 | A | Fidelity checks: slice sweeps, front-face depth maps, STL against STL and screenshot sheets (`tools/refview/fidelity.py`, Q61) | - | Sonnet | done |
-| T67 | A | Shared EA forward hull for the Omega and the Nova: best source per detail from T66, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement carried on the Nova (Q61) | T66 | Fable | not started |
+| T67 | A | Omega and Nova bow faces from T66: each generator kept separate (Q62), the open-frame bow, the octagonal launch bay in place of the red square, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement on the Nova (Q61, Q62) | T66 | Fable | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -551,11 +552,17 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   ship at about one scale. The Omega STL's drum is squared up by turning z 560 to 880 m by 45 degrees (a coarse span).
   Screenshot sheets use fixed views, not camera-matched.
 
-### M10-T67 Shared EA forward hull (Q61)
+### M10-T67 Omega and Nova bow faces (Q61, Q62)
 
-- **Goal:** one forward hull for the Omega and the Nova from T66's results (the best source per detail), the Omega's hull-letter
-  placement carried on the Nova. **Done when:** face slices >= 0.90 against the chosen source, a depth-diff limit on the bow face,
-  both hulls building from the one definition.
+- **Goal:** bring each ship's bow face to its own STL with T66's tools. The two ships stay **separate generators** (no shared
+  builder, Q62): their details are very similar, but each is measured against its own STL at its own approved length
+  (Omega 1 714.3 m, Nova 1 502.1 m; the scales differ, the lengths are right). Both get the **open-frame bow** (the deck structure
+  and detail visible behind the frame, as the Nova STL shows) and the **octagonal launch bay** with its frame and wedge fins,
+  replacing the red square mouth built in the bay fix; the bay keeps its red glow lighting. The Omega STL lacks the interior
+  detail: take it from the Nova STL, scaled to the Omega. The Nova carries the Omega's hull-letter placement.
+- **Done when:** face slices (T66 sweep, z 150 to 450 m and the face's x and y cuts) >= 0.90 for each ship against its STL
+  (the Omega's interior against the Nova STL's detail scaled), a depth-diff limit on the bow face, the screenshot sheets beside
+  `references/Ship references/`, and the maintainer has seen the bay close-ups (H).
 
 ### M10-T65 Subsystems targeted by kind (Q60)
 
