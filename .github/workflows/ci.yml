@@ -35,7 +35,7 @@ jobs:
   assets:
     name: generated assets
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 90  # the capital hulls (Omega, Hyperion, Nova) build alone at about 10 GB each
     outputs:
       shards: ${{ steps.shards.outputs.shards }}
       gut_shards: ${{ steps.shards.outputs.gut_shards }}
