@@ -360,7 +360,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T01 | A | References, identifications and lengths for every hull (Q4, Q35) | - | Opus | done |
 | T62 | A | Section measure for open STLs: a robust inside test in `tools/refview/sections.py` (Q36) | - | Sonnet | done |
 | T63 | E | Controller layout setting: positional defaults, per-layout button labels, the Nintendo face-button swap | - | Sonnet | done |
-| T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | in progress |
+| T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | done |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -498,6 +498,30 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   (the checklist says so); fighters may sit as a small group per type.
 - **Done when:** the mission loads with every finalized hull parked and still, a headless test checks each catalogue hull
   marked finalized is in the line-up and does not move over 60 s, and the maintainer has flown it (H).
+- **Done (2026-11-22), the maintainer's flight is open (H).** `data/scenarios/ship_showcase.json` (was `civilian_showcase`; menu
+  **Ship line-up**, tests, docs, `info.md` renamed) puts Babylon 5 in the scene as `station_showcase` does and the player at
+  (2500, -1200, -1200) facing -Z, between the rows. Rows run along -Z, parallel to the station's axis (it stands at x 5500,
+  8 km long), every ship bow to -Z so a fly-down passes each side-on, all at y -1200:
+  | row | x | holds |
+  | 1 civilian and neutral traders | 1000 | the ten civilians (Saturn 8, 4, 3, Skylark, Narn, Brezebel, two Bokmai), 120 m apart |
+  | 2 raiders | 2000 | the strike carrier (a `CapitalStandin`), three Delta-V raiders as a group |
+  | 3 Earth Alliance small craft | 3000 | three Starfuries as a group, Panama, construction tender, EA shuttle, atmospheric shuttle |
+  | 4 Earth Alliance capitals | 4000 | Omega (z -3957), Nova (-5865), Hyperion (-7428), 300 m between hulls |
+  Four nav buoys ("ROW 1 CIVILIAN TRADERS" ... "ROW 4 EA CAPITALS", at z -2150) name the rows, so `goto "ROW 4 EA CAPITALS"` works
+  and the radar shows them. **Held still:** ships fly an `idle` brain with `hold: true` and `invulnerable: true`; capitals are
+  a new scenario block `capitals[]` (`{type, name, offset, forward, standin}`; `standin: true` builds the class's
+  `CapitalStandin`, which the strike carrier needs, else a `CapitalShip` with its helm at zero heading on the rest velocity;
+  `Main._spawn_scenario_capitals`). The scenario's `relations` make raiders neutral to Earth Alliance, Narn, Centauri and
+  Brakiri, so no gun or brain fires; the Omega's drum rotor keeps turning. **Adding a hull (each later hull task):** set
+  `"finalized": true` on its `data/ships/catalogue.json` entry (new optional flag, `ShipCatalogData.finalized_ids`), add a
+  `spawns[]` entry (a ship: `idle` hold behaviour, `invulnerable`, a pool count in `pools`) or a `capitals[]` entry to its
+  faction's row at the next free z (half its length plus a gap past the last hull; the x of the row stays), and run
+  `scripts/gen_ship_catalog.sh`. `tests/integration/test_ship_showcase.gd` fails until every finalized hull is parked,
+  checks the capitals do not overlap and that all 24 hulls move under 0.5 m over 60 s with no hit landing (0.000 m
+  measured). The old flee tests moved with the old file to `tests/fixtures/civilian_row.json` (`test_civilian_ships.gd`).
+  **Not added:** the Thunderbolt has a generated asset (`ea_thunderbolt`) but no catalogue entry or `ShipSpec` yet (M11 makes it
+  flyable), so it has no row spot; its hull task or M11 adds it. Capitals are not invulnerable (a player's shots can hurt
+  them). Shots: `references/screenshots/M10-T64 ship showcase/`.
 
 ### M10-T02 Factions as data
 
