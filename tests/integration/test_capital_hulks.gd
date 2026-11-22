@@ -2,7 +2,7 @@ extends GutTest
 ## Disabled hulks on the Omega in the real main scene (M10-T10, D12.7, Q19, AC8's hulk clause): a disabled hull loses power,
 ## control and thrust in stages and then drifts cold on its last motion, still a target whose sections can blow; its lights go
 ## out while a sister's stay lit; a jump point it held collapses; in the low-attention tier it is a hulk row that ignores its
-## cruise, and comes back a hulk; past the cap the oldest hulk is scuttled; the console disables one and lists the hulks.
+## cruise, and comes back a hulk; a scuttle is silent and makes a hulk; a hulk destroyed blasts as its kind does; the Vorlons never leave a hulk.
 
 const TYPE: StringName = &"ea_omega"
 const SPEED_UP: float = 4.0
@@ -190,27 +190,66 @@ func test_in_the_tier_it_is_a_hulk_row_that_ignores_its_cruise_and_comes_back_a_
 	assert_lt((cap.linear_velocity - v0).length(), 0.05, "drifting as its row did")
 
 
-func test_past_the_cap_the_oldest_hulk_is_scuttled() -> void:
-	var first: CapitalShip = _spawn("EAS Agamemnon", 4000.0)
-	var second: CapitalShip = _spawn("EAS Achilles", -4000.0)
-	if first == null or second == null:
-		return
+func test_a_scuttle_is_silent_and_makes_a_hulk_with_no_cap() -> void:
+	var ships: Array[CapitalShip] = []
+	for i: int in 3:
+		var c: CapitalShip = _spawn("EAS Agamemnon" if i == 0 else "EAS Achilles" if i == 1 else "EAS Ajax", 4000.0 * (i + 1) - 6000.0)
+		if c == null:
+			return
+		ships.append(c)
 	await wait_physics_frames(3)
-	assert_true(_run("capital hulks 1").ok)
 	var deaths: Array = []
-	main.director.capital_destroyed.connect(func(c: CapitalBody, info: HitInfo) -> void: deaths.append([c, info.cause]))
-	_disable(first)
-	await wait_physics_frames(2)
-	assert_true(deaths.is_empty(), "one hulk is within the cap")
-	_disable(second)
-	assert_false(first.damageable.hull.destroyed, "never inside the hit that disabled the newest")
-	await wait_physics_frames(2)
-	assert_eq(deaths, [[first, HitInfo.CAUSE_SCUTTLE]], "the oldest is scuttled through the destruction director")
-	assert_true(second.is_hulk(), "the newest stays")
+	main.director.capital_destroyed.connect(func(c: CapitalBody, info: HitInfo) -> void: deaths.append([c, info]))
+	for c: CapitalShip in ships:
+		assert_true(c.scuttle(), "the crew scuttles it")
+		assert_false(c.scuttle(), "once")
+	await _fly(1.0)
+	assert_true(deaths.is_empty(), "no blast, no explosion")
+	for c: CapitalShip in ships:
+		assert_true(c.is_hulk())
+		assert_eq(c.damage.live_mounts().size(), 0, "it stops firing")
+	await _fly(ships[0].hulk_stages.cold_s, func() -> bool: return ships[0].hulk_stages.is_cold())
+	assert_true(ships[0].hulk_stages.is_cold(), "it goes through the stages")
+	assert_eq(CapitalFlight.of(main.world).hulks.size(), 3, "every hulk stays: there is no cap")
+	await _fly(1.0)
+	assert_true(deaths.is_empty(), "none scuttled by a count")
 	var listed: ConsoleResult = _run("capital hulks")
 	assert_true(listed.ok, listed.error)
-	assert_string_contains("\n".join(listed.lines), "EAS Achilles")
-	assert_string_contains("\n".join(listed.lines), "1 of 1 kept, 1 scuttled")
+	assert_string_contains("\n".join(listed.lines), "3 hulks")
+	assert_true(_run("capital focus %s" % String(ships[0].name)).ok)
+	assert_false(_run("capital scuttle").ok, "already disabled")
+
+
+func test_a_destroyed_hulk_blasts_as_big_as_any_ship_of_its_kind() -> void:
+	var hulk: CapitalShip = _spawn("EAS Agamemnon", 4000.0)
+	var fresh: CapitalShip = _spawn("EAS Achilles", -4000.0)
+	if hulk == null or fresh == null:
+		return
+	await wait_physics_frames(3)
+	var blasts: Dictionary = {}
+	main.director.capital_destroyed.connect(func(c: CapitalBody, info: HitInfo) -> void: blasts[c] = info.blast_energy_j)
+	hulk.scuttle()
+	await _fly(1.0)
+	hulk.damageable.kill()
+	fresh.damageable.kill()
+	await wait_physics_frames(2)
+	assert_gt(float(blasts.get(hulk, 0.0)), 0.0, "the hulk blows")
+	assert_eq(blasts.get(hulk), blasts.get(fresh), "with the blast of a ship of its kind, no special scuttle blast")
+
+
+func test_a_vorlon_or_shadow_ship_explodes_instead_of_becoming_a_hulk() -> void:
+	var cap: CapitalShip = CapitalShip.create(TYPE, &"vorlons", "Vorlon test", Vector3.ZERO)
+	if cap == null:
+		return
+	main.world.spawn(cap, main.world.to_universe(main.ship.global_position + Vector3(0.0, 0.0, -6000.0)), Basis.IDENTITY)
+	await wait_physics_frames(3)
+	var deaths: Array = []
+	main.director.capital_destroyed.connect(func(c: CapitalBody, info: HitInfo) -> void: deaths.append([c, info.cause]))
+	assert_true(cap.scuttle(), "the order is taken")
+	await wait_physics_frames(3)
+	assert_eq(deaths, [[cap, HitInfo.CAUSE_NO_HULK]], "it blows at once, a hulk never forms")
+	assert_false(cap.is_hulk())
+	assert_true(cap.hulk_stages.is_live(), "no wind-down began")
 
 
 func test_the_console_reads_the_wind_down() -> void:
@@ -222,7 +261,7 @@ func test_the_console_reads_the_wind_down() -> void:
 	_disable(cap)
 	assert_string_contains(str(DebugConsole.registry.read("capital.hulk").get("value")), "power lost")
 	assert_string_contains(_run("capital disable").lines[0], "already disabled")
-	assert_string_contains(str(DebugConsole.registry.read("capital.hulks").get("value")), "1 of")
+	assert_eq(str(DebugConsole.registry.read("capital.hulks").get("value")), "1")
 	assert_eq(str(DebugConsole.registry.read("capital.state").get("value")), "disabled")
 
 

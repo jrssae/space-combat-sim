@@ -1,9 +1,7 @@
 class_name HulkRoster
 extends RefCounted
-## The disabled hulks kept in play, oldest first (M10-T10, D12.7, Q19): past the cap the oldest are scuttled, so a long battle
-## does not fill the space with wrecks. Pure: it holds keys (body ids) in the order they were disabled.
-
-var cap: int = 8
+## The disabled hulks in play, oldest first (M10-T10, D12.7): there is no cap, a hulk stays until it is destroyed. Pure: it
+## holds keys (body ids) in the order they were disabled.
 
 var _order := PackedInt64Array()
 
@@ -27,13 +25,6 @@ func has(key: int) -> bool:
 
 func size() -> int:
 	return _order.size()
-
-
-## The hulks past the cap, oldest first: the ones to scuttle. A cap below 0 keeps every hulk.
-func over_cap() -> PackedInt64Array:
-	if cap < 0 or _order.size() <= cap:
-		return PackedInt64Array()
-	return _order.slice(0, _order.size() - cap)
 
 
 ## Every hulk, oldest first.

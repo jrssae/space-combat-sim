@@ -9,8 +9,7 @@ extends Node
 ## type is registered once with its flight spec (`CapitalPropulsion.flight_spec`); a ship whose spec changes joins again.
 ##
 ## Disabled hulks (M10-T10, D12.7, Q19): each tick a disabled ship's wind-down moves on before its command, and its assist goes
-## with its control. The hulks are kept oldest first (`hulks`); past `hulk_cap` the oldest are scuttled at the start of the next
-## tick (never inside the hit that disabled the newest, so a scuttle's blast never lands in the middle of another hit).
+## with its control. The hulks are listed oldest first (`hulks`); there is no cap on them.
 ##
 ## Console: it hosts the `capital` provider and command (`CapitalConsole`).
 
@@ -23,21 +22,18 @@ var out_scalars: PackedFloat64Array = PackedFloat64Array()
 var flown: Array[CapitalShip] = []
 ## Wall-clock microseconds of the last tick (a readout, never gameplay).
 var last_us: int = 0
-## The disabled hulks kept, oldest first, and how many were scuttled past the cap.
+## The disabled hulks, oldest first.
 var hulks: HulkRoster = HulkRoster.new()
-var scuttled: int = 0
 
 var _ships: Array[CapitalShip] = []
 var _step: Object = null
 var _out_slots := PackedInt32Array()  # the slot of each output row of the last step
 var _console: CapitalConsole = null
-var _scuttle_due: bool = false
 
 
 func _init() -> void:
 	name = NODE_NAME
 	process_physics_priority = PRIORITY
-	hulks.cap = int(CapitalData.hulk_rule("cap"))
 
 
 static func attach(world: Node) -> CapitalFlight:
@@ -86,12 +82,6 @@ func leave(ship: CapitalShip) -> void:
 		ship.ship_disabled.disconnect(callback)
 
 
-## Sets how many hulks stay at once (below 0: every one); any past it are scuttled at the next tick.
-func set_hulk_cap(cap: int) -> void:
-	hulks.cap = cap
-	_scuttle_due = true
-
-
 ## The capital ships it flies, in join order.
 func ships() -> Array[CapitalShip]:
 	return _ships
@@ -104,8 +94,6 @@ func row_of(ship: CapitalShip) -> int:
 
 func _physics_process(delta: float) -> void:
 	var started: int = Time.get_ticks_usec()  # readout only
-	if _scuttle_due:
-		_scuttle_over_cap()
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	flown.clear()
 	if sim == null or not sim.ensure_synced() or _native() == null:
@@ -139,24 +127,13 @@ func _physics_process(delta: float) -> void:
 	last_us = Time.get_ticks_usec() - started
 
 
-# A ship was disabled: it joins the hulks, and the oldest past the cap go at the next tick.
+# A ship was disabled: it joins the hulks, and the ones that are no longer hulks (destroyed, whole again) leave.
 func _on_ship_disabled(ship: CapitalShip) -> void:
-	hulks.add(ship.get_instance_id())
-	_scuttle_due = true
-
-
-# Drops the hulks that are no longer hulks (destroyed, whole again, gone), then scuttles the oldest past the cap.
-func _scuttle_over_cap() -> void:
-	_scuttle_due = false
 	for key: int in hulks.keys():
-		var ship: CapitalShip = CapitalShip.of_body(key)
-		if ship == null or not ship.is_hulk():
+		var other: CapitalShip = CapitalShip.of_body(key)
+		if other == null or not other.is_hulk():
 			hulks.remove(key)
-	for key: int in hulks.over_cap():
-		hulks.remove(key)
-		var ship: CapitalShip = CapitalShip.of_body(key)
-		if ship != null and ship.scuttle():
-			scuttled += 1
+	hulks.add(ship.get_instance_id())
 
 
 func _native() -> Object:

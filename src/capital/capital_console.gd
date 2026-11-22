@@ -2,11 +2,11 @@ class_name CapitalConsole
 extends RefCounted
 ## The `capital` provider and command (M10-T07): the capital ships in play, one in focus (the newest by default), and ways to
 ## spawn one, set its helm, open its own jump point, list its sections and hurt a section or a mount (M10-T08), so the capital
-## path can be driven from a live build; disable one and read or set the hulks kept (M10-T10).
+## path can be driven from a live build; disable or scuttle one and list the hulks (M10-T10).
 
 const PROVIDER: StringName = &"capital"
 const ACTIONS: Array[StringName] = [&"info", &"list", &"spawn", &"helm", &"jump", &"focus", &"sections", &"damage",
-		&"disable", &"hulks"]
+		&"disable", &"scuttle", &"hulks"]
 ## How far ahead of the player `capital spawn` places a ship, m, unless told.
 const SPAWN_AHEAD_M: float = 2000.0
 
@@ -51,8 +51,8 @@ func register() -> void:
 		&"bays": {"get": func() -> String: return _live_text(_focused().damage.live_bays().size(), _focused().damage.bay_sections.size()) if _focused() != null else "",
 				"doc": "Launch bays that work, of all"},
 		&"hulk": {"get": _hulk_text, "doc": "A disabled hull's wind-down (M10-T10): its stage (live, power lost, control lost, cold), its lights and drive left"},
-		&"hulks": {"get": func() -> String: return "%d of %d, %d scuttled" % [_live_hulks(), flight.hulks.cap, flight.scuttled],
-				"doc": "Disabled hulks kept, the cap (Q19; the oldest past it scuttled), and how many were scuttled"},
+		&"hulks": {"get": func() -> String: return "%d" % _live_hulks(),
+				"doc": "Disabled hulks in play (no cap, M10-T10)"},
 		&"collision": {"get": _collision_text, "doc": "Hull shapes, rotors, sections, and whether the core holds the surfaces"},
 		&"broadcast_km": {"get": func() -> float: return _focused().targetable.broadcast_range_m / 1000.0 if _focused() != null else 0.0,
 				"type": TYPE_FLOAT, "doc": "How far it is heard, km (by class)"},
@@ -63,7 +63,7 @@ func register() -> void:
 				"doc": "Wall-clock cost of the last tick's capital flight, us (a readout)"},
 	}), flight)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Capital ships (M10-T07): info, list, spawn <type> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>, disable, hulks [cap]",
+			"Capital ships (M10-T07): info, list, spawn <type> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>, disable, scuttle, hulks",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"a"),
 					ConsoleArg.float_optional(&"b", null)]), _cmd, flight)
 
@@ -91,8 +91,10 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 			return _damage(a, args[&"b"])
 		&"disable":
 			return _disable()
+		&"scuttle":
+			return _scuttle()
 		&"hulks":
-			return _hulks(a)
+			return _hulks()
 	var ship: CapitalShip = _focused()
 	if ship == null:
 		return ConsoleResult.line("no capital ships")
@@ -157,18 +159,25 @@ func _disable() -> ConsoleResult:
 	return ConsoleResult.line("%s disabled: %s" % [ship.targetable.display_name, _hulk_text()])
 
 
-# Lists the hulks kept, oldest first; with a number, sets the cap first (below 0: keep every one).
-func _hulks(cap_text: String) -> ConsoleResult:
-	if not cap_text.is_empty():
-		if not cap_text.is_valid_int():
-			return ConsoleResult.failure("capital hulks [cap]")
-		flight.set_hulk_cap(int(cap_text))
+# The crew scuttles the focused ship: silent, it winds down into a hulk (a Vorlon or Shadow ship blows instead).
+func _scuttle() -> ConsoleResult:
+	var ship: CapitalShip = _focused()
+	if ship == null:
+		return ConsoleResult.failure("capital scuttle: no capital ship")
+	var who: String = ship.targetable.display_name
+	if not ship.scuttle():
+		return ConsoleResult.failure("capital scuttle: %s is already disabled or destroyed" % who)
+	return ConsoleResult.line("%s scuttled" % who)
+
+
+# Lists the hulks, oldest first.
+func _hulks() -> ConsoleResult:
 	var lines := PackedStringArray()
 	for key: int in flight.hulks.keys():
 		var ship: CapitalShip = CapitalShip.of_body(key)
 		if ship != null and ship.is_hulk():
 			lines.append("%s: %s%s" % [ship.targetable.display_name, ship.hulk_stages.stage_name(), ", in the tier" if ship.is_tier_parked() else ""])
-	lines.append("%d of %d kept, %d scuttled" % [_live_hulks(), flight.hulks.cap, flight.scuttled])
+	lines.append("%d hulks" % _live_hulks())
 	return ConsoleResult.success(lines)
 
 

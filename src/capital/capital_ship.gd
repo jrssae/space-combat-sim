@@ -17,7 +17,7 @@ extends CapitalBody
 ## - **Disabled** (M10-T10, D12.7), it winds down in stages (`hulk_stages`): power first (weapons, bays; its lights die,
 ##   `CapitalHulkLights`), then control (the helm stops steering), then thrust (the mains' last setting winds down to cold), and
 ##   then it drifts on its last motion with no force, still a target whose sections can be hit and blow. In the tier it is a
-##   hulk row. `CapitalFlight` keeps the cap on hulks (Q19) and scuttles the oldest past it.
+##   hulk row. There is no cap on hulks; `scuttle()` is the crew's silent way to make one.
 ## - **In play.** `Targetable` of kind capital, heard as far as its class broadcasts (`CapitalData.broadcast_range_m`); in the
 ##   low-attention tier it is a capital row (`CapitalBody`); it opens and holds its own jump point at its anchor when its type
 ##   can (`open_own_point`). Destroyed, the `DestructionDirector` draws its blast and it leaves play (`leave_play`).
@@ -207,7 +207,7 @@ func advance_hulk(delta: float) -> void:
 
 
 func is_hulk() -> bool:
-	return damage != null and damage.is_disabled and not damage.is_destroyed
+	return damage != null and damage.is_disabled and not damage.is_destroyed and not damageable.hull.destroyed
 
 
 func settle_as_hulk() -> void:
@@ -220,9 +220,12 @@ func settle_as_hulk() -> void:
 	hulk_cold.emit()
 
 
-## Scuttled past the cap on hulks (Q19): destroyed with no shooter, so the destruction director draws its death and blast.
+## The crew scuttles the ship (M10-T10, D12.7): silent, no blast; it stops firing and winds down into a hulk. A ship that never
+## becomes a hulk (`CapitalData.never_hulk`) explodes instead. For the AI and the missions; false when it is already disabled.
 func scuttle() -> bool:
-	return damageable.kill(HitInfo.CAUSE_SCUTTLE)
+	if damage.is_disabled or damage.is_destroyed:
+		return false
+	return damage.scuttle()
 
 
 ## The force its engines applied on the last tick, World frame (the ram resolver takes it off a contact's velocity change).
@@ -523,6 +526,9 @@ func _power_for_drive() -> float:
 
 # Disabled: the wind-down starts, its lights get their own materials to dim; a hull already in the tier is a hulk row at once.
 func _on_disabled() -> void:
+	if CapitalData.never_hulk(faction, type_id):
+		_blow_instead.call_deferred()  # not inside the hit that disabled it
+		return
 	hulk_stages.start()
 	var roots: Array[Node] = [hull_piece]
 	for rotor: CapitalRotor in rotors:
@@ -535,6 +541,12 @@ func _on_disabled() -> void:
 		if tier != null:
 			tier.mark_hulk(self, true)
 		settle_as_hulk()
+
+
+# A ship that never becomes a hulk blows up the moment it is disabled, as any ship of its kind is destroyed.
+func _blow_instead() -> void:
+	if is_instance_valid(self) and damage != null and damage.is_disabled and not damage.is_destroyed:
+		damageable.kill(HitInfo.CAUSE_NO_HULK)
 
 
 # Whole again (the console's heal, a rebuild): every section and mount, the drive as built, its lights back on.

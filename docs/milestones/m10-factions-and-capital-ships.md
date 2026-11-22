@@ -51,7 +51,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q16 | How capital ships fight | A native brain profile `capital`, settled in T03 as a whole. Starting point: hold its main weapons' range, bring beams and broadsides to bear, screen with interceptors, launch its fighters, withdraw through its own jump point when crippled |
 | Q17 | Targetable subsystems | Turrets, beam emitters, engines, launch bays, the bridge and the reactor, as a second level of the radial target menu (§18.19), shown on the target box |
 | Q18 | Blast sizes | From the class and what is aboard (reactor, magazines, fuel): a fighter's death can hurt a wingman within about 100 m, a capital's reactor reaches a few km. T03 sets the numbers |
-| Q19 | Disabled hulks | Kept for the mission as drifting rows (D12.7); a cap on how many stay, the oldest scuttled past it; boarding and salvage are later (M32) |
+| Q19 | Disabled hulks | Kept for the mission as drifting rows (D12.7); no cap on how many stay (maintainer, 2026-11-21); the crew can scuttle a ship silently into a hulk, and Vorlon and Shadow ships never become one; boarding and salvage are later (M32) |
 | Q20 | Mines | Each faction lays its own minefields, placed by scenario and mission data around capitals and chokepoints; the hulls T03 names lay mines in battle too (for example the Narn). A mine ignores its own faction and its friends, triggers by proximity, blasts with D12.6's falloff and shows on the radar only at short range |
 | Q21 | The benchmark | The stand-ins go: the bench draws real classes from several factions (cruiser, destroyer and carrier sizes) with their real weapons; M4's bars are measured again |
 | Q22 | Who opens jump points | Only the larger classes (destroyers, carriers, dreadnoughts); smaller cruisers use a gate or another ship's point; fighters never. A point is sized for its opener; hulls wider than the gate's mouth (2 400 by 1 510 m) use their own; the ancients' arrivals follow T04 (the Shadows: Q44). T01 and T03 pick the list |
@@ -251,7 +251,7 @@ Out:
 
 - A disabled ship loses power, control and thrust in stages, stops fighting and drifts on its last motion. Its brain is
   released; it stays `Targetable` and its sections can still be hit.
-- In the tier it is a `FLAG_HULK` row (§17.14), never removed for being idle; Q19's cap scuttles the oldest.
+- In the tier it is a `FLAG_HULK` row (§17.14), never removed for being idle; there is no cap on hulks. `scuttle()` makes one silently; the ancients explode instead (`hulks.never_hulk`).
 - A jump point it held collapses (M6-T23's rule); an explosive section hit later blows it up (D12.8).
 
 ### D12.8 Staged break-up
@@ -724,16 +724,20 @@ parity green.
   pull aside). Numbers in `data/capitals/capitals.json` `hulks`. Its brain is released (`set_course` ignored); it stays
   `Targetable` and its sections still blow it up later; a point it held collapses (`JumpCapability.is_disabled` reads
   `CapitalBody.is_hulk`). In the tier a hulk row (`FLAG_HULK`, cruise ignored), cold at once when demoted, marked when disabled in
-  the tier (`TierDirector.mark_hulk`), a hulk again when promoted. Q19's cap: `CapitalFlight.hulks` (`HulkRoster`, cap 8), the
-  oldest scuttled at the next tick (`Damageable.kill`, new cause `scuttle`, its death and blast through the director). Console
-  `capital disable`, `capital hulks [cap]`, provider `hulk`, `hulks` (`info.md`). No native code: the drift was native already
+  the tier (`TierDirector.mark_hulk`), a hulk again when promoted. Hulks are listed in `CapitalFlight.hulks` (`HulkRoster`; the cap was dropped, see the follow-up below). Console
+  `capital disable`, `capital hulks`, provider `hulk`, `hulks` (`info.md`). No native code: the drift was native already
   (Jolt, the tier); a Rust test pins a capital hulk row. Tests (staged copy): cargo 278 (new: the capital hulk row); GUT 192/192 over 22 files (new:
   `test_hulk_stages` 7, `test_capital_hulks` 6, `test_hulk_threads` 1; with the capital, tier, blast, jump, destruction, strike
   carrier, subsystem, core, parity and thread files); compile check 1 091 scripts clean. Cost: GDScript per capital per tick (debug build), about 0.9 us more while live, about 2 us more while winding
   down, less once cold (no helm); the capital flight's tick with one hulk beside the seeded battle 46 us. **Open:** the stage times
-  and the cap of 8 are placeholders to confirm; fighters have no sections, so none is disabled yet; a near hulk's body row has no
+  are placeholders to confirm; fighters have no sections, so none is disabled yet; a near hulk's body row has no
   `FLAG_HULK` (near brains still see a ship); the lights' copies miss a later `texture_detail` change, and a far hull in the tier
   is drawn lit.
+  **Follow-up (2026-11-21, maintainer):** timings kept (2/6/3 s); the hulk cap and its scuttling are gone; `CapitalShip.scuttle()`
+  and `capital scuttle` are the crew's silent route to a hulk (no blast), a destroyed hulk blasts as its kind does (T09's rule), and
+  Vorlon and Shadow ships never become hulks (`hulks.never_hulk`: they explode when disabled, cause `no_hulk`). Omega turns slower
+  (`rate_max` 2 to 1 deg/s, torque to 5e11 / 5.2e11 / 9.6e10, 0.0018 rad/s^2, to tune); the Nova (1.5 deg/s, 0.004 rad/s^2) is
+  unchanged. Tests: `test_hulk_stages`, `test_capital_hulks` (cap tests replaced).
 - **T12 to T15 (weapons):** D12.9 with T03's numbers: beams and their batched draw, interceptors and the EA hulls'
   screens, capital turrets and missiles, mines placed by scenario data and laid in battle, with the radar's short range
   (Q20). Done when AC9, apart from the stand-ins' removal (T45).

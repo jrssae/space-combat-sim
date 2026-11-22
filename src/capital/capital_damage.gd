@@ -310,6 +310,17 @@ func _check_disabled() -> void:
 		drive_changed.emit()
 
 
+## The crew scuttles the ship (M10-T10): disabled at once with every section whole, so it stops fighting and winds down into a
+## hulk. False when it is already disabled or destroyed.
+func scuttle() -> bool:
+	if is_disabled or is_destroyed:
+		return false
+	is_disabled = true
+	disabled.emit()
+	drive_changed.emit()
+	return true
+
+
 func _section_lost(name: String) -> bool:
 	var s: CapitalSection = sections.get(name)
 	return s != null and s.lost()

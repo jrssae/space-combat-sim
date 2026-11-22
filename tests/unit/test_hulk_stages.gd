@@ -1,6 +1,6 @@
 extends GutTest
 ## `HulkStages` and `HulkRoster` (M10-T10, D12.7, Q19): a disabled capital loses power, then control, then thrust, then drifts
-## cold; its lights die as it goes; the hulks kept are capped, the oldest scuttled first.
+## cold; its lights die as it goes; the roster lists the hulks oldest first (no cap).
 
 const DT: float = 1.0 / 60.0
 
@@ -37,7 +37,7 @@ func test_the_file_gives_the_numbers() -> void:
 	assert_eq(s.cold_s, CapitalData.hulk_rule("cold_s"))
 	assert_eq(s.lights_fade_s, CapitalData.hulk_rule("lights_fade_s"))
 	assert_gt(s.cold_s, s.control_loss_s, "control goes before the drive is cold")
-	assert_gt(CapitalData.hulk_rule("cap"), 0.0)
+	assert_eq(CapitalData.hulk_rule("cap"), 0.0, "there is no cap on hulks")
 
 
 func test_a_live_hull_flies_its_helm_and_nothing_moves_on() -> void:
@@ -133,18 +133,29 @@ func test_finish_is_cold_at_once_and_reset_is_live() -> void:
 	assert_eq(s.thrust_level(), 1.0)
 
 
-func test_the_roster_scuttles_the_oldest_past_the_cap() -> void:
+func test_the_roster_keeps_every_hulk_oldest_first() -> void:
 	var r := HulkRoster.new()
-	r.cap = 2
 	for key: int in [11, 12, 13, 14]:
 		r.add(key)
 	r.add(12)
-	assert_eq(r.size(), 4, "a hulk is noted once")
-	assert_eq(r.over_cap(), PackedInt64Array([11, 12]), "the oldest past the cap")
+	assert_eq(r.size(), 4, "a hulk is noted once, and none is dropped for their number")
 	r.remove(11)
-	assert_eq(r.over_cap(), PackedInt64Array([12]))
-	r.cap = -1
-	assert_eq(r.over_cap().size(), 0, "below 0 keeps every hulk")
-	r.cap = 0
-	assert_eq(r.over_cap(), PackedInt64Array([12, 13, 14]))
 	assert_eq(r.keys(), PackedInt64Array([12, 13, 14]))
+	assert_true(r.has(13))
+
+
+func test_the_ancients_never_become_hulks() -> void:
+	assert_true(CapitalData.never_hulk(&"vorlons", &"ea_omega"))
+	assert_true(CapitalData.never_hulk(&"shadows", &"ea_omega"))
+	assert_false(CapitalData.never_hulk(&"earth_alliance", &"ea_omega"))
+
+
+func test_the_omega_struggles_to_turn_and_the_nova_does_not_out_turn_it_in_acceleration() -> void:
+	var omega: ShipSpec = load("res://assets/ships/ea_omega.tres")
+	var nova: ShipSpec = load("res://assets/ships/ea_nova.tres")
+	# Rates are deg/s, accelerations rad/s^2 about the pitch axis (x).
+	assert_lte(omega.rate_max.x, 1.0, "the Omega turns slowly")
+	assert_lt(omega.rate_max.x, nova.rate_max.x, "slower than the dreadnought, which is lighter")
+	var omega_acc: float = omega.rcs_torque_max.x / omega.inertia.x
+	var nova_acc: float = nova.rcs_torque_max.x / nova.inertia.x
+	assert_lt(omega_acc, nova_acc * 0.6, "and it is slow to start a turn")

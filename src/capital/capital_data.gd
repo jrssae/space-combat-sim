@@ -4,7 +4,7 @@ extends RefCounted
 ## needs after a jump before it can open another point, each faction's carrier doctrine (when its fighters go home and
 ## when the carrier flees; `CarrierTactics.DEFAULTS` lists the keys), how far each class is heard (M10-T07, Q51), and how its
 ## sections and mounts take damage (M10-T08, D12.5), the blasts' table (M10-T09, D12.6, `BlastTable`) and how a disabled hull
-## winds down and how many hulks stay (M10-T10, D12.7, Q19). Pure apart from the reads.
+## winds down and which ships never leave one (M10-T10, D12.7). Pure apart from the reads.
 
 const PATH: String = "res://data/capitals/capitals.json"
 ## The weapons' kinds (M10-T03), for a mount's hit points.
@@ -13,8 +13,8 @@ const LOADOUTS_PATH: String = "res://data/capitals/loadouts.json"
 const SECTION_DEFAULTS: Dictionary = {"reactor_overload": 0.5, "pass_on": 0.5, "headless_fire_rate": 0.5,
 		"power_stage_at": 0.5, "power_stage_level": 0.5, "mount_reach_m": 10.0}
 ## The hulk rules a file without `hulks` falls back on (D12.7, Q19): when control goes and when the drive is cold after the ship
-## is disabled, how long its lights take to die, s, and how many hulks stay before the oldest is scuttled.
-const HULK_DEFAULTS: Dictionary = {"control_loss_s": 2.0, "cold_s": 6.0, "lights_fade_s": 3.0, "cap": 8}
+## is disabled, and how long its lights take to die, s.
+const HULK_DEFAULTS: Dictionary = {"control_loss_s": 2.0, "cold_s": 6.0, "lights_fade_s": 3.0}
 ## A mount neither table names has this many hit points (a medium mount's).
 const DEFAULT_MOUNT_HP: float = 800.0
 ## A class the file does not name recharges this long, s.
@@ -56,6 +56,18 @@ static func hulk_rule(key: String) -> float:
 	var table: Variant = _read().get("hulks")
 	var value: Variant = (table as Dictionary).get(key) if table is Dictionary else null
 	return float(value) if value is float or value is int else float(HULK_DEFAULTS.get(key, 0.0))
+
+
+## Whether a ship of `faction` and hull `type_id` never becomes a hulk: disabled, it explodes instead (the ancients' ships; the
+## file's `hulks.never_hulk` lists factions and hulls).
+static func never_hulk(faction: StringName, type_id: StringName) -> bool:
+	var table: Variant = _read().get("hulks")
+	var rule: Variant = (table as Dictionary).get("never_hulk") if table is Dictionary else null
+	if not (rule is Dictionary):
+		return false
+	var factions: Variant = (rule as Dictionary).get("factions")
+	var hulls: Variant = (rule as Dictionary).get("hulls")
+	return (factions is Array and (factions as Array).has(String(faction))) or (hulls is Array and (hulls as Array).has(String(type_id)))
 
 
 ## Section rule `key` (`SECTION_DEFAULTS` lists them): the file's `section_damage` value, else the default.

@@ -7193,7 +7193,7 @@ src/capital/hulk_stages.gd          HulkStages, pure: the stages, the drive's an
 src/capital/hulk_roster.gd          HulkRoster, pure: the hulks kept, oldest first; the ones past the cap
 src/capital/capital_hulk_lights.gd  CapitalHulkLights: a disabled ship's glowing surfaces on materials of its own, dimmed
 src/capital/capital_ship.gd         the wind-down wired in: flight_command, flight_assist, advance_hulk, is_hulk, settle_as_hulk, scuttle
-src/capital/capital_flight.gd       advances each disabled ship's wind-down before its command; keeps the roster and the cap
+src/capital/capital_flight.gd       advances each disabled ship's wind-down before its command; keeps the roster of hulks
 src/ai/tier_director.gd             a disabled capital demoted as a hulk row; mark_hulk for one disabled in the tier
 ```
 
@@ -7216,20 +7216,24 @@ src/ai/tier_director.gd             a disabled capital demoted as a hulk row; ma
   ignored, the pull still on it. A hulk demoted goes cold at once (`settle_as_hulk`); one disabled while in the tier has its row
   marked (`TierDirector.mark_hulk`) and goes cold; promoted, its own damage keeps it a hulk. The drift is native already (Jolt near,
   the tier's integrator far); T10 adds no native code, only a Rust test that a capital hulk row ignores its cruise.
-- **The cap (Q19).** `CapitalFlight.hulks` (`HulkRoster`) notes each disabled ship in order; past `cap` (8) the oldest are scuttled
-  (`Damageable.kill`, cause `scuttle`, no shooter, no kill credit) at the start of the next tick, so a scuttle's blast never lands
-  inside the hit that disabled the newest. Destroyed or healed hulks leave the roster.
+- **No cap, scuttling, ancients (maintainer, 2026-11-21).** Hulks are not capped: one stays until it is destroyed
+  (`CapitalFlight.hulks`, `HulkRoster`, only a list). `CapitalShip.scuttle()` (console `capital scuttle`) is the crew's order for
+  the AI and the missions: silent, no blast and no explosion, the ship disabled with every section whole (`CapitalDamage.scuttle`),
+  so it stops firing and winds down into a hulk. A hulk destroyed later blasts as any ship of its kind does (§22.4's table; no
+  special scuttle blast). Vorlon and Shadow ships never become hulks (`data/capitals/capitals.json` `hulks.never_hulk`, factions
+  and hulls; `CapitalData.never_hulk`): disabled, or ordered to scuttle, they explode at once (cause `no_hulk`, deferred a frame
+  out of the hit that disabled them).
 - **Threads and cost.** All of it is per event or per disabled ship on the main thread; the rows it changes are the ones a body
   or a tier row already gives, so 1 and 6 threads give the same rows (`test_hulk_threads`). Per capital per tick in GDScript (debug
   build): about 0.9 us more while live (two calls beside the helm's 2.7 us), about 2 us more while winding down, and less than
   before once cold (no helm).
-- **Console.** `capital disable` (shuts the focused ship's reactors down), `capital hulks [cap]`; provider fields `hulk` and
+- **Console.** `capital disable` (shuts the focused ship's reactors down), `capital scuttle`, `capital hulks`; provider fields `hulk` and
   `hulks` (`info.md`).
 - **Tests.** `test_hulk_stages` (unit: the file's numbers, the stages in order, the drive's even wind-down and steering only with
-  control, the lights' stutter and fade, finish and reset, the roster's cap); `test_capital_hulks` (the main scene, on the Omega:
+  control, the lights' stutter and fade, finish and reset, the roster, the ancients' flag, the Omega's turn rate); `test_capital_hulks` (the main scene, on the Omega:
   the stages and the cold drift, still a target that blows on its magazine, the lights out beside a lit sister and back whole, a
-  held point collapsing, a hulk row ignoring its cruise and coming back a hulk, one disabled in the tier, the cap's scuttle, the
-  console); `test_hulk_threads` (1 vs 6 threads beside the seeded battle); `test_capital_damage` (the reactor's loss now winds
+  held point collapsing, a hulk row ignoring its cruise and coming back a hulk, one disabled in the tier, a silent scuttle with
+  no cap, a destroyed hulk's class blast, a Vorlon exploding instead, the console); `test_hulk_threads` (1 vs 6 threads beside the seeded battle); `test_capital_damage` (the reactor's loss now winds
   down before it drifts); Rust `tier::tests` (a capital hulk row drifts and falls, its cruise ignored).
 - **Known gaps.** Fighters have no sections, so nothing disables one yet (a `Ship.hulk` row and promotion exist since M4). A near
   hulk's body row carries no `FLAG_HULK` (only tier rows do), so a near brain still sees it as a ship. A hulk demoted mid-wind-down
