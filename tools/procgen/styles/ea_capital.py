@@ -1,6 +1,7 @@
-"""Earth Alliance warships (M10-T21, the Omega first; the Hyperion, Nova and Warlock follow): the fleet's grey plating in a
-panel mosaic (``styles/capital.PanelMosaic``), dark recessed bands, a painted face on the command section, black window
-rows, red-orange running lights, blue-white engines and the fleet's red-lit launch bays.
+"""Earth Alliance warships (M10-T21, the Omega first; the Nova and Warlock follow; the Hyperion, a different style, has its own
+looks in ``ea_hyperion.py`` on :func:`capital_style`): the fleet's grey plating in a panel mosaic (``styles/capital.PanelMosaic``),
+dark recessed bands, a painted face on the command section, black window rows, red-orange running lights, blue-white engines
+and the fleet's red-lit launch bays.
 
 Colours are sRGB read off the stills in ``references/show/m10/ea_omega/`` (gitignored): the plating a mottled blue-grey
 that wanders from plate to plate, the command section's fore face a rust ochre, the rotating section's slats a darker
@@ -85,11 +86,23 @@ def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None
     if look not in LOOKS:
         raise ValueError(f"ea_capital has no look {look!r}; it has {sorted(LOOKS)}")
     chosen = LOOKS[look]
+    return capital_style(chosen, f"ea_capital_{look}", PREFIX, fleet_mosaic(chosen), livery)
+
+
+def fleet_mosaic(chosen: Look) -> PanelMosaic:
+    """The Earth Alliance fleet's standard plate mosaic (the Omega's; the Hyperion wears it too), in a look's tone and grime."""
+    return PanelMosaic(plate_m=(18.0, 9.0), splits=2, tone=chosen.plate_tone, grime=chosen.plate_grime, frames_m=30.0, major_every=4)
+
+
+def capital_style(chosen: Look, name: str, prefix: str, skin: PanelMosaic, livery: Mapping[str, int] | None = None) -> CapitalStyle:
+    """An EA warship style from a look: the fleet's roles and fixed paints, its lit bays and engines, under ``name`` with its
+    materials named from ``prefix``. Each class's style module (this one, ``ea_hyperion``) brings its own looks and skin."""
     paint = {**FIXED, **chosen.paint, **dict(livery or {})}
     unknown = set(paint) - set(ROLES)
     if unknown:
-        raise ValueError(f"ea_capital has no roles {sorted(unknown)}")
-    tag = f"{PREFIX}_{look}" if not livery else f"{PREFIX}_{look}_" + "_".join(f"{k}{v:06x}" for k, v in sorted(livery.items()))
+        raise ValueError(f"{name} has no roles {sorted(unknown)}")
+    look = chosen.key
+    tag = f"{prefix}_{look}" if not livery else f"{prefix}_{look}_" + "_".join(f"{k}{v:06x}" for k, v in sorted(livery.items()))
     materials = {role: Material(f"{tag}_{role}", capture_albedo(paint[role]), paneled=paneled,
                                 metallic=chosen.metallic if metallic is None else metallic, roughness=roughness)
                  for role, (paneled, metallic, roughness) in ROLES.items()}
@@ -99,7 +112,7 @@ def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None
     materials["nozzle_throat"] = Material(f"{tag}_nozzle_throat", capture_albedo(0x1C1B1A), metallic=0.8, roughness=0.45, emissive=lin(ENGINE_GLOW),
                                           emissive_strength=ENGINE_STRENGTH)
     style = Style(
-        name=f"ea_capital_{look}",
+        name=name,
         materials=materials,
         panel_size_m=0.5,
         panel_line_width_m=0.035,
@@ -110,8 +123,7 @@ def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None
         grime=chosen.grime,
         extra={"bare_metal": 0.2, "smudge": 0.15, "smudge_scale_m": 0.6, "speckle": 0.04, "streak_length_m": 0.35},
     )
-    skin = PanelMosaic(plate_m=(18.0, 9.0), splits=2, tone=chosen.plate_tone, grime=chosen.plate_grime, frames_m=30.0, major_every=4)
-    return CapitalStyle(f"ea_capital_{look}", style, skin)
+    return CapitalStyle(name, style, skin)
 
 
 def bay_light_materials(tag: str) -> dict[str, Material]:
@@ -126,4 +138,4 @@ def bay_light_materials(tag: str) -> dict[str, Material]:
     }
 
 
-__all__ = ["DEFAULT_LOOK", "LOOKS", "Look", "bay_light_materials", "ea_capital"]
+__all__ = ["DEFAULT_LOOK", "FIXED", "LOOKS", "ROLES", "Look", "bay_light_materials", "capital_style", "ea_capital", "fleet_mosaic"]

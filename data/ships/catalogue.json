@@ -42,6 +42,8 @@
       "faction": "earth_alliance", "role": "capital", "capital_class": "destroyer", "pooled": false, "name": "Omega-class destroyer"},
     {"id": "ea_nova", "spec": "res://assets/ships/ea_nova.tres", "asset": "ea_nova",
       "faction": "earth_alliance", "role": "capital", "capital_class": "dreadnought", "pooled": false, "name": "Nova-class dreadnought"},
+    {"id": "ea_hyperion", "spec": "res://assets/ships/ea_hyperion.tres", "asset": "ea_hyperion",
+      "faction": "earth_alliance", "role": "capital", "capital_class": "destroyer", "pooled": false, "name": "Hyperion-class heavy cruiser"},
     {"id": "ea_shuttle", "spec": "res://assets/ships/ea_shuttle.tres", "asset": "ea_shuttle",
       "faction": "earth_alliance", "role": "civilian", "ai_profile": "civilian", "name": "EA shuttle",
       "look_sheet": "pool", "callsign": "SHUTTLE", "random_pool": false},

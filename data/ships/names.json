@@ -3,7 +3,16 @@
   "prefixes": {
     "earth_alliance": "EAS"
   },
+  "hull_numbers": {
+    "Hyperion": 21, "Lexington": 34, "Clarkstown": 17, "Cronus": 42, "Oceanus": 56, "Atlas": 63, "Helios": 28, "Iapetus": 71,
+    "Themis": 14, "Hermes": 85, "Artemis": 39, "Ares": 47, "Hephaestus": 52, "Castor": 66, "Pollux": 73, "Manchester": 19,
+    "Bristol": 88, "Coventry": 25, "York": 31, "Plymouth": 44, "Portsmouth": 58, "Canterbury": 77, "Exeter": 92, "Durham": 36
+  },
   "names": {
+    "ea_hyperion": [
+      "Hyperion", "Lexington", "Clarkstown", "Cronus", "Oceanus", "Atlas", "Helios", "Iapetus", "Themis", "Hermes", "Artemis", "Ares",
+      "Hephaestus", "Castor", "Pollux", "Manchester", "Bristol", "Coventry", "York", "Plymouth", "Portsmouth", "Canterbury", "Exeter", "Durham"
+    ],
     "ea_omega": [
       "Agamemnon", "Achilles", "Alexander", "Apollo", "Athena", "Charon", "Heracles", "Hector", "Jason", "Leonidas",
       "Nemesis", "Odysseus", "Orion", "Pericles", "Perseus", "Prometheus", "Poseidon", "Themistocles", "Theseus", "Ajax"

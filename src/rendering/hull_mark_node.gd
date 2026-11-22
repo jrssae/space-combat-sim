@@ -19,7 +19,7 @@ static func build_all(marks: Array[Dictionary], atlas: Dictionary, dir: String, 
 	var texture: Texture2D = load(path) as Texture2D
 	var chars: String = str(atlas.get("chars", ""))
 	for mark: Dictionary in marks:
-		var text: String = HullMarks.text_for(mark, display_name, chars)
+		var text: String = HullMarks.text_for(mark, display_name, chars, ShipNames.hull_number_of(display_name))
 		for i: int in text.length():
 			var node: HullMarkNode = create(mark, text, i, atlas, texture, path)
 			if node != null:

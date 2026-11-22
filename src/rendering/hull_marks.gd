@@ -2,26 +2,34 @@ class_name HullMarks
 extends RefCounted
 ## Painted hull lettering (M10-T21): the pure rules behind the letters and numbers on a hull. The generator leaves `marks` in
 ## `hardpoints.json` (each a place, a face normal, an up and a height) and one glyph atlas (`tools/procgen/core/glyphs.py`); a ship
-## picks the text for each mark when it spawns, so every Omega carries the first letter of its own name. Nodes live in
-## `HullMarkNode`.
+## picks the text for each mark when it spawns, so every Omega carries the first letter of its own name and every Hyperion its
+## whole name (M10-T22). Nodes live in `HullMarkNode`.
 
 ## What a mark's `text` says when it is the ship's initial.
 const INITIAL: String = "initial"
+## What a mark's `text` says when it is the ship's whole name.
+const NAME: String = "name"
+## What a mark's `text` says when it is the ship's hull number.
+const NUMBER: String = "number"
 ## How far a letter floats off the hull face, m, so it never z-fights the plating.
 const STANDOFF_M: float = 0.6
 
 
-## The text mark `mark` shows on a ship called `display_name`: the ship's initial, or the mark's own string. Uppercase; "" when
-## nothing printable is left.
-static func text_for(mark: Dictionary, display_name: String, chars: String) -> String:
+## The text mark `mark` shows on a ship called `display_name`: the ship's initial, its name, or the mark's own string. Uppercase,
+## spaces kept as gaps between words; "" when nothing printable is left.
+static func text_for(mark: Dictionary, display_name: String, chars: String, hull_number: String = "") -> String:
 	var text: String = str(mark.get("text", INITIAL))
 	if text == INITIAL:
 		text = initial_of(display_name)
+	elif text == NAME:
+		text = name_of(display_name)
+	elif text == NUMBER:
+		text = hull_number
 	var out: String = ""
 	for c: String in text.to_upper():
-		if chars.contains(c):
+		if chars.contains(c) or (c == " " and not out.is_empty() and not out.ends_with(" ")):
 			out += c
-	return out
+	return out.strip_edges()
 
 
 ## Whether `mark` is painted on a ship of `faction`: a mark with no `only_faction` is on every ship (the renegades' red X is not).
@@ -32,11 +40,16 @@ static func shown_for(mark: Dictionary, faction: StringName) -> bool:
 
 ## The first letter of the ship's own name: "EAS Agamemnon" gives "A" (a leading all-capitals word is the faction's prefix).
 static func initial_of(display_name: String) -> String:
+	return name_of(display_name).substr(0, 1).to_upper()
+
+
+## The ship's own name without its faction's prefix: "EAS Lexington 2" gives "Lexington 2".
+static func name_of(display_name: String) -> String:
 	var words: PackedStringArray = display_name.strip_edges().split(" ", false)
 	if words.is_empty():
 		return ""
 	var skip: int = 1 if words.size() > 1 and words[0].length() >= 2 and words[0] == words[0].to_upper() and words[0].to_upper() != words[0].to_lower() else 0
-	return words[skip].substr(0, 1).to_upper()
+	return " ".join(words.slice(skip))
 
 
 ## The atlas cell (column, row) of `char`, or (-1, -1) when the atlas has no such glyph.

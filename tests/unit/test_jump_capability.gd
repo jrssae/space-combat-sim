@@ -8,8 +8,9 @@ const SHIPS_DIR: String = "res://assets/ships/"
 
 
 ## Designed capital hulls that may open points (M12-T19: the raiders' strike carrier, the maintainer's Q25; M10-T07: the test
-## cruiser, Q51; M10-T21: the Omega, Q49; M10-T23: the Nova).
-const JUMP_CAPABLE: PackedStringArray = ["raider_strike_carrier.tres", "capital_test_cruiser.tres", "ea_nova.tres", "ea_omega.tres"]
+## cruiser, Q51; M10-T21: the Omega, Q49; M10-T23: the Nova; M10-T22: the Hyperion).
+const JUMP_CAPABLE: PackedStringArray = ["raider_strike_carrier.tres", "capital_test_cruiser.tres", "ea_nova.tres", "ea_omega.tres",
+		"ea_hyperion.tres"]
 
 
 func test_no_designed_fighter_or_civilian_hull_can_open_a_jump_point() -> void:

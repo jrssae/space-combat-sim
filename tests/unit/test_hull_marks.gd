@@ -11,10 +11,22 @@ func test_the_initial_skips_the_factions_prefix() -> void:
 	assert_eq(HullMarks.initial_of(""), "")
 
 
+func test_a_number_mark_shows_the_hull_number() -> void:
+	assert_eq(HullMarks.text_for({"text": "number"}, "EAS Hyperion", ATLAS["chars"], "21"), "21")
+	assert_eq(HullMarks.text_for({"text": "number"}, "EAS Hyperion", ATLAS["chars"]), "", "no number, nothing printed")
+
+
 func test_a_mark_shows_the_initial_or_its_own_text() -> void:
 	assert_eq(HullMarks.text_for({"text": "initial"}, "EAS Hector", ATLAS["chars"]), "H")
 	assert_eq(HullMarks.text_for({"text": "bc-7"}, "EAS Hector", ATLAS["chars"]), "BC7", "uppercased, unprintable characters dropped")
 	assert_eq(HullMarks.text_for({"text": "initial"}, "  ", ATLAS["chars"]), "")
+
+
+func test_a_name_mark_shows_the_whole_name_without_the_prefix() -> void:
+	assert_eq(HullMarks.name_of("EAS Lexington 2"), "Lexington 2")
+	assert_eq(HullMarks.text_for({"text": "name"}, "EAS Hyperion", ATLAS["chars"]), "HYPERION")
+	assert_eq(HullMarks.text_for({"text": "name"}, "EAS Yi Sun-sin 2", ATLAS["chars"]), "YI SUNSIN 2", "a space stays a gap between words")
+	assert_eq(HullMarks.text_for({"text": "name"}, "", ATLAS["chars"]), "")
 
 
 func test_the_atlas_cell_follows_the_character_order() -> void:

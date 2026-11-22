@@ -34,7 +34,11 @@ static func parse(text: String) -> Dictionary:
 						list.append(n)
 			if not list.is_empty():
 				names[StringName(str(type))] = list
-	return {"prefixes": prefixes, "names": names}
+	var numbers: Dictionary = {}
+	if raw.get("hull_numbers") is Dictionary:
+		for n: Variant in raw["hull_numbers"]:
+			numbers[str(n)] = str(int(raw["hull_numbers"][n]))
+	return {"prefixes": prefixes, "names": names, "hull_numbers": numbers}
 
 
 ## The names a ship of `type` may carry, in order (empty when the type has none).
@@ -57,3 +61,17 @@ static func pick(type: StringName, faction: StringName, index: int, lists: Dicti
 		chosen = "%s %d" % [chosen, round_number]
 	var prefix: String = str((source["prefixes"] as Dictionary).get(faction, ""))
 	return chosen if prefix.is_empty() else "%s %s" % [prefix, chosen]
+
+
+## The number painted on the hull of the ship called `display_name` ("EAS Hyperion 2" wears Hyperion's number), or "" when its name
+## has none. A repeated name (the "2") keeps its number.
+static func hull_number_of(display_name: String, lists: Dictionary = {}) -> String:
+	var source: Dictionary = lists if not lists.is_empty() else data()
+	var numbers: Dictionary = source.get("hull_numbers", {})
+	var name: String = HullMarks.name_of(display_name)
+	if numbers.has(name):
+		return numbers[name]
+	var words: PackedStringArray = name.split(" ", false)
+	if words.size() > 1 and words[words.size() - 1].is_valid_int():
+		return numbers.get(" ".join(words.slice(0, words.size() - 1)), "")
+	return ""

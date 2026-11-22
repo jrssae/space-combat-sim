@@ -592,6 +592,61 @@ Omega), made with `scripts/model_sheet.sh`; `section_compare.png` and the first 
 - The forward bays launch toward the command block: a Starfury out of the roof or a corner bay meets the bridge's roof or the
   upper armour plate about 200 m ahead and has to climb or turn first (the launch path is T17's).
 
+## `ea_hyperion` (M10-T22)
+
+`tools/procgen/assets/ea_hyperion.py` on `parts/ea_hyperion.py` (measured off the reference; `ea_hyperion_fidelity.py` holds the
+numbers) and its own style `styles/ea_hyperion.py` (the show's light grey with royal-blue bands, plated in the fleet's mosaic),
+on the Omega's machinery (`styles/ea_capital.capital_style`: lit red bays, blue-white engines). Earth Alliance and the renegades.
+The shape is in `docs/design-references.md`, "EA Hyperion-class heavy cruiser".
+
+### Measurements
+
+| | |
+|---|---|
+| Reference | `EA Hyperion Class Heavy Cruiser.stl`, mapping `+x +z -y` (T01); the reference is lopsided by modelling slop, so the hull is built symmetric (the maintainer approved) |
+| Length | **1 025.39 m** (T01) |
+| Span, height | 249.4 m x 266.2 m (the STL 248.7 x 267.4) |
+| Pieces | `hull`, one 4 096 px atlas |
+| Triangles | 10 176 (capital budget 100 000) |
+| Texture sets | 56.0 MB high, 16.0 MB low |
+
+### Sections and hardpoints
+
+Eleven sections: `bow`, `magazine`, `bridge` (the tower, blade, fin and pods), both `hangar` sponsons, `truss`, `reactor`,
+`spine_aft`, both `fuel` tanks and `engines`. Mounts as `data/capitals/loadouts.json` (T03): 2 heavy plasma in the bow face,
+2 particle cannons (deck and keel), 2 medium and 4 light plasma/pulse domes, 2 torpedo tubes, 4 interceptors, and in each
+sponson a lit Starfury bay over a lit shuttle bay (6 Starfuries, 2 shuttles).
+
+**Paint** (the maintainer, 2026-11-21): the royal-blue band is a continuous ring, as in the show's stills. Two rings round the
+forward hull (172 to 192 m and 318 to 338 m), each painted across the roof, both flanks and the belly (the hull lengths,
+the deck and the keel strake are cut at the band so it closes under the hull), and one round the tower. The old single stripe
+along the roof's starboard edge is gone.
+
+**Name and hull number**: the ship's whole name in the bands' blue across the forward roof and on each flank of the tower
+(`mark_name_*`, `text: "name"`), and its hull number, the show's "21" (still 02), in dark slate on each flank of the forward
+hull between the bow band and the flank dome turret (`mark_number_r` and `_l`, 24 m, `text: "number"`). The number is data:
+`data/ships/names.json` `hull_numbers` gives each Hyperion name its own (`Hyperion` 21, `Lexington` 34, ...); `ShipNames.hull_number_of`
+reads it (a repeated name, "Hyperion 2", keeps its number) and `HullMarks.text_for` prints it. **Renegades**: red X marks on
+both tower flanks and the roof (`only_faction` `renegades`).
+
+### Fidelity (Q10)
+
+Silhouettes top 0.905, side 0.916, front 0.950 (the STL's lopsidedness costs the top view), sizes within 1 %; 30 per-part
+sections (`parts/ea_hyperion_fidelity.py`, `test_ea_hyperion.py`) all at 0.909 or over.
+
+### In the game
+
+`assets/ships/ea_hyperion.tres`, catalogue `ea_hyperion` (class `destroyer`), 17 000 hull points (T03), reaction drive, opens its
+own jump points. `capital spawn ea_hyperion` names it from the list (`EAS Hyperion`, `EAS Lexington`, ...).
+
+Look sheet (gitignored): `references/screenshots/M10-T22 Hyperion/look_sheet_final.png` (`model_sheet.sh` shots and the in-game
+broadside with the painted name and number, `in_game/broadside_name_number.png`).
+
+### Open for the human tester `(H)`
+
+- The look against the stills: light grey, band widths, the dark hull number's contrast in shadow.
+- At the player's flank view the number is easily hidden by a Starfury; it reads best from the capital's own side.
+
 ## M10 lengths (T01)
 
 Stage 1 of M10-T01 (Q4, Q22, Q48): every M10 hull's quoted length with its sources, the reference STL's proportions, the

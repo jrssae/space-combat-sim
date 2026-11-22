@@ -30,3 +30,19 @@ func test_a_type_without_a_list_has_no_names() -> void:
 	assert_eq(ShipNames.pick(&"hull_c", Factions.EARTH_ALLIANCE, 0, lists), "", "not a list")
 	assert_eq(ShipNames.pick(&"nothing", Factions.EARTH_ALLIANCE, 0, lists), "")
 	assert_eq(ShipNames.parse("not json")["names"], {}, "a broken file names nothing")
+
+
+func test_a_ship_wears_its_names_hull_number() -> void:
+	var lists: Dictionary = ShipNames.parse('{"hull_numbers": {"One": 21}, "names": {"hull_a": ["One"]}}')
+	assert_eq(ShipNames.hull_number_of("EAS One", lists), "21")
+	assert_eq(ShipNames.hull_number_of("EAS One 2", lists), "21", "a repeated name keeps its number")
+	assert_eq(ShipNames.hull_number_of("EAS Other", lists), "", "no number, no paint")
+
+
+func test_every_hyperion_name_has_its_own_hull_number() -> void:
+	var seen: Dictionary = {}
+	for n: String in ShipNames.names_for(&"ea_hyperion"):
+		var number: String = ShipNames.hull_number_of(n)
+		assert_ne(number, "", "%s has a number" % n)
+		assert_false(seen.has(number), "%s is not shared" % number)
+		seen[number] = true

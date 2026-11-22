@@ -94,8 +94,9 @@ def hull_mark(name: str, at: Sequence[float], normal: Sequence[float], up: Seque
               colour: tuple[float, float, float] = (0.84, 0.85, 0.87), text: str = "initial", only_faction: str = "") -> Hardpoint:
     """A place for painted lettering on a hull (``core/glyphs.py``): ``at`` is the letter's centre on the face, ``normal`` the
     face's outward direction and ``up`` the way the letters stand. ``text`` is what the ship wears, chosen when it is spawned:
-    ``initial`` the first letter of its name (the EA destroyers' bows), or a fixed string. ``only_faction`` shows it only on a ship
-    of that faction (the renegades' red X). The game draws it; no geometry is made here."""
+    ``initial`` the first letter of its name (the EA destroyers' bows), ``name`` its whole name (the Hyperion's roof and tower), or a
+    fixed string. ``only_faction`` shows it only on a ship of that faction (the renegades' red X). The game draws it; no geometry
+    is made here."""
     if height_m <= 0.0:
         raise ValueError(f"mark {name!r} needs a height")
     return Hardpoint(name, MARK, tuple(at), tuple(normal), tuple(up),
