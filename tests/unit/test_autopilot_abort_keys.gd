@@ -73,3 +73,19 @@ func test_shift_and_mouse_4_abort_on_a_full_hold_only() -> void:
 
 func test_the_prompt_names_the_keys() -> void:
 	assert_eq(AutopilotAbort.prompt_text(BindingNames.of_action(InputAdapter.AUTOTRACK)), "HOLD X / SHIFT / MOUSE 4: ABORT")
+
+
+func test_shift_and_mouse_4_step_subsystems_on_a_long_press_like_the_pads_x() -> void:
+	for button: Array in [["Shift", _key], ["Mouse 4", _mouse4]]:
+		var adapter: InputAdapter = _adapter()
+		adapter.interaction_offered = false
+		adapter.taps_blocked = false
+		adapter.subsystems_offered = true
+		var steps: int = 0
+		(button[1] as Callable).call(true)
+		for i: int in 31:
+			steps += int(adapter.sample(_source, DT).combat.subsystem_next)
+		(button[1] as Callable).call(false)
+		steps += int(adapter.sample(_source, DT).combat.subsystem_next)
+		assert_eq(steps, 1, "%s held half a second: the next subsystem, once" % button[0])
+		assert_false(adapter.autotrack_on, "%s: the release of a long press toggles nothing" % button[0])

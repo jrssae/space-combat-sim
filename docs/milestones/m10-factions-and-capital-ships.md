@@ -746,7 +746,8 @@ parity green.
   in the console (`info.md`). Tests (staged copy): GUT 483 of 483 over 29 files (new: `test_capital_subsystems` 9 incl. the menu's
   rings, `test_hud_subsystem` 5, `test_capital_subsystem_targeting` 5 on the Omega; the input map, adapter, parity, profile, target
   menu, preview and HUD files green); compile check 1 085 scripts clean. Screenshots: `references/screenshots/M10-T18 subsystems/`.
-  **Open:** the pad's L3 is shared with free look; subsystem points are those of the rotating pieces at rest (a drum turret is
+  **Follow-up (maintainer):** subsystem cycling moved off L3 (free look only again) to a long press of X: `HoldInteract` gained `cycle_ok`/`cycled` (0.5 s, repeats each 0.5 s; a tap of X now toggles auto-track on the release while a capital with subsystems is targeted; never while an interaction, an autopilot abort or the opening's skip holds X). Shift and Mouse 4 do the same; key 9 stays.
+  **Open (superseded above):** the pad's L3 was shared with free look; subsystem points are those of the rotating pieces at rest (a drum turret is
   marked where it sits at rest); engines and bays use their section's centre; no subsystem on a mine; destroyed subsystems stay
   selectable (the point still exists).
 

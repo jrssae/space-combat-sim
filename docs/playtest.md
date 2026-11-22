@@ -1620,5 +1620,7 @@ too quiet or right, against the engines (the bed the rest sits on).
       a ring of WHOLE SHIP, BRIDGE, REACTOR, ENGINES, LAUNCH BAYS, TURRETS and BEAM EMITTERS opens (A picks, B backs out a ring);
       TURRETS opens a ring of its nearest eight with their state and points. The pick sets the target and the subsystem.
 - [ ] **(H) The box and the lead:** the target box shows `NAME  STATE %` under the hull bar and a square marker on the hull where the
-      subsystem is; the lead diamond and auto-track aim at it. `capital damage <mount> 200` changes its state; key 9 (L3 on a pad that
-      has it) steps through the subsystems and back to the whole ship. `set targeting.subsystem next|whole|<key>` does the same from the console.
+      subsystem is; the lead diamond and auto-track aim at it. `capital damage <mount> 200` changes its state; a long press of X (hold ~0.5 s; Shift or Mouse 4 on
+      the keyboard) steps to the next subsystem, keeps stepping every 0.5 s while held, and goes back to the whole ship after the
+      last; key 9 steps once. A quick tap of X still auto-tracks (now on the release), and a long hold with no capital targeted does
+      nothing. During a gate jump or docking run the hold of X is still the 1 s abort and never steps. L3 is free look only. `set targeting.subsystem next|whole|<key>` does the same from the console.

@@ -153,6 +153,9 @@ var autotrack_on: bool = false
 ## The selected target offers an interaction now (set by `Main` each tick, `InteractionHost`, M7-T27): X then splits into a tap
 ## (auto-track) and a hold (the interaction).
 var interaction_offered: bool = false
+## The selected target is a capital whose subsystems X may step through (set by `Main` each tick, M10-T18): a long press of X then
+## picks the next subsystem, and a tap of X (auto-track) comes on its release instead of its press.
+var subsystems_offered: bool = false
 ## X's tap and hold (M7-T27).
 var hold: HoldInteract = HoldInteract.new()
 ## Taps of X do nothing (M8-T32: while an autopilot holds the controls, X is only its abort's hold, never auto-track).
@@ -231,7 +234,7 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	# runs that instead.
 	var x_down: bool = source.is_pressed(AUTOTRACK) or console_hold_s > 0.0
 	console_hold_s = maxf(console_hold_s - dt, 0.0)
-	hold.step(x_down, interaction_offered, dt)
+	hold.step(x_down, interaction_offered, dt, subsystems_offered and not taps_blocked)
 	if hold.tapped and not taps_blocked:
 		autotrack_on = not autotrack_on
 	flight.autotrack = autotrack_on
@@ -251,7 +254,7 @@ func sample(source: InputSource, dt: float) -> PilotCommand:
 	cmd.combat.target_next = wheel > 0
 	cmd.combat.target_prev = edges[TARGET_PREV] or wheel < 0
 	cmd.combat.target_ahead = edges[TARGET_AHEAD]
-	cmd.combat.subsystem_next = edges[SUBSYSTEM_NEXT]
+	cmd.combat.subsystem_next = edges[SUBSYSTEM_NEXT] or hold.cycled  # key 9, or a long press of X
 
 	cmd.ui.toggle_camera = edges[TOGGLE_CAMERA]
 	cmd.ui.reset = edges[RESET_SHIP]

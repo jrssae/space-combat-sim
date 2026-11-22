@@ -347,6 +347,8 @@ func _physics_process(delta: float) -> void:
 	adapter.interaction_offered = opening or abortable != &"" or interactions.offer() != null
 	adapter.hold.hold_s = AutopilotAbort.hold_s() if abortable != &"" else adapter.interact_hold_s
 	adapter.taps_blocked = controls_locked()
+	# A long press of X steps a capital's subsystems unless X already means an interaction, an abort or the opening's skip.
+	adapter.subsystems_offered = not adapter.interaction_offered and ship != null and not ship.targeting.subsystem_entries().is_empty()
 	var pc: PilotCommand = adapter.sample(input_source, delta)
 	var aborted: bool = autopilot_abort.take(pc.ui, abortable)
 	if opening:

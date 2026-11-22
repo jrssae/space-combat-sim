@@ -26,13 +26,14 @@ const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
 ## mouse's (the pad targets with B, `target_cycle`, which a layout that targets with another button, such as m1_classic's
 ## D-pad Up on target_next, can leave unbound). The wing orders are keys 1-4, the console and the comms menu (architecture §16
 ## D36, §18 D54). The running lights and the comms menu are D-pad Left and Right in the default, but a layout that rolls on the
-## D-pad (m1_classic) has no button left for them.
+## D-pad (m1_classic) has no button left for them. `subsystem_next` is key 9; the pad steps subsystems with a long press of X
+## (`HoldInteract`, M10-T18).
 const KEYBOARD_ONLY: Array[StringName] = [
 	InputAdapter.TOGGLE_OVERLAY, InputAdapter.TARGET_AHEAD, InputAdapter.TARGET_PREV,
 	InputAdapter.SCREENSHOT, InputAdapter.WING_ATTACK, InputAdapter.WING_FORM, InputAdapter.WING_ENGAGE,
 	InputAdapter.WING_COVER, InputAdapter.ROLL_LEFT, InputAdapter.ROLL_RIGHT, InputAdapter.TARGET_NEXT,
 	InputAdapter.TARGET_CYCLE, InputAdapter.TOGGLE_RUNNING_LIGHTS, InputAdapter.COMMS_MENU, InputAdapter.WING_DOCK,
-	InputAdapter.WING_FORM_HOLD, InputAdapter.WING_HOLD,
+	InputAdapter.WING_FORM_HOLD, InputAdapter.WING_HOLD, InputAdapter.SUBSYSTEM_NEXT,
 ]
 ## The default pad layout before M3-T15 (action -> pad descriptors; actions without one are left out). A saved profile with
 ## exactly these pad bindings and no `target_cycle` gets the current default's pad bindings (`from_config`): its keys and

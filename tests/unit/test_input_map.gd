@@ -21,7 +21,6 @@ const PAD_BINDINGS: Dictionary = {
 	&"toggle_flight_assist": ["button", JOY_BUTTON_DPAD_UP, 0],
 	&"toggle_running_lights": ["button", JOY_BUTTON_DPAD_LEFT, 0],
 	&"comms_menu": ["button", JOY_BUTTON_DPAD_RIGHT, 0],
-	&"subsystem_next": ["button", JOY_BUTTON_LEFT_STICK, 0],
 	&"brake": ["button", JOY_BUTTON_RIGHT_STICK, 0],
 	&"autotrack": ["button", JOY_BUTTON_X, 0],
 	&"camera_look": ["button", JOY_BUTTON_LEFT_STICK, 0],
@@ -35,7 +34,7 @@ const PAD_BINDINGS: Dictionary = {
 const KEYBOARD_ONLY: Array[StringName] = [
 	&"debug_toggle_overlay", &"target_ahead", &"target_prev", &"screenshot",
 	&"wing_attack", &"wing_form", &"wing_engage", &"wing_cover", &"roll_left", &"roll_right", &"target_next",
-	&"wing_dock", &"wing_form_hold", &"wing_hold",
+	&"wing_dock", &"wing_form_hold", &"wing_hold", &"subsystem_next",
 ]
 
 # Keyboard layout B (architecture §6.1, M3-T01): every flight key under the left hand, because the right hand flies the
@@ -73,7 +72,7 @@ const KEYS_B: Dictionary = {
 	&"wing_form_hold": [KEY_7],
 	&"wing_hold": [KEY_8],
 	&"comms_menu": [KEY_CTRL],
-	&"subsystem_next": [KEY_9],  # the number row's next key: the targeted capital's next subsystem (M10-T18)
+	&"subsystem_next": [KEY_9],  # a direct cycle of the targeted capital's subsystems; X's long press does it on the pad (M10-T18)
 }
 
 # action -> mouse buttons in event order (an action not listed has none).

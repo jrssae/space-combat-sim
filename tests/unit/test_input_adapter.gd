@@ -754,3 +754,46 @@ func test_a_held_strafe_key_is_not_held_over_by_a_menu() -> void:
 	adapter.sample_radial(source, DT)
 	adapter.end_radial(source)
 	assert_almost_eq(adapter.sample(source, DT).flight.strafe.x, 1.0, 1e-6, "the Z/C key still strafes when the menu closes")
+
+
+# --- X's long press steps a capital's subsystems (M10-T18) --------------------------------------------------------------------
+
+
+func _x_for(ticks: int) -> Dictionary:
+	var steps: int = 0
+	source.hold(InputAdapter.AUTOTRACK)
+	for i: int in ticks:
+		steps += int(adapter.sample(source, DT).combat.subsystem_next)
+	source.release(InputAdapter.AUTOTRACK)
+	steps += int(adapter.sample(source, DT).combat.subsystem_next)
+	return {"steps": steps}
+
+
+func test_a_long_press_of_x_steps_subsystems_and_does_not_toggle_auto_track() -> void:
+	adapter.subsystems_offered = true
+	assert_eq(_x_for(31)["steps"], 1)
+	assert_false(adapter.autotrack_on, "a long hold is not a tap")
+	assert_eq(_x_for(91)["steps"], 3, "keeping it down repeats every half second")
+	_x_for(5)
+	assert_true(adapter.autotrack_on, "a tap still toggles auto-track, on the release")
+
+
+func test_a_long_press_of_x_steps_nothing_without_a_capital_target() -> void:
+	adapter.subsystems_offered = false
+	assert_eq(_x_for(91)["steps"], 0)
+
+
+func test_a_long_press_of_x_aborts_instead_while_an_autopilot_runs() -> void:
+	adapter.subsystems_offered = false  # Main clears it whenever an interaction or abort is on offer
+	adapter.interaction_offered = true
+	adapter.hold.hold_s = 1.0
+	adapter.taps_blocked = true
+	var fired: int = 0
+	var steps: int = 0
+	source.hold(InputAdapter.AUTOTRACK)
+	for i: int in 65:
+		var cmd: PilotCommand = adapter.sample(source, DT)
+		fired += int(cmd.ui.interact)
+		steps += int(cmd.combat.subsystem_next)
+	assert_eq(fired, 1, "the abort's hold, unchanged")
+	assert_eq(steps, 0)
