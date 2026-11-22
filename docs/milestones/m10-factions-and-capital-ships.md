@@ -556,6 +556,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 
 ### M10-T67 Omega and Nova bow faces (Q61, Q62)
 
+- **Scope since Q63:** the Nova only; the Omega's bow is rebuilt on the new kit in T68, with the same open frame and bay.
 - **Goal:** bring each ship's bow face to its own STL with T66's tools. The two ships stay **separate generators** (no shared
   builder, Q62): their details are very similar, but each is measured against its own STL at its own approved length
   (Omega 1 714.3 m, Nova 1 502.1 m; the scales differ, the lengths are right). Both get the **open-frame bow** (the deck structure
