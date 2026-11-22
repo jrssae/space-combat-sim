@@ -202,9 +202,11 @@ func test_each_hull_takes_damage_and_breaks_into_its_chunks_a_bokmai_shedding_it
 	for c: Combatant in main.scenario_ships.duplicate():
 		var name: String = c.display_name
 		var max_hp: float = c.damageable.hull.max_hp
+		# The earlier hulls' death blasts may already have scorched this one (M10-T09), so measure the hit, not the total.
+		var start: float = c.damageable.hull.fraction()
 		c.damageable.apply_hit(HitInfo.new(c.ship.get_instance_id(), 0, Factions.RAIDERS, max_hp * 0.25, c.ship.global_position,
 				Vector3.UP, 0.0))
-		assert_almost_eq(c.damageable.hull.fraction(), 0.75, 1e-4, "%s takes hull damage" % name)
+		assert_almost_eq(c.damageable.hull.fraction(), start - 0.25, 1e-4, "%s takes hull damage" % name)
 		var before: int = main.debris.active_chunk_count()
 		var pods: int = c.cargo_pods.count if c.cargo_pods != null else 0
 		c.damageable.apply_hit(HitInfo.new(c.ship.get_instance_id(), 0, Factions.RAIDERS, max_hp, c.ship.global_position,
