@@ -89,6 +89,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q60 | Subsystem targeting by kind (2026-11-22) | **No sub-targeting of single parts**: the target menu offers a subsystem only by kind (weapons, engines, bays, and any other kind with several parts), never one part. Targeting a kind aims at **the nearest of its parts that is still active**, re-picked as parts are lost, until none is left. Single-part subsystems (bridge, reactor) are targeted as now (T18, T65) |
 | Q61 | Omega and Nova forward hull (2026-11-22) | The Omega and the Nova are the same ship with a rotating section inserted, and the launch bay and face details of both disagree with their STLs. **Checks first** (T66: slice sweeps, front-face depth maps, STL against STL, screenshot sheets), then **one shared EA forward hull** built from the best source per detail (T67), carrying the Omega's hull-letter placement on the Nova |
 | Q62 | Omega and Nova bows; ship names (2026-11-22) | No shared builder after all: the Omega and the Nova keep their own generators; their lengths are right and their scales differ. Both bows are the **open frame**, with the **octagonal launch bay** (not the red square). Names: Novas after scientists (Schwarzkopf, Einstein, Bohr, ...; done), Warlocks after magic and lore creatures and elements (Foxfire, Titan, ...; T24), Explorers after explorers (Cortez, De Soto, ...; T52) |
+| Q63 | New Omega reference (2026-11-22) | The old `EA Omega Destroyer.stl` is removed. The new reference is a 4-part print kit from https://www.thingiverse.com/thing:4225115 (in README.md): `references/EA Omega head_x1.stl`, `middle_x1` (drum hub), `rear_x1` and `outerrotate_x2` (two drum arms), in mm, standing on the print bed. The agent assembles it (head + middle + rear along the axis, the two arms opposite each other round the hub, fitted by join faces and checked against `references/ships/Omega/`) and shows the assembled kit to the maintainer before any build. The length stays **1 714.3 m** (about 17.44 m per mm); print-only features (flat print faces, pegs and sockets, support ridges) are not part of the ship (T68) |
 
 ## The hulls
 
@@ -371,7 +372,8 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T64 | G | Ship line-up beside Babylon 5: the ship comparison mission (`civilian_showcase`, renamed `ship_showcase`) parks every finalized hull, faction by faction, next to the station, not moving, for fly-bys of scale and look (maintainer 2026-11-21) | T22, T23; then each hull task adds its own | Sonnet | done |
 | T65 | E | Subsystems targeted by kind: the nearest still-active part of a weapons, engines or bays kind, no single-part picks (Q60) | T18 | Sonnet | not started |
 | T66 | A | Fidelity checks: slice sweeps, front-face depth maps, STL against STL and screenshot sheets (`tools/refview/fidelity.py`, Q61) | - | Sonnet | done |
-| T67 | A | Omega and Nova bow faces from T66: each generator kept separate (Q62), the open-frame bow, the octagonal launch bay in place of the red square, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement on the Nova (Q61, Q62) | T66 | Fable | not started |
+| T67 | A | Nova bow face from T66 (the Omega's moves to T68): each generator kept separate (Q62), the open-frame bow, the octagonal launch bay in place of the red square, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement on the Nova (Q61, Q62) | T66 | Fable | not started |
+| T68 | A | Omega rebuilt on the new 4-part kit (Q63): assemble the kit into one reference, sheet to the maintainer, re-measure (silhouettes, sections, T66 sweeps and bow depth map), open-frame bow and octagonal bay (Q62), the drum in the kit's pose | T66 | Fable | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -563,6 +565,22 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Done when:** face slices (T66 sweep, z 150 to 450 m and the face's x and y cuts) >= 0.90 for each ship against its STL
   (the Omega's interior against the Nova STL's detail scaled), a depth-diff limit on the bow face, the screenshot sheets beside
   `references/Ship references/`, and the maintainer has seen the bay close-ups (H).
+
+### M10-T68 Omega on the new kit (Q63)
+
+- **Reference:** assemble the 4-part kit (`references/EA Omega head_x1.stl`, `middle_x1`, `rear_x1`, `outerrotate_x2` used
+  twice) in a small reusable tool (`tools/refview/`, kit = list of parts with transforms in a JSON beside it), writing the
+  assembled mesh to `references/` (gitignored) or `reports/`; head, middle and rear stacked on the axis, the two arms opposite
+  each other round the hub, placed by matching join faces; print-only features (print flats, pegs, sockets, supports) masked
+  out of the comparison. Scale to 1 714.3 m (about 17.44 m per mm). **Stop:** a sheet of the assembled kit beside
+  `references/ships/Omega/` for the maintainer before building.
+- **Build:** re-measure the current `ea_omega` against the kit (silhouettes with the drum in the kit's pose, per-part
+  sections, T66 slice sweeps and the bow depth map), then rework the hull where it falls short: the open-frame bow and the
+  octagonal launch bay with its frame and wedge fins (Q62), the drum built in the kit's pose so sheets and compares line up,
+  the hull letter, lit bay and retro thrusters kept. Update `ea_omega_fidelity.py`, the tests and `docs/assets-capital.md`
+  (one honest whole-hull score); the old STL's paths go.
+- **Done when:** the 90 % rule against the kit (three views, sizes, every part's sections), face slices >= 0.90, the depth-diff
+  limit, the look sheet beside the screenshots, and the maintainer has seen the bay close-ups (H).
 
 ### M10-T65 Subsystems targeted by kind (Q60)
 
