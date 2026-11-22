@@ -7140,6 +7140,24 @@ src/combat/blast_resolver.gd  BlastResolver: lands a blast (damage, push), chain
   `hulls` (the raider, the Thunderbolt as a heavy fighter), else a small craft's when the loadouts say so, else `by_role`; a
   hull in `cargo` (the Saturn tankers: fuel) is scaled by `cargo_scale`. The manifests' `sections[].blast_energy_j` is no
   longer read.
+- **A capital's blast scales with its size and its power** (maintainer, after T09). The class rows are the blasts of a
+  reference hull (cruiser: the test cruiser, 20000 hull points; capital: the Omega, 30000; dreadnought: 45000). A hull's death
+  is its class row times `k = (hull / reference)^2 x damage_scale^0.5` (`hull` and `damage_scale`, the power ladder of Q54, from
+  `data/capitals/loadouts.json`), its radius and impulse times `sqrt(k)` (`blasts.scaling`; `BlastTable.hull_scale`). A stand-in
+  with no type id scales as the hull `blasts.stand_ins` names; a faction row (the ancients) is not scaled, and fighter, small
+  craft and civilian rows, the Thunderbolt's heavy-fighter row and the tankers' fuel multipliers stay as they are. Reactor blasts
+  that result (a launched raider dies within the "kills a raider" range; a Starfury, 300 hull points, within its own):
+
+  | hull | hull pts | power | k | d0 | radius | kills a raider to | kills a Starfury to |
+  |---|---|---|---|---|---|---|---|
+  | raider_strike_carrier | 10000 | 1.0 | 0.25 | 450 | 500 m | 400 m | 210 m |
+  | capital_test_cruiser | 20000 | 1.0 | 1.0 | 1800 | 1000 m | 900 m | 770 m |
+  | ea_hyperion | 17000 | 0.71 | 0.27 | 1220 | 1300 m | 1150 m | 920 m |
+  | ea_omega | 30000 | 1.0 | 1.0 | 4500 | 2500 m | 2350 m | 2150 m |
+  | ea_nova | 36000 | 1.0 | 0.64 | 4800 | 2800 m | 2640 m | 2430 m |
+  | ea_warlock (for scale) | 45000 | 1.48 | 1.22 | 9120 | 3860 m | 3700 m | 3490 m |
+
+  Civilians keep `civilian_death` (400 at the centre, 300 m; the tankers 600 at 375 m).
 - **Who blows.** Every death through `DestructionDirector`: a pooled hull's (and the player's) from where its explosion
   starts; a capital's with the row of the section that blew (its first reactor's for a console kill or a stand-in), from that
   section's centre. A missile's warhead (`HitResolver`, `MissileStandin`'s projectiles) blasts where it struck, on top of the

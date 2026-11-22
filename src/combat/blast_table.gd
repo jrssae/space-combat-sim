@@ -76,11 +76,52 @@ static func capital_class(type_id: StringName, p_capital_class: StringName, fact
 	return StringName(str(mapped)) if mapped != null and sections.has(str(mapped)) else DEFAULT_CLASS
 
 
-## A capital's death: the blast of the section kind that blew (`DEFAULT_KIND` for none, or a kind its class has no row for).
+## A capital's death: the blast of the section kind that blew (`DEFAULT_KIND` for none, or a kind its class has no row for),
+## scaled to the hull by `hull_scale`.
 static func capital_death(type_id: StringName, p_capital_class: StringName, faction: StringName, kind: String) -> BlastSpec:
 	var cls: StringName = capital_class(type_id, p_capital_class, faction)
-	var made: BlastSpec = section(cls, kind if KINDS.has(kind) else DEFAULT_KIND)
-	return made if made != null else section(cls, DEFAULT_KIND)
+	var use_kind: String = kind if KINDS.has(kind) else DEFAULT_KIND
+	var row: BlastSpec = section(cls, use_kind)
+	if row == null:
+		use_kind = DEFAULT_KIND
+		row = section(cls, use_kind)
+	var hull: String = _scaling_hull(type_id, p_capital_class, faction)
+	var k: float = hull_scale(hull, cls)
+	if row == null or is_equal_approx(k, 1.0):
+		return row
+	var key := StringName("death:%s:%s:%s" % [hull, cls, use_kind])
+	if _cache.has(key):
+		return _cache[key]
+	var radius_k: float = pow(k, float((_blasts().get("scaling", {}) as Dictionary).get("radius_exp", 0.5)))
+	var made: BlastSpec = row.scaled(k, radius_k, radius_k)
+	_cache[key] = made
+	return made
+
+
+## How much bigger (or smaller) hull `hull`'s death is than its class row: `(hull points / the class's reference hull)^size_exp`
+## times `damage_scale^power_exp`, the ladder's power (Q54). 1 for a hull the loadouts do not list, a class with no reference,
+## and a side that has a row of its own (the ancients). The rows are the reference hulls' own blasts.
+static func hull_scale(hull: String, blast_class: StringName) -> float:
+	if hull == "":
+		return 1.0
+	var scaling: Dictionary = _blasts().get("scaling", {})
+	var ref: float = float((scaling.get("reference_hull", {}) as Dictionary).get(String(blast_class), 0.0))
+	var entry: Dictionary = CapitalData.hull_entry(hull)
+	var points: float = float(entry.get("hull", 0.0))
+	if not (ref > 0.0) or not (points > 0.0):
+		return 1.0
+	var k: float = pow(points / ref, float(scaling.get("size_exp", 2.0))) * pow(float(entry.get("damage_scale", 1.0)), float(scaling.get("power_exp", 0.5)))
+	return clampf(k, float(scaling.get("min_scale", 0.05)), float(scaling.get("max_scale", 6.0)))
+
+
+# The loadouts' hull a capital's blast scales by: its own, or the stand-in's for a class (a stand-in has no `type_id`); ""
+# for a side with a row of its own.
+static func _scaling_hull(type_id: StringName, p_capital_class: StringName, faction: StringName) -> String:
+	if (_blasts().get("factions", {}) as Dictionary).has(String(faction)):
+		return ""
+	if type_id != &"":
+		return String(type_id)
+	return str((_blasts().get("stand_ins", {}) as Dictionary).get(String(p_capital_class), ""))
 
 
 ## A pooled hull's death, by its asset id: the table's own row for the hull, else a small craft's, else its catalogue role's,

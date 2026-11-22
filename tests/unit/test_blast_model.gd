@@ -87,6 +87,30 @@ func test_a_capitals_class_comes_from_its_side_its_loadout_or_its_catalogue_clas
 			"a kind that does not blow: the reactor's")
 
 
+func test_a_capitals_blast_scales_with_its_size_and_its_power() -> void:
+	var omega: BlastSpec = BlastTable.capital_death(&"ea_omega", &"destroyer", Factions.EARTH_ALLIANCE, "reactor")
+	assert_eq([omega.d0, omega.radius_m], [4500.0, 2500.0], "the class row is its reference hull's own blast")
+	var test_cruiser: BlastSpec = BlastTable.capital_death(&"capital_test_cruiser", &"cruiser", Factions.EARTH_ALLIANCE, "reactor")
+	assert_eq([test_cruiser.d0, test_cruiser.radius_m], [1800.0, 1000.0])
+	var carrier: BlastSpec = BlastTable.capital_death(&"", &"strike_carrier", Factions.RAIDERS, "reactor")
+	assert_lt(carrier.d0, test_cruiser.d0 * 0.5, "a strike carrier is smaller than the test cruiser")
+	assert_lt(carrier.radius_m, 600.0, "and its blast is modest")
+	assert_eq(carrier.source, &"cruiser_reactor")
+	assert_eq(BlastTable.capital_death(&"raider_strike_carrier", &"strike_carrier", Factions.RAIDERS, "reactor").d0, carrier.d0,
+			"a stand-in scales as the hull it stands for")
+	var hyperion: BlastSpec = BlastTable.capital_death(&"ea_hyperion", &"destroyer", Factions.EARTH_ALLIANCE, "reactor")
+	var nova: BlastSpec = BlastTable.capital_death(&"ea_nova", &"dreadnought", Factions.EARTH_ALLIANCE, "reactor")
+	assert_lt(hyperion.d0, omega.d0, "smaller and weaker than an Omega")
+	assert_gt(nova.d0, 3.0 * hyperion.d0, "a Nova blows far harder than a Hyperion")
+	assert_gt(nova.radius_m, 1.5 * hyperion.radius_m)
+	assert_gt(nova.impulse, hyperion.impulse)
+	# Same power (0.71), a bigger hull: a bigger blast; same class, more power and hull: bigger still.
+	assert_gt(BlastTable.hull_scale("narn_gquan", &"capital"), BlastTable.hull_scale("ea_hyperion", &"capital"))
+	assert_gt(BlastTable.hull_scale("ea_warlock", &"dreadnought"), BlastTable.hull_scale("ea_nova", &"dreadnought"))
+	assert_eq(BlastTable.hull_scale("no_such_hull", &"capital"), 1.0)
+	assert_eq(BlastTable.capital_death(&"ea_omega", &"destroyer", &"shadows", "reactor").d0, 9000.0, "the ancients' row is not scaled")
+
+
 func test_a_pooled_hulls_death_is_sized_by_its_role_and_its_cargo() -> void:
 	assert_eq(BlastTable.hull_death("raider_fighter").source, &"raider_death")
 	assert_eq(BlastTable.hull_death("starfury_aurora").source, &"fighter_death")

@@ -711,6 +711,12 @@ parity green.
   confirm: the Thunderbolt as the heavy fighter (x1.3 on `d0` only) and the tankers' fuel cargo (x1.5 `d0`, x1.25 radius and
   impulse); a strike carrier's death (cruiser reactor, 1 800 at the centre out to 1 km) now kills its own fighters within
   about 750 m (in the escort mission a carrier killed at its standoff takes all six raiders it launched).
+  **Follow-up (maintainer, 2026-11-21): a capital's blast scales with its size and its power** (`docs/architecture.md` §22.4,
+  `blasts.scaling`): its class row, a reference hull's own blast, times `(hull / reference)^2 x damage_scale^0.5`, radius and
+  impulse times its square root; a stand-in scales as the hull `blasts.stand_ins` names, the ancients' row and the fighter,
+  Thunderbolt and tanker rows are unchanged. Strike carrier now 450 at the centre out to 500 m (kills a raider within 400 m,
+  not 750 m); Hyperion 1 220 / 1 300 m against the Nova's 4 800 / 2 800 m. `test_civilian_escort` checks again that raiders
+  clear of the blast survive and that some of wave one outlive the carrier.
 - **T10 done (2026-11-21).** Disabled hulks (`docs/architecture.md` §22.5, D12.7, Q19): `HulkStages` (pure) winds a disabled
   capital down: power at once (weapons, bays; its lights die over 3 s, stuttering, through `CapitalHulkLights`, its glowing
   surfaces on material copies of its own so its sisters stay lit), control at 2 s (no steering, no assist; the mains hold their

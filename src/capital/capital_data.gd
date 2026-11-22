@@ -95,6 +95,14 @@ static func hull_class(id: String) -> String:
 	return str((entry as Dictionary).get("class", "")) if entry is Dictionary else ""
 
 
+## A hull's loadout row (`hull`, `damage_scale`, ...), empty when the loadouts do not list `id` (M10-T09: what a death's blast
+## scales by). Shared and read-only to the caller.
+static func hull_entry(id: String) -> Dictionary:
+	_read_loadouts()
+	var entry: Variant = _hulls.get(id)
+	return entry if entry is Dictionary else {}
+
+
 ## The file's table under `key` (M10-T09: `blasts`), empty when it has none. Shared and read-only to the caller.
 static func table(key: String) -> Dictionary:
 	var found: Variant = _read().get(key)

@@ -70,7 +70,7 @@
   }
  },
  "blasts": {
-  "_doc": "M10-T09 (D12.6, Q18, Q53; docs/assets-capital.md 'Sections, mounts and blasts'): every explosion is a falloff blast, damage d0 x f(d) and push dv = impulse x f(d) x A / m (A the mean face area of the hull's box, capped at push_cap_mps), f(d) = (1 - (d/R)^2)^2 with d measured to the hull's nearest hit volume. sources: d0 (hull points at the centre), radius_m, impulse (N s/m^2) by source. sections: per blast class, [d0, radius_m] by explosive section kind and one impulse; a capital's death is the blast of the section that blew (its reactor's without one). classes: a capital class with no row of its own -> the row it takes; factions: a side whose capitals take a row of their own (the ancients: T04's placeholder). A pooled hull's death: hulls (asset id -> source) first, else small_craft_death for a hull the loadouts class as small craft, else by_role from the catalogue's role; cargo (asset id -> kind) scales it by cargo_scale (placeholders until the maintainer sets them). flash_j_per_d0: a blast's energy for the far flashes.",
+  "_doc": "M10-T09 (D12.6, Q18, Q53; docs/assets-capital.md 'Sections, mounts and blasts'): every explosion is a falloff blast, damage d0 x f(d) and push dv = impulse x f(d) x A / m (A the mean face area of the hull's box, capped at push_cap_mps), f(d) = (1 - (d/R)^2)^2 with d measured to the hull's nearest hit volume. sources: d0 (hull points at the centre), radius_m, impulse (N s/m^2) by source. sections: per blast class, [d0, radius_m] by explosive section kind and one impulse; a capital's death is the blast of the section that blew (its reactor's without one). classes: a capital class with no row of its own -> the row it takes; factions: a side whose capitals take a row of their own (the ancients: T04's placeholder). scaling: a capital's death is its class row times (hull points / reference_hull of its class)^size_exp x damage_scale^power_exp (hull and damage_scale from loadouts.json), so the rows are the reference hulls' own blasts; radius and impulse take that factor^radius_exp; stand_ins: the loadouts hull a stand-in capital (no type id) scales by; a faction row (the ancients) is not scaled. A pooled hull's death: hulls (asset id -> source) first, else small_craft_death for a hull the loadouts class as small craft, else by_role from the catalogue's role; cargo (asset id -> kind) scales it by cargo_scale (placeholders until the maintainer sets them). flash_j_per_d0: a blast's energy for the far flashes.",
   "flash_j_per_d0": 5000000.0,
   "push_cap_mps": 50.0,
   "sources": {
@@ -187,7 +187,18 @@
     "impulse": 12000.0
    }
   },
-  "classes": {
+  "scaling": {
+  "reference_hull": {"cruiser": 20000, "capital": 30000, "dreadnought": 45000},
+  "size_exp": 2.0,
+  "power_exp": 0.5,
+  "radius_exp": 0.5,
+  "min_scale": 0.05,
+  "max_scale": 6.0
+ },
+ "stand_ins": {
+  "strike_carrier": "raider_strike_carrier"
+ },
+ "classes": {
    "destroyer": "capital",
    "carrier": "capital",
    "strike_carrier": "cruiser"

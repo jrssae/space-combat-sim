@@ -555,18 +555,37 @@ func test_destroying_a_carrier_is_the_optional_objective() -> void:
 	var run: CarrierRun = _carriers().runs()[0]
 	await _run_on(60.0, func() -> bool: return run.state == CarrierRun.State.STANDOFF)
 	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.ACTIVE)
-	# Its death blast (M10-T09: a cruiser's reactor) takes the raiders near it; those out of its reach fight on.
-	var reach: float = BlastTable.capital_death(&"", run.carrier.ship_class, run.carrier.faction, "reactor").radius_m
+	# Its death blast (M10-T09: a modest one, scaled to the strike carrier) takes the raiders near it; those out of its reach
+	# fight on, and the blast is small enough that some always are.
+	var blast: BlastSpec = BlastTable.capital_death(&"", run.carrier.ship_class, run.carrier.faction, "reactor")
+	# A raider is only 60 points: a launched wave still hovering within 100 m of its carrier dies with it, so the carrier
+	# is killed once the raiders have headed for the civilian and most are clear of the blast.
+	var clear_m: float = blast.radius_m + 100.0
+	await _run_on(60.0, func() -> bool:
+		var clear: int = 0
+		for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
+			if WAVE_ONE.has(c.display_name) and c.ship.global_position.distance_to(run.carrier.global_position) > clear_m:
+				clear += 1
+		return clear >= 4)
+	var raider_hp: float = float(CapitalData.hull_entry("raider_fighter").get("hull", 60.0))
 	var out_of_reach: Array[Combatant] = []
+	var at_risk: int = 0
 	for c: Combatant in main.ships.alive(ShipPool.DEFAULT_TYPE):
-		if WAVE_ONE.has(c.display_name) and c.ship.global_position.distance_to(run.carrier.global_position) > reach + 50.0:
+		if not WAVE_ONE.has(c.display_name):
+			continue
+		var d: float = c.ship.global_position.distance_to(run.carrier.global_position)
+		if blast.damage_at(maxf(d - 30.0, 0.0)) < raider_hp * 0.8:
 			out_of_reach.append(c)
+		else:
+			at_risk += 1
 	assert_true(_run("carrier kill").ok)
 	await _ticks(4)
 	assert_eq(_api().objective_state(&"carrier"), ObjectiveBook.DONE, "a carrier destroyed")
 	assert_false(_api().has_ended(), "an optional objective ends nothing")
 	for c: Combatant in out_of_reach:
 		assert_true(_api().alive(c.display_name), "%s, out of its blast, fights on" % c.display_name)
+	assert_gt(_alive(WAVE_ONE), 0, "some of wave one outlive the carrier's blast (%d were in it)" % at_risk)
+	assert_gt(out_of_reach.size(), 2, "most of a launched wave is clear of a strike carrier's blast")
 	gut.p("raiders alive after the carrier's blast: %d of 6 (%d were out of its reach)" % [_alive(WAVE_ONE), out_of_reach.size()])
 
 
