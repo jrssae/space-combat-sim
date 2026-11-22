@@ -3,6 +3,7 @@
   "cruiser": 60.0,
   "destroyer": 90.0,
   "carrier": 120.0,
+  "dreadnought": 120.0,
   "strike_carrier": 240.0
  },
  "broadcast_range_m": {

@@ -5731,7 +5731,7 @@ velocity rebase is `World.auto_boost_speed_mps`, an export of `main.tscn`, not a
 - **The drive's recharge** (M8-T08, D83; `JumpDrive`, pure). Opening a point empties its opener's jump drive, and the ship
   opens no other until its class's recharge has passed: `JumpPointPool.open_for` / `open_with` refuse it until then
   (`refused_charging`). The recharge per class is data (`data/capitals/capitals.json`, `CapitalData.jump_recharge_s`: cruiser
-  60 s, destroyer 90 s, carrier 120 s, the raiders' strike carrier 240 s, the longest). A jumpgate is no pool's point and needs
+  60 s, destroyer 90 s, carrier and dreadnought 120 s, the raiders' strike carrier 240 s, the longest). A jumpgate is no pool's point and needs
   no drive: a ship leaves through it whatever its drive's state. A pooled carrier comes into a raid charged (the jump in is
   the one that empties it); one with no cradles (the cruiser stand-in) holds its course once its fighters are out, its
   arrival point let go to close by its timing, and opens its point out when the drive is ready.

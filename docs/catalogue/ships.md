@@ -26,6 +26,7 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `raider_strike_carrier` | raiders | capital (strike_carrier) | 112.0 x 85.5 x 84.3 | 10000 | none | yes | yes (18 cradles) |
 | `capital_test_cruiser` | earth_alliance | capital (cruiser) | 300.0 x 60.0 x 45.6 | 20000 | none | yes | no |
 | `ea_omega` | earth_alliance | capital (destroyer) | 1714.3 x 621.2 x 478.0 | 30000 | none | yes | no |
+| `ea_nova` | earth_alliance | capital (dreadnought) | 1502.1 x 208.0 x 443.7 | 36000 | none | yes | no |
 | `ea_shuttle` | earth_alliance | civilian | 18.6 x 9.2 x 5.3 | 200 | none | no | no |
 | `ea_atmo_shuttle` | earth_alliance | civilian | 25.6 x 45.5 x 8.5 | 260 | none | no | no |
 | `ea_panama` | earth_alliance | civilian | 180.0 x 44.8 x 29.6 | 600 | none | no | no |
@@ -56,6 +57,7 @@ civilian's radio name.
 | `raider_strike_carrier` | `res://assets/ships/raider_strike_carrier.tres` | - | no | - | - | hull | - | - |
 | `capital_test_cruiser` | `res://assets/ships/capital_test_cruiser.tres` | - | no | - | - | - | Test cruiser | - |
 | `ea_omega` | `res://assets/ships/ea_omega.tres` | - | no | - | - | - | Omega-class destroyer | - |
+| `ea_nova` | `res://assets/ships/ea_nova.tres` | - | no | - | - | - | Nova-class dreadnought | - |
 | `ea_shuttle` | `res://assets/ships/ea_shuttle.tres` | civilian | yes | no | - | pool | EA shuttle | SHUTTLE |
 | `ea_atmo_shuttle` | `res://assets/ships/ea_atmo_shuttle.tres` | civilian | yes | no | - | pool | EA atmospheric shuttle | KESTREL |
 | `ea_panama` | `res://assets/ships/ea_panama.tres` | civilian | yes | no | - | pool | Panama transport | PANAMA |

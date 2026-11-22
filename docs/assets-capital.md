@@ -505,6 +505,93 @@ with `scripts/model_sheet.sh`; `option_sheet.png` and `section_compare.png` from
 - The 4 096 px atlas over 1.7 km from 50 m (the plates and the detail tile carry it).
 - VRAM and frame cost with Omegas in a fight.
 
+## `ea_nova` (M10-T23)
+
+`tools/procgen/assets/ea_nova.py` on `parts/ea_nova.py` (the structure, measured off the reference), in the Omega's parts and
+look (the maintainer: the Nova reuses them): its slab armour, girder spine, octagonal collars, nacelles, lit bays, turrets,
+beams, interceptors, lamps and `styles/ea_capital.py` look A. The shape is described in `docs/design-references.md`, "EA
+Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as the Omega's).
+
+### Measurements
+
+| | |
+|---|---|
+| Reference | `EA Nova class destroyer.STL`, mapping `--right=-x --up=+z --aft=+y`; its spine's axis is 43.3 m above its box's middle |
+| Length | **1 502.1 m** (T01) |
+| Span, height | 208.0 m (the cross beam's tips behind the housing) x 443.7 m (roof masts to keel mast); the STL 210.4 x 446.1 |
+| Pieces | `hull` only, one 4 096 px atlas |
+| Triangles | 14 182 (budget 100 000) |
+| Texture sets | 56.0 MB high, 16.0 MB low (budget 109.3 and 29.3); measured 56 MB and 16 MB on the RX 6950 XT (model sheet, against the empty scene) |
+| Build | about 3.6 to 4.2 min (3 min 44 s with the forward bays) and 10 GB at its peak on the maintainer's machine (`BUILD_ALONE`) |
+
+### Sections and hardpoints
+
+Ten sections: `bow` (the armour, the keel wedge and the aerials), `bridge` (the bridge tube, deck and roof), `fuel` (the
+capsules and racetrack tanks under the bridge tube), `spine_fore`, `hangar` (the hangar block), `spine_mid`, `spine_aft`,
+`reactor` (the engine housing and the engine frame), `engine_r` and `engine_l`; blast energies on the fuel and the reactor.
+Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
+
+- 18 `ea_plasma_medium` twin turrets (TBP's twin cannons): six on each flank's waist in the gun-deck rows, three in the roof's
+  channel and three under the keel;
+- 6 `ea_sweep_beam_nova` emitters (the Omega's beams at 80 %): one on each flank of the command block covering the fore
+  hemisphere, four on the engine housing's corners the aft;
+- 6 `ea_interceptor` domes along the flanks;
+- 6 lit launch bays facing the bow (the maintainer, 2026-11-21: the Nova has the Omega's launch bay, facing forward), the
+  Omega's `launch_bay(lit=True)` (18 by 12 m mouths, 30 m halls): in the hangar block's fore face, in the band where the block
+  stands out of the collar ahead of it, one in the roof's band, one in the keel's and one in each corner, the block's front
+  built round their halls (`parts/ea_nova.front_bays`); `craft` `starfury_ally` and `capacity` 4 each (24 Starfuries). The
+  reference has no bays; the loadout's Starfuries need them. About 1.5 m of each mouth's inner edge sits behind the collar
+  when seen straight from ahead;
+- running lights (red to port, green to starboard, white on the roof, red-orange beacons under the keel and at the stern), the
+  four engines in a square, and a jump anchor 1 500 m ahead with a 400 m mouth.
+
+**Name letter**: the show's Schwarzkopf wears a large white "B" on the lower plate of its command block; each Nova wears the
+first letter of its name there (`mark_initial_r` and `_l`, 36 m, `HullMarks` as the Omega's). **Renegades**: a red X on each
+vertical plate and on the roof (`only_faction` `renegades`). **Names**: `data/ships/names.json`, twenty generals and admirals,
+the show's Schwarzkopf first.
+
+### Fidelity (Q10)
+
+```
+.venv/bin/python3 -I tools/refview/compare.py "references/EA Nova class destroyer.STL" ea_nova --length 1502.1 --right=-x --up=+z --aft=+y --model-offset 0,-43.3,0
+```
+
+(`--model-offset` moves the STL's axis onto the build's: 43.3 m is past the compare's 2 % shift window).
+
+| View | IoU | | Dimension | Mesh / STL |
+|---|---|---|---|---|
+| top | 0.951 | | length | 1.000 (1 502.1 / 1 502.1 m) |
+| side | 0.948 | | width | 0.989 (208.0 / 210.4 m) |
+| front | 0.965 | | height | 0.995 (443.7 / 446.1 m) |
+
+**Per-part sections** (`parts/ea_nova_fidelity.py`, `tools/refview/sections.py`; `test_ea_nova.py` holds them): the command
+block (by outline: the reference's is a shell of plates round loose parts, open at the front), the keel wedge, the tankage, the
+flank wing, the fore spine, the three ring lugs, both collars, the hangar block, the mid and aft spine, the engine housing and
+the engines, 33 planes, every one at 0.90 or over (lowest 0.903, the hangar block's fore plane at 600 m); no exemptions.
+Planes through the bays' halls (the hangar block's first 32 m, 559 to 591 m) score 0.86 to 0.88 (0.869 at 575 m, where the
+fore plane stood before the bays moved there): the bays are the loadout's, not the reference's.
+
+### In the game
+
+`assets/ships/ea_nova.tres`, catalogue `ea_nova`, capital class `dreadnought` (heard 1 000 km out, Q51; a 120 s jump
+recharge, `data/capitals/capitals.json`): 6.8e8 kg (680 kt from the skin's area at 260 kg/m2, the Omega's rule), its inertia
+a solid box of that mass over its length, span and height (as the Omega's), 1.0 m/s2 on its four mains with stand-in retros
+at half a main (reaction, no flip), turns at 1.5 degrees a second (1.2 in roll), 36 000 hull points (T03), opens its own jump
+points. `CapitalShip` builds it (no rotating section); destroyed, it leaves play through the destruction director. Its guns,
+beams and interceptors fire when T12 to T14 put capital weapons on the native rows. `capital spawn ea_nova` names it from the
+list (`EAS Schwarzkopf`, `EAS Nimitz`, ...) and each wears its own name's first letter (`HullMarks`, as the Omega's).
+
+Look sheet (gitignored): `references/screenshots/M10-T23 Nova/look_sheet_v2.png`, its shots in `look_sheet_v2/` (from 50 m in
+both texture sets, 1 km, 10 km and 100 km, the forward bays from 70 m lit and back-lit and from 180 m, side by side with the
+Omega), made with `scripts/model_sheet.sh`; `section_compare.png` and the first look sheet are stage 1's (the flank bays).
+
+### Open for the human tester `(H)`
+
+- The look beside the Omega; the show's Nova is darker (grey-brown and ochre) than look A.
+- One 4 096 px atlas over 1.5 km from 50 m.
+- The forward bays launch toward the command block: a Starfury out of the roof or a corner bay meets the bridge's roof or the
+  upper armour plate about 200 m ahead and has to climb or turn first (the launch path is T17's).
+
 ## M10 lengths (T01)
 
 Stage 1 of M10-T01 (Q4, Q22, Q48): every M10 hull's quoted length with its sources, the reference STL's proportions, the

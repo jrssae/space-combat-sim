@@ -1,5 +1,5 @@
 {
-  "_doc": "Ship names by catalogue type (M10-T21): every hull of a type in the lists below is given one of its names, in order, with its faction's prefix; a type with no list keeps its role's name. Omegas carry Greek names, mythological and historical (the show's Agamemnon). Add a list per class; ShipNames reads the file.",
+  "_doc": "Ship names by catalogue type (M10-T21): every hull of a type in the lists below is given one of its names, in order, with its faction's prefix; a type with no list keeps its role's name. Omegas carry Greek names, mythological and historical (the show's Agamemnon); Novas the names of generals and admirals (the show's Schwarzkopf). Add a list per class; ShipNames reads the file.",
   "prefixes": {
     "earth_alliance": "EAS"
   },
@@ -7,6 +7,10 @@
     "ea_omega": [
       "Agamemnon", "Achilles", "Alexander", "Apollo", "Athena", "Charon", "Heracles", "Hector", "Jason", "Leonidas",
       "Nemesis", "Odysseus", "Orion", "Pericles", "Perseus", "Prometheus", "Poseidon", "Themistocles", "Theseus", "Ajax"
+    ],
+    "ea_nova": [
+      "Schwarzkopf", "Nimitz", "Halsey", "Spruance", "Patton", "Bradley", "Eisenhower", "Montgomery", "Slim", "Zhukov",
+      "Foch", "Leclerc", "Garibaldi", "Bolivar", "Nelson", "Wellington", "Yi Sun-sin", "Togo", "Kutuzov", "Suvorov"
     ]
   }
 }

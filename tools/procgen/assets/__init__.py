@@ -11,7 +11,7 @@ from collections.abc import Callable
 from ..core.context import AssetOutputs, BuildContext
 from . import asteroids, b5_interior, babylon5_station, brakiri_bokmai, capital_hulls, capital_test_cruiser, cargo_pod_craft
 from . import centauri_brezebel
-from . import ea_omega, ea_shuttles, ea_thunderbolt, ea_work_ships
+from . import ea_nova, ea_omega, ea_shuttles, ea_thunderbolt, ea_work_ships
 from . import grid_heavy_cannon
 from . import grid_interceptor_battery, jumpgate, planet, saturn_family, skylark_transport
 from . import maintenance_bot, narn_transport, nav_buoy, organic_test_hull, raider_fighter, raider_strike_carrier
@@ -29,6 +29,7 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "centauri_brezebel": centauri_brezebel.build,
     "ea_atmo_shuttle": ea_shuttles.build_atmo,
     "ea_construction_tender": ea_work_ships.build_tender,
+    "ea_nova": ea_nova.build,
     "ea_omega": ea_omega.build,
     "ea_panama": ea_work_ships.build_panama,
     "ea_shuttle": ea_shuttles.build_shuttle,
@@ -54,4 +55,4 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
 
 # Assets whose bake needs the machine's memory to itself (M7-T04: the station's two 4 096 px atlases peak near 9 GB): with --jobs
 # they are built after the pool, one at a time, so a 16 GB machine never holds them beside other bakes.
-BUILD_ALONE: frozenset[str] = frozenset({"babylon5_station", "ea_omega", "organic_test_hull"})
+BUILD_ALONE: frozenset[str] = frozenset({"babylon5_station", "ea_nova", "ea_omega", "organic_test_hull"})
