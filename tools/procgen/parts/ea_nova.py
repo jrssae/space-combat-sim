@@ -1,5 +1,6 @@
 """The Nova-class dreadnought's structure (M10-T23): the parts measured off the reference model, built from the Omega's
-vocabulary (``parts/ea_omega.py``: its slab armour, girder spine, collars, nacelles and lit bays) on the capital library.
+vocabulary (``parts/ea_omega.py``: its slab armour, girder spine, collars, nacelles, retro nozzles and lit bay) on the capital
+library.
 
 Authored frame: x to starboard, y up from the spine's axis, z aft from the tip of the sensor boom; 1 502.1 m long
 (docs/assets-capital.md, "M10 lengths (T01)"). Numbers are the reference's own (``references/EA Nova class destroyer.STL``
@@ -9,19 +10,20 @@ Bow to stern:
 
 * **command block** (197 to 377 m): an armoured hexagon of plates, as the Omega's shields closed round the block: a
   vertical plate each side, a plate leaning in above to the roof and a long one leaning in below to the keel; inside, the
-  bridge tube, a deck, the roof block and a solid lower wedge; a diamond strake along each flank ending in a wing;
-* **tankage** under the bridge tube: a long capsule each side and a short one on the centre line;
+  bridge tube with the launch bay through it (the reference's octagonal hall, open from 198 to 328 m), a deck, the roof
+  block with the bridge's window and a solid lower wedge; a diamond strake along each flank ending in a wing;
+* **tankage** under the bridge tube: a long capsule each side and a short one on the centre line, and the two oval retro
+  thrusters below them;
 * **aerials**: the long sensor boom (port and low, one side only), lesser spikes and the masts above and below;
 * **spine** (330 to 1 103 m): the Omega's girder (core, waist, posts and fins) in three bays, split by two ring lugs
   with outrigger plates in the fore bay, two more in the aft bay, and the hangar block between two collars;
-* **hangar block** (559 to 741 m): an octagonal block, its six lit launch bays facing the bow from its fore face round the
-  collar (the Omega's bay);
+* **hangar block** (559 to 741 m): an octagonal block, its flanks framed round recessed panels;
 * **engine housing** (1 103 to 1 235 m): a flaring octagonal frustum with a strake along each flank;
 * **engines**: four nacelles in a square, the cross beam between them, plates above and below, and a tail blade
   between each side's pair.
 
 Every function returns modules already named for their damage section and side; ``assets/ea_nova.py`` adds the weapons,
-bays' params, lights and the section table.
+bay's params, lights and the section table.
 """
 
 from __future__ import annotations
@@ -32,11 +34,10 @@ import numpy as np
 
 from ..styles import Style
 from . import capital as cp
-from . import capital_bays as bays
 from . import capital_fittings as fittings
 from . import capital_solids as cs
 from .capital_hull import HullRoles
-from .ea_omega import DARK, DECKED, PANEL, PLAIN, RENEGADE_RED, _flip_y, _octagon, _put, _ring
+from .ea_omega import DARK, DECKED, PANEL, PLAIN, RENEGADE_RED, _flip_y, _octagon, _put, _ring, around_hole, fore_bay, retro_nozzle
 
 LENGTH_M = 1502.1
 # The command block's armour: the outer face of the side plate (x, its bottom and top edge's y, its z), the roof edge and
@@ -64,10 +65,16 @@ HOUSING_Z = (1103.0, 1234.8)
 HOUSING_RINGS = ((1103.0, 56.0, 56.8, (11.0, 10.0)), (1180.0, 86.5, 81.0, (33.0, 22.0)), (1234.8, 97.0, 97.8, (52.0, 22.0)))
 ENGINE_XY = 40.8
 ENGINE_START_Z, ENGINE_MOUTH_Z = 1234.0, 1456.0
-BAY_MOUTH, BAY_DEPTH, BAY_WALL = (18.0, 12.0), 30.0, 2.0  # as the Omega's: a Starfury is 11 m across and 7 m tall
-BAY_MOUTH_Z = COLLARS_Z[0][1]  # the bays' mouths, in the hangar block's fore face just behind the collar
-STARFURIES_PER_BAY = 4
+# The one launch bay, through the bridge tube above the retro thrusters (the maintainer, 2026-11-21): the reference's
+# octagonal hall, its mouth at the tube's front. A Starfury is 11 m across and 7 m tall.
+BAY_MOUTH, BAY_DEPTH, BAY_WALL, BAY_CORNER = (63.0, 27.0), 128.0, 2.0, 7.5
+BAY_MOUTH_Z, BAY_Y = 198.0, 0.5
+BAY_BACK_Z = BAY_MOUTH_Z + BAY_DEPTH + BAY_WALL
+TUBE_OUTLINE = [(36.0, -13.0), (36.0, 14.0), (32.0, 18.0), (-32.0, 18.0), (-36.0, 14.0), (-36.0, -13.0), (-32.0, -17.0), (32.0, -17.0)]
+STARFURIES = 24
 CRAFT = "starfury_ally"  # the catalogue's pooled Starfury (data/capitals/loadouts.json, launches)
+# The two oval retro thrusters under the bridge tube (the reference's): centre, mouth and throat z, half width and height.
+RETRO_XY, RETRO_Z, RETRO_HALF, RETRO_WALL = (14.2, -79.55), (167.0, 236.0), (12.0, 26.2), 4.8
 MARK_HEIGHT_M = 36.0  # the show's "B" stands about a third of the way down the lower plate
 X_HEIGHT_M = 30.0
 
@@ -109,18 +116,23 @@ def armour(s: Style) -> list[cp.Module]:
 
 
 def command_block(s: Style) -> list[cp.Module]:
-    """Inside the armour: the bridge tube (the spine's way forward), the deck over it, the roof block with the renegades' X
-    on top, the bridge's window at the tube's front, and the solid wedge between the lower plates."""
+    """Inside the armour: the bridge tube (the spine's way forward) with the launch bay through it (:func:`ea_omega.fore_bay`),
+    the deck over it, the roof block with the bridge's window in its face and the renegades' X on top, and the solid wedge
+    between the lower plates."""
     z0, z1 = PLATE_Z
-    tube = cs.prism("bridge_tube", [(35.0, -8.0), (35.0, 11.0), (28.0, 18.0), (-28.0, 18.0), (-35.0, 11.0), (-35.0, -8.0), (-28.0, -15.0), (28.0, -15.0)],
-                    z0 + 4.0, SPINE_Z[0] + 5.0, s, DECKED)
+    hw, hh = 0.5 * BAY_MOUTH[0] + BAY_WALL, 0.5 * BAY_MOUTH[1] + BAY_WALL
+    tube = around_hole("bridge_tube_fore", TUBE_OUTLINE, hw, (BAY_Y - hh, BAY_Y + hh), (BAY_MOUTH_Z, BAY_BACK_Z), s, DECKED, "bridge")
+    back = cs.prism("bridge_tube", TUBE_OUTLINE, BAY_BACK_Z - 0.5, SPINE_Z[0] + 5.0, s, DECKED)
+    bay, *fillets = fore_bay(s, BAY_MOUTH, BAY_DEPTH, BAY_CORNER, (0.0, BAY_Y, BAY_MOUTH_Z))
+    bay = bay.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES)
     deck = cs.box("bridge_deck", (-54.5, 43.0, 249.0), (54.5, 52.0, 359.0), s, DECKED)
     roof = cs.box("bridge_roof", (-46.0, 58.0, 214.0), (46.0, 74.0, 300.0), s, PANEL)
     ridge = cs.box("bridge_ridge", (-10.0, 52.0, 201.0), (10.0, 72.0, 329.0), s, DECKED)
-    frame = cs.prism("bridge_window_frame", _octagon(31.0, 13.0, (6.0, 6.0)), z0 + 3.0, z0 + 4.5, s, DARK, skin=cp.SKIN_NONE)
-    glass = cs.prism("bridge_window", _octagon(28.0, 10.0, (5.0, 5.0)), z0 + 2.6, z0 + 3.5, s,
+    # The bridge's window in the roof block's face.
+    frame = cs.prism("bridge_window_frame", _octagon(30.0, 6.0, (3.0, 3.0)), 213.2, 214.5, s, DARK, skin=cp.SKIN_NONE)
+    glass = cs.prism("bridge_window", _octagon(28.0, 4.5, (2.5, 2.5)), 212.8, 213.5, s,
                      HullRoles(side="canopy_glass", deck="canopy_glass", keel="canopy_glass"), skin=cp.SKIN_NONE)
-    frame, glass = (m.transformed(np.eye(3), (0.0, 1.5, 0.0)) for m in (frame, glass))
+    frame, glass = (m.transformed(np.eye(3), (0.0, 66.0, 0.0)) for m in (frame, glass))
     # The wedge fills the space between the lower plates, their inner faces from the plate's foot to the keel.
     lean = (PLATE_ROOT_X - KEEL_EDGE[0]) / (PLATE_Y[0] - KEEL_EDGE[1])  # x lost a metre down
     inner = lambda y: PLATE_ROOT_X - PLATE_THICK - (PLATE_Y[0] - y) * lean  # noqa: E731
@@ -129,7 +141,7 @@ def command_block(s: Style) -> list[cp.Module]:
     cross = fittings.hull_mark("mark_x_roof", (0.0, 74.0, 260.0), (0.0, 1.0, 0.0), (0.0, 0.0, -1.0), X_HEIGHT_M, colour=RENEGADE_RED, text="X",
                                only_faction="renegades")
     roof = dataclasses.replace(roof, hardpoints=(cross,))
-    return [_put("bridge", m) for m in (tube, deck, roof, ridge, frame, glass)] + [_put("bow", wedge)]
+    return [_put("bridge", m) for m in (back, deck, roof, ridge, frame, glass)] + tube + [bay, *fillets, _put("bow", wedge)]
 
 
 def flank_strake(s: Style) -> list[cp.Module]:
@@ -142,28 +154,18 @@ def flank_strake(s: Style) -> list[cp.Module]:
 
 
 def tankage(s: Style) -> list[cp.Module]:
-    """The reactant under the bridge tube, open to space at the block's front: a long capsule each side and a short one on
-    the centre line."""
+    """Under the bridge tube: a long reactant capsule each side and a short one on the centre line, and below them the two
+    oval retro thrusters, open nozzles closed by their throats (the reference's)."""
     def capsule(name: str, x: float, y: float, z: tuple[float, float], r: float) -> cp.Module:
         cap = [(r - r * np.cos(a), r * np.sin(a)) for a in np.linspace(0.0, 0.5 * np.pi, 5)]
         length = z[1] - z[0]
         profile = [(0.0, 0.0), *cap[1:], *[(length - d, rr) for d, rr in reversed(cap[1:])], (length, 0.0)]
         return cs.round_body(name, (x, y, z[0]), (x, y, z[1]), profile, s, s.material("hull_panel"), sides=20, skin=cp.SKIN_FITTING)
 
-    def racetrack(name: str, x: float, y: float, z: tuple[float, float], half_w: float, half_h: float, wall: float) -> cp.Module:
-        """A hollow racetrack tank, open at its front: its wall in convex pieces round the outline."""
-        def outline(r: float) -> list[tuple[float, float]]:
-            arc = np.linspace(0.0, np.pi, 13)
-            top, low = y + half_h - half_w, y - half_h + half_w  # the end arcs' centres
-            return [(x + r * np.cos(a), top + r * np.sin(a)) for a in arc] + [(x - r * np.cos(a), low - r * np.sin(a)) for a in arc]
-
-        outer, inner = outline(half_w), outline(half_w - wall)
-        n = len(outer)
-        return cs.compound(name, [cs.prism(f"{name}_{k}", [outer[k], outer[(k + 1) % n], inner[(k + 1) % n], inner[k]], *z, s, PANEL) for k in range(n)])
-
     beam = cs.box("tank_beam", (-52.0, -50.0, 200.0), (52.0, -47.6, 236.0), s, DARK)
+    retro = retro_nozzle("retro_r", *RETRO_XY, RETRO_Z, RETRO_HALF, RETRO_WALL, s)
     return [_put("fuel", capsule("tank_r", 39.5, -44.0, (176.0, 229.0), 12.8), cp.RIGHT), _put("fuel", capsule("tank_mid", 0.0, -47.8, (190.0, 230.0), 10.0)),
-            _put("fuel", racetrack("tank_racetrack_r", 14.2, -79.55, (167.0, 236.0), 12.0, 26.2, 4.8), cp.RIGHT), _put("fuel", beam)]
+            _put("fuel", retro, cp.RIGHT), _put("fuel", beam)]
 
 
 def aerials(s: Style) -> list[cp.Module]:
@@ -240,71 +242,15 @@ def collar(s: Style, name: str, section: str, z: tuple[float, float]) -> cp.Modu
     return _put(section, cs.prism(name, _octagon(COLLAR_W, COLLAR_H, COLLAR_CUT), *z, s, DECKED))
 
 
-def _bay_frame(normal: np.ndarray) -> np.ndarray:
-    """The turn that stands a bay with its mouth facing the bow, its back (the craft's up) along ``normal`` in the face."""
-    up = np.array([normal[0], normal[1], 0.0])
-    aft = np.array([0.0, 0.0, 1.0])
-    return np.column_stack([np.cross(up, aft), up, aft])
-
-
-def _corner_band() -> tuple[np.ndarray, np.ndarray, float]:
-    """The hangar's upper starboard corner face: its direction toward the roof, its outward normal and its distance from the
-    axis along that normal."""
-    flank = np.array([HANGAR_W, HANGAR_H - HANGAR_CUT[1]])
-    along = np.array([HANGAR_W - HANGAR_CUT[0], HANGAR_H]) - flank
-    along /= np.linalg.norm(along)
-    normal = np.array([along[1], -along[0]])
-    return along, normal, float(normal @ flank)
-
-
-def front_bays(s: Style, section: str) -> list[cp.Module]:
-    """The forward-facing launch bays (the Omega's lit bay, the maintainer, 2026-11-21) round the hangar block's fore face, in
-    the band the block stands out of the collar: one in the roof's band, one in the keel's and one in each corner, their mouths
-    facing the bow; the front of the block is built round them so each hall stays open."""
-    z0, zb = BAY_MOUTH_Z, BAY_MOUTH_Z + BAY_DEPTH + BAY_WALL
-    across = BAY_MOUTH[1] + 2.0 * BAY_WALL  # a housing's height across the band
-    along, normal, d_out = _corner_band()
-    d_in = d_out - across
-    # The corner bay sits as far toward the flank as the recessed panels below it allow.
-    t_flank = (RECESS_Y + 1.0 - normal[1] * (d_in + BAY_WALL)) / along[1] - BAY_WALL
-    t_roof = t_flank + BAY_MOUTH[0] + 2.0 * BAY_WALL
-    at = lambda t, d: t * along + d * normal  # noqa: E731 - a point on the corner by its distance along it and out from the axis
-    roof_y = HANGAR_H - across  # the roof band's housing from here to the roof
-    inner_x = (d_in - RECESS_Y * normal[1]) / normal[0]  # where the corner bay's inner face meets the recess's top
-    roof_x = at(t_roof, d_in)[0]
-    inner = cs.prism("hangar_front_top", [(inner_x, RECESS_Y), (roof_x, roof_y), (-roof_x, roof_y), (-inner_x, RECESS_Y)], z0 - 0.2, zb, s, DECKED)
-    flank_end = at(t_flank, d_out), at(t_flank, d_in)
-    lip = flank_end[1] + (flank_end[0] - flank_end[1]) * (RECESS_Y - flank_end[1][1]) / (flank_end[0][1] - flank_end[1][1])
-    by_flank = cs.prism("hangar_front_flank_top_r", [(HANGAR_W, RECESS_Y), (HANGAR_W, HANGAR_H - HANGAR_CUT[1]), tuple(flank_end[0]), tuple(lip)], z0 - 0.2, zb, s, DECKED)
-    half = 0.5 * BAY_MOUTH[0] + BAY_WALL
-    by_roof = cs.prism("hangar_front_roof_top_r", [(half, roof_y), tuple(at(t_roof, d_in)), tuple(at(t_roof, d_out)), (HANGAR_W - HANGAR_CUT[0], HANGAR_H),
-                                                   (half, HANGAR_H)], z0 - 0.2, zb, s, DECKED)
-    out = [_put(section, inner), _put(section, _flip_y(inner, "hangar_front_keel"))]
-    out += _pair(section, by_flank, "hangar_front_flank_low_r") + _pair(section, by_roof, "hangar_front_roof_low_r")
-
-    def bay(name: str, up: np.ndarray, centre: np.ndarray, side: str) -> cp.Module:
-        m = bays.launch_bay(name, BAY_MOUTH, BAY_DEPTH, s, BAY_WALL, lit=True).transformed(_bay_frame(up), (centre[0], centre[1], z0))
-        return _put(section, m.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES_PER_BAY), side)
-
-    mid_y, t_mid, d_mid = HANGAR_H - 0.5 * across, 0.5 * (t_flank + t_roof), d_out - 0.5 * across
-    low = np.array([normal[0], -normal[1]])
-    corner = at(t_mid, d_mid)
-    return out + [bay("bay_roof", np.array([0.0, 1.0]), np.array([0.0, mid_y]), cp.CENTRE),
-                  bay("bay_keel", np.array([0.0, -1.0]), np.array([0.0, -mid_y]), cp.CENTRE),
-                  bay("bay_upper_r", normal, corner, cp.RIGHT), bay("bay_lower_r", low, np.array([corner[0], -corner[1]]), cp.RIGHT)]
-
-
 def hangar_block(s: Style, section: str) -> list[cp.Module]:
     """The hangar block: an octagon round the girder, each flank a frame (a pillar fore and aft, the roof's and keel's
-    edges) round two recessed panels, the launch strip between them through the axis and a box standing out of it; its
-    launch bays face the bow from its fore face (:func:`front_bays`)."""
+    edges) round two recessed panels, the launch strip between them through the axis and a box standing out of it."""
     z0, z1 = HANGAR_Z
-    zb = BAY_MOUTH_Z + BAY_DEPTH + BAY_WALL  # the bays' halls end here; the roof and keel are whole aft of it
     strip = 0.5 * STRIP_H
     back = HANGAR_W - STRIP_DEPTH
     cut_y = HANGAR_H - HANGAR_CUT[1]
     top = cs.prism("hangar_roof", [(HANGAR_W, RECESS_Y), (HANGAR_W, cut_y), (HANGAR_W - HANGAR_CUT[0], HANGAR_H), (-HANGAR_W + HANGAR_CUT[0], HANGAR_H),
-                                   (-HANGAR_W, cut_y), (-HANGAR_W, RECESS_Y)], zb, z1, s, DECKED)
+                                   (-HANGAR_W, cut_y), (-HANGAR_W, RECESS_Y)], z0, z1, s, DECKED)
     middle = cs.box("hangar_middle", (-back, -RECESS_Y - 0.5, z0), (back, RECESS_Y + 0.5, z1), s, DECKED)
     out = [_put(section, top), _put(section, _flip_y(top, "hangar_keel")), _put(section, middle)]
     panel = cs.box("hangar_panel_top_r", (back - 0.5, strip - 0.5, z0), (RECESS_X, RECESS_Y + 0.5, z1), s, PANEL)
@@ -318,7 +264,7 @@ def hangar_block(s: Style, section: str) -> list[cp.Module]:
     bump = cs.box("hangar_bump", (-11.0, HANGAR_H - 1.0, 640.0), (11.0, 75.0, 662.0), s, DARK)
     out += [_put(section, bump), _put(section, _flip_y(bump, "hangar_bump_low"))]
     out.append(_put(section, cs.box("hangar_strip_r", (back - 0.5, -strip, z0 + PILLAR_M - 0.5), (HANGAR_W, strip, z1 - PILLAR_M + 0.5), s, DARK), cp.RIGHT))
-    return out + front_bays(s, section)
+    return out
 
 
 # --- the engine housing and the engines ----------------------------------------------------------------------------------
@@ -384,7 +330,7 @@ def engine_frame(s: Style, section: str) -> list[cp.Module]:
     return out + [_put("engine_r", m, cp.RIGHT) for m in (blade, lug)]
 
 
-__all__ = ["BAY_DEPTH", "BAY_MOUTH", "BAY_MOUTH_Z", "COLLARS_Z", "CORE_H", "ENGINE_MOUTH_Z", "ENGINE_START_Z", "ENGINE_XY",
-           "HANGAR_W", "HANGAR_Z", "HOUSING_Z", "LENGTH_M", "MARK_HEIGHT_M", "PLATE_X", "PLATE_Z", "RINGS_Z", "SPINE_Z", "STARFURIES_PER_BAY", "aerials",
-           "armour", "collar", "command_block", "engine", "engine_frame", "flank_fittings", "flank_strake", "front_bays", "hangar_block", "housing", "ring", "spine",
+__all__ = ["BAY_BACK_Z", "BAY_DEPTH", "BAY_MOUTH", "BAY_MOUTH_Z", "BAY_Y", "COLLARS_Z", "CORE_H", "ENGINE_MOUTH_Z", "ENGINE_START_Z", "ENGINE_XY",
+           "HANGAR_W", "HANGAR_Z", "HOUSING_Z", "LENGTH_M", "MARK_HEIGHT_M", "PLATE_X", "PLATE_Z", "RINGS_Z", "SPINE_Z", "STARFURIES", "aerials",
+           "armour", "collar", "command_block", "engine", "engine_frame", "flank_fittings", "flank_strake", "hangar_block", "housing", "ring", "spine",
            "tankage"]

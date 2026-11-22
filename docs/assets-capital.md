@@ -427,7 +427,7 @@ Omega-class destroyer". Earth Alliance only; the renegades fly it with their mar
 | Length | **1 714.3 m** (T01) |
 | Span, height | 474.6 m, 545.3 m with the drum turned as the reference's (474 x 545); 620 x 478 m at rest, the arms to port and starboard |
 | Pieces | `hull` and `drum`, the rotating section (555 to 879 m from the boom's tip), on its own 4 096 px atlas, turning at 0.1 rad/s about the spine's axis (about a third of a g at the arms' bodies) |
-| Triangles | 11 948 (budget 100 000) |
+| Triangles | 12 016 (budget 100 000) |
 | Texture sets | 109.3 MB high, 29.3 MB low (budget 109.3 and 29.3: two 4 096 px atlases); measured 110 MB high and 30 MB low on the RX 6950 XT (model sheet, against the empty scene) |
 | Mass (informational) | 1 053 kt from the skin's area at 260 kg/m2; the `ShipSpec` takes it (1.05e9 kg) |
 
@@ -442,7 +442,14 @@ energies on the fuel, magazine and reactor. Mounts as `data/capitals/loadouts.js
 - 6 `ea_sweep_beam` emitters: one on each shield's pod covering the fore hemisphere, four on the skirt's corners the aft;
 - 2 `ea_missile` batteries on the aft spine over the magazine;
 - 8 `ea_interceptor` domes along the flanks;
-- 8 launch bays in the drum's rims, four an arm, `craft` `starfury_ally` and `capacity` 4 each (32 Starfuries);
+- one launch bay facing the bow (the maintainer, 2026-11-21: one bay, on the command block's fore face just above the two oval
+  retro thrusters), in the `bow` section: the reference's octagonal hall, a 74 by 34 m mouth (fillets in its corners make it an
+  octagon) at 182 m, the hall 134 m deep, its housing standing out of the head as the reference's tube
+  (`parts/ea_omega.fore_bay`); `craft` `starfury_ally`, `capacity` 32. The bridge's window moved up the head's face, above the
+  bay. The drum's rims carry no bays: a panelled band runs round their outer faces. Nothing of the hull stands ahead of the
+  mouth (`test_the_launch_path_ahead_of_the_bay_is_clear`), so T17's launches leave straight ahead;
+- the two oval retro thrusters under the reactant spheres: open nozzles from 168 m to their dark throats at 258 m, as the
+  reference's (`parts/ea_omega.retro_nozzle`, which the Nova shares);
 - running lights (red to port, green to starboard, white on the roof, red-orange beacons at the keel and the stern), the
   four engines in a square, and a jump anchor 1 500 m ahead with a 450 m mouth.
 
@@ -450,7 +457,7 @@ energies on the fuel, magazine and reactor. Mounts as `data/capitals/loadouts.js
 EA hull's bays do). `parts/capital_bays.launch_bay(lit=True)`: the frame round the mouth in the hull's paint, a red band
 round the mouth on its face, three rings of red strips down the hall (the first at the mouth, the deeper ones dimmer), red
 guide strips on the deck, a red lamp at each corner of the mouth and the hall's walls faintly red; each bay also gets a
-light hardpoint of role `bay` (`bay_1_r_light`, red, in the hall's mouth) for the game's light rig. The colours are the
+light hardpoint of role `bay` (`bay_fore_light`, red, in the hall's mouth) for the game's light rig. The colours are the
 station's: `BAY_RED` for the strips (1.6 at the mouth, as the station's mouth frames; 0.9 inside) and its red lamp. The roles
 (`bay_light`, `bay_light_deep`, `bay_lamp`, `bay_hall`) come with `styles/ea_capital.bay_light_materials`, which the
 Hyperion, Nova, Warlock and Explorer get with the style.
@@ -466,13 +473,19 @@ Hyperion, Nova, Warlock and Explorer get with the style.
 | View | IoU | | Dimension | Mesh / STL |
 |---|---|---|---|---|
 | top | 0.969 | | length | 1.000 (1 714.3 / 1 714.3 m) |
-| side | 0.950 | | width | 1.001 (474.6 / 473.9 m) |
-| front | 0.930 | | height | 1.000 (545.3 / 545.1 m) |
+| side | 0.939 | | width | 1.001 (474.6 / 473.9 m) |
+| front | 0.923 | | height | 1.000 (545.3 / 545.1 m) |
+
+(Re-scored with the forward bay, 2026-11-21; the build before it scores the same, so the 0.950 and 0.930 first written here
+were an earlier build's.)
 
 **Per-part sections** (`parts/ea_omega_fidelity.py`, `tools/refview/sections.py`; `test_ea_omega.py` holds them): the bow
-block, the tankage (its forward plane by outline: the reference's tanks are open shells there), the command section, both
-spines, the collars, each drum arm and the hub (turned back 45 degrees, each in its own window), the engine housing and the
-engines, 31 planes, every one at 0.91 or over; no exemptions.
+block, the forward bay, the tankage (its forward plane by outline: the reference's tanks are open shells there), the retro
+thrusters, the command section, both spines, the collars, each drum arm and the hub (turned back 45 degrees, each in its own
+window), the engine housing and the engines, 35 planes, every one at 0.90 or over (lowest 0.909, the retro nozzle at 200 m);
+no exemptions. The bay's hall runs through the bow block and the command section, and the reference's hall is open shells its
+winding fills, so the bow block's planes and the command section's at 300 m compare outlines (0.986) and the hall is judged by
+relief, as the bow sees its mouth (0.962 at 250 and 300 m); the retro nozzles likewise (0.909, 0.911).
 
 ### Surface: look A, show grey with a rust face (the maintainer, 2026-11-21)
 
@@ -520,14 +533,14 @@ Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as
 | Length | **1 502.1 m** (T01) |
 | Span, height | 208.0 m (the cross beam's tips behind the housing) x 443.7 m (roof masts to keel mast); the STL 210.4 x 446.1 |
 | Pieces | `hull` only, one 4 096 px atlas |
-| Triangles | 14 182 (budget 100 000) |
+| Triangles | 13 802 (budget 100 000) |
 | Texture sets | 56.0 MB high, 16.0 MB low (budget 109.3 and 29.3); measured 56 MB and 16 MB on the RX 6950 XT (model sheet, against the empty scene) |
 | Build | about 3.6 to 4.2 min (3 min 44 s with the forward bays) and 10 GB at its peak on the maintainer's machine (`BUILD_ALONE`) |
 
 ### Sections and hardpoints
 
-Ten sections: `bow` (the armour, the keel wedge and the aerials), `bridge` (the bridge tube, deck and roof), `fuel` (the
-capsules and racetrack tanks under the bridge tube), `spine_fore`, `hangar` (the hangar block), `spine_mid`, `spine_aft`,
+Ten sections: `bow` (the armour, the keel wedge, the aerials and the launch bay), `bridge` (the bridge tube, deck and roof),
+`fuel` (the capsules and the retro thrusters under the bridge tube), `spine_fore`, `hangar` (the hangar block), `spine_mid`, `spine_aft`,
 `reactor` (the engine housing and the engine frame), `engine_r` and `engine_l`; blast energies on the fuel and the reactor.
 Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 
@@ -536,12 +549,13 @@ Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 - 6 `ea_sweep_beam_nova` emitters (the Omega's beams at 80 %): one on each flank of the command block covering the fore
   hemisphere, four on the engine housing's corners the aft;
 - 6 `ea_interceptor` domes along the flanks;
-- 6 lit launch bays facing the bow (the maintainer, 2026-11-21: the Nova has the Omega's launch bay, facing forward), the
-  Omega's `launch_bay(lit=True)` (18 by 12 m mouths, 30 m halls): in the hangar block's fore face, in the band where the block
-  stands out of the collar ahead of it, one in the roof's band, one in the keel's and one in each corner, the block's front
-  built round their halls (`parts/ea_nova.front_bays`); `craft` `starfury_ally` and `capacity` 4 each (24 Starfuries). The
-  reference has no bays; the loadout's Starfuries need them. About 1.5 m of each mouth's inner edge sits behind the collar
-  when seen straight from ahead;
+- one lit launch bay facing the bow (the maintainer, 2026-11-21: one bay, on the command block's front just above the two oval
+  retro thrusters), the Omega's `fore_bay` in the reference's octagonal hall through the bridge tube: a 63 by 27 m mouth at
+  198 m, the hall 128 m deep, in the `bow` section; `craft` `starfury_ally`, `capacity` 24. The hangar block's fore face is
+  whole again (its six bays are gone). The bridge's window moved to the roof block's face. Nothing of the hull stands ahead
+  of the mouth (`test_the_launch_path_ahead_of_the_bay_is_clear`), so T17's launches leave straight ahead;
+- the two oval retro thrusters under the capsules: open nozzles from 167 m, now closed by dark throats at 236 m as the
+  reference's (`parts/ea_omega.retro_nozzle`);
 - running lights (red to port, green to starboard, white on the roof, red-orange beacons under the keel and at the stern), the
   four engines in a square, and a jump anchor 1 500 m ahead with a 400 m mouth.
 
@@ -567,9 +581,11 @@ the show's Schwarzkopf first.
 **Per-part sections** (`parts/ea_nova_fidelity.py`, `tools/refview/sections.py`; `test_ea_nova.py` holds them): the command
 block (by outline: the reference's is a shell of plates round loose parts, open at the front), the keel wedge, the tankage, the
 flank wing, the fore spine, the three ring lugs, both collars, the hangar block, the mid and aft spine, the engine housing and
-the engines, 33 planes, every one at 0.90 or over (lowest 0.903, the hangar block's fore plane at 600 m); no exemptions.
-Planes through the bays' halls (the hangar block's first 32 m, 559 to 591 m) score 0.86 to 0.88 (0.869 at 575 m, where the
-fore plane stood before the bays moved there): the bays are the loadout's, not the reference's.
+the engines, with the retro thrusters by relief (0.931, 0.926) and the hangar block's fore end at 575 m again (0.935, whole
+since its bays left), 36 planes, every one at 0.90 or over (lowest 0.903, the hangar block at 600 m); no exemptions. The bay's
+hall lies inside the command block's planes (by outline, 0.979 to 0.980). Its mouth alone by relief, in the tube's window,
+scores 0.80 at 250 m and 0.84 at 300 m: the reference's tube is a thin frame a metre off the centre line, among loose parts the
+build leaves out; not a gate, for the maintainer.
 
 ### In the game
 
@@ -589,8 +605,7 @@ Omega), made with `scripts/model_sheet.sh`; `section_compare.png` and the first 
 
 - The look beside the Omega; the show's Nova is darker (grey-brown and ochre) than look A.
 - One 4 096 px atlas over 1.5 km from 50 m.
-- The forward bays launch toward the command block: a Starfury out of the roof or a corner bay meets the bridge's roof or the
-  upper armour plate about 200 m ahead and has to climb or turn first (the launch path is T17's).
+- The forward bay's red and its mouth beside the reference's tube, from ahead (`references/screenshots/M10-T23 Nova/bay_fix/`).
 
 ## `ea_hyperion` (M10-T22)
 

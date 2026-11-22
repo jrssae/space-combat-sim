@@ -25,11 +25,14 @@ PLANES: dict[str, list[SectionPlane]] = {
     "command_block": [_z("command", z, (-75.0, 75.0, -180.0, 100.0), outline=True) for z in (240.0, 270.0, 300.0, 350.0)],
     "keel_wedge": [_z("wedge", 270.0, (-60.0, 60.0, -175.0, -50.0))],
     "tankage": [_z("tank", z, (-55.0, 55.0, -108.0, -38.0)) for z in (205.0, 210.0)],
+    # The starboard retro thruster's oval nozzle as the bow sees it, in a window round its outline.
+    "retro_thrusters": [_z("retro_r", z, (3.0, 26.0, -106.0, -54.0), relief=True) for z in (190.0, 225.0)],
     "flank_wing": [_z("wing", 380.0, (-95.0, 95.0, -30.0, 70.0))],
     "forward_spine": [_z("spine_fore", z, GIRDER) for z in (420.0, 500.0)],
     "ring_lugs": [_z("ring", z, GIRDER) for z in (465.0, 835.0, 944.0)],
     "collars": [_z("collar", z, GIRDER) for z in (540.0, 760.0)],
-    "hangar_block": [_z("hangar", z, (-80.0, 80.0, -80.0, 80.0)) for z in (600.0, 624.0, 650.0, 677.0, 725.0)],
+    # 575 m: the block's fore end, whole again since its bays moved to the bow (M10-T23 fix).
+    "hangar_block": [_z("hangar", z, (-80.0, 80.0, -80.0, 80.0)) for z in (575.0, 600.0, 624.0, 650.0, 677.0, 725.0)],
     "aft_spine": [_z("spine_aft", z, GIRDER) for z in (800.0, 900.0, 1000.0, 1060.0)],
     "engine_housing": [_z("housing", z, (-115.0, 115.0, -110.0, 110.0)) for z in (1130.0, 1170.0, 1200.0, 1225.0)],
     "engines": [_z("engines", z, (-110.0, 110.0, -110.0, 110.0)) for z in (1260.0, 1300.0, 1350.0, 1400.0, 1440.0)],

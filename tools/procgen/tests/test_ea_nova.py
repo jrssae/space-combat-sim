@@ -1,5 +1,5 @@
 """``ea_nova`` (M10-T23, Q53): the Nova-class dreadnought on the capital framework, in the Omega's parts and look. Files and
-piece, size, the sections, the hardpoints against the loadout (30 mounts, 6 bays of 4 Starfuries), the lone sensor boom, the
+piece, size, the sections, the hardpoints against the loadout (30 mounts, one forward bay of 24 Starfuries), the lone sensor boom, the
 name letter and the renegades' marks, collision coverage, the class budget, and each part's sections against the reference STL
 (CLAUDE.md, "STL fidelity").
 
@@ -35,7 +35,7 @@ TEST_OPTIONS = {"atlas_px": 512, "detail_px": 128}  # the default sample spacing
 LENGTH, SPAN, HEIGHT = 1502.1, 208.0, 443.7  # T01's length; the beam's tips across, the roof masts to the keel mast
 SECTIONS = ("bow", "bridge", "fuel", "spine_fore", "hangar", "spine_mid", "spine_aft", "reactor", "engine_r", "engine_l")
 MOUNTS = {"turret": 18, "beam": 6, "interceptor": 6}
-BAYS, STARFURIES = 6, 24
+BAYS, STARFURIES = 1, 24
 
 
 class NovaBuildTests(unittest.TestCase):
@@ -89,11 +89,18 @@ class NovaBuildTests(unittest.TestCase):
         self.assertEqual((sum(z < 700.0 for z in beams), sum(z > 700.0 for z in beams)), (2, 4), "two fore, four aft")
         self.assertEqual(len(self.hp["bays"]), BAYS)
         self.assertEqual(sum(b["capacity"] for b in self.hp["bays"]), STARFURIES)
-        for bay in self.hp["bays"]:
-            self.assertEqual(bay["section"], "hangar")
-            self.assertLess(bay["exit"][2] - bay["position"][2], -1.0, f"{bay['name']} opens toward the bow")
-            np.testing.assert_allclose(bay["forward"], [0.0, 0.0, -1.0], atol=1e-6, err_msg=f"{bay['name']} launches forward")
-            self.assertAlmostEqual(self.authored(bay["exit"])[2], en.nv.BAY_MOUTH_Z, places=3, msg=f"{bay['name']}'s mouth in the hangar's fore face")
+        # The one bay faces the bow from the bridge tube's front, above the retro thrusters (the maintainer, 2026-11-21).
+        bay = self.hp["bays"][0]
+        self.assertEqual(bay["section"], "bow")
+        self.assertLess(bay["exit"][2] - bay["position"][2], -1.0, "it opens toward the bow")
+        np.testing.assert_allclose(bay["forward"], [0.0, 0.0, -1.0], atol=1e-6, err_msg="it launches forward")
+        exit_at = self.authored(bay["exit"])
+        self.assertAlmostEqual(exit_at[2], en.nv.BAY_MOUTH_Z, places=3, msg="its mouth at the bridge tube's front")
+        self.assertAlmostEqual(exit_at[0], 0.0, places=3)
+        retros = [m for m in cp.with_twins(en.modules()) if m.name.startswith("retro_")]
+        self.assertEqual(len(retros), 2, "two oval retro thrusters")
+        retro_top = max(float(m.part.mesh.bounds()[1][1]) for m in retros)
+        self.assertGreater(en.nv.BAY_Y - 0.5 * en.nv.BAY_MOUTH[1], retro_top, "the mouth above the retro thrusters")
 
     def test_engines_and_lights(self) -> None:
         self.assertEqual(len(self.hp["engines"]), 4)
@@ -139,6 +146,16 @@ class NovaSpecTests(unittest.TestCase):
         self.assertEqual(boom[0].side, cp.LONE)
         self.assertLess(float(boom[0].part.mesh.bounds()[1][0]), 0.0, "it hangs to port")
         self.assertEqual(float(boom[0].part.mesh.bounds()[0][2]), 0.0, "its tip is the ship's bow")
+
+    def test_the_launch_path_ahead_of_the_bay_is_clear(self) -> None:
+        """Nothing of the hull stands in the mouth's way out to the bow (T17 launches through it)."""
+        hw, hh = 0.5 * en.nv.BAY_MOUTH[0], 0.5 * en.nv.BAY_MOUTH[1]
+        lo, hi = np.array([-hw, en.nv.BAY_Y - hh, -1.0]), np.array([hw, en.nv.BAY_Y + hh, en.nv.BAY_MOUTH_Z - 0.01])
+        for m in cp.with_twins(en.modules()):
+            if m.name.startswith("bay_fore"):
+                continue
+            low, high = m.part.mesh.bounds()
+            self.assertFalse(bool(np.all(low < hi) and np.all(high > lo)), f"{m.name} stands ahead of the bay")
 
 
 @unittest.skipUnless(STL.is_file(), "the reference STL is gitignored; it is on the maintainer's machine")

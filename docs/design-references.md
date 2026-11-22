@@ -1076,7 +1076,8 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   stabiliser spikes to the stern (100 %).
 - **Weapons and bays (TBP).** 4 heavy plasma pulse cannons, 6 laser batteries (2 fore, 4 aft), 12 pulse cannons, missiles,
   mines, interceptors; the turret pods on the spines and the command neck carry them. **Two full squadrons of
-  Starfuries** (24): the launch bays are in the drum's arms (the show launches from the drum's rim).
+  Starfuries** (24). **One launch bay** (the maintainer, 2026-11-21): forward-facing, in the command section's fore face just
+  above the two big oval retro thrusters (the reference's octagonal hall); the drum's rims have none.
 - **Subsystems.** Bridge: the command section's fore face. Reactor: the engine section's forward housing (71 to 82 %).
   Hangars: the drum. Engines: the four pods. Jump engine: aft spine (own points).
 - **Colours (show).** Light and mid grey plating in big panels with darker recessed bands, black window rows, small
@@ -1118,7 +1119,8 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 - **Engine section** (75 to 100 %). A tapered housing (75 to 82 %) widening to about 190 m with angled flank plates, then
   **four engine pods** in a square (82 to 97 %), the same layout as the Omega's.
 - **Weapons and bays.** TBP: 18 twin cannons; no fighter bays are confirmed (the table's "Starfury" stays as the EA's
-  default, for T03). SotG lists 2 light shuttles.
+  default, for T03). SotG lists 2 light shuttles. **One launch bay** (the maintainer, 2026-11-21): forward-facing, in the
+  command block's front just above the two big oval retro thrusters (the reference's octagonal hall through the bridge tube).
 - **Subsystems.** Bridge: the command block. Reactor: the engine housing. Engines: the four pods.
 - **Colours (show).** Darker than the Omega: grey-brown and ochre plating, many lit windows, "B" and hull numbers in
   white, engines glowing red-orange in still 02.

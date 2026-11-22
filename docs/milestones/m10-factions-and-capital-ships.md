@@ -382,9 +382,9 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
-| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | in progress |
+| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
 | T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | done |
-| T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | in progress |
+| T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | done |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
 | T25 | F | Narn G'Quan-class heavy cruiser | T19, T62 | Fable | not started |
 | T26 | F | Centauri Vorchan-class warship | T19, T62 | Fable | not started |
@@ -822,6 +822,9 @@ On top of it:
   spawn); sheet `references/screenshots/M10-T21 Omega/letters/letters_sheet.png`. **Open:** its weapons fire with T12 to T14 (the numbers
   are T03's loadout; no `WeaponSpec`s yet); the renegades' marking is T02's (the `livery` hook unused); at 100 km it is under
   a pixel (no far representation); the bay lights are hardpoints only until a light rig reads capital lights.
+  **Bay fix (2026-11-22, the maintainer):** one forward lit bay (74 by 34 m, 134 m hall, 32 Starfuries, `bow` section) in the
+  reference's octagonal hall above the oval retro thrusters (now open nozzles); rim bays gone; 35 sections at 0.909 or over;
+  launch path ahead clear; sheets `references/screenshots/M10-T21 Omega/bay_fix/`.
 - **T23 done (2026-11-21).** `ea_nova`, the Nova-class dreadnought (1 502.1 m; 14 182 triangles; one 4 096 px atlas, measured
   56 MB high and 16 MB low): `tools/procgen/assets/ea_nova.py` on `parts/ea_nova.py` (measured off the STL), in the Omega's parts
   and its look A (`styles/ea_capital.py`, unchanged: the Hyperion's palette is its own, `styles/ea_hyperion.py`), with the
@@ -844,6 +847,9 @@ On top of it:
   100 km, the forward bays lit and back-lit, beside the Omega). **Open:** a Starfury leaving a roof or corner bay meets the
   command block about 200 m ahead and must climb or turn (T17's launch path); the guns fire with T12 to T14; at 100 km it is
   under a pixel; judging the look is (H).
+  **Bay fix (2026-11-22, the maintainer):** the six hangar bays become one forward lit bay (63 by 27 m, 128 m hall, 24
+  Starfuries, `bow`) through the bridge tube above the oval retro thrusters (throats added); 36 sections at 0.903 or over (the
+  mouth alone by relief 0.80 to 0.84, not a gate); launch path clear; sheets `references/screenshots/M10-T23 Nova/bay_fix/`.
 - **T22 done (2026-11-21).** `ea_hyperion`, the Hyperion-class heavy cruiser (1 025.39 m; 10 176 triangles; one 4 096 px atlas,
   56 MB high and 16 MB low): `tools/procgen/assets/ea_hyperion.py` on `parts/ea_hyperion.py` and its own style
   `styles/ea_hyperion.py` (the show's light grey and royal-blue bands, the fleet's mosaic), on the Omega's lit bays and loadout

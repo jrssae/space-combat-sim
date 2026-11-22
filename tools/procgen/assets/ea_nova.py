@@ -11,9 +11,10 @@ it and names the damage sections. The loadout is ``data/capitals/loadouts.json``
 * 6 sweeping beams at 80 % (the Omega's): one on each flank of the command block covering the fore hemisphere, four on the
   engine housing's corners covering the aft;
 * 6 interceptors along the flanks;
-* 6 launch bays facing the bow from the hangar block's fore face (the Omega's lit bay), 4 Starfuries each (24).
+* 1 launch bay facing the bow from the bridge tube's front, above the retro thrusters (the Omega's lit bay; the maintainer,
+  2026-11-21), in the bow section: all 24 Starfuries.
 
-Sections: bow (the armour and aerials), bridge, fuel (the tankage), the fore spine, the hangar block, the mid spine, the aft
+Sections: bow (the armour, aerials and launch bay), bridge, fuel (the tankage), the fore spine, the hangar block, the mid spine, the aft
 spine (the jump engine's place), the reactor (the engine housing) and an engine pair each side.
 
 Options: ``look`` (``styles/ea_capital.LOOKS``), and ``spacing``, ``atlas_px``, ``detail_px`` (``core/capital.build``).
