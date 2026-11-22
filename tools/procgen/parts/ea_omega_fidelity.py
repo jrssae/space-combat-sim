@@ -19,6 +19,7 @@ DRUM_TURN_DEG = 45.0
 SPINE = (-80.0, 80.0, -70.0, 70.0)
 ARM = (80.0, 320.0, -110.0, 110.0)
 TANK = (0.0, 40.0, -150.0, -58.0)  # the starboard reactant tank and the beam under it
+BAY = (-50.0, 50.0, -30.0, 30.0)  # the launch bay's mouth and the tube round it
 
 
 def _z(name: str, z: float, window: tuple[float, float, float, float], **kw: object) -> SectionPlane:
@@ -26,10 +27,16 @@ def _z(name: str, z: float, window: tuple[float, float, float, float], **kw: obj
 
 
 PLANES: dict[str, list[SectionPlane]] = {
-    "bow_block": [_z("bow_block", z, (-75.0, 75.0, -60.0, 100.0)) for z in (255.0, 285.0)],
+    # The launch bay's hall runs through the bow block and the command section (182 to 318 m). The reference's hall is open
+    # shells that its winding fills, so these planes compare the block's outline and the hall is judged by relief, as the
+    # bow sees its mouth.
+    "bow_block": [_z("bow_block", z, (-75.0, 75.0, -60.0, 100.0), outline=True) for z in (255.0, 285.0)],
+    "fore_bay": [_z("bay", z, BAY, relief=True) for z in (250.0, 300.0)],
     # The reference's tanks are open shells ahead of z 270, so the forward plane is compared by its outline.
     "tankage": [_z("tank_r", 250.0, TANK, outline=True), _z("tank_r", 280.0, TANK)],
-    "command_section": [_z("command", z, (-80.0, 80.0, -70.0, 100.0)) for z in (300.0, 340.0)],
+    # The starboard retro thruster's oval nozzle as the bow sees it, in a window round its outline.
+    "retro_thrusters": [_z("retro_r", z, (5.0, 32.0, -126.0, -64.0), relief=True) for z in (200.0, 240.0)],
+    "command_section": [_z("command", 300.0, (-80.0, 80.0, -70.0, 100.0), outline=True), _z("command", 340.0, (-80.0, 80.0, -70.0, 100.0))],
     "forward_spine": [_z("spine_fore", z, SPINE) for z in (448.0, 498.0)],
     "collars": [_z("collar", z, (-100.0, 100.0, -100.0, 100.0)) for z in (530.0, 900.0)],
     "drum_arms": [*(_z("arm_r", z, ARM, turn_deg=DRUM_TURN_DEG) for z in (620.0, 717.0, 800.0)),

@@ -10,7 +10,8 @@ it and names the damage sections. The loadout is ``data/capitals/loadouts.json``
 * 6 sweeping beams: one on each shield's pod covering the fore hemisphere, four on the skirt's corners covering the aft;
 * 2 missile batteries on the aft spine, above and below, over the magazine;
 * 8 interceptors along the flanks;
-* 8 launch bays in the rotating section's rims, 4 Starfuries each (32).
+* 1 launch bay facing the bow from the command block's fore face, above the retro thrusters (the maintainer, 2026-11-21),
+  in the bow section: all 32 Starfuries.
 
 Sections: bow, bridge, fuel (the tankage under the command block), the fore spine, the rotating section's hub and its two
 arms (the hangars), the magazine (the aft spine's forward half), the aft spine (the jump engine's place), the reactor (the

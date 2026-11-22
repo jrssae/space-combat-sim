@@ -6,13 +6,16 @@ that length, its sections cut with ``tools/refview/sections.py``); docs/design-r
 
 Bow to stern:
 
-* **bow** (0 to 358 m): the sensor boom (port and low, one side only), the command block (the spine's octagon with a
-  nose block for the bridge), two armour shields standing off its flanks in three leaning panels, a beam pod on each
-  shield, the reactant spheres and tanks slung under the block, masts;
+* **bow** (0 to 358 m): the sensor boom (port and low, one side only), the command block (the spine's octagon, the
+  bridge's window in its fore face), the launch bay through it (its housing standing out of the fore face as the
+  reference's tube, the hall reaching back 136 m), two armour shields standing off its flanks in three leaning
+  panels, a beam pod on each shield, the reactant spheres slung under the block and the two oval retro thrusters below
+  them, masts;
 * **spines** (358 to 512 m and 918 to 1 242 m): a girder, not a tube: a core, a waist, side rails and four ears;
 * **collars** (r 84 m) either side of the rotating section, on an axle through it;
-* **rotating section** (555 to 879 m): two arms on a hub, each a body, a neck and a rim cap with launch bays in its outer
-  face. It is built square (arms to port and starboard) in its own piece; the reference has it turned 45 degrees;
+* **rotating section** (555 to 879 m): two arms on a hub, each a body, a neck and a rim cap, a panelled band round the
+  rim's outer face. It is built square (arms to port and starboard) in its own piece; the reference has it turned 45
+  degrees;
 * **engine housing** (1 242 to 1 408 m): a solid core flaring in width, a skirt of stand-off plates flaring in height,
   three ribs and a strake on each flank;
 * **engines**: four nacelles in a square, a boom between each side's pair ending in a blade, tail plates above and below.
@@ -57,10 +60,17 @@ ENGINE_START_Z = 1310.0
 ENGINE_XY = (52.0, 45.5)
 ENGINE_MOUTH_Z = 1660.0
 LUG_Z = (1409.0, 1452.0)
-BAYS_PER_ARM = 4
-BAY_MOUTH, BAY_DEPTH, BAY_WALL = (18.0, 12.0), 30.0, 2.0  # a Starfury is 11 m across and 7 m tall
-STARFURIES_PER_BAY = 4
+# The one launch bay, in the command block's fore face above the retro thrusters (the maintainer, 2026-11-21): the
+# reference's octagonal hall, open from 182 to about 320 m, its housing standing out of the head as the reference's tube.
+# A Starfury is 11 m across and 7 m tall.
+BAY_MOUTH, BAY_DEPTH, BAY_WALL = (74.0, 34.0), 134.0, 2.0
+BAY_MOUTH_Z, BAY_Y = 182.0, 0.0
+BAY_BACK_Z = BAY_MOUTH_Z + BAY_DEPTH + BAY_WALL
+BAY_CORNER = 7.0  # the fillets in the hall's corners that make its mouth the reference's octagon
+STARFURIES = 32
 CRAFT = "starfury_ally"  # the catalogue's pooled Starfury (data/capitals/loadouts.json, launches)
+# The retro thrusters' oval nozzles: open from their mouths to the throat, as the reference's.
+RETRO_Z, RETRO_THROAT_Z, RETRO_WALL, RETRO_NARROW = 168.0, 258.0, 6.0, 1.0
 
 DECKED = HullRoles()
 PLAIN = HullRoles(deck="hull", keel="hull")  # a part with no deck: its top and bottom wear the side's paint
@@ -85,6 +95,69 @@ def _flip_y(m: cp.Module, name: str) -> cp.Module:
 
 def _put(section: str, m: cp.Module, side: str = cp.CENTRE) -> cp.Module:
     return m.in_section(section).on_side(side)
+
+
+def _clip(outline: list[tuple[float, float]], keep) -> list[tuple[float, float]]:
+    """The part of a convex outline where ``keep(p)`` is not negative (``keep`` linear in p)."""
+    out: list[tuple[float, float]] = []
+    for a, b in zip(outline, outline[1:] + outline[:1], strict=True):
+        fa, fb = keep(a), keep(b)
+        if fa >= 0.0:
+            out.append(a)
+        if (fa >= 0.0) != (fb >= 0.0):
+            t = fa / (fa - fb)
+            out.append((a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])))
+    return out
+
+
+def around_hole(name: str, outline: list[tuple[float, float]], half_w: float, ys: tuple[float, float], z: tuple[float, float], s: Style,
+                roles: HullRoles, section: str) -> list[cp.Module]:
+    """A convex block from ``z[0]`` to ``z[1]`` with a rectangular hole through it (``half_w`` either side of the axis, from
+    ``ys[0]`` to ``ys[1]``) for a bay's housing: the part above the hole, below it and the starboard part beside it (each
+    only where the block reaches past the hole)."""
+    y0, y1 = ys
+    top = _clip(outline, lambda p: p[1] - y1)
+    low = _clip(outline, lambda p: y0 - p[1])
+    side = _clip(_clip(_clip(outline, lambda p: p[0] - half_w), lambda p: y1 - p[1]), lambda p: p[1] - y0)
+
+    def area(pts: list[tuple[float, float]]) -> float:
+        return 0.5 * abs(sum(a[0] * b[1] - b[0] * a[1] for a, b in zip(pts, pts[1:] + pts[:1], strict=True))) if len(pts) > 2 else 0.0
+
+    pieces = ((f"{name}_top", top, cp.CENTRE), (f"{name}_low", low, cp.CENTRE), (f"{name}_side_r", side, cp.RIGHT))
+    return [_put(section, cs.prism(n, pts, *z, s, roles), side_of) for n, pts, side_of in pieces if area(pts) > 0.01]
+
+
+def fore_bay(s: Style, mouth: tuple[float, float], depth: float, corner: float, at: tuple[float, float, float], section: str = "bow") -> list[cp.Module]:
+    """The one forward-facing launch bay, its mouth at ``at`` facing the bow, in the hull's paint and lit red (the
+    maintainer, 2026-11-21), and the fillets (legs ``corner``) that make its mouth an octagon. Its hardpoint is the first."""
+    x, y, z = at
+    bay = bays.launch_bay("bay_fore", mouth, depth, s, BAY_WALL, lit=True).transformed(np.eye(3), at)
+    w, h = 0.5 * mouth[0], 0.5 * mouth[1]
+    out = [_put(section, bay)]
+    for tag, sy in (("top", 1.0), ("low", -1.0)):
+        fillet = cs.prism(f"bay_fore_fillet_{tag}_r", [(x + w, y + sy * h), (x + w - corner, y + sy * h), (x + w, y + sy * (h - corner))], z, z + depth, s, PLAIN)
+        out.append(_put(section, fillet, cp.RIGHT))
+    return out
+
+
+def retro_nozzle(name: str, x: float, y: float, z: tuple[float, float], half: tuple[float, float], wall: float, s: Style, narrow: float = 0.0) -> cp.Module:
+    """An oval retro thruster's nozzle (the reference's): a racetrack wall open at its mouth (``z[0]``), its opening
+    ``narrow`` metres shorter at each end by the throat, and a dark throat plate closing it at ``z[1]``. ``half`` is the
+    outline's half width and half height."""
+    half_w, half_h = half
+
+    def outline(r: float, inset: float = 0.0) -> list[tuple[float, float]]:
+        arc = np.linspace(0.0, np.pi, 13)
+        top, low = y + half_h - half_w - inset, y - half_h + half_w + inset  # the end arcs' centres
+        return [(x + r * np.cos(a), top + r * np.sin(a)) for a in arc] + [(x - r * np.cos(a), low - r * np.sin(a)) for a in arc]
+
+    outer, mouth, throat = outline(half_w), outline(half_w - wall), outline(half_w - wall, narrow)
+    n = len(outer)
+    ring = [cs.convex(f"{name}_{k}", [(*p, zz) for zz in z for p in (outer[k], outer[(k + 1) % n])]
+                      + [(*mouth[k], z[0]), (*mouth[(k + 1) % n], z[0]), (*throat[k], z[1]), (*throat[(k + 1) % n], z[1])], s, PANEL) for k in range(n)]
+    plate = cs.prism(f"{name}_throat", throat, z[1] - 2.0, z[1], s, HullRoles(side="nozzle", deck="nozzle", keel="nozzle", cap="nozzle"),
+                     skin=cp.SKIN_FITTING)
+    return cs.compound(name, [*ring, plate])
 
 
 # --- the bow -------------------------------------------------------------------------------------------------------------
@@ -133,28 +206,36 @@ def shields(s: Style) -> list[cp.Module]:
 
 
 def command_block(s: Style) -> list[cp.Module]:
-    """The command section between the shields: the octagon, its roof slab, the head and the bridge's nose block with its
-    window, and a strake along each flank."""
+    """The command section between the shields: the octagon, its roof slab, the head with the bridge's window, the launch
+    bay through them in its tube (:func:`fore_bay`) and a strake along each flank."""
     z0, z1 = COMMAND_Z
-    block = cs.prism("command_block", _octagon(SPINE_W, SPINE_H), z0, NOTCH_Z, s, DECKED)
+    hw, hh = 0.5 * BAY_MOUTH[0] + BAY_WALL, 0.5 * BAY_MOUTH[1] + BAY_WALL
+    ys = (BAY_Y - hh, BAY_Y + hh)
+    block = cs.prism("command_block", _octagon(SPINE_W, SPINE_H), BAY_BACK_Z - 0.5, NOTCH_Z, s, DECKED)
+    fore = around_hole("command_block_fore", _octagon(SPINE_W, SPINE_H), hw, ys, (z0, BAY_BACK_Z), s, DECKED, "bridge")
+    stripe = HullRoles(side="stripe", deck="stripe", keel="stripe", cap="stripe")
+    head = around_hole("command_head", [(57.0, -45.0), (57.0, 50.0), (-57.0, 50.0), (-57.0, -45.0)], hw, ys, (195.0, z0 + 1.0), s, stripe, "bridge")
     waist = cs.box("command_aft", (-SPINE_W, -47.0, NOTCH_Z - 1.0), (SPINE_W, 47.0, z1), s, PLAIN)
     shoulder = cs.prism("command_shoulder_top_r", [(20.0, 46.0), (SPINE_W, 46.0), (SPINE_W, SPINE_H - SPINE_CUT[1]), (SPINE_W - SPINE_CUT[0], SPINE_H),
                                                    (26.0, SPINE_H)], NOTCH_Z - 1.0, z1, s, DECKED)
     roof = cs.box("command_roof", (-57.0, 55.5, 214.0), (57.0, 62.5, 262.0), s, PANEL)
-    head = cs.box("command_head", (-57.0, -45.0, 195.0), (57.0, 50.0, z0 + 1.0), s, HullRoles(side="stripe", deck="stripe", keel="stripe", cap="stripe"))
-    nose = cs.box("bridge_nose", (-32.0, -17.0, 182.0), (32.0, 17.0, 196.0), s, HullRoles(side="stripe", deck="stripe", keel="stripe"))
-    frame = cs.prism("bridge_window_frame", _octagon(27.0, 12.0, (6.0, 6.0)), 181.2, 182.5, s, DARK, skin=cp.SKIN_NONE)
-    glass = cs.prism("bridge_window", _octagon(24.0, 9.0, (5.0, 5.0)), 180.8, 181.5, s,
+    # The bridge's window in the head's face, above the bay's tube.
+    frame = cs.prism("bridge_window_frame", _octagon(27.0, 10.0, (6.0, 6.0)), 194.2, 195.5, s, DARK, skin=cp.SKIN_NONE)
+    glass = cs.prism("bridge_window", _octagon(24.0, 7.5, (5.0, 5.0)), 193.8, 194.5, s,
                      HullRoles(side="canopy_glass", deck="canopy_glass", keel="canopy_glass"), skin=cp.SKIN_NONE)
+    frame, glass = (m.transformed(np.eye(3), (0.0, 35.0, 0.0)) for m in (frame, glass))
     strake = cs.prism("command_strake_r", [(SPINE_W - 1.0, 8.0), (72.0, 3.5), (72.0, -3.5), (SPINE_W - 1.0, -8.0)], 200.0, 372.0, s, DARK)
     sided = (strake, shoulder, _flip_y(shoulder, "command_shoulder_low_r"))
     roof = dataclasses.replace(roof, hardpoints=(renegade_xs()["command_roof"],))
-    return [_put("bridge", m) for m in (block, waist, roof, head, nose, frame, glass)] + [_put("bridge", m, cp.RIGHT) for m in sided]
+    bay, *fillets = fore_bay(s, BAY_MOUTH, BAY_DEPTH, BAY_CORNER, (0.0, BAY_Y, BAY_MOUTH_Z))
+    bay = bay.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES)
+    return ([_put("bridge", m) for m in (block, waist, roof, frame, glass)] + fore + head + [bay, *fillets]
+            + [_put("bridge", m, cp.RIGHT) for m in sided])
 
 
 def tankage(s: Style) -> list[cp.Module]:
-    """The reactant under the command block: three spheres at its lower front edge, two long tanks, the cross beam that
-    carries them and the keel pod where the shields meet."""
+    """Under the command block: three reactant spheres at its lower front edge, the two oval retro thrusters below them
+    (each an open nozzle ahead of its tank), the cross beam that carries them and the keel pod where the shields meet."""
     def sphere(name: str, centre: tuple[float, float, float], r: float) -> cp.Module:
         arc = [(r - r * np.cos(a), r * np.sin(a)) for a in np.linspace(0.0, np.pi, 9)]
         arc[0], arc[-1] = (0.0, 0.0), (2.0 * r, 0.0)
@@ -164,11 +245,12 @@ def tankage(s: Style) -> list[cp.Module]:
     racetrack = [(14.0 * np.cos(a), 17.0 * np.sign(np.sin(a)) + 14.0 * np.sin(a)) for a in np.radians(np.arange(15.0, 360.0, 30.0))]
     outline = [(18.5 + x, -95.0 + y) for x, y in racetrack]
     tip = [(18.5 + dx, y, TANK_END_Z + 20.0) for dx in (-3.0, 3.0) for y in (-104.0, -120.0)]  # the aft end slopes back to a low point
-    tank = cs.convex("tank_r", _ring(outline, 168.0) + _ring(outline, TANK_END_Z) + tip, s, PANEL)
+    tank = cs.convex("tank_r", _ring(outline, RETRO_THROAT_Z - 0.5) + _ring(outline, TANK_END_Z) + tip, s, PANEL)
+    retro = retro_nozzle("retro_r", 18.5, -95.0, (RETRO_Z, RETRO_THROAT_Z), (14.0, 31.0), RETRO_WALL, s, RETRO_NARROW)
     beam = cs.box("tank_beam", (-40.0, -146.0, 214.0), (40.0, -128.0, TANK_END_Z), s, DARK)
     keel = cs.box("keel_pod", (-12.0, -207.0, 200.0), (12.0, -194.0, 278.0), s, DARK)
     return [_put("fuel", sphere("sphere_r", (42.0, -47.6, 190.0), 14.0), cp.RIGHT), _put("fuel", sphere("sphere_mid", (0.0, -50.0, 190.0), 11.0)),
-            _put("fuel", tank, cp.RIGHT), _put("fuel", beam), _put("bow", keel)]
+            _put("fuel", tank, cp.RIGHT), _put("fuel", retro, cp.RIGHT), _put("fuel", beam), _put("bow", keel)]
 
 
 def aerials(s: Style) -> list[cp.Module]:
@@ -225,36 +307,19 @@ def axle(s: Style, section: str) -> cp.Module:
 
 
 # --- the rotating section ------------------------------------------------------------------------------------------------
-def bay_centres() -> list[float]:
-    """Where each arm's launch bays sit along the drum (z of each mouth's middle)."""
-    pitch = (DRUM_Z[1] - DRUM_Z[0]) / BAYS_PER_ARM
-    return [DRUM_Z[0] + (k + 0.5) * pitch for k in range(BAYS_PER_ARM)]
-
-
 def drum_arm(s: Style, section: str) -> list[cp.Module]:
-    """The starboard arm at rest (it reaches along +x): the body, the neck, the cap's bar and slope, and the rim with its
-    launch bays, each bay opening outward through the rim's face, in the hull's paint and lit red (the maintainer, 2026-11-21)."""
+    """The starboard arm at rest (it reaches along +x): the body, the neck, the cap's bar and slope, and the rim, a panelled
+    band round its outer face (no bays: the ship launches from its bow, the maintainer, 2026-11-21)."""
     z0, z1 = DRUM_Z
     body = cs.prism("arm_body_r", [(79.0, -81.0), (79.0, 81.0), (111.0, 101.0), (139.0, 101.0), (186.0, 55.0), (186.0, -55.0), (139.0, -101.0),
                                    (111.0, -101.0)], z0, z1, s, DECKED)
     neck = cs.box("arm_neck_r", (185.0, -25.0, z0), (212.0, 25.0, z1), s, DARK)
     bar = cs.prism("arm_bar_r", [(211.0, -55.0), (211.0, 55.0), (226.0, 74.0), (248.0, 74.0), (248.0, -74.0), (226.0, -74.0)], z0, z1, s, DECKED)
     slope = cs.prism("arm_slope_r", [(247.0, 54.0), (272.5, 41.0), (272.5, -41.0), (247.0, -54.0)], z0, z1, s, PANEL)
-    half = 0.5 * BAY_MOUTH[1] + BAY_WALL  # the bays' strip through the rim, above and below the axis plane
-    back = DRUM_REACH - BAY_DEPTH - BAY_WALL
+    half = 10.0  # the band through the rim, above and below the axis plane
     rim_top = cs.prism("arm_rim_top_r", [(272.0, half), (272.0, 41.0), (294.6, 41.0), (DRUM_REACH, 25.0), (DRUM_REACH, half)], z0, z1, s, DECKED)
-    rim_back = cs.box("arm_rim_back_r", (272.0, -half, z0), (back, half, z1), s, DECKED)
-    out = [body, neck, bar, slope, rim_top, _flip_y(rim_top, "arm_rim_low_r"), rim_back]
-    # Between the bays the strip is solid; each bay's housing fills its own stretch, its mouth flush with the rim.
-    width = BAY_MOUTH[0] + 2.0 * BAY_WALL
-    edges = [z0] + [c + d for c in bay_centres() for d in (-0.5 * width, 0.5 * width)] + [z1]
-    for k in range(0, len(edges), 2):
-        out.append(cs.box(f"arm_rim_block_{k // 2 + 1}_r", (back, -half, edges[k]), (DRUM_REACH, half, edges[k + 1]), s, DECKED))
-    outward = np.array([[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])  # a bay's way out (-z) turned to +x, its width along z
-    for k, zc in enumerate(bay_centres()):
-        bay = bays.launch_bay(f"bay_{k + 1}_r", BAY_MOUTH, BAY_DEPTH, s, BAY_WALL, lit=True).transformed(outward, (DRUM_REACH, 0.0, zc))
-        out.append(bay.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES_PER_BAY))
-    return [_put(section, m, cp.RIGHT) for m in out]
+    band = cs.box("arm_rim_band_r", (272.0, -half - 0.5, z0), (DRUM_REACH, half + 0.5, z1), s, PANEL)
+    return [_put(section, m, cp.RIGHT) for m in (body, neck, bar, slope, rim_top, _flip_y(rim_top, "arm_rim_low_r"), band)]
 
 
 def drum_hub(s: Style, section: str) -> list[cp.Module]:
@@ -343,7 +408,7 @@ def tail(s: Style, section: str) -> list[cp.Module]:
     return out
 
 
-__all__ = ["AFT_COLLAR_Z", "AFT_SPINE_Z", "AXLE_R", "BAYS_PER_ARM", "BAY_DEPTH", "BAY_MOUTH", "COLLAR_R", "COMMAND_Z", "CORE_END_Z", "DRUM_PIVOT", "ENGINE_START_Z", "NOTCH_Z", "RAILS_END_Z",
+__all__ = ["AFT_COLLAR_Z", "AFT_SPINE_Z", "AXLE_R", "BAY_BACK_Z", "BAY_CORNER", "BAY_DEPTH", "BAY_MOUTH", "BAY_MOUTH_Z", "BAY_Y", "COLLAR_R", "COMMAND_Z", "CORE_END_Z", "DRUM_PIVOT", "ENGINE_START_Z", "NOTCH_Z", "RAILS_END_Z",
            "DRUM_REACH", "DRUM_Z", "ENGINE_MOUTH_Z", "ENGINE_XY", "FORE_COLLAR_Z", "FORE_SPINE_Z", "HOUSING_H", "HOUSING_W", "HOUSING_Z", "LENGTH_M",
-           "SPINE_H", "SPINE_W", "STARFURIES_PER_BAY", "aerials", "axle", "bay_centres", "collar", "command_block", "drum_arm", "drum_hub", "engine",
-           "engine_frame", "housing", "shields", "spine", "tail", "tankage"]
+           "SPINE_H", "SPINE_W", "STARFURIES", "aerials", "around_hole", "axle", "collar", "command_block", "drum_arm", "drum_hub", "engine",
+           "engine_frame", "fore_bay", "housing", "retro_nozzle", "shields", "spine", "tail", "tankage"]

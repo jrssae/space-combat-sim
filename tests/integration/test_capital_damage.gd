@@ -171,14 +171,15 @@ func test_the_console_lists_and_heals_the_sections() -> void:
 	if cap == null:
 		return
 	await wait_physics_frames(3)
-	assert_true(_run("capital damage hangar_r 3000").ok)
+	# Its one launch bay is in the bow (the maintainer, 2026-11-21): losing the bow loses the launches.
+	assert_true(_run("capital damage bow 3000").ok)
 	var listed: ConsoleResult = _run("capital sections")
 	assert_true(listed.ok, listed.error)
 	assert_eq(listed.lines.size(), cap.damage.sections.size() + 1, "a line a section and one for the ship")
-	assert_string_contains("\n".join(listed.lines), "hangar_r (hangar) disabled")
-	assert_string_contains("\n".join(listed.lines), "bays 4/8")
-	assert_eq(DebugConsole.registry.read("capital.bays").get("value"), "4/8")
+	assert_string_contains("\n".join(listed.lines), "bow (structure) disabled")
+	assert_string_contains("\n".join(listed.lines), "bays 0/1")
+	assert_eq(DebugConsole.registry.read("capital.bays").get("value"), "0/1")
 	assert_false(_run("capital damage nowhere 10").ok, "an unknown section is refused")
 	cap.damageable.restore()
-	assert_eq(cap.damage.sections["hangar_r"].state, CapitalSection.State.INTACT, "whole again")
-	assert_eq(cap.damage.live_bays().size(), 8)
+	assert_eq(cap.damage.sections["bow"].state, CapitalSection.State.INTACT, "whole again")
+	assert_eq(cap.damage.live_bays().size(), 1)

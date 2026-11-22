@@ -382,9 +382,9 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
-| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
+| T21 | F | EA Omega-class destroyer | T19, T62 | Fable | in progress |
 | T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | done |
-| T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | done |
+| T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | in progress |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
 | T25 | F | Narn G'Quan-class heavy cruiser | T19, T62 | Fable | not started |
 | T26 | F | Centauri Vorchan-class warship | T19, T62 | Fable | not started |
