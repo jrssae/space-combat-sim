@@ -382,7 +382,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
 | T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
-| T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | not started |
+| T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | done |
 | T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | done |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
 | T25 | F | Narn G'Quan-class heavy cruiser | T19, T62 | Fable | not started |
@@ -828,6 +828,17 @@ On top of it:
   100 km, the forward bays lit and back-lit, beside the Omega). **Open:** a Starfury leaving a roof or corner bay meets the
   command block about 200 m ahead and must climb or turn (T17's launch path); the guns fire with T12 to T14; at 100 km it is
   under a pixel; judging the look is (H).
+- **T22 done (2026-11-21).** `ea_hyperion`, the Hyperion-class heavy cruiser (1 025.39 m; 10 176 triangles; one 4 096 px atlas,
+  56 MB high and 16 MB low): `tools/procgen/assets/ea_hyperion.py` on `parts/ea_hyperion.py` and its own style
+  `styles/ea_hyperion.py` (the show's light grey and royal-blue bands, the fleet's mosaic), on the Omega's lit bays and loadout
+  check (6 Starfuries and 2 shuttles). Built symmetric (the STL is lopsided; the maintainer approved). Compare 0.905 / 0.916 / 0.950,
+  30 part sections at 0.909 or over. **Bands** (the maintainer): the blue is a continuous ring round the forward hull (roof, both
+  flanks, belly) at 172 to 192 m and 318 to 338 m, plus the tower's, as in the stills; the single roof-edge stripe was dropped.
+  **Name and hull number** (the maintainer): the whole name on the roof and the tower flanks (`HullMarks` `name`) and a hull
+  number like the show's "21" on each hull flank (`HullMarks` `number`; `data/ships/names.json` `hull_numbers`, one per Hyperion
+  name, `ShipNames.hull_number_of`). In the game: `assets/ships/ea_hyperion.tres`, catalogue `ea_hyperion` (class `destroyer`),
+  names `EAS Hyperion`, `EAS Lexington`, ... As built in `docs/assets-capital.md`, "`ea_hyperion`". Look sheet
+  `references/screenshots/M10-T22 Hyperion/look_sheet_final.png`. **Open:** judging the look is (H); its guns fire with T12 to T14.
 - **Faction fighters (T38 to T42):** the fighter pipeline (the generator as `raider_fighter`, not the capital framework),
   with T06's parts where organic; its `ShipSpec`, thruster layout, guns per T03, a pilot profile, break-up chunks. Done
   when a seeded fight against Starfuries also runs headless; its carriers launch it in T17.
