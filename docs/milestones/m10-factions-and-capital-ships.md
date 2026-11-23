@@ -92,6 +92,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q63 | New Omega reference (2026-11-22) | The old `EA Omega Destroyer.stl` is removed. The new reference is a 4-part print kit from https://www.thingiverse.com/thing:4225115 (in README.md): `references/EA Omega head_x1.stl`, `middle_x1` (drum hub), `rear_x1` and `outerrotate_x2` (two drum arms), in mm, standing on the print bed. The old whole-ship STL is back as `references/EA Omega (lacking detail).stl` for the gaps between the forward hull, the spinning section and the rear hull (layout only). The agent assembles the kit (head + middle + rear along the axis, the two arms opposite each other round the hub, fitted by join faces and checked against `references/ships/Omega/`) and shows the assembled kit to the maintainer before any build. The length stays **1 714.3 m** (about 17.44 m per mm); print-only features (flat print faces, pegs and sockets, support ridges) are not part of the ship (T68) |
 | Q64 | Hyperion look approved; skins and bays (2026-11-22) | The refined Hyperion (V5c, old-STL antenna, brighter look A) is the best ship so far; its **skin** (light grey plates with small patches of medium and darker grey, shallow soft seams: `HyperionMosaic`/`PatchPlates`) is the model for the **Omega and Nova skins** too (T67, T68). The Hyperion carries its name, hull number and an emblem in the EarthForce emblem's place, **drawn from scratch in code but kept close to the show's design** (maintainer: a free fan project, it need not differ much; still no copied or ripped logo file). **Omega and Nova bays: no glowing outer edge and no doors** (the red light stays inside); only the Hyperion's bays have roll-down doors |
 | Q65 | Small EA craft lengths; Hyperion number (2026-11-23) | New lengths: the **construction tender 8 m** (was 50 m), the **Kestrel atmospheric shuttle 29 m** (`ea_atmo_shuttle`, was 25.59 m), the **crew shuttle 38 m** (`ea_shuttle`, was 18.64 m) (T69). The Hyperion's side hull number is **white with a black outline**, like the bow name (T22) |
+| Q66 | Panama size; work order (2026-11-23) | The **Panama** keeps its proportions and is scaled to **20 m tall**: about 124 x 31 x 20 m (was 180 x 45 x 29; T71). Work order, Opus, one task at a time: T22's bays (in progress), then T67, T68, T14, T71; small checks (T70) may run beside them |
 
 ## The hulls
 
@@ -378,6 +379,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T68 | A | Omega rebuilt on the new 4-part kit (Q63): assemble the kit into one reference, sheet to the maintainer, re-measure (silhouettes, sections, T66 sweeps and bow depth map), open-frame bow and octagonal bay (Q62), the drum in the kit's pose | T66 | Fable | not started |
 | T69 | F | Re-size the small EA craft (Q65): `ea_construction_tender` to 8 m, `ea_atmo_shuttle` (Kestrel) to 29 m, `ea_shuttle` (crew shuttle) to 38 m; check each STL's proportions still hold (90 % rule at the new length), ShipSpecs (mass, thrust, hull points by size), hardpoints, collision, the docks and bays that hold them, the ship line-up spacing, docs/assets-capital.md and the catalogue page | T55, T57 | Sonnet | done |
 | T70 | E | Clearance: the resized EA craft through B5's main docking bay (crew shuttle, Kestrel, tender) | T69 | Sonnet | done |
+| T71 | F | Re-size the Panama (Q66): `ea_panama` scaled uniformly to 20 m tall (about 124 x 31 x 20 m, scale 0.69), as T69 did for the small craft: the 90 % rule at the new size, ShipSpec (mass, thrust, hull points), hardpoints, collision and chunks, its docks and routes (B5's bay, civilian traffic), the line-up, docs and the catalogue page | T69 | Opus | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -400,7 +402,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
 | T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
-| T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | done |
+| T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | in progress |
 | T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | done |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
 | T25 | F | Narn G'Quan-class heavy cruiser | T19, T62 | Fable | not started |
