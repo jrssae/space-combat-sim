@@ -57,3 +57,16 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
 # Assets whose bake needs the machine's memory to itself (M7-T04: the station's two 4 096 px atlases peak near 9 GB): with --jobs
 # they are built after the pool, one at a time, so a 16 GB machine never holds them beside other bakes.
 BUILD_ALONE: frozenset[str] = frozenset({"babylon5_station", "ea_hyperion", "ea_nova", "ea_omega", "organic_test_hull"})
+
+# Each heavy asset's measured peak memory in MB (M10-T21: one build alone, /usr/bin/time, 4 096 px atlases), so ``--jobs`` only
+# starts builds that fit the memory left: CI's 16 GB runner was killed running two 6 GB bakes beside each other.
+PEAK_MB: dict[str, int] = {
+    "babylon5_station": 7300, "ea_hyperion": 7200, "ea_nova": 6600, "ea_omega": 6200, "ea_panama": 6500,
+    "raider_strike_carrier": 6300, "organic_test_hull": 4100, "epsilon_iii": 2300, "gamma_leporis_ii": 2300,
+    "ea_thunderbolt": 2200, "b5_interior": 1900, "starfury_aurora": 1900, "ea_shuttle": 1900, "capital_test_cruiser": 1800,
+    "skylark_transport": 1800, "ea_construction_tender": 1700, "saturn_4_tanker": 1700, "saturn_8_tanker": 1700,
+    "saturn_4_transport": 1700, "saturn_8_transport": 1700, "grid_heavy_cannon": 1700, "raider_fighter": 1700,
+    "capital_hulls": 1600, "narn_transport": 1600, "saturn_3_freighter": 1600, "grid_interceptor_battery": 1500,
+    "centauri_brezebel": 1400, "jumpgate": 1300, "ea_atmo_shuttle": 1300, "brakiri_bokmai": 1300,
+}
+DEFAULT_PEAK_MB = 1300  # an asset not measured yet: about the lighter textured hulls
