@@ -426,7 +426,7 @@ func bay_door_open(bay: String) -> bool:
 ## The roll-up doors the hull carries, all shut.
 func _add_doors() -> void:
 	for door: Dictionary in BayDoors.doors_of(_hardpoints):
-		var node: BayDoorNode = BayDoorNode.create(door)
+		var node: BayDoorNode = BayDoorNode.create(door, BayDoors.light_of(_hardpoints, BayDoors.bay_of(str(door.get("name", "")))))
 		bay_doors[node.bay] = node
 		hull_piece.add_child(node)
 

@@ -18,10 +18,11 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..core import detail_layer
 from ..core.geometry import Material
 from ..core.seams import Feature, Plates, SeamLayout, _keyed_hash
 from .capital import CapitalStyle, PanelMosaic, _frames
-from .ea_capital import Look, capital_style, fleet_mosaic
+from .ea_capital import Look, bay_metal_materials, capital_style, fleet_mosaic
 
 PREFIX = "eah"
 SMOOTH_ROLES = ("barrel", "bore")
@@ -55,15 +56,19 @@ class PatchPlates(Plates):
 
 @dataclass(frozen=True)
 class HyperionMosaic(PanelMosaic):
-    """The fleet's plating made shallower (``seam_depth`` of the groove depth) with small dark patches (``patches``, the share of
-    plates) over a light grey base; the plates' own tone wander stays small."""
+    """The fleet's plating with subtler seams (``seam_depth`` of the groove depth, ``seam_width`` of the line) and small dark
+    patches (``patches``, the share of plates) over a light grey base; the plates' own tone wander stays small. Its near-field
+    tile's seams are softened alike."""
 
-    seam_depth: float = 0.45
+    seam_depth: float = 0.22
+    seam_width: float = 0.6
+    tile_soft: float = 0.5
     patches: float = 0.2
     darkest: float = 0.5
 
     def _soft(self, features: list[Feature]) -> list[Feature]:
-        return [dataclasses.replace(f, depth=f.depth * self.seam_depth) if f.depth > 0.0 else f for f in features]
+        return [dataclasses.replace(f, depth=f.depth * self.seam_depth, width=f.width * self.seam_width) if f.depth > 0.0 else f
+                for f in features]
 
     def _plating(self, cell: tuple[float, float], seed: int) -> list[Feature]:
         base = dict(wrap="sides", long_axis=2, cell=cell, splits=self.splits, min_m=1.2, keep=0.3, seed=seed)
@@ -72,6 +77,12 @@ class HyperionMosaic(PanelMosaic):
 
     def hull_layout(self, lo, hi, seed: int) -> SeamLayout:  # noqa: ANN001
         return SeamLayout.of([*self._soft(_frames(lo, hi, self.frames_m, self.major_every)), *self._plating(self.plate_m, seed)])
+
+    def detail_tile(self, px: int, seed: int) -> dict[str, np.ndarray] | None:
+        """The fleet's near-field mosaic with its seams as soft as the hull's: narrower, ``tile_soft`` as deep and as dark."""
+        dark = 1.0 - (1.0 - detail_layer.LINE_DARK) * self.tile_soft
+        return detail_layer.detail_tile(px, self.tile_m, seed, line_m=detail_layer.LINE_M * self.seam_width,
+                                        groove_m=detail_layer.GROOVE_M * self.tile_soft, line_dark=dark)
 
 
 LOOKS: dict[str, Look] = {
@@ -105,10 +116,11 @@ def ea_hyperion(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = Non
     skin = hyperion_mosaic(chosen) if plating is None else PanelMosaic(plate_m=plating.plate_m, splits=plating.splits, tone=chosen.plate_tone,
                                                                     grime=chosen.plate_grime, frames_m=plating.frames_m, major_every=4)
     style = capital_style(chosen, f"ea_hyperion_{look}", PREFIX, skin, livery)
-    style = dataclasses.replace(style, style=dataclasses.replace(style.style, materials=smooth_barrels(style.style.materials)))
+    materials = {**smooth_barrels(style.style.materials), **bay_metal_materials(style.style.materials["hull"].name.removesuffix("_hull"))}
+    style = dataclasses.replace(style, style=dataclasses.replace(style.style, materials=materials))
     if plating is not None:
         return style
-    return dataclasses.replace(style, style=dataclasses.replace(style.style, panel_line_darkness=0.78, groove_depth_m=0.006))
+    return dataclasses.replace(style, style=dataclasses.replace(style.style, panel_line_darkness=0.89, groove_depth_m=0.003))
 
 
 def smooth_barrels(materials: Mapping[str, Material]) -> dict[str, Material]:

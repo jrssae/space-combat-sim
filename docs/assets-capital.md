@@ -520,7 +520,12 @@ texel and, with a `glow`, its lamp's light on it (`<asset>_<mark>_glow.png`), an
 (the Hyperion's emblem, which baked into the hull blurred to the plating's texels). A mark with `outline` prints from the
 glyph atlas's outlined twin (`<asset>_marks_outlined.png`, black rims 0.06 cap heights wide, written only when a mark asks).
 Materials with `smooth` (the Hyperion's barrels and bores) take no grime, chips or dirt. `launch_bay(rim=False)`
-keeps a lit bay's red inside the hall; `launch_bay(door=True)` builds a roll housing over the mouth and guide rails, and leaves a
+keeps a lit bay's red inside the hall; `launch_bay(metal=True)` lines it as Babylon 5's docking bay (the Hyperion's, after the
+maintainer's look round): grey `bay_metal` (the station's `bay_tunnel`: #A8AAAE, metallic 0.7, roughness 0.32, faint red 0.04;
+`ea_capital.bay_metal_materials`), small red lamps along the roof, no strips, the `bay` light mid-hall; the game lights it red
+only while the door is open (`BayDoorNode`'s `LightEmitter`, energy 3.5 times how far it is open, the light's `range_m`, in the
+`LightRig`'s omni-slot competition). The Hyperion's seams are subtler than the fleet's (`HyperionMosaic`: 0.22 of the depth, 0.6
+of the width; line darkness 0.89). `launch_bay(door=True)` builds a roll housing over the mouth and guide rails, and leaves a
 `door` hardpoint (`hardpoints.doors[]`: the shut shutter's centre, `forward`, `up`, `size_m`, `slats`), with rails and a sill that
 close the gap round it. `CapitalShip` draws each door as slats on a dark backing plate, so a shut door shows no light
 (`BayDoorNode`, rules in `BayDoors`), shut by default; `set_bay_door(bay, open)` winds it up into the housing (T17's hook; the

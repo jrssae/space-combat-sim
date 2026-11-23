@@ -6,6 +6,7 @@ extends Node
 ## Arguments after `--`: out=<dir> settle=<frames> shots=<shot>,<shot>,... where a shot is
 ## `name|asset[:option]|distance_m|view|low or high|lit or dark|aim|livery`: `view` one of VIEWS; `aim` the model point
 ## (`x;y;z`, its own frame) held `distance_m` ahead of the camera (empty: its centre); `livery` a `wing:number` (empty: plain).
+## `lit+bays` or `dark+bays` also lights every bay's red lamp, as an open door does in the game (M10-T22).
 ## An option is read from `<asset>_options/<option>/<asset>/`, as the hull sheets'. An asset of `-` is a shot of the empty
 ## scene, whose video memory is the baseline for the model's.
 
@@ -19,6 +20,7 @@ var options: Dictionary = {"out": "", "settle": "50", "shots": ""}
 var shots: Array[PackedStringArray] = []
 var _key_star: DirectionalLight3D = null
 var _model: MeshInstance3D = null
+var _bay_lamps: Array[LightEmitter] = []
 var _index: int = -1
 var _frame: int = 0
 
@@ -65,6 +67,11 @@ func _start() -> void:
 func _next() -> void:
 	_index += 1
 	_frame = 0
+	var rig: LightRig = LightRig.of(main)
+	for lamp: LightEmitter in _bay_lamps:
+		if rig != null:
+			rig.remove_emitter(lamp)
+	_bay_lamps.clear()
 	if _model != null:
 		_model.queue_free()
 		_model = null
@@ -110,8 +117,28 @@ func _park(shot: PackedStringArray) -> String:
 		aim = Vector3(float(parts[0]), float(parts[1]), float(parts[2]))
 	var at: Vector3 = camera.global_position - camera.global_basis.z * float(shot[2])
 	_model.global_transform = Transform3D(basis, at - basis * aim)
-	_light(camera, shot[5] == "dark")
+	_light(camera, shot[5].begins_with("dark"))
+	if shot[5].ends_with("+bays"):
+		_add_bay_lamps(asset_id, root)
 	return ""
+
+
+# Every bay's red lamp at full strength, so its open hall reads as the game lights it.
+func _add_bay_lamps(asset_id: String, root: String) -> void:
+	var hp: Variant = JSON.parse_string(FileAccess.get_file_as_string(root.path_join(asset_id).path_join("hardpoints.json")))
+	var rig: LightRig = LightRig.of(main)
+	if not hp is Dictionary or rig == null:
+		return
+	for light: Variant in (hp as Dictionary).get("lights", []):
+		if light is Dictionary and str((light as Dictionary).get("role", "")) == "bay":
+			var c: Array = light.get("colour", [1.0, 0.0, 0.0]) as Array
+			var lamp := LightEmitter.new(str(light["name"]), LightEmitter.PRIORITY_CABIN, Color(float(c[0]), float(c[1]), float(c[2])),
+					BayDoors.LIGHT_ENERGY, float(light.get("range_m", 50.0)), BayDoors.LIGHT_ATTENUATION)
+			lamp.anchor = _model
+			var at: Array = light["position"]
+			lamp.offset = Vector3(float(at[0]), float(at[1]), float(at[2]))
+			rig.add_emitter(lamp)
+			_bay_lamps.append(lamp)
 
 
 # A capital's rotating pieces (M10-T21: the Omega's drum) drawn at rest on their pivots, so the model is whole.

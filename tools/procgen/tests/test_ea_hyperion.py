@@ -19,6 +19,7 @@ import numpy as np
 from tools.procgen.assets import ASSETS, BUILD_ALONE
 from tools.procgen.assets import ea_hyperion as eh
 from tools.procgen.core import capital as cap
+from tools.procgen.core import detail_layer
 from tools.procgen.core import hull_decals as hd
 from tools.procgen.core import loadout
 from tools.procgen.core import manifest as manifest_io
@@ -216,6 +217,33 @@ class HyperionBuildTests(unittest.TestCase):
             self.assertGreaterEqual(door["slats"], 4)
         lamps = [m for m in self.hp["lights"] if m["role"] == "bay"]
         self.assertEqual(len(lamps), 7, "the red stays inside: one light a bay")
+
+    def test_the_bays_are_grey_metal_lit_red_as_babylon_5s(self) -> None:
+        """The maintainer (M10-T22): grey metal in the halls, the red from the bays' lights, not paint; only small lamps glow."""
+        style = ea_hyperion(DEFAULT_LOOK).style
+        metal, strips = style.material("bay_metal"), {style.material(r).name for r in ("bay_light", "bay_light_deep", "bay_hall")}
+        self.assertLess(metal.emissive_strength, 0.05, "a faint red at range only")
+        self.assertGreater(min(metal.albedo[:3]), 0.3, "light grey metal")
+        parts = {m.name: m for m in eh.modules()}
+        for name in ("bay_shuttle", *(f"bay_fury_{k + 1}_r" for k in range(len(hy.FURY_BAY_ZS)))):
+            mesh = parts[name].part.mesh
+            used = {mesh.materials[i].name for i in set(mesh.face_material.tolist())}
+            self.assertIn(metal.name, used, name)
+            self.assertFalse(used & strips, f"{name}: no red strips or red-painted walls")
+        self.assertTrue(all(float(np.max(light["colour"])) == light["colour"][0] for light in self.hp["lights"] if light["role"] == "bay"))
+
+    def test_its_seams_are_subtler_than_the_fleets(self) -> None:
+        skin, style = hyperion_mosaic(LOOKS[DEFAULT_LOOK]), ea_hyperion(DEFAULT_LOOK).style
+        self.assertLessEqual(skin.seam_depth, 0.25)
+        self.assertLessEqual(skin.seam_width, 0.6)
+        self.assertGreaterEqual(style.panel_line_darkness, 0.85, "the lines barely darker than the plates")
+        lines = [f for f in skin.hull_layout((-10.0, -10.0, 0.0), (10.0, 10.0, 200.0), 1).features() if f.depth > 0.0]
+        self.assertTrue(lines and all(f.width <= 0.6 and f.depth <= 0.25 for f in lines))
+        fleet, own = detail_layer.detail_tile(64, skin.tile_m, 3), skin.detail_tile(64, 3)
+        self.assertGreater(float(own["albedo"][..., :3].astype(float).mean()), float(fleet["albedo"][..., :3].astype(float).mean()),
+                           "the near tile's seams lighter than the fleet's")
+        self.assertLess(float(np.abs(own["normal"][..., :2].astype(float) - 128.0).mean()),
+                        float(np.abs(fleet["normal"][..., :2].astype(float) - 128.0).mean()), "and shallower")
 
     def test_the_bays_fit_their_craft_in_the_v5cs_frames(self) -> None:
         """M10-T22 (option c): the Starfury doors in the V5c's proud frames, sized for the maintainer's Starfury with 2 m clear,

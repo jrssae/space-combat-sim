@@ -429,7 +429,7 @@ def tower(s: Style) -> list[cp.Module]:
         sides.append(_tower_piece(f"tower_slot_side_{k + 1}_r", a, b, s, roles, keeps=(lambda p: p[0] - w, lambda p: p[1] - back)))
     out.append(_tower_piece("tower_top", slot[1], TOWER_TOP, s, HULL))
     out[-1] = dataclasses.replace(out[-1], hardpoints=(xs["tower_r"], xs["tower_l"]))
-    bay = bays.launch_bay("bay_shuttle", SHUTTLE_BAY_MOUTH, SHUTTLE_BAY_DEPTH, s, SHUTTLE_BAY_WALL, lit=True, rim=False, door=True)
+    bay = bays.launch_bay("bay_shuttle", SHUTTLE_BAY_MOUTH, SHUTTLE_BAY_DEPTH, s, SHUTTLE_BAY_WALL, lit=True, rim=False, door=True, metal=True)
     out.append(bay.transformed(np.diag([-1.0, 1.0, -1.0]), (0.0, SHUTTLE_BAY_Y, TOWER_Z[1]))
                .with_params(cp.BAY, craft=SHUTTLE, capacity=SHUTTLES_PER_BAY, berths=1, poses=SHUTTLE_POSES))
     hull = s.material("hull")
@@ -515,7 +515,7 @@ def hangar(s: Style) -> list[cp.Module]:
     outward = np.array([[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])  # a bay's way out (-z) turned to +x, its width along z
     fz, fy = FURY_FRAME[0] / 2, FURY_FRAME[1] / 2
     for k, z in enumerate(FURY_BAY_ZS):
-        bay = bays.launch_bay(f"bay_fury_{k + 1}_r", FURY_BAY_MOUTH, FURY_BAY_DEPTH, s, FURY_BAY_WALL, lit=True, rim=False, door=True)
+        bay = bays.launch_bay(f"bay_fury_{k + 1}_r", FURY_BAY_MOUTH, FURY_BAY_DEPTH, s, FURY_BAY_WALL, lit=True, rim=False, door=True, metal=True)
         out.append(_put("hangar_r", bay.transformed(outward, (FURY_FRAME_X, FURY_BAY_Y, z)).with_params(cp.BAY, craft=FURY, capacity=STARFURIES_PER_BAY), cp.RIGHT))
         # The proud frame round the bay's housing, from the bump's flank out to the door's face.
         y0, y1 = FURY_BAY_Y - fy, FURY_BAY_Y + fy

@@ -68,9 +68,11 @@ def _plates(u: np.ndarray, v: np.ndarray, tile_m: float, seed: int, max_plate_m:
     return key, u0, u1, v0, v1
 
 
-def detail_tile(px: int = DEFAULT_PX, tile_m: float = DEFAULT_TILE_M, seed: int = 0) -> dict[str, np.ndarray]:
+def detail_tile(px: int = DEFAULT_PX, tile_m: float = DEFAULT_TILE_M, seed: int = 0, line_m: float = LINE_M, groove_m: float = GROOVE_M,
+                line_dark: float = LINE_DARK) -> dict[str, np.ndarray]:
     """The tile's two maps as 8-bit arrays: ``albedo`` (RGBA, the multiply factor in sRGB and the blend in alpha) and ``normal``
-    (tangent space, +Y up). ``tile_m`` must hold a few of the mosaic's largest plates."""
+    (tangent space, +Y up). ``tile_m`` must hold a few of the mosaic's largest plates; ``line_m``, ``groove_m`` and ``line_dark``
+    let a hull soften its seams (the Hyperion's)."""
     if tile_m < 2.0 * MAX_PLATE_M:
         raise ValueError(f"the tile ({tile_m} m) must be at least {2.0 * MAX_PLATE_M} m across")
     texel = tile_m / px
@@ -79,13 +81,13 @@ def detail_tile(px: int = DEFAULT_PX, tile_m: float = DEFAULT_TILE_M, seed: int 
     key, u0, u1, v0, v1 = _plates(u, v, tile_m, seed)
     edge = np.minimum(np.minimum(u - u0, u1 - u), np.minimum(v - v0, v1 - v))
     s = np.full(u.shape, seed, dtype=np.int64)
-    line = _smooth(1.0 - edge / (0.5 * LINE_M))
-    height = -GROOVE_M * line
+    line = _smooth(1.0 - edge / (0.5 * line_m))
+    height = -groove_m * line
     # Inset hatches on a few plates: a groove round them and the face sunk a little.
     hatch = (_hash01(key, s + 503) < HATCH_SHARE) & (np.minimum(u1 - u0, v1 - v0) > 3.0 * HATCH_INSET_M)
     inner = edge - HATCH_INSET_M
-    hatch_line = _smooth(1.0 - np.abs(inner) / (0.4 * LINE_M)) * hatch
-    height -= 0.6 * GROOVE_M * hatch_line + 0.3 * GROOVE_M * _smooth(inner / LINE_M) * hatch
+    hatch_line = _smooth(1.0 - np.abs(inner) / (0.4 * line_m)) * hatch
+    height -= 0.6 * groove_m * hatch_line + 0.3 * groove_m * _smooth(inner / line_m) * hatch
     line = np.maximum(line, 0.8 * hatch_line)
     # Each plate leans a little: a tilted plane over it, flat again at its seams so the tile still wraps.
     tu, tv = TILT * (2.0 * _hash01(key, s + 701) - 1.0), TILT * (2.0 * _hash01(key, s + 709) - 1.0)
@@ -94,7 +96,7 @@ def detail_tile(px: int = DEFAULT_PX, tile_m: float = DEFAULT_TILE_M, seed: int 
     tone = 1.0 - 0.07 * _hash01(key, s + 401) - 0.05 * np.exp(-edge / 0.35)
     alpha = np.maximum(FACE_ALPHA, line)
     face = 1.0 - (1.0 - tone) / FACE_ALPHA
-    factor = np.where(line > 0.0, face * (1.0 - line) + LINE_DARK * line, face)
+    factor = np.where(line > 0.0, face * (1.0 - line) + line_dark * line, face)
     rgb = np.clip(linear_to_srgb(np.clip(factor, 0.0, 1.0)), 0.0, 1.0)
     albedo = np.concatenate([np.repeat(rgb[..., None], 3, axis=-1), alpha[..., None]], axis=-1)
     # Slopes with wrap-around differences, so the normal map is as seamless as the plating.

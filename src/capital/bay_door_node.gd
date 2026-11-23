@@ -13,13 +13,16 @@ var amount: float = 0.0
 var _door: Dictionary = {}
 var _target: float = 0.0
 var _backing: MeshInstance3D = null
+## The hall's red lamp, lit as the door opens (null when the bay has no light).
+var emitter: LightEmitter = null
+var _rig: LightRig = null
 
 static var _material: StandardMaterial3D = null
 static var _dark: StandardMaterial3D = null
 
 
-## A shut door built from one `doors` entry of `hardpoints.json`.
-static func create(door: Dictionary) -> BayDoorNode:
+## A shut door built from one `doors` entry of `hardpoints.json`, with its bay's `light` entry (empty for none).
+static func create(door: Dictionary, light: Dictionary = {}) -> BayDoorNode:
 	var node := BayDoorNode.new()
 	node.bay = BayDoors.bay_of(str(door.get("name", "")))
 	node.name = "Door%s" % node.bay.to_pascal_case().validate_node_name()
@@ -37,9 +40,27 @@ static func create(door: Dictionary) -> BayDoorNode:
 	node.visibility_range_end = DRAW_RANGE_M
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node._add_backing(size)
+	if not light.is_empty():
+		var c: Array = light.get("colour", [1.0, 0.0, 0.0]) as Array
+		node.emitter = LightEmitter.new(str(light.get("name", "")), LightEmitter.PRIORITY_CABIN, Color(float(c[0]), float(c[1]), float(c[2])),
+				0.0, float(light.get("range_m", 50.0)), BayDoors.LIGHT_ATTENUATION)
+		node.emitter.anchor = node
+		node.emitter.offset = BayDoors.light_offset(door, light)
 	node._draw()
 	node.set_process(false)
 	return node
+
+
+func _enter_tree() -> void:
+	_rig = LightRig.of(self) if emitter != null else null
+	if _rig != null:
+		_rig.add_emitter(emitter)
+
+
+func _exit_tree() -> void:
+	if _rig != null and is_instance_valid(_rig):
+		_rig.remove_emitter(emitter)
+	_rig = null
 
 
 func is_open() -> bool:
@@ -94,6 +115,8 @@ func _draw() -> void:
 	for i: int in shown.size():
 		MultiMeshUpload.set_instance_transform(multimesh, i, Transform3D(Basis.from_scale(Vector3(1.0, shown[i].y, 1.0)), Vector3(0.0, shown[i].x, 0.0)))
 	multimesh.visible_instance_count = shown.size()
+	if emitter != null:
+		emitter.energy = BayDoors.light_energy(amount)
 	visible = not shown.is_empty()
 	var back: Vector2 = BayDoors.backing(_door, amount)
 	var depth: float = float((_door.get("size_m", [1.0, 1.0, 0.2]) as Array)[2])

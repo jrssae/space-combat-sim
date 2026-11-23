@@ -53,3 +53,37 @@ func test_the_roll_takes_its_time_and_stops_at_the_target() -> void:
 func test_a_hull_without_doors_lists_none() -> void:
 	assert_true(BayDoors.doors_of({}).is_empty())
 	assert_eq(BayDoors.doors_of({"doors": [DOOR]}).size(), 1)
+
+
+func test_the_bays_light_is_found_by_its_name_and_sits_in_the_doors_frame() -> void:
+	var light: Dictionary = {"name": "bay_fury_1_r_light", "position": [4.0, 5.0, 2.0], "role": "bay"}
+	var hp: Dictionary = {"lights": [{"name": "bay_fury_2_r_light"}, light]}
+	assert_eq(BayDoors.light_of(hp, "bay_fury_1_r"), light)
+	assert_true(BayDoors.light_of(hp, "bay_shuttle").is_empty(), "a bay with no light")
+	assert_true(BayDoors.light_of({}, "bay_fury_1_r").is_empty())
+	var at: Vector3 = BayDoors.light_offset(DOOR, light)
+	assert_almost_eq(at.z, -6.0, 1e-4, "behind the shutter, in the hall")
+	assert_almost_eq(BayDoors.frame(DOOR) * at, Vector3(4.0, 5.0, 2.0), Vector3.ONE * 1e-4)
+
+
+func test_a_shut_door_keeps_its_bay_dark_and_the_light_grows_as_it_opens() -> void:
+	assert_eq(BayDoors.light_energy(0.0), 0.0, "shut: no light leaks onto the hull")
+	assert_almost_eq(BayDoors.light_energy(0.5), 0.5 * BayDoors.LIGHT_ENERGY, 1e-6)
+	assert_eq(BayDoors.light_energy(1.0), BayDoors.LIGHT_ENERGY)
+	assert_eq(BayDoors.light_energy(2.0), BayDoors.LIGHT_ENERGY)
+
+
+func test_a_door_node_lights_its_hall_only_while_open() -> void:
+	var light: Dictionary = {"name": "bay_fury_1_r_light", "position": [4.0, 5.0, 2.0], "colour": [0.75, 0.02, 0.01], "range_m": 68.0}
+	var node: BayDoorNode = BayDoorNode.create(DOOR, light)
+	assert_not_null(node.emitter)
+	assert_eq(node.emitter.energy, 0.0, "shut by default")
+	assert_eq(node.emitter.omni_range, 68.0)
+	node.snap(true)
+	assert_eq(node.emitter.energy, BayDoors.LIGHT_ENERGY, "open, the hall is lit red")
+	node.snap(false)
+	assert_eq(node.emitter.energy, 0.0)
+	node.free()
+	var dark: BayDoorNode = BayDoorNode.create(DOOR)
+	assert_null(dark.emitter, "no light in the hardpoints, no emitter")
+	dark.free()

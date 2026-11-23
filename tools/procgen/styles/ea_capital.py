@@ -23,7 +23,7 @@ from ..core.geometry import Material
 from . import Style
 from .capital import CapitalStyle, PanelMosaic
 from .ea_civilian import lin
-from .earth_alliance_station import BAY_RED, LAMP_GLOW, LAMP_STRENGTH
+from .earth_alliance_station import BAY_RED, BAY_TUNNEL, BAY_TUNNEL_STRENGTH, LAMP_GLOW, LAMP_STRENGTH
 
 PREFIX = "eaw"
 ENGINE_GLOW = 0xBFD8FF  # the blue-white of the wake in the stills
@@ -138,4 +138,11 @@ def bay_light_materials(tag: str) -> dict[str, Material]:
     }
 
 
-__all__ = ["DEFAULT_LOOK", "FIXED", "LOOKS", "ROLES", "Look", "bay_light_materials", "capital_style", "ea_capital", "fleet_mosaic"]
+def bay_metal_materials(tag: str) -> dict[str, Material]:
+    """The hall of a bay lit as Babylon 5's docking bay (``launch_bay(metal=True)``): the station's grey tunnel metal, red only from
+    the bay's lamps falling on it."""
+    return {"bay_metal": Material(f"{tag}_bay_metal", lin(BAY_TUNNEL), paneled=True, metallic=0.7, roughness=0.32, emissive=lin(BAY_RED),
+                                  emissive_strength=BAY_TUNNEL_STRENGTH)}
+
+
+__all__ = ["DEFAULT_LOOK", "FIXED", "LOOKS", "ROLES", "Look", "bay_light_materials", "bay_metal_materials", "capital_style", "ea_capital", "fleet_mosaic"]

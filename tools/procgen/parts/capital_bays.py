@@ -13,6 +13,8 @@ A **lit** bay (``launch_bay(lit=True)``; every Earth Alliance hull's, as Babylon
 frame and glows red: a band round the mouth, rings of light strips down a faintly red hall, guide strips on the deck, a lamp at each
 corner of the mouth and a ``bay`` light hardpoint in the hall's mouth for the game's light rig. Its style carries
 :data:`BAY_LIGHT_ROLES` (``styles/ea_capital.bay_light_materials``). ``rim=False`` keeps the red inside the hall (the Hyperion's).
+``metal=True`` lines the hall as Babylon 5's docking bay instead (the Hyperion's, M10-T22): grey metal (``bay_metal``,
+``styles/ea_capital.bay_metal_materials``) lit red by the bay's light, small lamps along the roof and no glowing strips.
 
 A bay with a **door** (``door=True``, M10-T22) has a roll-up shutter: a housing over the mouth and guide rails down its sides are
 built here; the shutter itself is a ``door`` hardpoint (``hardpoints.doors[]``) the game draws as slats, shut until a craft
@@ -36,6 +38,7 @@ EXIT = "exit"  # the mouth's centre: one of ``capital.POINT_PARAMS``, so it move
 BAY_LIGHT_ROLES = ("bay_light", "bay_light_deep", "bay_lamp", "bay_hall")  # the mouth's glow, the hall's strips, the lamps, its walls
 BAY_LIGHT_ROLE = "bay"  # the light hardpoint's role
 BAND_M, STRIP_M = 0.6, 0.5  # the glowing band round the mouth and a strip's width
+LAMP_DEPTHS = (0.2, 0.5, 0.8)  # a metal-lined hall's lamps, as fractions of its depth
 RINGS = (0.06, 0.45, 0.85)  # where the hall's rings of strips stand, as fractions of its depth: the first is the mouth's own
 
 
@@ -57,21 +60,24 @@ def _shell(w: float, h: float, z0: float, z1: float, material, inward: bool, bac
 
 
 def launch_bay(name: str, mouth_m: tuple[float, float], depth_m: float, style: Style, wall_m: float = 1.5, lit: bool = False,
-               rim: bool = True, door: bool = False) -> Module:
+               rim: bool = True, door: bool = False, metal: bool = False) -> Module:
     """A launch bay: a housing ``wall_m`` thick round a hall ``mouth_m`` wide and high and ``depth_m`` deep, open at -z,
     the hall dark with a lit deck (or, ``lit``, in the hull's paint and red light; ``rim=False`` leaves the mouth's outer band and corner
     lamps off, the red staying inside; ``door`` adds a roll-up door: its housing over the mouth and a door hardpoint the game draws as
-    a shutter). A craft starts at the hall's middle, a third of its height above the deck."""
+    a shutter; ``metal``, with ``lit``, lines the hall in grey metal lit red by its light alone, as Babylon 5's docking bay, with
+    small lamps and no glowing strips). A craft starts at the hall's middle, a third of its height above the deck."""
     w, h = mouth_m
     if w <= 0.0 or h <= 0.0 or depth_m <= 0.0 or wall_m <= 0.0:
         raise ValueError(f"launch bay {name!r} needs a mouth, a depth and a wall")
     ow, oh = w + 2.0 * wall_m, h + 2.0 * wall_m
     outer = _shell(ow, oh, 0.0, depth_m + wall_m, style.material("hull"), inward=False, back=True)
-    hall = _shell(w, h, 0.0, depth_m, style.material("bay_hall" if lit else "interior"), inward=True, back=True)
+    metal = metal and lit
+    hall_role = "bay_metal" if metal else "bay_hall" if lit else "interior"
+    hall = _shell(w, h, 0.0, depth_m, style.material(hall_role), inward=True, back=True)
     # The deck, a hair over the hall's floor (lit warm, or dark under a lit bay's red), and the frame round the mouth.
     deck = flat([(-0.4 * w, -0.5 * h + 0.05, 0.05 * depth_m), (0.4 * w, -0.5 * h + 0.05, 0.05 * depth_m),
                  (0.4 * w, -0.5 * h + 0.05, 0.95 * depth_m), (-0.4 * w, -0.5 * h + 0.05, 0.95 * depth_m)],
-                style.material("interior" if lit else "hazard"), (0.0, -h, 0.5 * depth_m))
+                style.material("hull_dark" if metal else "interior" if lit else "hazard"), (0.0, -h, 0.5 * depth_m))
     x, y, X, Y = 0.5 * w, 0.5 * h, 0.5 * ow, 0.5 * oh
     frame_mat = style.material("hull" if lit else "hazard_dark")
     frame = [flat([(a[0], a[1], 0.0), (b[0], b[1], 0.0), (c[0], c[1], 0.0), (d[0], d[1], 0.0)], frame_mat, (0.0, 0.0, 1.0))
@@ -89,9 +95,9 @@ def launch_bay(name: str, mouth_m: tuple[float, float], depth_m: float, style: S
                         {EXIT: (0.0, -h / 6.0, 0.0), "mouth_m": [round(w, 3), round(h, 3)], "depth_m": round(depth_m, 3)})]
     glow: list[Mesh] = []
     if lit:
-        glow = _bay_glow(w, h, depth_m, wall_m, style, rim)
+        glow = _bay_lamps(w, h, depth_m, style) if metal else _bay_glow(w, h, depth_m, wall_m, style, rim)
         red = style.material("bay_light").emissive
-        points.append(Hardpoint(f"{name}_light", LIGHT, (0.0, 0.0, 0.2 * depth_m), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0),
+        points.append(Hardpoint(f"{name}_light", LIGHT, (0.0, 0.0, (0.5 if metal else 0.2) * depth_m), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0),
                                 {"role": BAY_LIGHT_ROLE, "colour": [round(float(c), 4) for c in red], "range_m": round(2.0 * (w + h), 2)}))
     shutter: list[Mesh] = []
     if door:
@@ -158,6 +164,18 @@ def _bay_glow(w: float, h: float, depth_m: float, wall_m: float, style: Style, r
     for sx in (-1.0, 1.0) if rim else ():
         for sy in (-1.0, 1.0):
             out.append(box((lamp, lamp, 0.5 * lamp), style.material("bay_lamp"), (sx * (x + 0.5 * wall_m), sy * (y + 0.5 * wall_m), -0.25 * lamp)))
+    return out
+
+
+def _bay_lamps(w: float, h: float, depth_m: float, style: Style) -> list[Mesh]:
+    """A metal-lined hall's small red lamps along the roof's edges: the only thing in it that glows."""
+    lamp, y = min(0.5, 0.03 * w), 0.5 * h - 0.04
+    out: list[Mesh] = []
+    for f in LAMP_DEPTHS:
+        z = f * depth_m
+        for sx in (-1.0, 1.0):
+            u0, u1 = sx * (0.5 * w - 0.3), sx * (0.5 * w - 0.3 - lamp)
+            out.append(flat([(u0, y, z), (u1, y, z), (u1, y, z + lamp), (u0, y, z + lamp)], style.material("bay_lamp"), (0.0, 2.0 * h, z)))
     return out
 
 

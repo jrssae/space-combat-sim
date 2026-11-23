@@ -18,6 +18,7 @@ from tools.procgen.parts import capital_hull as hull
 from tools.procgen.parts import capital_weapons as weapons
 from tools.procgen.styles.capital import FRAMEWORK_GREY
 from tools.procgen.styles.ea_capital import ea_capital
+from tools.procgen.styles.ea_hyperion import ea_hyperion
 
 STYLE = FRAMEWORK_GREY.style
 STATIONS = (hull.Station(0.0, 20.0, 10.0, 3.0), hull.Station(40.0, 22.0, 11.0, 4.0), hull.Station(70.0, 15.0, 8.0, 2.0, 1.0))
@@ -131,6 +132,19 @@ class CapitalPartsTests(unittest.TestCase):
         lo, hi = lit.part.mesh.bounds()
         self.assertGreater(float(lo[2]), -1.0, "nothing stands more than a lamp proud of the mouth")
         self.assertLessEqual(float(hi[0]), 11.0 + 1e-6, "nor outside the housing")
+
+    def test_a_metal_bay_is_grey_lit_by_its_light_with_only_small_lamps_glowing(self) -> None:
+        ea = ea_hyperion().style
+        bay = bays.launch_bay("bay", (18.0, 10.0), 20.0, ea, 1.0, lit=True, rim=False, door=True, metal=True)
+        mesh = bay.part.mesh
+        used = {mesh.materials[i].name for i in set(mesh.face_material.tolist())}
+        self.assertIn(ea.material("bay_metal").name, used)
+        self.assertIn(ea.material("bay_lamp").name, used, "small lamps")
+        self.assertFalse(used & {ea.material(r).name for r in ("bay_light", "bay_light_deep", "bay_hall")}, "no strips, no red walls")
+        light = next(h for h in bay.hardpoints if h.kind == cp.LIGHT)
+        self.assertAlmostEqual(float(light.position[2]), 10.0, msg="the light mid-hall")
+        self.assertTrue(np.array_equal(bays.launch_bay("bay", (18.0, 10.0), 20.0, ea, 1.0, metal=True).part.mesh.vertices,
+                                       bays.launch_bay("bay", (18.0, 10.0), 20.0, ea, 1.0).part.mesh.vertices), "metal needs lit")
 
     def test_a_bay_door_and_an_unlit_rim_are_off_unless_asked_for(self) -> None:
         ea = ea_capital().style

@@ -11,6 +11,11 @@ const ROLL_SECONDS: float = 2.4
 const GAP_SHARE: float = 0.1
 
 
+## A bay's red lamp, fully open (as the station's `BayLights`): the grey hall reads red-lit only from it.
+const LIGHT_ENERGY: float = 3.5
+const LIGHT_ATTENUATION: float = 1.2
+
+
 ## The doors in a hardpoints dictionary (empty when the hull has none).
 static func doors_of(hardpoints: Dictionary) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -55,6 +60,24 @@ static func backing(door: Dictionary, amount: float) -> Vector2:
 	var tall: float = _vec(door.get("size_m")).y
 	var lift: float = clampf(amount, 0.0, 1.0) * tall
 	return Vector2(0.5 * lift, tall - lift)
+
+
+## The `bay` light inside a door's bay (empty when it has none), so the door can light its hall as it opens.
+static func light_of(hardpoints: Dictionary, bay: String) -> Dictionary:
+	for light: Variant in hardpoints.get("lights", []) if hardpoints.get("lights") is Array else []:
+		if light is Dictionary and str((light as Dictionary).get("name", "")) == bay + "_light":
+			return light
+	return {}
+
+
+## The bay lamp's energy with the door `amount` open: dark while shut, so no light leaks round a closed door onto the hull.
+static func light_energy(amount: float) -> float:
+	return LIGHT_ENERGY * clampf(amount, 0.0, 1.0)
+
+
+## Where a bay's light sits in the door's own frame.
+static func light_offset(door: Dictionary, light: Dictionary) -> Vector3:
+	return frame(door).affine_inverse() * _vec(light.get("position"))
 
 
 ## `amount` moved toward `target` by `delta` seconds of rolling.
