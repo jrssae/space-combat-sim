@@ -94,6 +94,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q65 | Small EA craft lengths; Hyperion number (2026-11-23) | New lengths: the **construction tender 8 m** (was 50 m), the **Kestrel atmospheric shuttle 29 m** (`ea_atmo_shuttle`, was 25.59 m), the **crew shuttle 38 m** (`ea_shuttle`, was 18.64 m) (T69). The Hyperion's side hull number is **white with a black outline**, like the bow name (T22) |
 | Q66 | Panama size; work order (2026-11-23) | The **Panama** keeps its proportions and is scaled to **20 m tall**: about 124 x 31 x 20 m (was 180 x 45 x 29; T71). Work order, Opus, one task at a time: T22's bays (in progress), then T67, T68, T14, T71; small checks (T70) may run beside them |
 | Q67 | New approved lengths; the Drakh (2026-11-23) | The lengths now in the STL file names are approved and **replace T01/Q49's**: Brakiri Avioki **1 000 m**, Drakh carrier **7 000 m** (`Drakh carrier 7km.STL`; too big for the jump gates: it **opens its own jump points**), Drakh fighter **215 m**, ISA Victory **2 990 m**, ISA White Star **266 m**, Shadow scout **356 m**, Vree Xill **500 m**, Narn G'Quan **1 400 m**, Narn Frazi **16.8 m** (and as before Vorchan 360, Warlock 1 992, Sharlin 1 600, Explorer 6 103, Asimov 600, mining transport 600, Nial 22, Shadow fighter 15.3, Minbari Flyer 40). The **Drakh fighter** is a multi-crew vessel a little smaller than a White Star and a fairly even match for one: built on the capital framework like the Shadow scout (T40). The **Drakh carrier holds 40 Drakh fighters, hanging on the outside of its belly** (was 24, Q53). STL file names in this file now match `references/` |
+| Q68 | Interior layer for every hull (2026-11-23) | The Hyperion is complete (T22 closed). Every ship with an open interior (bays, halls, hangars, docks) gets an **interior layer** like B5's, so sunlight never falls into the halls and only the interior's own lights (red bay lights, lamps) light them: T72 adds it to the hulls already built; from now on it is part of the hull checklist for every ship in progress and every ship still to be built |
 
 ## The hulls
 
@@ -381,6 +382,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T69 | F | Re-size the small EA craft (Q65): `ea_construction_tender` to 8 m, `ea_atmo_shuttle` (Kestrel) to 29 m, `ea_shuttle` (crew shuttle) to 38 m; check each STL's proportions still hold (90 % rule at the new length), ShipSpecs (mass, thrust, hull points by size), hardpoints, collision, the docks and bays that hold them, the ship line-up spacing, docs/assets-capital.md and the catalogue page | T55, T57 | Sonnet | done |
 | T70 | E | Clearance: the resized EA craft through B5's main docking bay (crew shuttle, Kestrel, tender) | T69 | Sonnet | done |
 | T71 | F | Re-size the Panama (Q66): `ea_panama` scaled uniformly to 20 m tall (about 124 x 31 x 20 m, scale 0.69), as T69 did for the small craft: the 90 % rule at the new size, ShipSpec (mass, thrust, hull points), hardpoints, collision and chunks, its docks and routes (B5's bay, civilian traffic), the line-up, docs and the catalogue page | T69 | Opus | not started |
+| T72 | A | Interior layer for the built hulls (Q68): as B5's (`InteriorZones` and the interior faces flagged by the generator; see docs/assets-station.md), for every built ship with an open interior: Hyperion (Starfury bays, shuttle bay), Omega and Nova (forward bay), raider strike carrier, and any civilian with an open hold or bay; sunlight kept out, the interiors lit only by their own lights; closed doors still show nothing; tests and before/after shots with the sun shining into an open bay | T22 | Opus | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -403,7 +405,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
 | T20 | F | not needed: dropped (M8-T27, not from the show) | - | - | not needed |
 | T21 | F | EA Omega-class destroyer | T19, T62 | Fable | done |
-| T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | in progress |
+| T22 | F | EA Hyperion-class heavy cruiser | T19, T62 | Fable | done |
 | T23 | F | EA Nova-class dreadnought | T19, T62 | Fable | done |
 | T24 | F | EA Warlock-class destroyer | T19, T62 | Fable | not started |
 | T25 | F | Narn G'Quan-class heavy cruiser | T19, T62 | Fable | not started |
@@ -921,6 +923,8 @@ Not needed here: moved to M11 (the maintainer, 2026-11-18), which plans it.
 - Within its class budget (Q38); VRAM recorded.
 - Python tests (AC6's list).
 - A look sheet to `references/screenshots/M10-Txx <hull>/` in the main checkout; judging the look is (H).
+- Every open interior (bays, halls, hangars, docks) on the interior layer (Q68, T72): no sunlight inside, lit only by the
+  interior's own lights, nothing visible through closed doors.
 - **Done when:** AC6 for the task's hulls and the maintainer has seen the look sheet.
 - Once the hull is finalized (look approved, committed), it joins the ship line-up (T64): parked in its faction's row beside
   Babylon 5 in the ship comparison mission, set not to move, so the player can fly past it for scale and look.
