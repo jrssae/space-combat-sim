@@ -377,6 +377,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T67 | A | Nova bow face from T66 (the Omega's moves to T68): each generator kept separate (Q62), the open-frame bow, the octagonal launch bay in place of the red square, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement on the Nova (Q61, Q62) | T66 | Fable | not started |
 | T68 | A | Omega rebuilt on the new 4-part kit (Q63): assemble the kit into one reference, sheet to the maintainer, re-measure (silhouettes, sections, T66 sweeps and bow depth map), open-frame bow and octagonal bay (Q62), the drum in the kit's pose | T66 | Fable | not started |
 | T69 | F | Re-size the small EA craft (Q65): `ea_construction_tender` to 8 m, `ea_atmo_shuttle` (Kestrel) to 29 m, `ea_shuttle` (crew shuttle) to 38 m; check each STL's proportions still hold (90 % rule at the new length), ShipSpecs (mass, thrust, hull points by size), hardpoints, collision, the docks and bays that hold them, the ship line-up spacing, docs/assets-capital.md and the catalogue page | T55, T57 | Sonnet | done |
+| T70 | E | Clearance: the resized EA craft through B5's main docking bay (crew shuttle, Kestrel, tender) | T69 | Sonnet | done |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -1084,6 +1085,10 @@ On top of it:
   deep, Q58) no longer holds the 38 m shuttle; the Victory (T34) launches Kestrels, so its bay needs 52 x 10 m. Scale
   sheet: `references/screenshots/M10-T69 craft resize/scale_sheet.png` (each beside a Starfury at one distance); judging the
   look is (H).
+
+### M10-T70 Clearance of the resized EA craft in B5's main docking bay
+
+- **T70 done (2026-11-23).** Each hull's collision shapes swept down the mouth (73.2 x 16.7 m band, 45.5 x 30.0 m core, outline clear to the doors) all fit, level and centred: crew shuttle 9.5 m, Kestrel 5.3 m (the wingtip under the band's ceiling), tender 12.8 m; off by 2 m and 2 degrees of roll 7.4, 2.4 and 10.7 m. Test: `tools/procgen/tests/test_ea_craft_bay_clearance.py`.
 
 ### M10-T43 to T47 Mechanics, sounds, bench, scenarios and performance
 
