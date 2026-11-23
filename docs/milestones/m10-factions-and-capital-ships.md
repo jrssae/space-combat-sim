@@ -991,6 +991,14 @@ On top of it:
   name, `ShipNames.hull_number_of`). In the game: `assets/ships/ea_hyperion.tres`, catalogue `ea_hyperion` (class `destroyer`),
   names `EAS Hyperion`, `EAS Lexington`, ... As built in `docs/assets-capital.md`, "`ea_hyperion`". Look sheet
   `references/screenshots/M10-T22 Hyperion/look_sheet_final.png`. **Open:** judging the look is (H); its guns fire with T12 to T14.
+- **T22 refinement done (2026-11-23).** Rebuilt on `references/EA-Hyperion-V5c.stl` (Q58) with the old STL's antenna array,
+  lowered into a recessed nose face behind a grey lip, and a forward dish under the crown's saucer. Six single-fury bays in the
+  mid-spine bump's flanks and the shuttle bays, all with roll-up doors (`BayDoors`, `BayDoorNode`). Paint (Q64): look A's light
+  grey `HyperionMosaic` plates, continuous blue bands, a grey nose behind a blue ring; HYPERION across the bow's roof (white,
+  black outline) and in blue on the tower flanks over a show-style emblem drawn from scratch (`core/hull_decals.py`, a sharp
+  decal); the hull number "21" white with a black outline (Q65); floods light the bow name, the emblem and the crown. Smooth
+  particle-cannon barrels. Fidelity: top 0.944, side 0.918, front 0.963, 31 sections at 0.926 or over. Sheet
+  `references/screenshots/M10-T22 Hyperion/refine/final_sheet_4.png`. **Open:** the look is (H) in play.
 - **Faction fighters (T38 to T42):** the fighter pipeline (the generator as `raider_fighter`, not the capital framework),
   with T06's parts where organic; its `ShipSpec`, thruster layout, guns per T03, a pilot profile, break-up chunks. Done
   when a seeded fight against Starfuries also runs headless; its carriers launch it in T17.

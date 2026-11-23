@@ -756,7 +756,7 @@ def flood_brackets(s: Style) -> list[cp.Module]:
             .in_section(f.section).on_side(cp.CENTRE if f.centre else cp.RIGHT) for f in FLOODS if f.bracket is not None]
 
 
-NUMBER_INK = (0.07, 0.10, 0.24)  # the show's hull number is dark slate blue, darker than the bands
+NUMBER_INK = NAME_LIGHT  # white with a black outline, like the bow's name (Q65)
 NUMBER_HEIGHT_M = 26.0
 NUMBER_Z = 168.0  # just aft of the bow band, ahead of the flank dome turret (263 m on), as the stills paint it
 NUMBER_Y = -16.0  # mid-way down the flank's flat
@@ -764,7 +764,7 @@ NUMBER_Y = -16.0  # mid-way down the flank's flat
 
 def hull_numbers() -> tuple[cp.Hardpoint, cp.Hardpoint]:
     """The ship's hull number (the show's "21") painted on each flank of the forward hull aft of the bow band; the game picks the
-    digits from the ship's name (``data/ships/names.json``, ``hull_numbers``), outlined in black as the stills print it. The flank widens aft, so the mark leans with it: a
+    digits from the ship's name (``data/ships/names.json``, ``hull_numbers``), white outlined in black like the bow's name (Q65). The flank widens aft, so the mark leans with it: a
     flat mark square to the beam would sink its aft digit into the hull."""
     span = 0.5 * NUMBER_HEIGHT_M
     w, slope = _lerp(NUMBER_Z, HALF_W), (_lerp(NUMBER_Z + span, HALF_W) - _lerp(NUMBER_Z - span, HALF_W)) / (2.0 * span)

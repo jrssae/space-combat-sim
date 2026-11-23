@@ -139,6 +139,7 @@ class HyperionBuildTests(unittest.TestCase):
         self.assertNotIn("outline", names["mark_name_r"], "the tower's name is not")
         numbers = [m for m in self.hp["marks"] if m.get("text") == "number"]
         self.assertTrue(numbers and all(m.get("outline") for m in numbers), "the hull number is outlined too")
+        self.assertTrue(all(min(m["colour"]) > 0.8 for m in numbers), "the hull number is white, like the bow's name (Q65)")
         self.assertTrue((self.dir / self.hp["mark_atlas"]["outlined_file"]).is_file(), "the outlined print is written beside the plain one")
         roof_z = float(self.authored(names["mark_name_roof"]["position"])[2])
         self.assertTrue(hy.BOW_Z < roof_z < hy.FORE_BANDS[0][0], "between the bow face and the bow band")
@@ -217,7 +218,7 @@ class HyperionBuildTests(unittest.TestCase):
         self.assertEqual(len(lamps), 7, "the red stays inside: one light a bay")
 
     def test_the_hull_number_is_painted_on_both_flanks_aft_of_the_bow_band(self) -> None:
-        nums = {m["name"]: m for m in self.hp["marks"] if m["text"] == "number"}
+        nums = {m["name"]: m for m in self.hp["marks"] if m.get("text") == "number"}
         self.assertEqual(sorted(nums), ["mark_number_l", "mark_number_r"])
         r, l = self.authored(nums["mark_number_r"]["position"]), self.authored(nums["mark_number_l"]["position"])
         self.assertAlmostEqual(float(r[0]), -float(l[0]), places=3)

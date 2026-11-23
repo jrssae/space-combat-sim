@@ -656,7 +656,7 @@ the deck and the keel strake are cut at the band so it closes under the hull), a
 along the roof's starboard edge is gone.
 
 **Name and hull number**: the ship's whole name in the bands' blue across the forward roof and on each flank of the tower
-(`mark_name_*`, `text: "name"`), and its hull number, the show's "21" (still 02), in dark slate on each flank of the forward
+(`mark_name_*`, `text: "name"`), and its hull number, the show's "21" (still 02), white outlined in black like the bow's name (Q65), on each flank of the forward
 hull between the bow band and the flank dome turret (`mark_number_r` and `_l`, 26 m, `text: "number"`; each leans with the
 widening flank so neither digit sinks into it). The number is data:
 `data/ships/names.json` `hull_numbers` gives each Hyperion name its own (`Hyperion` 21, `Lexington` 34, ...); `ShipNames.hull_number_of`
@@ -675,8 +675,9 @@ is baked onto every hull part it reaches (`Flood.parts`).
 
 ### Fidelity (Q10)
 
-Silhouettes top 0.905, side 0.916, front 0.950 (the STL's lopsidedness costs the top view), sizes within 1 %; 30 per-part
-sections (`parts/ea_hyperion_fidelity.py`, `test_ea_hyperion.py`) all at 0.909 or over.
+Against `references/EA-Hyperion-V5c.stl` (Q58): silhouettes top 0.944, side 0.918, front 0.963; width and height within 1 %,
+length 4.3 % over (the old STL's antenna rods reach past the V5c's bow); 31 per-part sections (`parts/ea_hyperion_fidelity.py`,
+`test_ea_hyperion.py`) all at 0.926 or over, no exemptions.
 
 ### In the game
 
@@ -688,7 +689,7 @@ broadside with the painted name and number, `in_game/broadside_name_number.png`)
 
 ### Open for the human tester `(H)`
 
-- The look against the stills: light grey, band widths, the dark hull number's contrast in shadow.
+- The look against the stills: light grey, band widths, the white hull number's outline in shadow.
 - At the player's flank view the number is easily hidden by a Starfury; it reads best from the capital's own side.
 
 ## M10 lengths (T01)
