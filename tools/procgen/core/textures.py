@@ -436,6 +436,15 @@ def _to8(values: np.ndarray) -> np.ndarray:
     return np.clip(np.rint(np.asarray(values) * 255.0), 0, 255).astype(np.uint8)
 
 
+def _srgb8(values: np.ndarray, rows: int = 1 << 20) -> np.ndarray:
+    """Linear colours as sRGB bytes, a block of rows at a time: the same bytes, without whole-atlas float temporaries."""
+    values = np.asarray(values)
+    out = np.empty(values.shape, dtype=np.uint8)
+    for start in range(0, len(values), rows):
+        out[start : start + rows] = _to8(linear_to_srgb(values[start : start + rows]))
+    return out
+
+
 def _texel_metric(filled: np.ndarray, pos: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Per texel: the world step along +u and +v (metres per texel), finite differences inside the filled region. Built in strips
     of rows (rows wrap round), so the temporaries stay small at 4 096 px."""
@@ -913,7 +922,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         window_scale = np.where(surface_strength > 0.0, window_strength / np.maximum(surface_strength, 1e-9), 0.0)
         glow = np.clip(np.maximum(emissive * scale[:, None], window_glow * window_scale[:, None]), 0.0, 1.0)
         emissive_map8 = np.zeros((size, size, 3), dtype=np.uint8)  # an empty texel is 0 either way; only the filled ones are converted
-        emissive_map8[idx] = _to8(linear_to_srgb(glow))
+        emissive_map8[idx] = _srgb8(glow)
         return emissive_map8
 
     emissive_map8 = _kept(memo, ("emissive", seed), glow_map)  # made now so its per-texel inputs can go
@@ -933,26 +942,32 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
 
     # Occlusion, roughness and metal; emissive scaled per surface so one map serves both.
     occ = _occlusion(atlas, seed) if occlusion else np.ones((size, size))
-    orm = np.zeros((size, size, 3))
-    orm[..., 0] = np.where(filled, occ, 1.0)
+    # Each channel goes to bytes on its own, so no float copy of all three is held (the same bytes).
+    orm8 = np.empty((size, size, 3), dtype=np.uint8)
+    occ_channel = np.where(filled, occ, 1.0)
+    del occ
     planar = dict(style.extra).get("planar_detail")
     if planar and not occlusion:
         # Texels whose detail tile is laid flat in their own facet (M7-T24, the station hull shader): the slanted facets of the named
         # parts, marked in the occlusion channel, which a hull baked without occlusion does not use.
         wanted = np.isin(part, [names.index(p) for p in planar["parts"] if p in names])
         slanted = np.abs(nrm).max(axis=1) < float(planar["max_axis"])
-        orm[idx[0][wanted & slanted], idx[1][wanted & slanted], 0] = 0.0
+        occ_channel[idx[0][wanted & slanted], idx[1][wanted & slanted]] = 0.0
     orm_rough = np.full((size, size), 0.7)
     orm_rough[idx] = np.clip(roughness, 0.02, 1.0)
-    orm[..., 1] = orm_rough
+    orm8[..., 0] = _to8(occ_channel)
+    del occ_channel
+    orm8[..., 1] = _to8(orm_rough)
+    del orm_rough
     orm_metal = np.zeros((size, size))
     orm_metal[idx] = np.clip(metallic, 0.0, 1.0)
-    orm[..., 2] = orm_metal
+    orm8[..., 2] = _to8(orm_metal)
+    del orm_metal
 
     mean = albedo[~glass].mean(axis=0) if (~glass).any() else albedo.mean(axis=0)
     # Converted texel by texel, so only the filled texels and the one colour round them (the same bytes as the whole map's).
     albedo8 = np.empty((size, size, 3), dtype=np.uint8)
-    albedo8[idx] = _to8(linear_to_srgb(np.clip(albedo, 0.0, 1.0)))
+    albedo8[idx] = _srgb8(np.clip(albedo, 0.0, 1.0))
     albedo8[~filled] = _to8(linear_to_srgb(np.clip(mean, 0.0, 1.0)[None, :]))[0]
     if paintable:
         may_paint = np.isin(np.array([m.name for m in table])[mat], list(paintable)) & ~glass
@@ -962,7 +977,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     return {
         "albedo": albedo8,
         "normal": normal8,
-        "orm": _to8(orm),
+        "orm": orm8,
         "emissive": emissive_map8,
         "mean_albedo": mean,
     }
