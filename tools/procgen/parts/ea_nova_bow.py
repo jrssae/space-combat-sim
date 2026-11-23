@@ -1,5 +1,5 @@
 """The Nova's open-frame bow (M10-T67; Q61, Q62): what the reference shows through the armour's open front, built so the face
-matches the STL's (``tools/refview/fidelity.py`` sweeps and the front depth map, ``parts/ea_nova_fidelity.FACE_GATES``).
+matches the STL's (``tools/refview/fidelity.py`` sweeps and the front depth map, ``parts/ea_nova_fidelity.FACE_MEAN_IOU`` and ``FACE_DEPTH``).
 
 Frame and numbers as ``parts/ea_nova.py``'s. Seen from ahead, top to bottom:
 
@@ -17,8 +17,11 @@ here (:data:`INTERIOR_MODULES`).
 
 from __future__ import annotations
 
+import dataclasses
+
 import numpy as np
 
+from ..core import collision as col
 from ..styles import Style
 from . import capital as cp
 from . import capital_bays as bays
@@ -126,13 +129,13 @@ def bay(s: Style) -> list[cp.Module]:
                                     (lip_out[b], LIP_Z), (outer[a], FRAME_BEVEL_Z), (outer[b], FRAME_BEVEL_Z))]
         pts += [(*p, FRAME_BACK_Z) for p in (outer[a], outer[b], inner[a], inner[b])]
         ring.append(cs.convex(f"frame_{k}", pts, s, PANEL))
-    out.append(_put("bow", cs.compound("bay_fore_frame", ring)))
+    out.append(_put("bridge", cs.compound("bay_fore_frame", ring)))
     for tag, y in zip(("top", "low"), PROBE_YS, strict=True):
-        out.append(_put("bow", cs.rod(f"bay_fore_probe_{tag}_r", (PROBE_X, y, LIP_Z), (PROBE_X, y, PROBE_TIP_Z), PROBE_R, s), cp.RIGHT))
+        out.append(_put("bridge", cs.rod(f"bay_fore_probe_{tag}_r", (PROBE_X, y, LIP_Z), (PROBE_X, y, PROBE_TIP_Z), PROBE_R, s), cp.RIGHT))
     for tag, (y0, y1) in FINS:
         fin = cs.convex(f"bay_fin_{tag}_r", [(x, y, z) for x, ys, zs in ((FRAME_HALF[0] - 0.5, (y0, y1), (185.0, 214.0)), (54.0, (y0 + 0.5, y1 - 0.5), (199.0, 214.0)))
                                             for y in ys for z in zs], s, DARK)
-        out.append(_put("bow", fin, cp.RIGHT))
+        out.append(_put("bridge", fin, cp.RIGHT))
     return out
 
 
@@ -142,7 +145,7 @@ def decks(s: Style) -> list[cp.Module]:
     out = []
     for name, x0, x1, y0, y1, z, back in DECKS:
         roles = PANEL if "plate" in name else DECKED
-        section = "bridge" if y0 > 0.0 else "bow"
+        section = "bow" if name.startswith("tank_backing") else "bridge"
         if name == "deck_upper_stbd":  # its outer edge follows the leaning plate
             (ax, ay), (bx, by) = UPPER_EDGE
             m = cs.prism(name, [(x0, y0), (ax, y0), (ax, ay), (bx, by), (x0, y1)], z, back, s, roles)
@@ -165,9 +168,9 @@ def decks(s: Style) -> list[cp.Module]:
     back = 380.0
     for name, (y0, y1), (x0, x1), (z0, z1) in PLATE_WINGS:
         wing = cs.convex(name + "_r", [(x, y, z) for x, zf in ((x0, z0), (x1, z1)) for y in (y0, y1) for z in (zf, back)], s, PANEL)
-        out.append(_put("bow", wing, cp.RIGHT))
+        out.append(_put("bridge", wing, cp.RIGHT))
     (bx0, bx1), (by0, by1), (bz0, bz1) = SIDE_BULKHEAD
-    out.append(_put("bow", cs.box("side_bulkhead_r", (bx0, by0, bz0), (bx1, by1, bz1), s, DECKED), cp.RIGHT))
+    out.append(_put("bridge", cs.box("side_bulkhead_r", (bx0, by0, bz0), (bx1, by1, bz1), s, DECKED), cp.RIGHT))
     return out
 
 
@@ -215,6 +218,8 @@ def keel(s: Style, inner) -> list[cp.Module]:  # noqa: ANN001 - inner(y): the lo
     domes = [cs.round_body(f"keel_dome_{k + 1}", (x, y, SPHERE_FRONT_Z), (x, y, SPHERE_FRONT_Z + 2.0 * SPHERE_R),
                            [(d, r) for r, d in half], s, s.material("hull_dark"), sides=12, skin=cp.SKIN_FITTING)
              for k, (x, y) in enumerate(KEEL_SPHERES)]
+    # One hull a dome, so the bow's shapes stay within the section's budget unmerged.
+    domes = [dataclasses.replace(d, shapes=(col.hull(d.name, d.part.mesh.vertices),)) for d in domes]
     return [_put("bow", m) for m in (wall, block, slope)] + [_put("bow", m, cp.LONE) for m in (lump, *domes)] + pipes
 
 

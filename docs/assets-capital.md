@@ -565,8 +565,8 @@ Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as
 
 ### Sections and hardpoints
 
-Ten sections: `bow` (the armour, the keel wedge, the aerials and the launch bay), `bridge` (the bridge tube, deck and roof),
-`fuel` (the capsules and the retro thrusters under the bridge tube), `spine_fore`, `hangar` (the hangar block), `spine_mid`, `spine_aft`,
+Ten sections: `bow` (the armour, the keel, the aerials and the launch bay's hall), `bridge` (the bridge tube, the bay's frame,
+probes and fins, the open front's decks and the roof; T67 moved them here so neither section's shapes are merged), `fuel` (the capsules and the retro thrusters under the bridge tube), `spine_fore`, `hangar` (the hangar block), `spine_mid`, `spine_aft`,
 `reactor` (the engine housing and the engine frame), `engine_r` and `engine_l`; blast energies on the fuel and the reactor.
 Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 
@@ -576,20 +576,22 @@ Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
   hemisphere, four on the engine housing's corners the aft;
 - 6 `ea_interceptor` domes along the flanks;
 - one launch bay facing the bow (the maintainer, 2026-11-21; rebuilt in T67, `parts/ea_nova_bow.py`): the reference's octagonal
-  hall, a 62 by 26 m mouth at 182.5 m in a proud octagonal frame (a lip at the mouth bevelled back to 196 m, four thin probes
-  forward from its corners to 136.5 m) with a thin wedge fin each side above and below the axis, the hall 146.5 m deep back to
-  the reference's wall at 329 m, in the `bow` section; `craft` `starfury_ally`, `capacity` 24. The hall is Babylon 5's grey bay
+  hall, a 62 by 27 m mouth at 190 m in a proud octagonal frame (a flat lip at 182.6 m bevelled back to the mouth and to the
+  frame's outer edge at 189.5 m, its back at 196 m, four thin probes forward from the lip's corners to 136.5 m) with a thin
+  wedge fin each side above and below the axis, the hall 139 m deep back to the reference's wall at 329 m, in the `bow` section; `craft` `starfury_ally`, `capacity` 24. The hall is Babylon 5's grey bay
   metal (`launch_bay(metal=True)`: #A8AAAE, metallic 0.7, roughness 0.32, faint red 0.04) lit by small red lamps and the bay's red
   light hardpoint; no glowing rim and no door (Q64). Nothing of the hull stands ahead of the mouth but the frame's probes
   (`test_the_launch_path_ahead_of_the_bay_is_clear`), so T17's launches leave straight ahead;
 - the **open-frame bow** (T67, Q61/Q62): the armour is open at the front, and behind it stand the reference's decks: three deck
-  plates forward (y 76, 48, 20), deck blocks between them at the reference's depths (`DECKS`), the roof block with the bridge's
+  plates forward (y 76, 48, 20; the two lower ones sloping back to the armour at their ends, `PLATE_WINGS`) and a sill and a
+  plate under the frame, deck blocks between them at the reference's depths (`DECKS`), a bulkhead beside the hall at 331 m, the roof block with the bridge's
   window and two humps, a deck block under the bay, the backing behind the tanks, the retro thrusters' radial struts, and the keel
   (the wall behind the retro thrusters at 257 m, a block under them, the sloping face with a block, two domes and the pipes up
   to the spine). The hall and the decks are the bow's open interior: T72 (Q68) gives them the interior layer
   (`ea_nova_bow.INTERIOR_MODULES`);
-- the two oval retro thrusters under the capsules: open nozzles from 165 m, closed by dark throats at 236 m as the
-  reference's (`parts/ea_omega.retro_nozzle`);
+- the two oval retro thrusters under the capsules: open nozzles from 165 m with the reference's rounded lips
+  (`ea_nova_bow.retro_lip`, back to the outer wall at 173 m), closed by dark throats at 236 m (`parts/ea_omega.retro_nozzle`);
+  the flank strake through the vertical plate is the reference's flattened hexagon (`STRAKE_OUTLINE`);
 - running lights (red to port, green to starboard, white on the roof, red-orange beacons under the keel and at the stern), the
   four engines in a square, and a jump anchor 1 500 m ahead with a 400 m mouth.
 
