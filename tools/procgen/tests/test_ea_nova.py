@@ -147,6 +147,30 @@ class NovaSpecTests(unittest.TestCase):
         self.assertLess(float(boom[0].part.mesh.bounds()[1][0]), 0.0, "it hangs to port")
         self.assertEqual(float(boom[0].part.mesh.bounds()[0][2]), 0.0, "its tip is the ship's bow")
 
+    def test_the_soft_finish_and_the_metal_bay(self) -> None:
+        """Q64: the Hyperion's skin in the Omega's colours, the bay lined in grey metal lit red, no glowing rim and no door."""
+        from tools.procgen.styles.ea_capital import ea_capital  # noqa: PLC0415
+        from tools.procgen.styles.ea_hyperion import HyperionMosaic  # noqa: PLC0415
+
+        nova, omega = en.style(), ea_capital()
+        self.assertIsInstance(nova.skin, HyperionMosaic)
+        self.assertNotIsInstance(omega.skin, HyperionMosaic, "the Omega keeps the fleet's finish until T68")
+        self.assertEqual(nova.style.materials["hull"].albedo, omega.style.materials["hull"].albedo, "the Omega's colours")
+        self.assertNotIn("bay_metal", omega.style.materials)
+        metal = nova.style.materials["bay_metal"]
+        self.assertEqual((metal.metallic, metal.roughness), (0.7, 0.32))
+        hall = next(m for m in en.modules() if m.name == "bay_fore")
+        used = {mat.name for mat in hall.part.mesh.materials}
+        self.assertIn(metal.name, used, "the hall is grey metal")
+        self.assertNotIn(nova.style.materials["bay_light"].name, used, "no glowing band round the mouth")
+        self.assertFalse(any(h.kind == cp.DOOR for m in en.modules() for h in m.hardpoints), "no doors")
+
+    def test_the_open_bow_marks_its_interior_for_t72(self) -> None:
+        """Q68: the hall and the decks behind the open frame are named for the interior layer T72 adds."""
+        names = {m.name for m in en.modules()}
+        for name in en.nv.bow.INTERIOR_MODULES:
+            self.assertIn(name, names)
+
     def test_the_launch_path_ahead_of_the_bay_is_clear(self) -> None:
         """Nothing of the hull stands in the mouth's way out to the bow (T17 launches through it)."""
         hw, hh = 0.5 * en.nv.BAY_MOUTH[0], 0.5 * en.nv.BAY_MOUTH[1]
@@ -179,6 +203,19 @@ class NovaSectionTests(unittest.TestCase):
                 failures = [f"{p.name} {s.iou:.3f}" for p in planes if (s := section_score(self.stl, self.model, p)).iou < PASS_IOU
                             and p.name not in fid.EXEMPT]
                 self.assertEqual(failures, [], f"{part}: sections under {PASS_IOU}")
+
+    def test_the_bow_face_holds_its_floors(self) -> None:
+        """T66's sweeps and depth map over the open-frame bow (M10-T67): each sweep's mean IoU and the face's depth agreement."""
+        from tools.refview import fidelity  # noqa: PLC0415
+
+        for axis, (span, step, window) in fid.FACE_SWEEPS.items():
+            scores = fidelity.sweep(self.stl, self.model, "xyz".index(axis), span, step, 1.0, window, outline=True)
+            with self.subTest(axis=axis):
+                self.assertGreaterEqual(float(np.mean([s.iou for s in scores])), fid.FACE_MEAN_IOU[axis])
+        maps = [fidelity.depth_map(m, "front", fid.FACE_BOX, 1.0) for m in (self.stl, self.model)]
+        summary = fidelity.depth_diff(*maps, fidelity.DEFAULT_TOLERANCE_M, 1.0).summary
+        self.assertGreaterEqual(summary["within_tolerance"], fid.FACE_DEPTH["within_tolerance"])
+        self.assertLessEqual(summary["mean_abs_depth_diff_m"], fid.FACE_DEPTH["mean_abs_depth_diff_m"])
 
     def test_every_exemption_names_a_plane_and_a_reason(self) -> None:
         names = {p.name for planes in fid.PLANES.values() for p in planes}

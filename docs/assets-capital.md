@@ -545,7 +545,10 @@ with `scripts/model_sheet.sh`; `option_sheet.png` and `section_compare.png` from
 
 `tools/procgen/assets/ea_nova.py` on `parts/ea_nova.py` (the structure, measured off the reference), in the Omega's parts and
 look (the maintainer: the Nova reuses them): its slab armour, girder spine, octagonal collars, nacelles, lit bays, turrets,
-beams, interceptors, lamps and `styles/ea_capital.py` look A. The shape is described in `docs/design-references.md`, "EA
+beams, interceptors, lamps and `styles/ea_capital.py` look A, worn since T67 in the **soft finish** (`ea_capital(look,
+finish="soft")`, Q64): the Hyperion's skin (`ea_hyperion.HyperionMosaic`: shallow narrow seams, small patches of darker plates,
+little tone wander, faint seam lines) in the Omega's colours, its bays lined in grey metal; the Omega keeps the fleet finish
+until T68. The shape is described in `docs/design-references.md`, "EA
 Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as the Omega's).
 
 ### Measurements
@@ -572,18 +575,26 @@ Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 - 6 `ea_sweep_beam_nova` emitters (the Omega's beams at 80 %): one on each flank of the command block covering the fore
   hemisphere, four on the engine housing's corners the aft;
 - 6 `ea_interceptor` domes along the flanks;
-- one lit launch bay facing the bow (the maintainer, 2026-11-21: one bay, on the command block's front just above the two oval
-  retro thrusters), the Omega's `fore_bay` in the reference's octagonal hall through the bridge tube: a 63 by 27 m mouth at
-  198 m, the hall 128 m deep, in the `bow` section; `craft` `starfury_ally`, `capacity` 24. The hangar block's fore face is
-  whole again (its six bays are gone). The bridge's window moved to the roof block's face. Nothing of the hull stands ahead
-  of the mouth (`test_the_launch_path_ahead_of_the_bay_is_clear`), so T17's launches leave straight ahead;
-- the two oval retro thrusters under the capsules: open nozzles from 167 m, now closed by dark throats at 236 m as the
+- one launch bay facing the bow (the maintainer, 2026-11-21; rebuilt in T67, `parts/ea_nova_bow.py`): the reference's octagonal
+  hall, a 62 by 26 m mouth at 182.5 m in a proud octagonal frame (a lip at the mouth bevelled back to 196 m, four thin probes
+  forward from its corners to 136.5 m) with a thin wedge fin each side above and below the axis, the hall 146.5 m deep back to
+  the reference's wall at 329 m, in the `bow` section; `craft` `starfury_ally`, `capacity` 24. The hall is Babylon 5's grey bay
+  metal (`launch_bay(metal=True)`: #A8AAAE, metallic 0.7, roughness 0.32, faint red 0.04) lit by small red lamps and the bay's red
+  light hardpoint; no glowing rim and no door (Q64). Nothing of the hull stands ahead of the mouth but the frame's probes
+  (`test_the_launch_path_ahead_of_the_bay_is_clear`), so T17's launches leave straight ahead;
+- the **open-frame bow** (T67, Q61/Q62): the armour is open at the front, and behind it stand the reference's decks: three deck
+  plates forward (y 76, 48, 20), deck blocks between them at the reference's depths (`DECKS`), the roof block with the bridge's
+  window and two humps, a deck block under the bay, the backing behind the tanks, the retro thrusters' radial struts, and the keel
+  (the wall behind the retro thrusters at 257 m, a block under them, the sloping face with a block, two domes and the pipes up
+  to the spine). The hall and the decks are the bow's open interior: T72 (Q68) gives them the interior layer
+  (`ea_nova_bow.INTERIOR_MODULES`);
+- the two oval retro thrusters under the capsules: open nozzles from 165 m, closed by dark throats at 236 m as the
   reference's (`parts/ea_omega.retro_nozzle`);
 - running lights (red to port, green to starboard, white on the roof, red-orange beacons under the keel and at the stern), the
   four engines in a square, and a jump anchor 1 500 m ahead with a 400 m mouth.
 
-**Name letter**: the show's Schwarzkopf wears a large white "B" on the lower plate of its command block; each Nova wears the
-first letter of its name there (`mark_initial_r` and `_l`, 36 m, `HullMarks` as the Omega's). **Renegades**: a red X on each
+**Name letter**: each Nova wears the first letter of its name in the Omega's place (Q61, Q62): on the lower plate's face, a
+fifth of the way up from its keel edge (`ea_omega.MARK_AT`), mid-length (`mark_initial_r` and `_l`, 36 m, `HullMarks`). **Renegades**: a red X on each
 vertical plate and on the roof (`only_faction` `renegades`). **Names**: `data/ships/names.json`, twenty generals and admirals,
 the show's Schwarzkopf first.
 

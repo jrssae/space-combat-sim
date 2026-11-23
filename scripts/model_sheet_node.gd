@@ -6,7 +6,8 @@ extends Node
 ## Arguments after `--`: out=<dir> settle=<frames> shots=<shot>,<shot>,... where a shot is
 ## `name|asset[:option]|distance_m|view|low or high|lit or dark|aim|livery`: `view` one of VIEWS; `aim` the model point
 ## (`x;y;z`, its own frame) held `distance_m` ahead of the camera (empty: its centre); `livery` a `wing:number` (empty: plain).
-## `lit+bays` or `dark+bays` also lights every bay's red lamp, as an open door does in the game (M10-T22).
+## `lit+bays` or `dark+bays` also lights every bay's red lamp, as an open door does in the game (M10-T22). A `livery` of
+## `name:<ship name>` paints the hull's name marks for that name (M10-T67).
 ## An option is read from `<asset>_options/<option>/<asset>/`, as the hull sheets'. An asset of `-` is a shot of the empty
 ## scene, whose video memory is the baseline for the model's.
 
@@ -120,7 +121,21 @@ func _park(shot: PackedStringArray) -> String:
 	_light(camera, shot[5].begins_with("dark"))
 	if shot[5].ends_with("+bays"):
 		_add_bay_lamps(asset_id, root)
+	if shot.size() > 7 and shot[7].begins_with("name:"):
+		_add_marks(asset_id, root, shot[7].trim_prefix("name:"))
 	return ""
+
+
+# The hull's painted name marks for a ship of that name (a capital's name letter, M10-T67), as the game paints them; the
+# faction-only marks stay off.
+func _add_marks(asset_id: String, root: String, display_name: String) -> void:
+	var dir: String = root.path_join(asset_id)
+	var hp: Variant = JSON.parse_string(FileAccess.get_file_as_string(dir.path_join("hardpoints.json")))
+	if not hp is Dictionary or not (hp as Dictionary).get("mark_atlas") is Dictionary:
+		return
+	for node: HullMarkNode in HullMarkNode.build_all(HullMarks.marks_of(hp), hp["mark_atlas"], dir, display_name):
+		node.visible = node.only_faction == &""
+		_model.add_child(node)
 
 
 # Every bay's red lamp at full strength, so its open hall reads as the game lights it.

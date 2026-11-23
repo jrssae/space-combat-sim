@@ -40,4 +40,18 @@ PLANES: dict[str, list[SectionPlane]] = {
 # Planes a part may fail, each with the reason the maintainer accepted. None yet.
 EXEMPT: dict[str, str] = {}
 
-__all__ = ["EXEMPT", "PLANES", "REFERENCE_AXIS", "REFERENCE_MAPPING"]
+
+# The bow face (M10-T67, T66's sweeps): outline cuts every ``step`` metres across ``span``, in ``window`` (None: both meshes),
+# and the front depth map over FACE_BOX. The x and y cuts see the face only, from the bow to the armour's end (z 150 to 380).
+FACE_SWEEPS: dict[str, tuple[tuple[float, float], float, tuple[float, float, float, float] | None]] = {
+    "z": ((150.0, 450.0), 4.0, None),
+    "x": ((-70.0, 70.0), 5.0, (150.0, 380.0, -185.0, 100.0)),
+    "y": ((-175.0, 95.0), 5.0, (-75.0, 75.0, 150.0, 380.0)),
+}
+FACE_BOX = (-75.0, 75.0, -180.0, 100.0, 150.0, 450.0)
+# The floors the face holds today (the maintainer's target is every slice >= 0.90; see docs/assets-capital.md, "ea_nova"):
+# each sweep's mean IoU, and the depth map's share within 2 m and its mean difference (m).
+FACE_MEAN_IOU = {"z": 0.92, "x": 0.80, "y": 0.95}
+FACE_DEPTH = {"within_tolerance": 0.55, "mean_abs_depth_diff_m": 11.0}
+
+__all__ = ["EXEMPT", "FACE_BOX", "FACE_DEPTH", "FACE_MEAN_IOU", "FACE_SWEEPS", "PLANES", "REFERENCE_AXIS", "REFERENCE_MAPPING"]
