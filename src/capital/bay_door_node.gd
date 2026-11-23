@@ -92,7 +92,7 @@ func _add_backing(size: Array) -> void:
 func _draw() -> void:
 	var shown: Array[Vector2] = BayDoors.slats(_door, amount)
 	for i: int in shown.size():
-		multimesh.set_instance_transform(i, Transform3D(Basis.from_scale(Vector3(1.0, shown[i].y, 1.0)), Vector3(0.0, shown[i].x, 0.0)))
+		MultiMeshUpload.set_instance_transform(multimesh, i, Transform3D(Basis.from_scale(Vector3(1.0, shown[i].y, 1.0)), Vector3(0.0, shown[i].x, 0.0)))
 	multimesh.visible_instance_count = shown.size()
 	visible = not shown.is_empty()
 	var back: Vector2 = BayDoors.backing(_door, amount)

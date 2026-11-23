@@ -8,7 +8,14 @@ from pathlib import Path
 
 import numpy as np
 
-from tools.refview import fidelity as fd
+try:
+    import PIL  # noqa: F401
+except ImportError:  # the tool draws with Pillow, which procgen treats as optional (tools/procgen/README.md)
+    fd = None
+else:
+    from tools.refview import fidelity as fd  # a broken tool must fail here, not skip
+
+needs_pillow = unittest.skipIf(fd is None, "tools/refview needs Pillow")
 
 
 def box(lo: tuple[float, float, float], hi: tuple[float, float, float]) -> np.ndarray:
@@ -21,6 +28,7 @@ def box(lo: tuple[float, float, float], hi: tuple[float, float, float]) -> np.nd
     return np.array(tris)
 
 
+@needs_pillow
 class SweepTests(unittest.TestCase):
     def test_identical_meshes_score_one_everywhere(self) -> None:
         m = box((-5, -5, 0), (5, 5, 40))
@@ -53,6 +61,7 @@ class SweepTests(unittest.TestCase):
             self.assertTrue((Path(d) / "s.png").is_file())
 
 
+@needs_pillow
 class DepthTests(unittest.TestCase):
     BOX = (-10.0, 10.0, -10.0, 10.0, 0.0, 50.0)
 
@@ -78,6 +87,7 @@ class DepthTests(unittest.TestCase):
         self.assertAlmostEqual(float(top[top.shape[0] // 2, 10]), -10.0, delta=0.1)
 
 
+@needs_pillow
 class AlignmentTests(unittest.TestCase):
     def test_bow_tip_and_alignment_meet_in_z(self) -> None:
         a, b = box((-5, -5, 3), (5, 5, 30)), box((-5, -5, 0), (5, 5, 30))
