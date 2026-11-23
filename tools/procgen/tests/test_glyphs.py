@@ -66,6 +66,35 @@ class GlyphTests(unittest.TestCase):
         cell = a[row * glyphs.CELL_PX:(row + 1) * glyphs.CELL_PX, col * glyphs.CELL_PX:(col + 1) * glyphs.CELL_PX, 3]
         self.assertTrue(np.array_equal(cell, np.round(glyphs.glyph("Q") * 255).astype(np.uint8)))
 
+    def test_the_outlined_print_rims_each_letter_in_black(self) -> None:
+        cover, value = glyphs.outlined_glyph("O")
+        plain = glyphs.glyph("O")
+        self.assertTrue(np.all(cover >= plain - 1e-9), "the outline only adds to the letter's coverage")
+        ring = (cover > 0.99) & (plain < 0.01)
+        self.assertGreater(int(ring.sum()), 0, "a rim round the letter")
+        self.assertLess(float(value[ring].max()), 0.01, "black there")
+        self.assertGreater(float(value[plain > 0.99].min()), 0.99, "the letter itself stays white, for the game's tint")
+        width_px = glyphs.OUTLINE * glyphs.GLYPH_PX
+        row = cover[glyphs.CELL_PX // 2]
+        self.assertAlmostEqual(float(row.sum() - plain[glyphs.CELL_PX // 2].sum()), 4.0 * width_px, delta=2.0,
+                               msg="the rim's width each side of both strokes")
+        edge = row[(row > 0.0) & (row < 1.0)]
+        self.assertGreater(len(edge), 0, "anti-aliased, not stepped")
+
+    def test_the_outlined_atlas_is_written_only_when_asked(self) -> None:
+        import tempfile  # noqa: PLC0415
+        from pathlib import Path  # noqa: PLC0415
+
+        with tempfile.TemporaryDirectory() as d:
+            files, entry = glyphs.write_atlas(Path(d), "x", outlined=True)
+            self.assertEqual(len(files), 4)
+            self.assertEqual(entry["outlined_file"], glyphs.OUTLINED_NAME.format(asset="x"))
+            self.assertTrue((Path(d) / entry["outlined_file"]).is_file())
+            _, plain = glyphs.write_atlas(Path(d), "y")
+        self.assertNotIn("outlined_file", plain)
+        a = glyphs.atlas(outlined=True)
+        self.assertEqual(int(a[..., :3][a[..., 3] == 0].max()), 0, "clear texels are black, so the rim's edge keeps its colour in the mips")
+
     def test_the_build_is_deterministic(self) -> None:
         self.assertTrue(np.array_equal(glyphs.atlas(), glyphs.atlas()))
 

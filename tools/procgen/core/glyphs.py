@@ -24,7 +24,9 @@ GLYPH_PX = 160  # the cap height inside a cell; the rest is margin for the mip c
 STROKE = 0.17  # the stroke's width, in cap heights
 TRACKING = 0.1  # the gap between letters, in cap heights
 SPACE = 0.32  # a space's advance, in cap heights
+OUTLINE = 0.06  # a black outline's width round the letters, in cap heights (the Hyperion's bow name and hull number)
 ATLAS_NAME = "{asset}_marks.png"
+OUTLINED_NAME = "{asset}_marks_outlined.png"
 
 _H = STROKE / 2.0
 _B, _T = _H, 1.0 - _H  # the centrelines of strokes lying on the baseline and the cap line
@@ -192,26 +194,45 @@ def distance(char: str, p: np.ndarray) -> np.ndarray:
     return np.maximum(out, clip)
 
 
-def glyph(char: str) -> np.ndarray:
-    """One glyph's coverage, a ``(CELL_PX, CELL_PX)`` float array in 0..1, the letter centred in its cell and its edges smoothed
-    over one texel from the exact distance to its strokes."""
+def _cell_distance(char: str) -> np.ndarray:
+    """The signed distance (cap heights) to ``char``'s ink at each texel of its cell, the letter centred in it."""
     w = width(char)
     idx = np.arange(CELL_PX) + 0.5
     x = (idx - 0.5 * (CELL_PX - w * GLYPH_PX)) / GLYPH_PX
     y = (0.5 * (CELL_PX + GLYPH_PX) - idx) / GLYPH_PX
     gx, gy = np.meshgrid(x, y)
-    d = distance(char, np.stack([gx.ravel(), gy.ravel()], axis=1)).reshape(CELL_PX, CELL_PX)
-    return np.clip(0.5 - d * GLYPH_PX, 0.0, 1.0)
+    return distance(char, np.stack([gx.ravel(), gy.ravel()], axis=1)).reshape(CELL_PX, CELL_PX)
 
 
-def atlas() -> np.ndarray:
-    """The RGBA atlas, 8-bit: white glyphs, the coverage in alpha."""
+def glyph(char: str) -> np.ndarray:
+    """One glyph's coverage, a ``(CELL_PX, CELL_PX)`` float array in 0..1, the letter centred in its cell and its edges smoothed
+    over one texel from the exact distance to its strokes."""
+    return np.clip(0.5 - _cell_distance(char) * GLYPH_PX, 0.0, 1.0)
+
+
+def outlined_glyph(char: str) -> tuple[np.ndarray, np.ndarray]:
+    """One glyph with a black outline :data:`OUTLINE` wide round it: the coverage of letter and outline together, and how much of
+    that is the letter (its value: 1 on the letter, 0 on the outline), both edges smoothed over a texel."""
+    d = _cell_distance(char)
+    ink, cover = np.clip(0.5 - d * GLYPH_PX, 0.0, 1.0), np.clip(0.5 - (d - OUTLINE) * GLYPH_PX, 0.0, 1.0)
+    return cover, np.where(cover > 0.0, ink / np.maximum(cover, 1e-6), 0.0)
+
+
+def atlas(outlined: bool = False) -> np.ndarray:
+    """The RGBA atlas, 8-bit: white glyphs, the coverage in alpha; ``outlined``, each glyph rimmed in black (the game's tint colours
+    only the white)."""
     size = COLUMNS * CELL_PX
     image = np.zeros((size, size, 4), dtype=np.uint8)
-    image[..., :3] = 255
+    image[..., :3] = 0 if outlined else 255
     for i, char in enumerate(CHARS):
         row, col = divmod(i, COLUMNS)
-        image[row * CELL_PX:(row + 1) * CELL_PX, col * CELL_PX:(col + 1) * CELL_PX, 3] = np.round(glyph(char) * 255.0).astype(np.uint8)
+        cell = (slice(row * CELL_PX, (row + 1) * CELL_PX), slice(col * CELL_PX, (col + 1) * CELL_PX))
+        if outlined:
+            cover, value = outlined_glyph(char)
+            image[cell[0], cell[1], :3] = np.round(value * 255.0).astype(np.uint8)[..., None]
+            image[cell[0], cell[1], 3] = np.round(cover * 255.0).astype(np.uint8)
+        else:
+            image[cell[0], cell[1], 3] = np.round(glyph(char) * 255.0).astype(np.uint8)
     return image
 
 
@@ -228,15 +249,20 @@ def import_sidecar() -> str:
     )
 
 
-def write_atlas(out_dir: Path, asset_id: str) -> tuple[list[Path], dict[str, object]]:
-    """Writes the atlas and its sidecar into ``out_dir``; returns the files and the entry the game reads the layout and spacing from."""
-    png = write_png(out_dir / ATLAS_NAME.format(asset=asset_id), atlas())
-    sidecar = Path(str(png) + ".import")
-    sidecar.write_text(import_sidecar(), encoding="utf-8", newline="\n")
-    entry = {"file": png.name, "chars": CHARS, "columns": COLUMNS, "glyph_height_share": GLYPH_PX / CELL_PX,
-             "widths": [round(width(c), 4) for c in CHARS], "tracking": TRACKING, "space": SPACE}
-    return [png, sidecar], entry
+def write_atlas(out_dir: Path, asset_id: str, outlined: bool = False) -> tuple[list[Path], dict[str, object]]:
+    """Writes the atlas and its sidecar into ``out_dir`` (and the outlined print beside it when a mark asks for one); returns the
+    files and the entry the game reads the layout and spacing from."""
+    files: list[Path] = []
+    for name, image in ((ATLAS_NAME, atlas()), *(((OUTLINED_NAME, atlas(outlined=True)),) if outlined else ())):
+        png = write_png(out_dir / name.format(asset=asset_id), image)
+        sidecar = Path(str(png) + ".import")
+        sidecar.write_text(import_sidecar(), encoding="utf-8", newline="\n")
+        files += [png, sidecar]
+    entry = {"file": files[0].name, "chars": CHARS, "columns": COLUMNS, "glyph_height_share": GLYPH_PX / CELL_PX,
+             "widths": [round(width(c), 4) for c in CHARS], "tracking": TRACKING, "space": SPACE,
+             **({"outlined_file": files[2].name} if outlined else {})}
+    return files, entry
 
 
-__all__ = ["ATLAS_NAME", "CELL_PX", "CHARS", "COLUMNS", "GLYPHS", "GLYPH_PX", "SPACE", "STROKE", "TRACKING", "atlas", "distance", "glyph",
-           "import_sidecar", "width", "write_atlas"]
+__all__ = ["ATLAS_NAME", "CELL_PX", "CHARS", "COLUMNS", "GLYPHS", "GLYPH_PX", "OUTLINE", "OUTLINED_NAME", "SPACE", "STROKE", "TRACKING", "atlas",
+           "distance", "glyph", "import_sidecar", "outlined_glyph", "width", "write_atlas"]

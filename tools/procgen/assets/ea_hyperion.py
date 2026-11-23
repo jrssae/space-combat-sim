@@ -6,11 +6,12 @@ red X marks, the loadout check).
 The structure is ``parts/ea_hyperion.py`` (measured off the reference model); this file stands the weapons and lights on it
 and names the damage sections. The loadout is ``data/capitals/loadouts.json``, ``ea_hyperion`` (M10-T03, Q49, Q53):
 
-* 2 heavy plasma cannons, fixed forward: the muzzles of two rods of the front antenna array (not symmetric);
+* 2 heavy plasma cannons, fixed forward: the muzzles of two rods of the front antenna array (not symmetric), rooted in the
+  recess in the bow's face;
 * 2 particle cannons (beams, the fore cone): twin barrels raised from the deck's slope, and lowered from under the keel;
 * 2 medium plasma dome turrets, one on each flank;
 * 4 light pulse dome turrets: on the turret deck, the tower's drum, the reactor module and the engine block;
-* 2 torpedo tubes in the bow face;
+* 2 torpedo tubes in the bow face's recess;
 * 4 interceptors: one on each pod under the tower and one on each sponson's aft face;
 * three single-Starfury bays in each flank of the hangar bump on the spine, and a shuttle bay for both shuttles in the
   tower's aft face (Q58): 6 Starfuries and 2 shuttles.
@@ -69,7 +70,7 @@ def weapon_modules(s: Style) -> list[cp.Module]:
         out.append(m.in_section(section).on_side(side))
 
     add("bow", hy.front_array(s).with_params(weapon=PLASMA_HEAVY), cp.LONE)  # lopsided: the first STL's rods
-    add("bow", weapons.missile_launcher("torpedo_r", (1, 1), 6.0, s).mounted((7.0, 8.0, hy.BOW_Z), FORE, UP).with_params(weapon=TORPEDO), cp.RIGHT)
+    add("bow", weapons.missile_launcher("torpedo_r", (1, 1), 6.0, s).mounted((7.0, 8.0, hy.NOSE_FLOOR_Z), FORE, UP).with_params(weapon=TORPEDO), cp.RIGHT)
     add("bow", hy.particle_cannon("particle_top", (0.0, 33.0, 125.0), (0.0, 41.0, 70.0), s).with_params(weapon=PARTICLE))
     add("bow", hy.particle_cannon("particle_low", (0.0, -44.0, 118.0), (0.0, -46.0, 60.0), s, spread=3.7, normal=DOWN).with_params(weapon=PARTICLE))
     add("magazine", hy.dome_turret("plasma_flank_r", 14.0, s).mounted((62.2, -22.0, 283.0), RIGHT).with_params(weapon=PLASMA_MEDIUM), cp.RIGHT)
@@ -129,8 +130,9 @@ def spec(look: str = DEFAULT_LOOK) -> cap.CapitalSpec:
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=1000.0, mouth_radius_m=300.0),
         notes=("the renegades' red X marks (M10-T02) are `mark` hardpoints with `only_faction`: the game draws them on a renegade ship",
-               "the Earth Alliance emblem on the tower's flanks and the floods' pools of light are baked into the hull's maps (M10-T22)"),
-        markings=(*hy.emblems(), *hy.flood_pools()),
+               "the floods' pools of light are baked into the hull's maps; the Earth Alliance emblem on the tower's flanks is a picture mark the "
+               "game draws as a sharp decal, lit as the pools are (M10-T22)"),
+        markings=tuple(hy.flood_pools()),
     )
 
 

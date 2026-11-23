@@ -514,7 +514,12 @@ faction's all-capitals prefix) a little off each face when it is created, so any
 **Hull decals, floods and bay doors (M10-T22, the Hyperion; off unless a hull asks).** A `CapitalSpec` may carry `markings`
 (module name, `core/textures.Marking`) baked into its hull's maps: `Marking.emblem`, the Earth Alliance emblem drawn in code
 (`core/hull_decals.py`, close to the maintainer's reference, no image file; Q64), and `Marking.flood`, a flood lamp's pool of
-light baked as glow, so a lit pool costs the GPU nothing (the lamp itself is a `flood` light fitting). `launch_bay(rim=False)`
+light baked as glow, so a lit pool costs the GPU nothing (the lamp itself is a `flood` light fitting). A hull may instead carry a
+picture as a mark (`capital_fittings.hull_image`, `image` naming a `hull_decals.IMAGES` key): the build writes its image at 2 cm a
+texel and, with a `glow`, its lamp's light on it (`<asset>_<mark>_glow.png`), and `HullMarkNode` draws it as one sharp quad
+(the Hyperion's emblem, which baked into the hull blurred to the plating's texels). A mark with `outline` prints from the
+glyph atlas's outlined twin (`<asset>_marks_outlined.png`, black rims 0.06 cap heights wide, written only when a mark asks).
+Materials with `smooth` (the Hyperion's barrels and bores) take no grime, chips or dirt. `launch_bay(rim=False)`
 keeps a lit bay's red inside the hall; `launch_bay(door=True)` builds a roll housing over the mouth and guide rails, and leaves a
 `door` hardpoint (`hardpoints.doors[]`: the shut shutter's centre, `forward`, `up`, `size_m`, `slats`), with rails and a sill that
 close the gap round it. `CapitalShip` draws each door as slats on a dark backing plate, so a shut door shows no light
@@ -658,8 +663,12 @@ widening flank so neither digit sinks into it). The number is data:
 reads it (a repeated name, "Hyperion 2", keeps its number) and `HullMarks.text_for` prints it. **Renegades**: red X marks on
 both tower flanks and the roof (`only_faction` `renegades`).
 
-**Nose, emblem and floods (M10-T22 refinement)**: the bow's face is hull grey with a blue ring just behind it (`nose_ring`,
-50.3 to 58 m, behind a 0.3 m grey lip). The emblem and the tower's name sit on the smooth tower flank aft of the forward hull and
+**Nose, emblem and floods (M10-T22 refinement)**: the bow's face is hull grey with a blue ring just behind it (`nose_ring_lip`
+and `nose_ring`, 50.3 to 58 m, behind a 0.3 m grey lip). Its centre is recessed 3.25 m (the V5c's 3.26 m) inside a 3 m lip
+(`nose_recess`; the V5c's lip is 7 to 11.5 m, too wide for the first STL's outer rods), the floor grey (`nose_face`); the antenna
+rods (lowered 2.5 m, `ARRAY_LOWER_M`), the torpedo tubes and the bow lamp all root in the floor. A forward dish hangs under the
+crown's saucer as both STLs have it (`forward_dish`, the V5c's: a flat face 11.3 m in radius at 346.1 m, no tilt, a feed ahead
+and a boom and post back to the saucer). The bow name and hull number are outlined in black; the emblem is a picture mark. The emblem and the tower's name sit on the smooth tower flank aft of the forward hull and
 the sponson (`EMBLEM_Z`), the emblem lit by a lamp on a bracket directly below it shining up (`flood_emblem`); a lamp on a post
 at the front of the roof lights the bow's name (`flood_name_roof`, on the axis); the crown floods as before. Each flood's pool
 is baked onto every hull part it reaches (`Flood.parts`).

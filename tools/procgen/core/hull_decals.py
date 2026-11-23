@@ -1,4 +1,5 @@
-"""Painted and lit hull decals baked into a hull's maps (M10-T22): the Earth Alliance emblem and the floods' pools of light.
+"""Painted and lit hull decals (M10-T22): the Earth Alliance emblem and the floods' pools of light. The pools are baked into a hull's
+maps; the emblem is drawn by the game as a sharp decal from its own image (:func:`write_images`), lit as the pools light the hull.
 
 The emblem is drawn here from scratch (Q64), close to the maintainer's reference (``references/ships/earth_alliance_emblem_reference.png``,
 gitignored): a blue body of faceted pieces, each edged with a thick yellow border, and two yellow bars across its right half. Its pieces
@@ -11,9 +12,18 @@ with distance, and only on faces turned toward the lamp. It is baked as a soft g
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from pathlib import Path
+from typing import Any
+
 import numpy as np
 
+from .image import write_png
+
 DESIGN_W, DESIGN_H = 600.0, 191.0
+EMBLEM = "ea_emblem"  # the emblem's key among the decal images (:data:`IMAGES`)
+EMBLEM_BLUE, EMBLEM_YELLOW = (8, 57, 148), (255, 206, 0)  # the reference's colours (sRGB)
+IMAGE_PX = 2048  # a decal image's width; at the Hyperion's 42 m emblem, two centimetres a texel
 BORDER = 13.0  # the yellow border's width, in design units
 BAR_R = 6.5  # half the bars' thickness
 
@@ -68,6 +78,74 @@ def emblem(uv: np.ndarray, height_m: float, soft_m: float) -> tuple[np.ndarray, 
     return body - bar, trim + bar
 
 
+def emblem_image(width_px: int = IMAGE_PX) -> np.ndarray:
+    """The emblem as an 8-bit sRGB RGBA image, ``width_px`` wide: its colours, and its coverage in alpha with edges smoothed over a
+    texel. Clear texels carry the border's yellow, so the mip chain does not darken the edge."""
+    height_px = round(width_px * DESIGN_H / DESIGN_W)
+    unit = DESIGN_W / width_px
+    j, i = np.meshgrid(np.arange(width_px) + 0.5, np.arange(height_px) + 0.5)
+    uv = np.stack([(j.ravel() - 0.5 * width_px) * unit, (0.5 * height_px - i.ravel()) * unit], axis=1)
+    body, trim = emblem(uv, DESIGN_H, unit)
+    cover = body + trim
+    blue, yellow = np.asarray(EMBLEM_BLUE, dtype=float), np.asarray(EMBLEM_YELLOW, dtype=float)
+    rgb = np.where(cover[:, None] > 1e-6, (body[:, None] * blue + trim[:, None] * yellow) / np.maximum(cover, 1e-6)[:, None], yellow)
+    out = np.concatenate([rgb, 255.0 * cover[:, None]], axis=1).reshape(height_px, width_px, 4)
+    return np.round(np.clip(out, 0.0, 255.0)).astype(np.uint8)
+
+
+IMAGES: dict[str, Callable[[], np.ndarray]] = {EMBLEM: emblem_image}
+
+
+def _to_linear(c: np.ndarray) -> np.ndarray:
+    return np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+
+
+def _to_srgb(c: np.ndarray) -> np.ndarray:
+    return np.where(c <= 0.0031308, 12.92 * c, 1.055 * np.power(np.maximum(c, 0.0), 1.0 / 2.4) - 0.055)
+
+
+def glow_image(image: np.ndarray, width_m: float, height_m: float, glow: dict[str, Any], grey: float) -> np.ndarray:
+    """The light a flood throws on a decal, as an 8-bit sRGB RGB image the decal's size: the pool (:func:`flood_pool`) on its face,
+    taking the decal's own colour as the hull's baked pools take the paint's (bright where the paint is as light as ``grey``)."""
+    h, w = image.shape[:2]
+    j, i = np.meshgrid((np.arange(w) + 0.5) / w - 0.5, 0.5 - (np.arange(h) + 0.5) / h)
+    p = np.stack([j.ravel() * width_m, i.ravel() * height_m, np.zeros(j.size)], axis=1)
+    n = np.tile([0.0, 0.0, 1.0], (len(p), 1))
+    direction = np.asarray(glow["direction"], dtype=float)
+    pool = flood_pool(p, n, np.asarray(glow["lamp"], dtype=float), direction / np.linalg.norm(direction), glow["outer_deg"], glow["inner_deg"],
+                      glow["range_m"])
+    lit = np.clip(_to_linear(image[..., :3].reshape(-1, 3) / 255.0) / grey, 0.0, 1.0)
+    light = pool[:, None] * np.asarray(glow["colour"], dtype=float) * lit
+    return np.round(255.0 * np.clip(_to_srgb(light), 0.0, 1.0)).reshape(h, w, 3).astype(np.uint8)
+
+
+def write_images(out_dir: Path, asset_id: str, marks: list[dict[str, Any]], sidecar: str, grey: float) -> list[Path]:
+    """Writes each picture mark's image (once per picture) and, for a lit one, its light, with Godot's ``sidecar`` import beside
+    each; points the marks at their files (``image``; ``glow`` becomes its file and its energy). Returns the files."""
+    files: list[Path] = []
+    drawn: dict[str, tuple[np.ndarray, str]] = {}
+
+    def save(name: str, pixels: np.ndarray) -> str:
+        png = write_png(out_dir / name, pixels)
+        side = Path(str(png) + ".import")
+        side.write_text(sidecar, encoding="utf-8", newline="\n")
+        files.extend([png, side])
+        return png.name
+
+    for mark in marks:
+        key = mark["image"]
+        if key not in IMAGES:
+            raise ValueError(f"mark {mark['name']!r}: no decal image {key!r}; there are {sorted(IMAGES)}")
+        if key not in drawn:
+            pixels = IMAGES[key]()
+            drawn[key] = (pixels, save(f"{asset_id}_{key}.png", pixels))
+        pixels, mark["image"] = drawn[key]
+        if "glow" in mark:
+            light = glow_image(pixels, mark["width_m"], mark["height_m"], mark["glow"], grey)
+            mark["glow"] = {"file": save(f"{asset_id}_{mark['name']}_glow.png", light), "energy": float(mark["glow"]["strength"])}
+    return files
+
+
 def flood_pool(p: np.ndarray, n: np.ndarray, at: np.ndarray, direction: np.ndarray, outer_deg: float, inner_deg: float,
                range_m: float) -> np.ndarray:
     """A flood's light (0..1) on hull points ``p`` with normals ``n``: full inside the inner cone, gone at the outer one and at
@@ -83,4 +161,5 @@ def flood_pool(p: np.ndarray, n: np.ndarray, at: np.ndarray, direction: np.ndarr
     return cone * cone * (3.0 - 2.0 * cone) * reach * reach * np.sqrt(facing)
 
 
-__all__ = ["BARS", "BORDER", "DESIGN_H", "DESIGN_W", "PIECES", "emblem", "flood_pool"]
+__all__ = ["BARS", "BORDER", "DESIGN_H", "DESIGN_W", "EMBLEM", "EMBLEM_BLUE", "EMBLEM_YELLOW", "IMAGES", "IMAGE_PX", "PIECES", "emblem",
+           "emblem_image", "flood_pool", "glow_image", "write_images"]

@@ -27,7 +27,7 @@ class Material:
 
     ``transmittance`` is the fraction of light that should pass through the whole surface
     (0 = opaque hull, 0.7 = tinted glass); the textured mesh draws it as glass.
-    ``paneled`` surfaces get the style's panel lines. ``metallic``, ``roughness`` (``None``: a default from the
+    ``paneled`` surfaces get the style's panel lines; ``smooth`` ones (gun barrels) take no weathering at all. ``metallic``, ``roughness`` (``None``: a default from the
     metalness) and the emissive colour and strength reach the textured mesh's maps (M4-T30a).
     """
 
@@ -39,6 +39,7 @@ class Material:
     roughness: float | None = None
     emissive: Vec3 = (0.0, 0.0, 0.0)
     emissive_strength: float = 0.0
+    smooth: bool = False
 
     def __post_init__(self) -> None:
         if not self.name:

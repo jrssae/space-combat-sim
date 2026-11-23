@@ -43,6 +43,54 @@ class EmblemTests(unittest.TestCase):
         self.assertEqual(float((body + trim).max()), 0.0)
 
 
+class EmblemImageTests(unittest.TestCase):
+    """The emblem as the game draws it (M10-T22): its own sharp image instead of the hull's texels."""
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.image = hd.emblem_image(600)
+
+    def test_the_image_has_the_emblems_shape_and_colours(self) -> None:
+        self.assertEqual(self.image.shape, (191, 600, 4))
+        alpha = self.image[..., 3]
+        self.assertEqual(int(alpha[0, 0]), 0, "clear outside")
+        blue = self.image[(alpha == 255) & (self.image[..., 2] > 120) & (self.image[..., 0] < 40)]
+        yellow = self.image[(alpha == 255) & (self.image[..., 0] > 240) & (self.image[..., 2] < 30)]
+        self.assertGreater(len(blue), 1000, "the blue body")
+        self.assertGreater(len(yellow), 1000, "the yellow border and bars")
+        self.assertTrue(np.all(self.image[alpha == 0][:, :3] == hd.EMBLEM_YELLOW), "clear texels carry the border's colour")
+        soft = (alpha > 0) & (alpha < 255)
+        self.assertGreater(int(soft.sum()), 0, "anti-aliased edges")
+
+    def test_its_flood_lights_it_from_below(self) -> None:
+        glow = {"lamp": [0.0, -14.0, 2.8], "direction": [0.0, 0.99, -0.12], "outer_deg": 42.0, "inner_deg": 16.0, "range_m": 40.0,
+                "colour": [0.9, 0.87, 0.81], "strength": 0.9}
+        light = hd.glow_image(self.image, 42.0, 13.37, glow, 0.35)
+        self.assertEqual(light.shape, (191, 600, 3))
+        even = hd.glow_image(np.full_like(self.image, 160), 42.0, 13.37, glow, 0.35)
+        self.assertGreater(int(even[170:, 290:310].sum()), int(even[:20, 290:310].sum()), "brighter low, nearer the lamp")
+        yellow = (self.image[..., 3] == 255) & (self.image[..., 0] > 240)
+        blue = (self.image[..., 3] == 255) & (self.image[..., 0] < 40)
+        self.assertGreater(float(light[yellow][:, 0].mean()), float(light[blue][:, 0].mean()), "it takes the paint's colour")
+
+    def test_writing_points_each_mark_at_its_files(self) -> None:
+        import tempfile  # noqa: PLC0415
+        from pathlib import Path  # noqa: PLC0415
+
+        marks = [{"name": f"mark_{s}", "image": hd.EMBLEM, "width_m": 42.0, "height_m": 13.37,
+                  "glow": {"lamp": [0.0, -14.0, 2.8], "direction": [0.0, 1.0, 0.0], "outer_deg": 42.0, "inner_deg": 16.0, "range_m": 40.0,
+                           "colour": [1.0, 1.0, 1.0], "strength": 0.9}} for s in "rl"]
+        with tempfile.TemporaryDirectory() as d:
+            files = hd.write_images(Path(d), "x", marks, "[remap]\n", 0.35)
+            self.assertEqual(len(files), 6, "one image for both, a light for each, and their sidecars")
+            for m in marks:
+                self.assertEqual(m["image"], "x_ea_emblem.png")
+                self.assertTrue((Path(d) / m["glow"]["file"]).is_file())
+                self.assertEqual(m["glow"]["energy"], 0.9)
+        with self.assertRaises(ValueError):
+            hd.write_images(Path("."), "x", [{"name": "m", "image": "nope"}], "", 0.35)
+
+
 class FloodPoolTests(unittest.TestCase):
     def test_a_pool_is_bright_on_its_axis_and_dark_outside_the_cone_behind_or_past_its_reach(self) -> None:
         at, down = np.zeros(3), np.array([0.0, -1.0, 0.0])

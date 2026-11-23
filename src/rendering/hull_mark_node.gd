@@ -1,7 +1,8 @@
 class_name HullMarkNode
 extends MeshInstance3D
-## One painted letter on a hull (M10-T21): a quad a little off the face, showing one cell of the generated glyph atlas. A thin
-## adapter; the rules are in `HullMarks`.
+## One painted letter on a hull (M10-T21): a quad a little off the face, showing one cell of the generated glyph atlas; or one
+## painted picture (the Earth Alliance emblem, M10-T22) showing its own image, lit by its flood. A thin adapter; the rules are in
+## `HullMarks`.
 
 ## The faction this mark is painted for; empty for every ship's.
 var only_faction: StringName = &""
@@ -13,12 +14,19 @@ static var _materials: Dictionary = {}  # "<atlas path>|<cell>|<colour>" -> Stan
 ## name gives no letter. `dir` is the asset's folder.
 static func build_all(marks: Array[Dictionary], atlas: Dictionary, dir: String, display_name: String) -> Array[HullMarkNode]:
 	var out: Array[HullMarkNode] = []
-	var path: String = dir.path_join(str(atlas.get("file", "")))
-	if marks.is_empty() or atlas.is_empty() or not ResourceLoader.exists(path):
+	if marks.is_empty() or atlas.is_empty() or not ResourceLoader.exists(dir.path_join(str(atlas.get("file", "")))):
 		return out
-	var texture: Texture2D = load(path) as Texture2D
 	var chars: String = str(atlas.get("chars", ""))
 	for mark: Dictionary in marks:
+		if HullMarks.is_image(mark):
+			var picture: HullMarkNode = create_image(mark, dir)
+			if picture != null:
+				out.append(picture)
+			continue
+		var path: String = dir.path_join(HullMarks.atlas_file(mark, atlas))
+		if not ResourceLoader.exists(path):
+			continue
+		var texture: Texture2D = load(path) as Texture2D
 		var text: String = HullMarks.text_for(mark, display_name, chars, ShipNames.hull_number_of(display_name))
 		var offsets: PackedFloat32Array = HullMarks.offsets(text, atlas, float(mark.get("stretch", 1.0)))
 		for i: int in text.length():
@@ -50,6 +58,47 @@ static func create(mark: Dictionary, text: String, index: int, atlas: Dictionary
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.transform = Transform3D(basis, _vec(mark.get("position")) + normal.normalized() * HullMarks.STANDOFF_M + basis.x * shift)
 	return node
+
+
+## A picture mark (`HullMarks.is_image`): one quad its size showing its image, sharp at any range (mipmapped, filtered
+## anisotropically), with its flood's light added as the hull's baked pools add theirs. Null when the image is missing.
+static func create_image(mark: Dictionary, dir: String) -> HullMarkNode:
+	var path: String = dir.path_join(str(mark.get("image", "")))
+	if not ResourceLoader.exists(path):
+		return null
+	var normal := _vec(mark.get("normal"))
+	var basis: Basis = HullMarks.quad_basis(normal, _vec(mark.get("up")))
+	var node := HullMarkNode.new()
+	node.name = "Mark%s" % str(mark.get("name", "image")).to_pascal_case().validate_node_name()
+	var quad := QuadMesh.new()
+	quad.size = Vector2(float(mark.get("width_m", 10.0)), float(mark.get("height_m", 10.0)))
+	node.mesh = quad
+	var glow: Dictionary = mark.get("glow", {}) if mark.get("glow") is Dictionary else {}
+	node.material_override = _image_material(path, dir.path_join(str(glow.get("file", ""))) if glow.has("file") else "", float(glow.get("energy", 0.0)))
+	node.only_faction = StringName(str(mark.get("only_faction", "")))
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.transform = Transform3D(basis, _vec(mark.get("position")) + normal.normalized() * HullMarks.STANDOFF_M)
+	return node
+
+
+static func _image_material(path: String, glow_path: String, energy: float) -> StandardMaterial3D:
+	var key: String = "%s|%s|%s" % [path, glow_path, energy]
+	if _materials.has(key):
+		return _materials[key]
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = load(path) as Texture2D
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	m.roughness = 0.6
+	m.metallic = 0.2
+	if not glow_path.is_empty() and ResourceLoader.exists(glow_path) and energy > 0.0:
+		m.emission_enabled = true
+		m.emission = Color.WHITE
+		m.emission_operator = BaseMaterial3D.EMISSION_OP_MULTIPLY
+		m.emission_texture = load(glow_path) as Texture2D
+		m.emission_energy_multiplier = energy
+	_materials[key] = m
+	return m
 
 
 static func _material(texture: Texture2D, path: String, cell: Vector2i, columns: int, colour: Color) -> StandardMaterial3D:

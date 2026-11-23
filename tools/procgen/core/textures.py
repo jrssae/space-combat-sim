@@ -793,7 +793,8 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
     noise_fine = _kept(memo, ("noise", 0.11 * k, seed + 1), lambda: value_noise(pos, 0.11 * k, seed + 1))
     noise_coarse = _kept(memo, ("noise", style.grime_scale_m, seed + 2), lambda: value_noise(pos, style.grime_scale_m, seed + 2))
     edge = np.clip(1.0 - b.edge_distance[idx] / style.edge_wear_width_m, 0.0, 1.0)
-    chips = np.clip((edge * (0.35 + noise_fine) - (1.0 - style.edge_wear)) * 3.0, 0.0, 1.0) * ~glass
+    plain = np.array([m.smooth for m in table], dtype=bool)[mat]  # smooth finishes (gun barrels) stay clean
+    chips = np.clip((edge * (0.35 + noise_fine) - (1.0 - style.edge_wear)) * 3.0, 0.0, 1.0) * ~glass * ~plain
     # A weathering term a style sets to nothing is left out (the same maps: it would add or multiply by zero).
     if style.streaks:
         streak_seed = _hash01(lattice_cell[:, 0], lattice_cell[:, 1], lattice_cell[:, 2] + 17, seeds)
@@ -817,7 +818,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         speckle = float(extra.get("speckle", 0.0)) * (2.0 * speckle_noise - 1.0) * paneled
     else:
         speckle = np.zeros(n)
-    grime = 1.0 + style.grime * (2.0 * noise_coarse - 1.0) + speckle
+    grime = np.where(plain, 1.0, 1.0 + style.grime * (2.0 * noise_coarse - 1.0) + speckle)
     albedo *= (grime * (1.0 - streak) * (1.0 - smudge))[:, None]
     if bare_metal > 0.0:
         bare = np.array([0.42, 0.42, 0.44])
@@ -924,7 +925,7 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         dirt = np.clip(streak + smudge + np.clip(1.0 - 2.0 * noise_coarse, 0.0, 1.0) * float(finish.get("grime_dirt", 0.5))
                        + float(finish.get("chip_dirt", 0.0)) * chips + float(finish.get("seam_dirt", 0.0)) * on_line, 0.0, 1.0)
         # M7-T17: chipped edges and seams count as dirt too, and a style may keep the dirt off its bare metal (the paint only).
-        dirty = (paneled & ~glass) if finish.get("dirt_on_paint_only") else ~glass
+        dirty = ((paneled & ~glass) if finish.get("dirt_on_paint_only") else ~glass) & ~plain
         roughness, metallic = metal_finish(finish, pos, paneled & ~glass, roughness, metallic, dirt * dirty, seed, memo)
 
     # The normal map: the plating's relief at twice the atlas's resolution, Godot's +Y up (Q34).

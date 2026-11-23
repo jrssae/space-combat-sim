@@ -99,9 +99,23 @@ func test_it_spawns_named_and_wears_its_name() -> void:
 	assert_eq(CapitalPropulsion.main_count(cap.layout), 4, "three bells, the centre one listed on both sides")
 	assert_true(cap.surfaces_held())
 	assert_true(cap.rotors.is_empty(), "no rotating section")
-	# HYPERION across the roof and on each flank of the tower, its hull number 21 on each flank of the hull, one quad a letter; no red X on a loyal ship.
+	# HYPERION across the roof and on each flank of the tower, its hull number 21 on each flank of the hull, one quad a letter, and the
+	# emblem on each flank of the tower as one sharp picture; no red X on a loyal ship.
 	var letters: Array[HullMarkNode] = _letters(cap)
-	assert_eq(letters.size(), 3 * "HYPERION".length() + 2 * "21".length(), "the name three times and the hull number on each flank")
+	assert_eq(letters.size(), 3 * "HYPERION".length() + 2 * "21".length() + 2, "the name three times, the hull number and the emblem on each flank")
+	var emblems: Array[HullMarkNode] = letters.filter(func(n: HullMarkNode) -> bool: return String(n.name).begins_with("MarkMarkEmblem"))
+	assert_eq(emblems.size(), 2, "the emblem on each flank of the tower")
+	for node: HullMarkNode in emblems:
+		var m := node.material_override as StandardMaterial3D
+		assert_not_null(m.albedo_texture, "drawn from its own image")
+		assert_true(m.emission_enabled, "lit by the lamp under it")
+		assert_almost_eq((node.mesh as QuadMesh).size.x, 42.0, 0.01, "as wide as the name is long")
+	var outlined: int = 0
+	for node: HullMarkNode in letters:
+		var tex: Texture2D = (node.material_override as StandardMaterial3D).albedo_texture
+		if tex != null and tex.resource_path.ends_with("_marks_outlined.png"):
+			outlined += 1
+	assert_eq(outlined, "HYPERION".length() + 2 * "21".length(), "the bow's name and the hull numbers are outlined in black")
 	for node: HullMarkNode in _letters(cap, true):
 		assert_false(node.visible, "a loyal Hyperion wears no X")
 	var spawned_again: ConsoleResult = DebugConsole.registry.execute_tokens(["capital", "spawn", String(TYPE), "9000"])

@@ -37,14 +37,14 @@ from ..parts import mass_centroid, total_mass
 from ..styles.capital import CapitalStyle
 from . import civilian as cv
 from . import collision as col
-from . import glyphs
+from . import glyphs, hull_decals
 from .budgets import LOW_SHRINK, low_set_mb, texture_mb
 from .context import AssetOutputs, BuildContext
 from .image import write_png
 from .manifest import build_manifest, write_manifest
 from .silhouette import far_section
 from .textured_mesh import import_sidecar
-from .textures import Marking
+from .textures import FLOOD_GREY, Marking
 
 Vec3 = tuple[float, float, float]
 
@@ -404,8 +404,11 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
         hp["jump_point"] = {"position": cv.r(np.array([0.0, 0.0, float(whole_lo[2]) - spec.jump_point.ahead_m]) - offset),
                             "forward": [0.0, 0.0, -1.0], "mouth_radius_m": float(spec.jump_point.mouth_radius_m)}
     if lists["marks"]:
-        mark_files, hp["mark_atlas"] = glyphs.write_atlas(out_dir, spec.asset_id)
+        mark_files, hp["mark_atlas"] = glyphs.write_atlas(out_dir, spec.asset_id, outlined=any(m.get("outline") for m in lists["marks"]))
         files += mark_files
+        pictures = [m for m in lists["marks"] if "image" in m]
+        if pictures:
+            files += hull_decals.write_images(out_dir, spec.asset_id, pictures, glyphs.import_sidecar(), FLOOD_GREY)
     hp_path = out_dir / HARDPOINTS_NAME
     hp_path.write_text(json.dumps(hp, indent=2) + "\n", encoding="utf-8", newline="\n")
     files.append(hp_path)

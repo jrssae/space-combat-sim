@@ -69,3 +69,16 @@ func test_letters_are_spaced_by_their_own_widths_and_centred() -> void:
 	var even: PackedFloat32Array = HullMarks.offsets("AB", ATLAS)
 	assert_almost_eq(even[1] - even[0], 0.8, 1e-5, "an atlas without widths keeps an even pitch")
 	assert_almost_eq(even[0] + even[1], 0.0, 1e-5)
+
+
+func test_an_outlined_mark_prints_from_the_outlined_atlas() -> void:
+	var atlas: Dictionary = ATLAS.merged({"file": "x_marks.png", "outlined_file": "x_marks_outlined.png"})
+	assert_eq(HullMarks.atlas_file({"text": "name", "outline": true}, atlas), "x_marks_outlined.png", "the bow name and hull number")
+	assert_eq(HullMarks.atlas_file({"text": "name"}, atlas), "x_marks.png", "every other mark prints plain")
+	assert_eq(HullMarks.atlas_file({"outline": true}, ATLAS.merged({"file": "x_marks.png"})), "x_marks.png", "no outlined print: the plain one")
+
+
+func test_a_picture_mark_is_told_from_lettering() -> void:
+	assert_true(HullMarks.is_image({"image": "ea_hyperion_ea_emblem.png", "width_m": 42.0}), "the emblem")
+	assert_false(HullMarks.is_image({"text": "name"}))
+	assert_false(HullMarks.is_image({"image": ""}))

@@ -18,11 +18,13 @@ from dataclasses import dataclass
 
 import numpy as np
 
+from ..core.geometry import Material
 from ..core.seams import Feature, Plates, SeamLayout, _keyed_hash
 from .capital import CapitalStyle, PanelMosaic, _frames
 from .ea_capital import Look, capital_style, fleet_mosaic
 
 PREFIX = "eah"
+SMOOTH_ROLES = ("barrel", "bore")
 
 
 @dataclass(frozen=True)
@@ -103,9 +105,15 @@ def ea_hyperion(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = Non
     skin = hyperion_mosaic(chosen) if plating is None else PanelMosaic(plate_m=plating.plate_m, splits=plating.splits, tone=chosen.plate_tone,
                                                                     grime=chosen.plate_grime, frames_m=plating.frames_m, major_every=4)
     style = capital_style(chosen, f"ea_hyperion_{look}", PREFIX, skin, livery)
+    style = dataclasses.replace(style, style=dataclasses.replace(style.style, materials=smooth_barrels(style.style.materials)))
     if plating is not None:
         return style
     return dataclasses.replace(style, style=dataclasses.replace(style.style, panel_line_darkness=0.78, groove_depth_m=0.006))
 
 
-__all__ = ["DEFAULT_LOOK", "LOOKS", "PLATING", "HyperionMosaic", "PatchPlates", "Plating", "ea_hyperion", "hyperion_mosaic"]
+def smooth_barrels(materials: Mapping[str, Material]) -> dict[str, Material]:
+    """The maintainer's call (M10-T22): the guns' barrels and bores are plain smooth metal, no weathering on them."""
+    return {role: dataclasses.replace(m, smooth=True) if role in SMOOTH_ROLES else m for role, m in materials.items()}
+
+
+__all__ = ["DEFAULT_LOOK", "LOOKS", "PLATING", "HyperionMosaic", "PatchPlates", "Plating", "SMOOTH_ROLES", "ea_hyperion", "hyperion_mosaic", "smooth_barrels"]

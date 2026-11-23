@@ -52,6 +52,19 @@ static func name_of(display_name: String) -> String:
 	return " ".join(words.slice(skip))
 
 
+## Whether `mark` is a picture (the Earth Alliance emblem, M10-T22) rather than lettering: it names its own image file.
+static func is_image(mark: Dictionary) -> bool:
+	return mark.get("image") is String and not str(mark["image"]).is_empty()
+
+
+## The atlas file `mark`'s letters are printed from: the outlined print for a mark that asks for a black outline (the Hyperion's
+## bow name and hull number), the plain one otherwise or when the hull has no outlined print.
+static func atlas_file(mark: Dictionary, atlas: Dictionary) -> String:
+	if bool(mark.get("outline", false)) and str(atlas.get("outlined_file", "")) != "":
+		return str(atlas["outlined_file"])
+	return str(atlas.get("file", ""))
+
+
 ## The atlas cell (column, row) of `char`, or (-1, -1) when the atlas has no such glyph.
 static func cell_of(char: String, atlas: Dictionary) -> Vector2i:
 	var chars: String = str(atlas.get("chars", ""))

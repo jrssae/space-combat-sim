@@ -19,6 +19,7 @@ import numpy as np
 from tools.procgen.assets import ASSETS, BUILD_ALONE
 from tools.procgen.assets import ea_hyperion as eh
 from tools.procgen.core import capital as cap
+from tools.procgen.core import hull_decals as hd
 from tools.procgen.core import loadout
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.budgets import low_set_mb, over_budget, texture_mb
@@ -119,7 +120,7 @@ class HyperionBuildTests(unittest.TestCase):
         self.assertLess(port["position"][0], 0.0, "red to port")
 
     def test_the_renegades_red_x_marks_are_for_renegades_only(self) -> None:
-        xs = [m for m in self.hp["marks"] if m["text"] == "X"]
+        xs = [m for m in self.hp["marks"] if m.get("text") == "X"]
         self.assertEqual(sorted(m["name"] for m in xs), ["mark_x_l", "mark_x_r", "mark_x_roof"], "one on each flank of the tower, one on the deck")
         for m in xs:
             self.assertEqual(m["only_faction"], "renegades")
@@ -127,13 +128,18 @@ class HyperionBuildTests(unittest.TestCase):
             self.assertLess(m["colour"][1], 0.2)
 
     def test_the_ship_wears_its_name_on_the_roof_and_the_tower(self) -> None:
-        names = {m["name"]: m for m in self.hp["marks"] if m["text"] == "name"}
+        names = {m["name"]: m for m in self.hp["marks"] if m.get("text") == "name"}
         self.assertEqual(sorted(names), ["mark_name_l", "mark_name_r", "mark_name_roof"], "as the stills paint HYPERION")
         for m in names.values():
             self.assertNotIn("only_faction", m, "every faction's hull carries its name")
         for key in ("mark_name_r", "mark_name_l"):
             self.assertGreater(names[key]["colour"][2], names[key]["colour"][0], "the tower's in the bands' blue")
         self.assertGreater(min(names["mark_name_roof"]["colour"]), 0.8, "light across the bow's roof")
+        self.assertTrue(names["mark_name_roof"].get("outline"), "outlined in black, as the stills print it")
+        self.assertNotIn("outline", names["mark_name_r"], "the tower's name is not")
+        numbers = [m for m in self.hp["marks"] if m.get("text") == "number"]
+        self.assertTrue(numbers and all(m.get("outline") for m in numbers), "the hull number is outlined too")
+        self.assertTrue((self.dir / self.hp["mark_atlas"]["outlined_file"]).is_file(), "the outlined print is written beside the plain one")
         roof_z = float(self.authored(names["mark_name_roof"]["position"])[2])
         self.assertTrue(hy.BOW_Z < roof_z < hy.FORE_BANDS[0][0], "between the bow face and the bow band")
         muzzle = min(float(m.part.mesh.bounds()[0][2]) for m in eh.modules() if m.name == "particle_top")
@@ -143,21 +149,24 @@ class HyperionBuildTests(unittest.TestCase):
         self.assertAlmostEqual(float(r[0]), -float(l[0]), places=3)
         self.assertGreater(float(r[1]), hy.ROOF_Y + 10.0, "on the tower, above the roof")
 
-    def test_the_emblem_is_painted_on_both_tower_flanks_under_the_name(self) -> None:
-        emblems = [m for _, m in eh.spec().markings if m.kind == "emblem"]
-        self.assertEqual(len(emblems), 2)
+    def test_the_emblem_is_a_sharp_picture_on_both_tower_flanks_under_the_name(self) -> None:
+        """The maintainer's call: drawn by the game from its own image, not baked into the hull at the plating's texels."""
+        self.assertFalse([m for _, m in eh.spec().markings if m.kind == "emblem"], "no emblem baked into the hull")
+        emblems = [m for m in self.hp["marks"] if "image" in m]
+        self.assertEqual(sorted(m["name"] for m in emblems), ["mark_emblem_l", "mark_emblem_r"])
         name = next(m for m in self.hp["marks"] if m["name"] == "mark_name_r")
         name_at = self.authored(name["position"])
         for e in emblems:
-            at, facing = np.asarray(e.params["centre"]), np.asarray(e.params["facing"])
-            self.assertEqual(abs(float(facing[0])), 1.0, "on a flank")
+            at, normal = self.authored(e["position"]), np.asarray(e["normal"])
+            self.assertGreater(abs(float(normal[0])), 0.99, "on a flank")
             self.assertAlmostEqual(abs(float(at[0])), abs(float(name_at[0])), delta=1.0, msg="on the tower's face")
             self.assertAlmostEqual(float(at[2]), float(name_at[2]), places=3, msg="centred under the name")
-            top = float(at[1]) + 0.5 * e.params["height_m"]
-            self.assertLess(top, float(name_at[1]) - 0.5 * hy.NAME_HEIGHT_M["tower"], "below the name")
-            self.assertGreater(float(at[1]) - 0.5 * e.params["height_m"], hy.ROOF_Y, "above the bow's roof")
-            self.assertAlmostEqual(float(np.cross(e.params["up"], e.params["facing"]) @ e.params["right"]), 1.0, places=6,
-                                   msg="it reads as the name does, not mirrored")
+            self.assertAlmostEqual(e["width_m"] / e["height_m"], hd.DESIGN_W / hd.DESIGN_H, places=2)
+            self.assertLess(float(at[1]) + 0.5 * e["height_m"], float(name_at[1]) - 0.5 * hy.NAME_HEIGHT_M["tower"], "below the name")
+            self.assertGreater(float(at[1]) - 0.5 * e["height_m"], hy.ROOF_Y, "above the bow's roof")
+            self.assertTrue((self.dir / e["image"]).is_file() and (self.dir / (e["image"] + ".import")).is_file())
+            self.assertTrue((self.dir / e["glow"]["file"]).is_file(), "lit by the lamp under it")
+            self.assertGreater(e["glow"]["energy"], 0.0)
 
     def test_the_floods_lamps_stand_where_their_pools_are_thrown_from(self) -> None:
         lamps = [light for light in self.hp["lights"] if light["role"] == "flood"]
@@ -175,11 +184,11 @@ class HyperionBuildTests(unittest.TestCase):
 
     def test_a_lamp_under_each_emblem_shines_up_onto_it_and_one_lights_the_bows_name(self) -> None:
         lamps = {light["name"]: light for light in self.hp["lights"] if light["role"] == "flood"}
-        emblem = next(m for _, m in eh.spec().markings if m.kind == "emblem" and m.params["centre"][0] > 0.0)
+        emblem = next(m for m in self.hp["marks"] if m["name"] == "mark_emblem_r")
         under = lamps["flood_emblem_r"]
-        at, centre = self.authored(under["position"]), np.asarray(emblem.params["centre"])
+        at, centre = self.authored(under["position"]), self.authored(emblem["position"])
         self.assertAlmostEqual(float(at[2]), float(centre[2]), delta=0.5, msg="directly below the emblem")
-        self.assertLess(float(at[1]), float(centre[1]) - 0.5 * emblem.params["height_m"], "under it")
+        self.assertLess(float(at[1]), float(centre[1]) - 0.5 * emblem["height_m"], "under it")
         self.assertGreater(float(under["direction"][1]), 0.7, "shining up")
         self.assertTrue(hy.SPONSON_Z[1] < float(centre[2]) - 0.5 * hy.EMBLEM_WIDTH_M and float(centre[2]) + 0.5 * hy.EMBLEM_WIDTH_M < hy.TOWER_Z[1],
                         "the emblem is on the smooth flank, aft of the forward hull and the sponson")
@@ -232,9 +241,12 @@ class HyperionBuildTests(unittest.TestCase):
         nose = min(hull, key=lambda m: float(m.part.mesh.bounds()[0][2]))
         self.assertTrue(nose.name.startswith("fore_hull_"), "the maintainer's call: the face is hull grey, as the stills paint it")
         self.assertLess(float(nose.part.mesh.bounds()[1][2]) - hy.BOW_Z, 0.5, "a thin grey lip only")
-        ring = next(m for m in hull if m.name == "nose_ring")
-        self.assertEqual((round(float(ring.part.mesh.bounds()[0][2]), 2), round(float(ring.part.mesh.bounds()[1][2]), 2)), hy.NOSE_RING,
-                         "the blue ring round the nose, just behind the face")
+        ring = [m for m in hull if m.name in ("nose_ring_lip", "nose_ring")]
+        self.assertEqual((round(min(float(m.part.mesh.bounds()[0][2]) for m in ring), 2), round(max(float(m.part.mesh.bounds()[1][2]) for m in ring), 2)),
+                         hy.NOSE_RING, "the blue ring round the nose, just behind the face")
+        face = next(m for m in hull if m.name == "nose_face")
+        grey = {ea_hyperion(DEFAULT_LOOK).style.material(r).name for r in ("hull", "hull_panel")}
+        self.assertLessEqual({m.name for m in face.part.mesh.materials}, grey, "the recess's floor is grey too")
         self.assertGreater(min(float(m.part.mesh.bounds()[0][2]) for m in painted), hy.BOW_Z + 30.0, "no band near the face")
         for lo, hi in hy.FORE_BANDS:
             inside = [m for m in painted if lo - 0.01 <= float(m.part.mesh.bounds()[0][2]) and float(m.part.mesh.bounds()[1][2]) <= hi + 0.01]
@@ -266,19 +278,63 @@ class HyperionSpecTests(unittest.TestCase):
             lo, hi = m.part.mesh.bounds()
             self.assertAlmostEqual(float(lo[0]), -float(hi[0]), delta=0.05, msg=f"{m.name} is off the axis")
 
-    def test_every_antenna_rod_roots_in_the_bow_face(self) -> None:
-        """The maintainer's call: the first STL's array, every rod rooted in the face as that model roots it, none above the roof."""
-        face = np.asarray(hy.fore_outline(hy.BOW_Z))
+    def test_the_nose_face_is_recessed_inside_a_lip(self) -> None:
+        """The maintainer's call, after the V5c's nose: the face's centre set back inside a lip round its edge."""
+        hull = hy.fore_hull(ea_hyperion(DEFAULT_LOOK).style)
+        face = next(m for m in hull if m.name == "nose_face")
+        self.assertAlmostEqual(float(face.part.mesh.bounds()[1][2]), hy.BOW_Z + hy.NOSE_RECESS_M, places=3, msg="the floor, set back")
+        self.assertAlmostEqual(hy.NOSE_RECESS_M, 3.26, delta=0.05, msg="as deep as the V5c's")
+        lip = [m for m in hull if float(m.part.mesh.bounds()[1][2]) <= hy.NOSE_FLOOR_Z + 1e-6 and m.name != "nose_face"]
+        self.assertEqual(sorted(m.name for m in lip), ["fore_hull_1", "nose_ring_lip"], "grey at the face, the ring's blue behind it")
+        outline, recess = np.asarray(hy.fore_outline(hy.BOW_Z)), np.asarray(hy.nose_recess())
+        for k in (0, 1):
+            self.assertAlmostEqual(float(outline[:, k].max() - recess[:, k].max()), hy.NOSE_LIP_M, places=3, msg="the lip's width")
+        for m in lip:
+            verts = m.part.mesh.vertices
+            front = verts[np.abs(verts[:, 2] - hy.BOW_Z) < 1e-6] if m.name == "fore_hull_1" else verts
+            near_axis = front[(np.abs(front[:, 0]) < 20.0) & (np.abs(front[:, 1] + 5.0) < 10.0)]
+            self.assertEqual(len(near_axis), 0, f"{m.name} leaves the face's centre open")
+
+    def test_every_antenna_rod_roots_inside_the_recess(self) -> None:
+        """The maintainer's call: the first STL's array, lowered a little, every rod rooted in the recess's floor, none above the roof."""
+        face = np.asarray(hy.nose_recess())
         edges = list(zip(face, np.roll(face, -1, axis=0)))
         array = next(m for m in eh.modules() if m.name == "front_array")
         lo, hi = array.part.mesh.bounds()
         self.assertLessEqual(float(hi[1]), hy.ROOF_Y - 2.0, "no rod stands above the roof")
+        self.assertGreater(float(hi[2]), hy.NOSE_FLOOR_Z, "into the floor")
+        self.assertEqual(hy.ARRAY_DROP, hy.ROOF_Y - 29.2 - hy.ARRAY_LOWER_M)
         for x, y_old, stages in hy.ARRAY_RODS:
             r = max(radius for _, radius in stages)
             for dx, dy in ((r, 0.0), (-r, 0.0), (0.0, r), (0.0, -r)):
                 p = np.array([x + dx, y_old + hy.ARRAY_DROP + dy])
                 sides = [np.sign((b - a)[0] * (p - a)[1] - (b - a)[1] * (p - a)[0]) for a, b in edges]
-                self.assertTrue(all(v >= 0 for v in sides) or all(v <= 0 for v in sides), f"the rod at x={x} roots in the face")
+                self.assertTrue(all(v >= 0 for v in sides) or all(v <= 0 for v in sides), f"the rod at x={x} roots in the recess")
+
+    def test_every_gun_barrel_is_plain_smooth_metal(self) -> None:
+        """The maintainer's call: no weathering on the barrels (the turrets', the particle cannons' and the array's rods)."""
+        style = ea_hyperion(DEFAULT_LOOK).style
+        for role in ("barrel", "bore"):
+            self.assertTrue(style.material(role).smooth, role)
+        self.assertFalse(style.material("hull").smooth)
+        for name in ("pulse_deck", "particle_top", "front_array"):
+            m = next(m for m in eh.modules() if m.name == name)
+            guns = {mat.name for mat in m.part.mesh.materials} - {style.material(r).name for r in ("hull_dark", "hull_panel", "hull")}
+            self.assertTrue(guns and all(style.materials[r].smooth for r in style.materials if style.materials[r].name in guns), name)
+
+    def test_a_forward_dish_hangs_under_the_crown_saucer(self) -> None:
+        """Both STLs have it; measured off the V5c: a flat face 11.3 m in radius at 346.1 m, square to the bow."""
+        parts = {m.name: m for m in eh.modules()}
+        dish = parts["tower_dish_fwd"]
+        lo, hi = dish.part.mesh.bounds()
+        self.assertAlmostEqual(float(lo[2]), hy.DISH_FWD_Z, places=2, msg="its face forward")
+        self.assertAlmostEqual(float(hi[1] - lo[1]) / 2.0, hy.DISH_FWD_R, delta=0.1)
+        self.assertAlmostEqual(float(hi[0]), -float(lo[0]), places=3, msg="on the axis")
+        saucer = parts["tower_dish"].part.mesh.bounds()
+        self.assertLess(float(hi[1]), float(saucer[0][1]), "under the saucer")
+        self.assertGreater(float(parts["tower_dish_post"].part.mesh.bounds()[1][1]), float(saucer[0][1]), "its post reaches the saucer")
+        self.assertLess(float(parts["tower_dish_feed"].part.mesh.bounds()[0][2]), hy.DISH_FWD_Z - 9.0, "its feed ahead of it")
+        self.assertEqual({parts[n].section for n in ("tower_dish_fwd", "tower_dish_feed", "tower_dish_boom", "tower_dish_post")}, {"bridge"})
 
     def test_its_own_style_and_looks(self) -> None:
         self.assertEqual(sorted(LOOKS), ["a", "b", "c"])
