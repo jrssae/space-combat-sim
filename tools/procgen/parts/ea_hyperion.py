@@ -9,7 +9,7 @@ bands painted there instead (``ea_hyperion_fidelity.py`` cuts clear of it).
 Bow to stern:
 
 * **forward hull** (50 to 411.5 m): a box with rounded edges widening to 127 m, its floor deepening aft; a raised deck on
-  the roof sloping up from 104 m to the tower; a keel strake under it; the bow's gun clusters and torpedo tubes in its face;
+  the roof sloping up from 104 m to the tower; a keel strake under it; the bow's antenna array and torpedo tubes in its face;
   a dome turret on each flank and one on the deck;
 * **sponsons** (346 to 416.5 m): the lower hull swelling out to 179 m across ahead of the tower, two thruster bells in
   each aft face;
@@ -18,7 +18,7 @@ Bow to stern:
 * **truss** (468 to 675 m): a neck, the girder with the hangar bump (three Starfury bays a side, Q58), the lower box, the
   lower chord rising aft, the web's diagonals and the frame ahead of the module;
 * **reactor module** (675 to 725.5 m), **aft spine** (725 to 907 m) with its chord falling to the engine block;
-* **fuel tanks** (821 to 907 m): two big capsules and six small ones each side, in a frame;
+* **fuel tanks** (817.5 to 907 m): two big capsules and six small ones each side, in a frame;
 * **engine block** (907 to 964.5 m), three bells (to 1 025.39 m) and the rails over and under them.
 
 Every function returns modules already named for their damage section and side; ``assets/ea_hyperion.py`` adds the weapons,
@@ -31,6 +31,9 @@ import dataclasses
 
 import numpy as np
 
+from ..core import hull_decals
+from ..core.color import srgb_to_linear
+from ..core.textures import Marking
 from ..styles import Style
 from . import capital as cp
 from . import capital_bays as bays
@@ -40,7 +43,6 @@ from .capital_hull import HullRoles
 
 LENGTH_M = 1025.39
 BOW_Z, FORE_END_Z = 50.0, 411.5  # the forward hull's face and its square aft end
-BOW_RIM = (BOW_Z, 56.0)  # the blue rim round the bow face
 FORE_BANDS = ((95.0, 137.0), (336.0, 367.0))  # the bow band and the aft band, at the reference's grooves
 ROOF_Y = 17.2
 DECK_W, DECK_H = 29.0, 46.2  # the raised deck's half width and its top
@@ -57,7 +59,7 @@ BLOCK_Z = (907.3, 964.5)
 BLOCK_W, BLOCK_Y = 127.2, (-82.0, 60.5)
 ENGINE_Y = -12.9
 NOZZLE_XS = (-76.2, 0.0, 76.2)  # the port bell is the starboard one's twin
-NOZZLE_R = 37.0
+NOZZLE_R = 38.0
 SPONSON_Z = (346.0, 416.5)
 SPONSON_X = 89.5
 SPONSON_Y = (-25.0, -69.2)
@@ -132,12 +134,12 @@ def fore_outline(z: float) -> list[tuple[float, float]]:
 
 
 def fore_hull(s: Style) -> list[cp.Module]:
-    """The forward hull in lengths between its stations, the bow rim and the two bands painted; ahead of 250 m the bow, aft
+    """The forward hull in lengths between its stations, the two bands painted (the nose is hull grey); ahead of 250 m the bow, aft
     the magazine."""
-    stations = sorted({*(z for z, _ in HALF_W), *(z for z, _ in FLOOR_Y if z >= BOW_Z), *BOW_RIM, *(z for band in FORE_BANDS for z in band)})
+    stations = sorted({*(z for z, _ in HALF_W), *(z for z, _ in FLOOR_Y if z >= BOW_Z), *(z for band in FORE_BANDS for z in band)})
     out = []
     for k, (a, b) in enumerate(zip(stations, stations[1:], strict=False)):
-        band = _painted(a, b, (BOW_RIM, *FORE_BANDS))
+        band = _painted(a, b, FORE_BANDS)  # the nose is hull grey: no band reaches the face
         name = f"fore_band_{k + 1}" if band else f"fore_hull_{k + 1}"
         m = cs.convex(name, _ring(fore_outline(a), a) + _ring(fore_outline(b), b), s, BAND if band else HULL)
         if a <= NAME_ROOF_Z < b:
@@ -194,11 +196,14 @@ def sponson(s: Style) -> list[cp.Module]:
     top, bottom = SPONSON_Y
 
     def ring(z: float) -> list[tuple[float, float, float]]:
-        return _ring(_rounded(_lerp(z, SPONSON_PLAN), top, bottom, 8.0), z)
-    band_end = FORE_BANDS[1][1]
+        return _ring(_rounded(_lerp(z, SPONSON_PLAN), top, bottom, 8.0, n=2), z)
+    band_mid, band_end, mid = 358.0, FORE_BANDS[1][1], 390.0
     rows = [z for z, _ in SPONSON_PLAN]
-    out = [cs.convex("sponson_band", [p for z in (*[z for z in rows if z < band_end], band_end) for p in ring(z)], s, BAND),
-           cs.convex("sponson", [p for z in (band_end, *[z for z in rows if z > band_end]) for p in ring(z)], s, HULL)]
+    # In four lengths, so each collision hull keeps the rounded corners it covers.
+    out = [cs.convex("sponson_band", [p for z in rows if z <= band_mid for p in ring(z)], s, BAND),
+           cs.convex("sponson_band_aft", [p for z in (*[z for z in rows if band_mid <= z < band_end], band_end) for p in ring(z)], s, BAND),
+           cs.convex("sponson", [p for z in (band_end, *[z for z in rows if band_end < z <= mid]) for p in ring(z)], s, HULL),
+           cs.convex("sponson_aft", [p for z in rows if z >= mid for p in ring(z)], s, HULL)]
     out = [_put("magazine", m) for m in out]
     z1 = SPONSON_Z[1]
     for k, y in enumerate(THRUSTER_YS):
@@ -209,20 +214,53 @@ def sponson(s: Style) -> list[cp.Module]:
     return out
 
 
-def bow_guns(s: Style) -> cp.Module:
-    """The starboard heavy plasma cannon: a cluster of long barrels from the bow face, fixed forward (it aims by the hull).
-    A stand-in until the front array is settled with the maintainer (Q58)."""
-    barrels = (((20.75, 6.0), 1.4, 0.0), ((29.75, -6.0), 1.3, 2.0), ((20.5, -12.5), 1.2, 8.0), ((12.0, -2.0), 2.0, 14.0))
-    parts = []
-    bar, bore = s.material("barrel"), s.material("bore")
-    for k, ((x, y), r, z0) in enumerate(barrels):
-        profile = [(0.0, 0.0), (0.0, 0.55 * r), (0.6, r), (BOW_Z + 2.0 - z0, r), (BOW_Z + 2.0 - z0, 0.0)]
-        parts.append(cs.round_body(f"gun_barrel_{k + 1}", (x, y, BOW_Z + 2.0), (x, y, z0), profile, s, [bore, bar, bar, bar], sides=8,
-                                   creases={1, 2, 3}, skin=cp.SKIN_NONE))
-    gun = cs.compound("plasma_heavy_r", parts)
-    point = cp.Hardpoint("plasma_heavy_r", cp.TURRET, (22.0, -3.0, 6.0), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0),
-                         {"traverse_deg": 3.0, "elevation_deg": [-3.0, 3.0], "barrel_m": round(BOW_Z - 6.0, 3), "barrels": len(barrels)})
-    return dataclasses.replace(gun, hardpoints=(point,))
+# The front antenna array, read off the first reference STL (``EA Hyperion Class Heavy Cruiser.stl``, its face aligned to ours):
+# 12 stepped rods of staggered length, up to 94 m ahead of the bow and not symmetric, as that model has them.
+# Each is (x, y, stages); a stage is (where it starts, in that STL's metres from its nose; its radius) and runs to the next.
+ARRAY_SHIFT = 43.8  # that STL's nose-measured z less ours: the two bow faces then meet at BOW_Z
+ARRAY_DROP = ROOF_Y - 29.2  # that STL's roof is 12 m higher than ours: dropped by as much, every rod roots in our face as in its own
+ARRAY_RODS = (
+    (-28.65, 7.8, ((0.5, 0.6), (3.0, 0.95), (37.3, 1.25))),
+    (-19.25, 22.3, ((3.5, 0.8), (4.8, 1.15))),
+    (-19.15, 1.9, ((3.5, 0.8), (4.8, 1.15))),
+    (-11.65, 12.3, ((0.0, 0.4), (1.3, 0.75), (26.4, 1.15), (50.9, 2.05))),
+    (4.45, 12.25, ((54.9, 1.05), (79.6, 1.6))),
+    (10.45, 18.5, ((39.2, 1.45),)),
+    (13.9, 2.7, ((39.2, 0.6), (57.7, 1.1))),
+    (14.0, 10.2, ((59.9, 0.65), (76.1, 1.05))),
+    (22.75, 22.75, ((3.8, 0.85), (4.8, 1.15))),
+    (24.95, 2.1, ((3.8, 0.85), (4.8, 1.15))),
+    (31.05, 6.65, ((39.2, 0.35), (61.7, 0.95))),
+    (31.3, 12.85, ((29.9, 0.4), (58.9, 0.8))),
+)
+ARRAY_CANNONS = {"plasma_heavy_l": 0, "plasma_heavy_r": 9}  # the rods whose tips are the heavy plasma cannons' muzzles
+
+
+def front_array(s: Style) -> cp.Module:
+    """The bow's antenna array: thin stepped rods ahead of the face, the heavy plasma cannons' muzzles at two of their tips
+    (fixed forward, they aim by the hull)."""
+    bar = s.material("barrel")
+    parts, hit = [], []
+    for k, (x, y_old, stages) in enumerate(ARRAY_RODS):
+        y, z0 = y_old + ARRAY_DROP, stages[0][0]
+        length = BOW_Z + 1.0 - (z0 - ARRAY_SHIFT)
+        profile = [(0.0, 0.0), (0.0, stages[0][1])]
+        for (_, r_prev), (z1, r1) in zip(stages, stages[1:], strict=False):
+            profile += [(z1 - z0, r_prev), (z1 - z0, r1)]
+        profile += [(length, stages[-1][1]), (length, 0.0)]
+        parts.append(cs.round_body(f"antenna_{k + 1}", (x, y, z0 - ARRAY_SHIFT), (x, y, BOW_Z + 1.0), profile, s, bar, sides=8,
+                                   creases=set(range(1, len(profile) - 1)), skin=cp.SKIN_NONE))
+        # One tapered convex shape a rod: the bow's collision budget (64) cannot hold every step of every rod.
+        taper = [(0.0, 0.0), (0.0, stages[0][1]), (length, stages[-1][1]), (length, 0.0)]
+        hit += cs.round_body(f"antenna_{k + 1}_hit", (x, y, z0 - ARRAY_SHIFT), (x, y, BOW_Z + 1.0), taper, s, bar, sides=6).shapes
+    array = dataclasses.replace(cs.compound("front_array", parts), shapes=tuple(hit), fine=0.3)  # fine: the thin rods need dense skin samples
+    points = []
+    for name, k in ARRAY_CANNONS.items():
+        x, y_old, stages = ARRAY_RODS[k]
+        y, tip = y_old + ARRAY_DROP, stages[0][0] - ARRAY_SHIFT
+        points.append(cp.Hardpoint(name, cp.TURRET, (x, y, tip), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0),
+                                   {"traverse_deg": 3.0, "elevation_deg": [-3.0, 3.0], "barrel_m": round(BOW_Z - tip, 3), "barrels": 1}))
+    return dataclasses.replace(array, hardpoints=tuple(points))
 
 
 def particle_cannon(name: str, root: tuple[float, float, float], muzzle: tuple[float, float, float], s: Style, spread: float = 7.0,
@@ -311,7 +349,7 @@ def tower(s: Style) -> list[cp.Module]:
     side = _tower_piece("tower_slot_side_r", *slot, s, HULL, keeps=(lambda p: p[0] - w, lambda p: p[1] - back))
     out.append(_tower_piece("tower_top", slot[1], TOWER_TOP, s, HULL))
     out[-1] = dataclasses.replace(out[-1], hardpoints=(xs["tower_r"], xs["tower_l"]))
-    bay = bays.launch_bay("bay_shuttle", SHUTTLE_BAY_MOUTH, SHUTTLE_BAY_DEPTH, s, SHUTTLE_BAY_WALL, lit=True)
+    bay = bays.launch_bay("bay_shuttle", SHUTTLE_BAY_MOUTH, SHUTTLE_BAY_DEPTH, s, SHUTTLE_BAY_WALL, lit=True, rim=False, door=True)
     out.append(bay.transformed(np.diag([-1.0, 1.0, -1.0]), (0.0, SHUTTLE_BAY_Y, TOWER_Z[1])).with_params(cp.BAY, craft=SHUTTLE, capacity=SHUTTLES_PER_BAY))
     hull = s.material("hull")
     out.append(cs.round_body("tower_pedestal", (0.0, TOWER_TOP - 1.0, TOWER_DRUM_Z), (0.0, 125.0, TOWER_DRUM_Z), [(0.0, 0.0), (0.0, 14.5), (21.0, 14.5), (21.0, 0.0)],
@@ -393,7 +431,7 @@ def hangar(s: Style) -> list[cp.Module]:
     out = [_put("truss", m) for m in out]
     outward = np.array([[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])  # a bay's way out (-z) turned to +x, its width along z
     for k, z in enumerate(FURY_BAY_ZS):
-        bay = bays.launch_bay(f"bay_fury_{k + 1}_r", FURY_BAY_MOUTH, FURY_BAY_DEPTH, s, FURY_BAY_WALL, lit=True).transformed(outward, (w, FURY_BAY_Y, z))
+        bay = bays.launch_bay(f"bay_fury_{k + 1}_r", FURY_BAY_MOUTH, FURY_BAY_DEPTH, s, FURY_BAY_WALL, lit=True, rim=False, door=True).transformed(outward, (w, FURY_BAY_Y, z))
         out.append(_put("hangar_r", bay.with_params(cp.BAY, craft=FURY, capacity=STARFURIES_PER_BAY), cp.RIGHT))
     return out
 
@@ -401,7 +439,7 @@ def hangar(s: Style) -> list[cp.Module]:
 def lattice(s: Style) -> list[cp.Module]:
     """The starboard half of the frame of struts in the lower box's plane ahead of the module: two struts out from the box and
     a rail and cross member at the frame's edge."""
-    y0, y1 = 6.2, 15.8
+    y0, y1 = 6.5, 15.5
 
     def strut(name: str, a: tuple[float, float], b: tuple[float, float], half: float = 1.5) -> cp.Module:
         (za, xa), (zb, xb) = a, b
@@ -409,8 +447,11 @@ def lattice(s: Style) -> list[cp.Module]:
         nx, nz = -d[1] * half, d[0] * half
         return cs.convex(name, [(x + sx * nx, y, z + sx * nz) for z, x in (a, b) for sx in (-1.0, 1.0) for y in (y0, y1)], s, DARK)
     z1 = MODULE_Z[0] + 1.0
-    return [strut("strut_long_r", (560.0, BOX_W - 1.0), (625.0, 40.0), 2.5), strut("strut_short_r", (600.0, BOX_W - 1.0), (626.0, 30.0), 1.6),
-            cs.box("lattice_rail_r", (44.5, y0, 625.0), (50.5, y1, z1), s, DARK), cs.box("lattice_front_r", (BOX_W - 1.0, y0, 625.0), (61.0, y1, 634.0), s, DARK)]
+    # Under the frame's front a drop leads down to a lower rail running aft to the module.
+    drop = cs.convex("lattice_drop_r", [(x, y, z) for x in (37.0, 46.0) for z, y in ((625.5, y0), (633.0, y0), (640.0, -7.0), (640.0, -13.0), (633.5, -13.0))], s, DARK)
+    return [strut("strut_long_r", (560.0, BOX_W - 1.0), (625.0, 39.0), 5.0), strut("strut_short_r", (600.0, BOX_W - 1.0), (626.0, 30.0), 1.6),
+            cs.box("lattice_rail_r", (49.5, y0, 625.0), (59.5, y1, z1), s, DARK), cs.box("lattice_front_r", (BOX_W - 1.0, y0, 625.0), (61.0, y1, 634.0), s, DARK),
+            drop, cs.box("lattice_rail_low_r", (37.0, -13.0, 639.0), (46.0, -7.0, z1), s, DARK)]
 
 
 def module(s: Style) -> list[cp.Module]:
@@ -437,8 +478,8 @@ def aft_spine(s: Style) -> list[cp.Module]:
 
 
 # --- the tanks and the engines -------------------------------------------------------------------------------------------
-BIG_TANKS = (("top", 70.5, 38.0, 14.5), ("low", 70.5, -59.5, 14.0))  # x, y, radius; painted blue (the stills)
-FRAME_Z = (846.0, 856.5)
+BIG_TANKS = (("top", 70.5, 37.75, 13.75), ("low", 70.5, -60.25, 13.75))  # x, y, radius; painted blue (the stills)
+FRAME_Z = (842.5, 854.5)
 SMALL_TANKS = tuple((f"{k + 1}{tag}", x, y) for k, x in enumerate((33.3, 63.2, 93.1)) for tag, y in (("a", 0.5), ("b", -23.5)))
 
 
@@ -447,9 +488,9 @@ def tanks(s: Style) -> list[cp.Module]:
     the frame post ahead of them and the outrigger rail."""
     z1 = BLOCK_Z[0] + 1.0
     out = []
-    z0, cap = 836.0, 8.0
+    z0 = 828.0  # a long pointed nose, as the reference's
     for tag, x, y, r in BIG_TANKS:
-        nose = [(cap * (1.0 - np.cos(a)), r * np.sin(a)) for a in np.linspace(0.0, 0.5 * np.pi, 5)[1:]]
+        nose = [(dz, r * k) for dz, k in ((0.0, 0.25), (2.0, 0.38), (8.0, 0.45), (10.0, 0.67), (12.0, 0.8), (14.0, 0.89), (16.0, 0.96), (19.0, 1.0))]
         out.append(cs.round_body(f"tank_{tag}_r", (x, y, z0), (x, y, z1), [(0.0, 0.0), *nose, (z1 - z0, r), (z1 - z0, 0.0)], s, s.material("stripe"),
                                  sides=16, creases={len(nose)}))
     z0 = 854.0  # the small tanks: a slim neck ahead of the full barrel
@@ -458,14 +499,19 @@ def tanks(s: Style) -> list[cp.Module]:
         out.append(cs.round_body(f"tank_{tag}_r", (x, y, z0), (x, y, z1), profile, s, s.material("hull_panel"), sides=16, creases={1, 2, 3, 4, 5}))
         if tag.endswith("a"):  # each pair joined by a web along its necks
             out.append(cs.box(f"tank_web_{tag[:-1]}_r", (x - 3.0, SMALL_TANKS[1][2], z0 + 1.0), (x + 3.0, y, z0 + 12.0), s, DARK))
-    for tag, (ya, yb) in (("top", (38.5, 47.0)), ("low", (-70.0, -61.5))):
-        out.append(cs.box(f"tank_plate_{tag}_r", (39.5, ya, FRAME_Z[1]), (101.5, yb, z1), s, DARK))
-    out.append(cs.box("tank_post_r", (74.2, -63.0, 821.0), (83.8, 39.0, 827.0), s, DARK))
+    # Each plate thickens toward the tanks' middle at its front, where it meets the frame.
+    for tag, (inner, outer, foot) in (("top", (39.0, 48.0, 28.5)), ("low", (-61.5, -71.0, -52.0))):
+        lip = [(x, y, z) for x in (39.5, 101.5) for z, y in ((FRAME_Z[1], outer), (FRAME_Z[1], foot), (868.0, inner), (868.0, outer))]
+        out.append(cs.convex(f"tank_plate_lip_{tag}_r", lip, s, DARK))
+        out.append(cs.box(f"tank_plate_{tag}_r", (39.5, min(inner, outer), 867.5), (101.5, max(inner, outer), z1), s, DARK))
+    out.append(cs.box("tank_post_r", (75.0, -61.0, 817.5), (82.5, 39.5, 826.5), s, DARK))
     # The frame across the tanks' noses: two posts and a bar out from the spine's lower box.
     for k, (xa, xb) in enumerate(((39.5, 57.0), (84.0, 101.5))):
         out.append(cs.box(f"tank_frame_post_{k + 1}_r", (xa, -57.5, FRAME_Z[0]), (xb, 38.5, FRAME_Z[1]), s, DARK))
-    out.append(cs.box("tank_frame_bar_r", (BOX_W - 1.0, 6.5, FRAME_Z[0]), (105.5, 19.5, FRAME_Z[1]), s, DARK))
-    out.append(cs.box("tank_outrigger_r", (113.0, 6.5, 859.0), (123.0, 18.5, z1), s, DARK))
+    out.append(cs.box("tank_frame_bar_r", (BOX_W - 1.0, 6.5, 848.0), (112.0, 19.5, 858.5), s, DARK))
+    brace = [(x, y, z) for z, xs, ys in ((FRAME_Z[1], (98.0, 114.0), (0.5, 18.5)), (866.0, (106.5, 122.0), (6.0, 18.5))) for x in xs for y in ys]
+    out.append(cs.convex("tank_outrigger_brace_r", brace, s, DARK))
+    out.append(cs.box("tank_outrigger_r", (112.0, 6.0, 865.0), (122.0, 18.5, z1), s, DARK))
     return [_put("fuel_r", m, cp.RIGHT) for m in out]
 
 
@@ -488,8 +534,8 @@ def engines(s: Style) -> list[cp.Module]:
         out.append(_put("engines", cs.convex(f"engine_rail_{tag}", pts, s, PANEL)))
     dark, metal, glow = s.material("hull_dark"), s.material("nozzle"), s.material("nozzle_throat")
     at = lambda z: z - (face - 1.0)  # noqa: E731 - the profile is written at the ship's z
-    profile = [(0.0, 0.0), (0.0, 23.0), (at(975.0), 28.0), (at(991.0), 30.9), (at(1005.0), 33.9), (at(LENGTH_M), NOZZLE_R),
-               (at(LENGTH_M), 24.0), (at(LENGTH_M) - 25.0, 18.5), (at(LENGTH_M) - 25.0, 0.0)]  # the bore, its wall thick
+    profile = [(0.0, 0.0), (0.0, 20.5), (at(975.0), 27.8), (at(990.0), 31.5), (at(1005.0), 35.0), (at(LENGTH_M), NOZZLE_R),
+               (at(LENGTH_M), 25.3), (at(1013.0), 22.5), (at(1013.0), 0.0)]  # a shallow bore: a deeper one costs more collision than the budget
     mats = [dark, metal, metal, metal, metal, glow, glow, glow]
     for name, part, x, side, pipes in (("engine_centre", "engine_bell", NOZZLE_XS[1], cp.CENTRE, ((16.0, 6.0), (-38.0, 6.0))),
                                        ("engine_r", "engine_bell_r", NOZZLE_XS[2], cp.RIGHT, ((33.5, 7.5), (-59.0, 7.5)))):
@@ -530,7 +576,7 @@ NAME_BLUE = (0.141, 0.322, 0.706)  # the bands' royal blue (sRGB), as the show's
 NAME_LIGHT = (0.86, 0.87, 0.88)  # the stills' light lettering across the bow's roof
 NAME_HEIGHT_M = {"roof": 10.0, "tower": 8.0}
 NAME_TOWER_Y = 40.0  # just under the tower's upper band
-NAME_ROOF_Z = 75.0  # between the bow rim and the bow band
+NAME_ROOF_Z = 75.0  # between the bow face and the bow band
 
 
 def name_marks() -> dict[str, cp.Hardpoint]:
@@ -546,6 +592,60 @@ def name_marks() -> dict[str, cp.Hardpoint]:
             "tower_l": mark("mark_name_l", (-at[0], at[1], at[2]), (-1.0, 0.0, 0.0), (0.0, 1.0, 0.0), "tower", NAME_BLUE)}
 
 
+# The Earth Alliance emblem (Q64, ``core/hull_decals.py``), painted into the hull's maps on each flank of the tower under the name,
+# as the side still (``references/ships/Hyperion/Pasted image.png``) sets it: centred under HYPERION, as wide as the name is long.
+EMBLEM_BLUE, EMBLEM_YELLOW = (8, 57, 148), (255, 206, 0)  # the reference's colours (sRGB)
+EMBLEM_WIDTH_M = 46.0
+EMBLEM_HEIGHT_M = EMBLEM_WIDTH_M * hull_decals.DESIGN_H / hull_decals.DESIGN_W
+EMBLEM_Y = NAME_TOWER_Y - 0.5 * NAME_HEIGHT_M["tower"] - 2.0 - 0.5 * EMBLEM_HEIGHT_M
+
+
+def _linear(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
+    return tuple(float(c) for c in srgb_to_linear(np.asarray(rgb, dtype=float) / 255.0))  # type: ignore[return-value]
+
+
+def emblems() -> list[tuple[str, Marking]]:
+    """The emblem on each flank of the tower, by the module that carries it; it reads with the name (toward the bow on the starboard
+    flank, the stern on the port)."""
+    at = _tower_flank(EMBLEM_Y, 0.5 * (_lerp(NAME_TOWER_Y, TOWER_FRONT) + TOWER_Z[1]))
+    return [("tower_6", Marking.emblem("", (sx * at[0], at[1], at[2]), (0.0, 0.0, -float(sx)), (0.0, 1.0, 0.0), (float(sx), 0.0, 0.0), EMBLEM_HEIGHT_M,
+                                       _linear(EMBLEM_BLUE), _linear(EMBLEM_YELLOW))) for sx in (1, -1)]
+
+
+@dataclasses.dataclass(frozen=True)
+class Flood:
+    """A hull-mounted flood lamp (starboard; the port one is its mirror) and the pool it throws: the warm lamps on the tower's roof
+    that light the bridge's pedestal and drum (the show's stills light the tower's crown warm), and the lamps on the bow's roof
+    that light the tower's flanks from below, the pool brightest under the emblem and fading up over it (the side still)."""
+
+    name: str
+    lamp: tuple[float, float, float]
+    aim: tuple[float, float, float]
+    outer_deg: float
+    inner_deg: float
+    range_m: float
+    colour: tuple[int, int, int]
+    strength: float
+
+    def direction(self, sx: float = 1.0) -> np.ndarray:
+        d = np.subtract(self.aim, self.lamp) * (sx, 1.0, 1.0)
+        return d / np.linalg.norm(d)
+
+
+FLOODS = (
+    Flood("flood_crown", (17.0, TOWER_TOP + 0.5, 390.0), (0.0, 130.0, TOWER_DRUM_Z), 24.0, 10.0, 95.0, (255, 226, 194), 0.9),
+    Flood("flood_name", (50.0, ROOF_Y + 0.3, 398.0), (_lerp(22.0, TOWER_W), 22.0, 410.0), 45.0, 20.0, 55.0, (244, 240, 232), 0.75),
+)
+
+BOW_LAMP = (27.0, 10.0, BOW_Z)  # the white flood lamp on the bow's face, between the array's rods (no pool: it lights the rods)
+
+
+def flood_pools() -> list[tuple[str, Marking]]:
+    """Each flood's pool of light baked into the hull's glow, both sides."""
+    return [("tower_6", Marking.flood("", (sx * f.lamp[0], f.lamp[1], f.lamp[2]), tuple(f.direction(sx)), f.outer_deg, f.inner_deg, f.range_m,
+                                      _linear(f.colour), f.strength)) for f in FLOODS for sx in (1.0, -1.0)]
+
+
 NUMBER_INK = (0.07, 0.10, 0.24)  # the show's hull number is dark slate blue, darker than the bands
 NUMBER_HEIGHT_M = 26.0
 NUMBER_Z = 168.0  # just aft of the bow band, ahead of the flank dome turret (263 m on), as the stills paint it
@@ -559,8 +659,8 @@ def hull_numbers() -> tuple[cp.Hardpoint, cp.Hardpoint]:
                                     colour=NUMBER_INK, text="number") for name, sx in (("mark_number_r", 1), ("mark_number_l", -1)))  # type: ignore[return-value]
 
 
-__all__ = ["BLOCK_Y", "BLOCK_Z", "BOW_RIM", "BOW_Z", "ROOF_Y", "DECK_H", "DECK_Z", "ENGINE_Y", "FIN_BOTTOM", "FORE_BANDS", "FORE_END_Z", "FURY", "FURY_BAY_ZS",
+__all__ = ["BLOCK_Y", "BLOCK_Z", "BOW_Z", "ROOF_Y", "DECK_H", "DECK_Z", "ENGINE_Y", "FIN_BOTTOM", "FORE_BANDS", "FORE_END_Z", "FURY", "FURY_BAY_ZS",
            "LENGTH_M", "MODULE_Y", "MODULE_Z", "NOZZLE_XS", "NUMBER_Z", "SHUTTLE", "SHUTTLES_PER_BAY", "SPONSON_X", "SPONSON_Z", "STARFURIES_PER_BAY",
-           "TOWER_DRUM_Y", "TOWER_DRUM_Z", "TOWER_TOP", "TOWER_Z", "aft_spine", "bow_guns", "deck", "dome_turret", "engines", "fore_hull", "fore_outline",
-           "hangar", "hull_numbers", "keel", "lattice", "module", "name_marks", "particle_cannon", "renegade_xs", "sponson", "tanks", "tower",
+           "TOWER_DRUM_Y", "TOWER_DRUM_Z", "TOWER_TOP", "TOWER_Z", "aft_spine", "front_array", "deck", "dome_turret", "engines", "fore_hull", "fore_outline",
+           "BOW_LAMP", "FLOODS", "Flood", "emblems", "flood_pools", "hangar", "hull_numbers", "keel", "lattice", "module", "name_marks", "particle_cannon", "renegade_xs", "sponson", "tanks", "tower",
            "tower_plan", "truss"]

@@ -508,6 +508,16 @@ leaning lower panel (`parts/ea_omega.shield_mark`, 40 m tall, a fifth of the way
 atlas carry it; `CapitalShip` stands one `HullMarkNode` quad (`HullMarks` picks the letter from the display name, skipping the
 faction's all-capitals prefix) a little off each face when it is created, so any hull with a name list and marks reuses it.
 
+**Hull decals, floods and bay doors (M10-T22, the Hyperion; off unless a hull asks).** A `CapitalSpec` may carry `markings`
+(module name, `core/textures.Marking`) baked into its hull's maps: `Marking.emblem`, the Earth Alliance emblem drawn in code
+(`core/hull_decals.py`, close to the maintainer's reference, no image file; Q64), and `Marking.flood`, a flood lamp's pool of
+light baked as glow, so a lit pool costs the GPU nothing (the lamp itself is a `flood` light fitting). `launch_bay(rim=False)`
+keeps a lit bay's red inside the hall; `launch_bay(door=True)` builds a roll housing over the mouth and guide rails, and leaves a
+`door` hardpoint (`hardpoints.doors[]`: the shut shutter's centre, `forward`, `up`, `size_m`, `slats`), with rails and a sill that
+close the gap round it. `CapitalShip` draws each door as slats on a dark backing plate, so a shut door shows no light
+(`BayDoorNode`, rules in `BayDoors`), shut by default; `set_bay_door(bay, open)` winds it up into the housing (T17's hook; the
+console's `capital doors open|close[:<bay>]`).
+
 Sheets (gitignored, `references/screenshots/M10-T21 Omega/`): `look_sheet.png` with its shots in `look_sheet/` (from 50 m,
 1 km, 10 km and 100 km, the drum in the low texture set, the lit bays from 60 m and into one from 40 m, lit and back-lit), made
 with `scripts/model_sheet.sh`; `option_sheet.png` and `section_compare.png` from stage 1. At 100 km the hull is under a pixel.

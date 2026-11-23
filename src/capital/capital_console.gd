@@ -6,7 +6,7 @@ extends RefCounted
 
 const PROVIDER: StringName = &"capital"
 const ACTIONS: Array[StringName] = [&"info", &"list", &"spawn", &"helm", &"jump", &"focus", &"sections", &"damage",
-		&"disable", &"scuttle", &"hulks"]
+		&"disable", &"scuttle", &"hulks", &"doors"]
 ## How far ahead of the player `capital spawn` places a ship, m, unless told.
 const SPAWN_AHEAD_M: float = 2000.0
 
@@ -63,7 +63,7 @@ func register() -> void:
 				"doc": "Wall-clock cost of the last tick's capital flight, us (a readout)"},
 	}), flight)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Capital ships (M10-T07): info, list, spawn <type[:faction]> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>, disable, scuttle, hulks",
+			"Capital ships (M10-T07): info, list, spawn <type[:faction]> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>, disable, scuttle, hulks, doors <open|close>[:<bay>]",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"a"),
 					ConsoleArg.float_optional(&"b", null)]), _cmd, flight)
 
@@ -95,6 +95,8 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 			return _scuttle()
 		&"hulks":
 			return _hulks()
+		&"doors":
+			return _doors(a)
 	var ship: CapitalShip = _focused()
 	if ship == null:
 		return ConsoleResult.line("no capital ships")
@@ -168,6 +170,26 @@ func _scuttle() -> ConsoleResult:
 	if not ship.scuttle():
 		return ConsoleResult.failure("capital scuttle: %s is already disabled or destroyed" % who)
 	return ConsoleResult.line("%s scuttled" % who)
+
+
+# `doors open|close[:<bay>]`: rolls the focused ship's bay doors (all of them, or one bay's); `doors` alone lists their state.
+func _doors(spec: String) -> ConsoleResult:
+	var ship: CapitalShip = _focused()
+	if ship == null:
+		return ConsoleResult.failure("capital doors: no capital ship")
+	var parts: PackedStringArray = spec.split(":")
+	var verb: String = parts[0]
+	if verb != "open" and verb != "close":
+		var states: PackedStringArray = []
+		for bay: String in ship.bay_doors:
+			states.append("%s %s" % [bay, "open" if ship.bay_door_open(bay) else "shut"])
+		return ConsoleResult.line("; ".join(states) if not states.is_empty() else "no bay doors")
+	var bays: Array = [parts[1]] if parts.size() > 1 else ship.bay_doors.keys()
+	var moved: int = 0
+	for bay: Variant in bays:
+		if ship.set_bay_door(str(bay), verb == "open"):
+			moved += 1
+	return ConsoleResult.line("%d doors %s" % [moved, "opening" if verb == "open" else "closing"]) if moved > 0 else ConsoleResult.failure("capital doors: no such bay")
 
 
 # Lists the hulks, oldest first.

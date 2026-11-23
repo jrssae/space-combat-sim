@@ -175,3 +175,24 @@ func test_it_takes_fire_on_its_sections_and_dies_by_the_plan() -> void:
 	assert_lt(main.director.last_blast_position.distance_to(cap.global_position), 1.0, "its blast where it died")
 	for section: String in names:
 		assert_not_null(cap.chunk_mesh(section), "a break-up chunk for %s (T11's plan)" % section)
+
+
+func test_its_bay_doors_are_shut_and_roll_open_on_command() -> void:
+	var cap: CapitalShip = CapitalShip.create(TYPE, Factions.EARTH_ALLIANCE, "EAS Hyperion", main.world.rest_velocity())
+	assert_not_null(cap)
+	if cap == null:
+		return
+	main.world.add_child(cap)
+	assert_eq(cap.bay_doors.size(), 7, "a door for each of the six Starfury bays and the shuttle bay")
+	for bay: String in cap.bay_doors:
+		assert_false(cap.bay_door_open(bay), "%s is shut when idle" % bay)
+	assert_true(cap.set_bay_door("bay_shuttle", true, true))
+	assert_true(cap.bay_door_open("bay_shuttle"))
+	assert_false(cap.bay_door_open("bay_fury_1_r"), "the others stay shut")
+	assert_true(cap.set_bay_door("bay_shuttle", false, true))
+	assert_false(cap.bay_door_open("bay_shuttle"))
+	assert_false(cap.set_bay_door("bay_nowhere", true), "an unknown bay has no door")
+	DebugConsole.registry.execute_tokens(["capital", "spawn", String(TYPE), "4000"])
+	var result: ConsoleResult = DebugConsole.registry.execute_tokens(["capital", "doors", "open"])
+	assert_true(result.ok, result.error)
+	assert_string_contains(DebugConsole.registry.execute_tokens(["capital", "doors"]).text(), "open")

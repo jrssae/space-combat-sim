@@ -12,7 +12,11 @@ open end (``hull_section(caps=...)``). The hull's own faces are never cut.
 A **lit** bay (``launch_bay(lit=True)``; every Earth Alliance hull's, as Babylon 5's docking bay) keeps the hull's paint on its
 frame and glows red: a band round the mouth, rings of light strips down a faintly red hall, guide strips on the deck, a lamp at each
 corner of the mouth and a ``bay`` light hardpoint in the hall's mouth for the game's light rig. Its style carries
-:data:`BAY_LIGHT_ROLES` (``styles/ea_capital.bay_light_materials``).
+:data:`BAY_LIGHT_ROLES` (``styles/ea_capital.bay_light_materials``). ``rim=False`` keeps the red inside the hall (the Hyperion's).
+
+A bay with a **door** (``door=True``, M10-T22) has a roll-up shutter: a housing over the mouth and guide rails down its sides are
+built here; the shutter itself is a ``door`` hardpoint (``hardpoints.doors[]``) the game draws as slats, shut until a craft
+launches or docks, when it winds up into the housing.
 """
 
 from __future__ import annotations
@@ -24,7 +28,7 @@ import numpy as np
 from ..core import collision as col
 from ..core.geometry import Mesh, box, lathe
 from ..styles import Style
-from .capital import BAY, LIGHT, SKIN_FITTING, TUBE, Hardpoint, Module, module
+from .capital import BAY, DOOR, LIGHT, SKIN_FITTING, TUBE, Hardpoint, Module, module
 from .raider_carrier import flat
 from .solids import box_solid, difference
 
@@ -52,10 +56,12 @@ def _shell(w: float, h: float, z0: float, z1: float, material, inward: bool, bac
     return out
 
 
-def launch_bay(name: str, mouth_m: tuple[float, float], depth_m: float, style: Style, wall_m: float = 1.5, lit: bool = False) -> Module:
+def launch_bay(name: str, mouth_m: tuple[float, float], depth_m: float, style: Style, wall_m: float = 1.5, lit: bool = False,
+               rim: bool = True, door: bool = False) -> Module:
     """A launch bay: a housing ``wall_m`` thick round a hall ``mouth_m`` wide and high and ``depth_m`` deep, open at -z,
-    the hall dark with a lit deck (or, ``lit``, in the hull's paint and red light). A craft starts at the hall's middle, a
-    third of its height above the deck."""
+    the hall dark with a lit deck (or, ``lit``, in the hull's paint and red light; ``rim=False`` leaves the mouth's outer band and corner
+    lamps off, the red staying inside; ``door`` adds a roll-up door: its housing over the mouth and a door hardpoint the game draws as
+    a shutter). A craft starts at the hall's middle, a third of its height above the deck."""
     w, h = mouth_m
     if w <= 0.0 or h <= 0.0 or depth_m <= 0.0 or wall_m <= 0.0:
         raise ValueError(f"launch bay {name!r} needs a mouth, a depth and a wall")
@@ -83,15 +89,45 @@ def launch_bay(name: str, mouth_m: tuple[float, float], depth_m: float, style: S
                         {EXIT: (0.0, -h / 6.0, 0.0), "mouth_m": [round(w, 3), round(h, 3)], "depth_m": round(depth_m, 3)})]
     glow: list[Mesh] = []
     if lit:
-        glow = _bay_glow(w, h, depth_m, wall_m, style)
+        glow = _bay_glow(w, h, depth_m, wall_m, style, rim)
         red = style.material("bay_light").emissive
         points.append(Hardpoint(f"{name}_light", LIGHT, (0.0, 0.0, 0.2 * depth_m), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0),
                                 {"role": BAY_LIGHT_ROLE, "colour": [round(float(c), 4) for c in red], "range_m": round(2.0 * (w + h), 2)}))
+    shutter: list[Mesh] = []
+    if door:
+        points.append(door_point(name, w, h))
+        shutter = _door_housing(w, h, wall_m, style)
     solid = difference(box_solid((ow, oh, depth_m + wall_m), (0.0, 0.0, mid_z)), box_solid((w, h, depth_m + 1.0), (0.0, 0.0, 0.5 * depth_m - 0.5)))
-    return module(name, Mesh.concatenate([*outer, *hall, deck, *frame, *glow]), shapes, points, solid=solid, skin=SKIN_FITTING)
+    return module(name, Mesh.concatenate([*outer, *hall, deck, *frame, *glow, *shutter]), shapes, points, solid=solid, skin=SKIN_FITTING)
 
 
-def _bay_glow(w: float, h: float, depth_m: float, wall_m: float, style: Style) -> list[Mesh]:
+DOOR_GAP_M = 0.3  # the shutter's plane, this far out from the frame's face
+DOOR_THICK_M = 0.2
+RAIL_M = 0.4  # the guide rails' width each side of the mouth
+SLAT_M = 0.9  # about one slat a metre of mouth
+
+
+def door_point(name: str, w: float, h: float) -> Hardpoint:
+    """A bay's roll-up door: a shutter of slats over the mouth, its top inside the roll housing; the game draws the slats and
+    winds them up into the housing to open it. ``position`` is the shut shutter's centre, ``up`` the way it rolls."""
+    return Hardpoint(f"{name}_door", DOOR, (0.0, -0.05, -DOOR_GAP_M), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0),
+                     {"size_m": [round(w + RAIL_M, 3), round(h + 0.1, 3), DOOR_THICK_M], "slats": max(4, round(h / SLAT_M))})
+
+
+def _door_housing(w: float, h: float, wall_m: float, style: Style) -> list[Mesh]:
+    """The roll housing over the mouth, which the shutter winds up into, the guide rails it runs down and the sill it shuts on:
+    together they close the gap between the shutter and the frame, so no light from the hall shows round a shut door."""
+    x, y = 0.5 * w, 0.5 * h
+    depth = DOOR_GAP_M + 0.6
+    tall = 0.6 + 0.16 * h
+    housing = box((w + 2.0 * wall_m + 0.4, tall, depth), style.material("hull_panel"), (0.0, y - DOOR_GAP_M + 0.5 * tall, -0.5 * depth))
+    rails = [box((RAIL_M, h, DOOR_GAP_M + 0.25), style.material("hull_dark"), (sx * (x + 0.5 * RAIL_M), 0.0, -0.5 * (DOOR_GAP_M + 0.25)))
+             for sx in (-1.0, 1.0)]
+    sill = box((w + 2.0 * RAIL_M, 0.4, DOOR_GAP_M + 0.25), style.material("hull_dark"), (0.0, -y - 0.3, -0.5 * (DOOR_GAP_M + 0.25)))
+    return [housing, *rails, sill]
+
+
+def _bay_glow(w: float, h: float, depth_m: float, wall_m: float, style: Style, rim: bool = True) -> list[Mesh]:
     """A lit bay's red light, so the mouth reads as an EA hangar from far off and the hall glows red up close."""
     x, y = 0.5 * w, 0.5 * h
     lift = 0.04  # a hair off the surface it lies on
@@ -99,8 +135,9 @@ def _bay_glow(w: float, h: float, depth_m: float, wall_m: float, style: Style) -
     # The band round the mouth, on the frame's face just outside the opening.
     a, b = (x, y), (x + BAND_M, y + BAND_M)
     band = style.material("bay_light")
-    for p, q, r, s in (((-b[0], -b[1]), (b[0], -b[1]), (a[0], -a[1]), (-a[0], -a[1])), ((b[0], -b[1]), (b[0], b[1]), (a[0], a[1]), (a[0], -a[1])),
-                       ((b[0], b[1]), (-b[0], b[1]), (-a[0], a[1]), (a[0], a[1])), ((-b[0], b[1]), (-b[0], -b[1]), (-a[0], -a[1]), (-a[0], a[1]))):
+    quads = (((-b[0], -b[1]), (b[0], -b[1]), (a[0], -a[1]), (-a[0], -a[1])), ((b[0], -b[1]), (b[0], b[1]), (a[0], a[1]), (a[0], -a[1])),
+             ((b[0], b[1]), (-b[0], b[1]), (-a[0], a[1]), (a[0], a[1])), ((-b[0], b[1]), (-b[0], -b[1]), (-a[0], -a[1]), (-a[0], a[1])))
+    for p, q, r, s in quads if rim else ():
         out.append(flat([(*p, -lift), (*q, -lift), (*r, -lift), (*s, -lift)], band, (0.0, 0.0, 1.0)))
     # Rings of strips round the hall's walls and roof, the first at the mouth, the deeper ones dimmer.
     for k, f in enumerate(RINGS):
@@ -118,7 +155,7 @@ def _bay_glow(w: float, h: float, depth_m: float, wall_m: float, style: Style) -
         out.append(flat([(u0, -y + 0.08, 0.05 * depth_m), (u1, -y + 0.08, 0.05 * depth_m), (u1, -y + 0.08, 0.95 * depth_m),
                          (u0, -y + 0.08, 0.95 * depth_m)], deep, (0.0, -h, 0.5 * depth_m)))
     lamp = min(1.2, 0.8 * wall_m)
-    for sx in (-1.0, 1.0):
+    for sx in (-1.0, 1.0) if rim else ():
         for sy in (-1.0, 1.0):
             out.append(box((lamp, lamp, 0.5 * lamp), style.material("bay_lamp"), (sx * (x + 0.5 * wall_m), sy * (y + 0.5 * wall_m), -0.25 * lamp)))
     return out

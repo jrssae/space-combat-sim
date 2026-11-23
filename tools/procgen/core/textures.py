@@ -19,6 +19,7 @@ from typing import Any
 
 import numpy as np
 
+from . import hull_decals
 from .color import linear_to_srgb, srgb_to_linear
 from .geometry import Material, Mesh, unit
 from .raster import AtlasBuffers
@@ -97,6 +98,9 @@ def glyph_strokes(ch: str) -> tuple[tuple[tuple[float, float], ...], ...]:
 
 
 # --- markings ---------------------------------------------------------------------------------
+FLOOD_GREY = 0.35  # the plating's albedo (linear) a flood's pool shows at its full colour
+
+
 @dataclass(frozen=True)
 class Marking:
     """One thing painted onto a part in world space: a band round an axis, stencilled text or a flat decal on a facing
@@ -155,6 +159,25 @@ class Marking:
                                                         "pitch_m": (float(pitch_m[0]), float(pitch_m[1])),
                                                         "window_m": (float(window_m[0]), float(window_m[1])),
                                                         "strength": float(strength), "lit": float(lit)})
+
+    @staticmethod
+    def emblem(part: str, centre: Sequence[float], right: Sequence[float], up: Sequence[float], facing: Sequence[float], height_m: float,
+               colour: Vec3, trim: Vec3, depth_m: float = 2.0) -> Marking:
+        """The Earth Alliance emblem (``core/hull_decals.py``) ``height_m`` tall, its body ``colour`` and its border and bars ``trim``,
+        on the side facing ``facing`` within ``depth_m`` of the face through ``centre``."""
+        return Marking("emblem", part, tuple(colour), {"centre": tuple(centre), "right": tuple(unit(np.asarray(right, dtype=float))),
+                                                       "up": tuple(unit(np.asarray(up, dtype=float))),
+                                                       "facing": tuple(unit(np.asarray(facing, dtype=float))), "height_m": float(height_m),
+                                                       "trim": tuple(trim), "depth_m": float(depth_m),
+                                                       "reach_m": 0.5 * float(height_m) * hull_decals.DESIGN_W / hull_decals.DESIGN_H + depth_m})
+
+    @staticmethod
+    def flood(part: str, lamp: Sequence[float], direction: Sequence[float], outer_deg: float, inner_deg: float, range_m: float, colour: Vec3,
+              strength: float) -> Marking:
+        """A flood's pool of light (``core/hull_decals.flood_pool``) baked as glow: a lamp at ``lamp`` shining along ``direction``."""
+        return Marking("flood", part, tuple(colour), {"centre": tuple(lamp), "direction": tuple(unit(np.asarray(direction, dtype=float))),
+                                                      "outer_deg": float(outer_deg), "inner_deg": float(inner_deg), "range_m": float(range_m),
+                                                      "strength": float(strength), "reach_m": float(range_m)})
 
     @staticmethod
     def paint(part: str, colour: Vec3, cover: Callable[[np.ndarray, np.ndarray], np.ndarray]) -> Marking:
@@ -819,6 +842,9 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
             continue
         sel = np.ones(n, dtype=bool) if not marking.part else part == names.index(marking.part)
         sel &= ~glass
+        if "reach_m" in marking.params:  # a local decal: only the texels in its box, so a big atlas is not copied whole
+            for axis in range(3):
+                sel &= np.abs(pos[:, axis] - marking.params["centre"][axis]) <= marking.params["reach_m"]
         if not sel.any():
             continue
         p = pos[sel]
@@ -848,6 +874,23 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
             window_strength[rows] = np.where(glow > 0.0, q["strength"], window_strength[rows])
             colour = np.array([0.018, 0.02, 0.024])  # dark glass where a window is unlit, and round the glow where it is
             roughness[sel] = roughness[sel] * (1.0 - cover) + 0.15 * cover
+        elif marking.kind == "emblem":
+            facing = np.asarray(q["facing"])
+            d = p - np.asarray(q["centre"])
+            near = np.clip((nrm[sel] @ facing - 0.3) / 0.2, 0.0, 1.0) * (np.abs(d @ facing) < q["depth_m"])
+            uv = np.stack([d @ np.asarray(q["right"]), d @ np.asarray(q["up"])], axis=1)
+            body, trim = hull_decals.emblem(uv, q["height_m"], soft)
+            body, trim = body * near, trim * near
+            cover = body + trim
+            colour = (body[:, None] * colour + trim[:, None] * np.asarray(q["trim"])) / np.maximum(cover, 1e-6)[:, None]
+        elif marking.kind == "flood":
+            glow = hull_decals.flood_pool(p, nrm[sel], np.asarray(q["centre"]), np.asarray(q["direction"]), q["outer_deg"], q["inner_deg"],
+                                          q["range_m"])
+            rows = np.flatnonzero(sel)
+            # Lit paint, not a glow over it: the pool takes the colour of what it lands on, so an emblem in it keeps its blue.
+            lit = np.clip(albedo[sel] / FLOOD_GREY, 0.0, 1.0)
+            window_glow[rows] = np.maximum(window_glow[rows], glow[:, None] * colour * lit)
+            window_strength[rows] = np.where(glow > 0.0, np.maximum(q["strength"], window_strength[rows]), window_strength[rows])
         elif marking.kind == "soot":
             direction = np.asarray(q["direction"])
             d = p - np.asarray(q["exit"])
@@ -868,9 +911,9 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         scale = np.where(surface_strength > 0.0, strength / np.maximum(surface_strength, 1e-9), 0.0)
         window_scale = np.where(surface_strength > 0.0, window_strength / np.maximum(surface_strength, 1e-9), 0.0)
         glow = np.clip(np.maximum(emissive * scale[:, None], window_glow * window_scale[:, None]), 0.0, 1.0)
-        emissive_map = np.zeros((size, size, 3))
-        emissive_map[idx] = glow
-        return _to8(linear_to_srgb(emissive_map))
+        emissive_map8 = np.zeros((size, size, 3), dtype=np.uint8)  # an empty texel is 0 either way; only the filled ones are converted
+        emissive_map8[idx] = _to8(linear_to_srgb(glow))
+        return emissive_map8
 
     emissive_map8 = _kept(memo, ("emissive", seed), glow_map)  # made now so its per-texel inputs can go
     del emissive, strength, window_glow, window_strength
@@ -929,7 +972,7 @@ def surface_emissive_strength(materials: Sequence[Material], glass: bool, markin
     holds each glow's share of it)."""
     strengths = [m.emissive_strength for m in materials if (m.transmittance > 0.0) == glass]
     if not glass:
-        strengths += [float(m.params["strength"]) for m in markings if m.kind == "windows"]
+        strengths += [float(m.params["strength"]) for m in markings if m.kind in ("windows", "flood")]
     return max(strengths) if strengths else 0.0
 
 

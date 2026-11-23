@@ -37,10 +37,10 @@ LONE = "a"  # as ``core/civilian.py``: a part one side has and the other has not
 AREAL_DENSITY_KG_M2 = 260.0  # the strike carrier's: a skin's mass by its area (informational; the ShipSpec rules)
 
 TURRET, BEAM, INTERCEPTOR, MISSILE, MINE = "turret", "beam", "interceptor", "missile", "mine"
-BAY, TUBE, ENGINE, LIGHT, MARK = "bay", "tube", "engine", "light", "mark"
+BAY, TUBE, ENGINE, LIGHT, MARK, DOOR = "bay", "tube", "engine", "light", "mark", "door"
 WEAPON_KINDS = (TURRET, BEAM, INTERCEPTOR, MISSILE, MINE)
 LAUNCH_KINDS = (BAY, TUBE)
-HARDPOINT_KINDS = (*WEAPON_KINDS, *LAUNCH_KINDS, ENGINE, LIGHT, MARK)
+HARDPOINT_KINDS = (*WEAPON_KINDS, *LAUNCH_KINDS, ENGINE, LIGHT, MARK, DOOR)
 
 # Hardpoint parameters that are points in the module's frame: they move with it (a bay's mouth).
 POINT_PARAMS = ("exit",)

@@ -6,16 +6,20 @@ hull and the command tower. The ``stripe`` role is the band.
 
 Look A is the maintainer's (2026-11-21): the show's light grey and royal blue, plated in the fleet's standard mosaic
 (``ea_capital.fleet_mosaic``) rather than the show's long planks; its colours re-read from the stills in
-``references/ships/Hyperion/`` (Q58): a warmer grey and a deeper, slightly violet blue. B and C stay from the option sheet, each with its own plating
-(:data:`PLATING`). ``livery`` repaints roles as ``ea_capital``'s does.
+``references/ships/Hyperion/`` (Q58): a neutral light grey and a saturated royal blue, since the game's warm key light turns
+a warm grey beige and a violet-leaning blue dull. B and C stay from the option sheet, each with its own plating (:data:`PLATING`). ``livery`` repaints roles as ``ea_capital``'s does.
 """
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-from .capital import CapitalStyle, PanelMosaic
+import numpy as np
+
+from ..core.seams import Feature, Plates, SeamLayout, _keyed_hash
+from .capital import CapitalStyle, PanelMosaic, _frames
 from .ea_capital import Look, capital_style, fleet_mosaic
 
 PREFIX = "eah"
@@ -30,10 +34,48 @@ class Plating:
     frames_m: float
 
 
+@dataclass(frozen=True)
+class PatchPlates(Plates):
+    """Scattered plates painted a darker grey (down to ``darkest`` of the hull's value), flush with the hull: the patches of
+    medium and dark panels on the Hyperion's light grey."""
+
+    darkest: float = 0.5
+
+    def _paint_all(self, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out, ok: np.ndarray) -> None:  # noqa: ANN001
+        key, u0, u1, v0, v1, u, v = self.cells(p, n)
+        chosen = ok & (self._hash(key, 503) < self.scatter) & (np.minimum(u1 - u0, v1 - v0) > 2.5 * self.inset_m)
+        inside = np.minimum(np.minimum(u - u0, u1 - u), np.minimum(v - v0, v1 - v)) > self.inset_m
+        out.tint *= 1.0 - self.darkest * self._hash(key, 401) * (chosen & inside)
+
+    def _hash(self, key: np.ndarray, salt: int) -> np.ndarray:
+        return _keyed_hash(key, self.seed + salt)
+
+
+@dataclass(frozen=True)
+class HyperionMosaic(PanelMosaic):
+    """The fleet's plating made shallower (``seam_depth`` of the groove depth) with small dark patches (``patches``, the share of
+    plates) over a light grey base; the plates' own tone wander stays small."""
+
+    seam_depth: float = 0.45
+    patches: float = 0.2
+    darkest: float = 0.5
+
+    def _soft(self, features: list[Feature]) -> list[Feature]:
+        return [dataclasses.replace(f, depth=f.depth * self.seam_depth) if f.depth > 0.0 else f for f in features]
+
+    def _plating(self, cell: tuple[float, float], seed: int) -> list[Feature]:
+        base = dict(wrap="sides", long_axis=2, cell=cell, splits=self.splits, min_m=1.2, keep=0.3, seed=seed)
+        return [*self._soft(super()._plating(cell, seed)),
+                PatchPlates(level=3, scatter=self.patches, inset_m=0.1, darkest=self.darkest, dark=0.0, depth=0.0, **base)]
+
+    def hull_layout(self, lo, hi, seed: int) -> SeamLayout:  # noqa: ANN001
+        return SeamLayout.of([*self._soft(_frames(lo, hi, self.frames_m, self.major_every)), *self._plating(self.plate_m, seed)])
+
+
 LOOKS: dict[str, Look] = {
-    "a": Look("a", "A: show livery, warm light grey and deep royal-blue bands, the fleet's mosaic",
-              {"hull": 0xBCBDB5, "hull_panel": 0xA9AAA3, "hull_dark": 0x4A4A46, "stripe": 0x3A41A6},
-              plate_tone=0.08, plate_grime=0.06, metallic=0.3, edge_wear=0.25, streaks=0.12, grime=0.06),
+    "a": Look("a", "A: show livery, light grey with dark patches, bright royal-blue bands, shallow seams",
+              {"hull": 0xD0D3D6, "hull_panel": 0xC0C4C8, "hull_dark": 0x60646C, "stripe": 0x3464EA},
+              plate_tone=0.04, plate_grime=0.05, metallic=0.3, edge_wear=0.25, streaks=0.1, grime=0.05),
     "b": Look("b", "B: fleet white, navy bands, square plates",
               {"hull": 0xD0D2D4, "hull_panel": 0xBDC0C4, "hull_dark": 0x585C64, "stripe": 0x1A2C66},
               plate_tone=0.1, plate_grime=0.08, metallic=0.25, edge_wear=0.3, streaks=0.15, grime=0.08),
@@ -48,14 +90,22 @@ PLATING: dict[str, Plating] = {  # the looks not on the fleet's mosaic
 DEFAULT_LOOK = "a"
 
 
+def hyperion_mosaic(chosen: Look) -> HyperionMosaic:
+    """The fleet's plate sizes in the Hyperion's softer, patched finish."""
+    return HyperionMosaic(plate_m=(18.0, 9.0), splits=2, tone=chosen.plate_tone, grime=chosen.plate_grime, frames_m=30.0, major_every=4)
+
+
 def ea_hyperion(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None) -> CapitalStyle:
     """The Hyperion's style in one of the looks, any role repainted by ``livery``."""
     if look not in LOOKS:
         raise ValueError(f"ea_hyperion has no look {look!r}; it has {sorted(LOOKS)}")
     chosen, plating = LOOKS[look], PLATING.get(look)
-    skin = fleet_mosaic(chosen) if plating is None else PanelMosaic(plate_m=plating.plate_m, splits=plating.splits, tone=chosen.plate_tone,
+    skin = hyperion_mosaic(chosen) if plating is None else PanelMosaic(plate_m=plating.plate_m, splits=plating.splits, tone=chosen.plate_tone,
                                                                     grime=chosen.plate_grime, frames_m=plating.frames_m, major_every=4)
-    return capital_style(chosen, f"ea_hyperion_{look}", PREFIX, skin, livery)
+    style = capital_style(chosen, f"ea_hyperion_{look}", PREFIX, skin, livery)
+    if plating is not None:
+        return style
+    return dataclasses.replace(style, style=dataclasses.replace(style.style, panel_line_darkness=0.78, groove_depth_m=0.006))
 
 
-__all__ = ["DEFAULT_LOOK", "LOOKS", "PLATING", "Plating", "ea_hyperion"]
+__all__ = ["DEFAULT_LOOK", "LOOKS", "PLATING", "HyperionMosaic", "PatchPlates", "Plating", "ea_hyperion", "hyperion_mosaic"]

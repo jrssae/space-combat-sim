@@ -27,7 +27,7 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `capital_test_cruiser` | earth_alliance | capital (cruiser) | 300.0 x 60.0 x 45.6 | 20000 | none | yes | no |
 | `ea_omega` | earth_alliance | capital (destroyer) | 1714.3 x 620.0 x 478.0 | 30000 | none | yes | no |
 | `ea_nova` | earth_alliance | capital (dreadnought) | 1502.1 x 208.0 x 443.7 | 36000 | none | yes | no |
-| `ea_hyperion` | earth_alliance | capital (destroyer) | 1025.4 x 249.4 x 266.2 | 17000 | none | yes | no |
+| `ea_hyperion` | earth_alliance | capital (destroyer) | 1069.2 x 254.4 x 319.5 | 17000 | none | yes | no |
 | `ea_shuttle` | earth_alliance | civilian | 18.6 x 9.2 x 5.3 | 200 | none | no | no |
 | `ea_atmo_shuttle` | earth_alliance | civilian | 25.6 x 45.5 x 8.5 | 260 | none | no | no |
 | `ea_panama` | earth_alliance | civilian | 180.0 x 44.8 x 29.6 | 600 | none | no | no |

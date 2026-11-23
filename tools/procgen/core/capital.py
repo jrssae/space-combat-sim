@@ -44,6 +44,7 @@ from .image import write_png
 from .manifest import build_manifest, write_manifest
 from .silhouette import far_section
 from .textured_mesh import import_sidecar
+from .textures import Marking
 
 Vec3 = tuple[float, float, float]
 
@@ -122,6 +123,7 @@ class CapitalSpec:
     cover_reach_m: float = 2.5
     detail_px: int = 1024
     notes: tuple[str, ...] = ()
+    markings: tuple[tuple[str, Marking], ...] = ()  # painted or lit decals baked into the hull's maps, by the module they belong to
 
 
 # --- the section model (pure) ------------------------------------------------------------------------------------------
@@ -228,9 +230,9 @@ def _json_params(params: dict[str, Any], offset: np.ndarray) -> dict[str, Any]:
 
 
 def hardpoint_lists(modules: Sequence[cp.Module], offset: np.ndarray) -> dict[str, list[dict[str, Any]]]:
-    """The capital hardpoints by list (body frame): ``weapons``, ``bays``, ``engines``, ``lights`` and ``marks`` (painted
-    lettering, ``core/glyphs.py``), in module order."""
-    out: dict[str, list[dict[str, Any]]] = {"weapons": [], "bays": [], "engines": [], "lights": [], "marks": []}
+    """The capital hardpoints by list (body frame): ``weapons``, ``bays``, ``engines``, ``lights``, ``marks`` (painted
+    lettering, ``core/glyphs.py``) and, when a bay has one, ``doors`` (its roll-up door), in module order."""
+    out: dict[str, list[dict[str, Any]]] = {"weapons": [], "bays": [], "engines": [], "lights": [], "marks": [], "doors": []}
     for m in modules:
         for h in m.hardpoints:
             base = {"name": h.name, "section": m.section, "position": cv.r(h.position - offset)}
@@ -243,8 +245,12 @@ def hardpoint_lists(modules: Sequence[cp.Module], offset: np.ndarray) -> dict[st
                 out["engines"].append({**base, "thrust": cv.r(h.forward), "exhaust": cv.r(-h.forward), **params})
             elif h.kind == cp.MARK:
                 out["marks"].append({**base, "normal": cv.r(h.forward), "up": cv.r(h.up), **params})
+            elif h.kind == cp.DOOR:
+                out["doors"].append({**base, "forward": cv.r(h.forward), "up": cv.r(h.up), **params})
             else:
                 out["lights"].append({**base, "direction": cv.r(h.forward), **params})
+    if not out["doors"]:
+        del out["doors"]  # a hull without doors writes what it always did
     return out
 
 
@@ -333,13 +339,16 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
     pieces: list[_Piece] = []
     chunks: list[dict[str, Any]] = []
     shapes = section_shapes(modules, sections, spec.collision)
+    marks: dict[str, tuple[Marking, ...]] = {}
+    for module_name, marking in spec.markings:
+        marks[module_name] = (*marks.get(module_name, ()), marking)
     for p in spec.pieces:
         hull_piece = p.name == HULL_PIECE
         piece = _Piece(p, spec.asset_id if hull_piece else f"{spec.asset_id}_{p.name}", offset if hull_piece else np.asarray(p.pivot, dtype=float),
                        [s.name for s in sections if s.piece == p.name])
         mine = [s for s in sampled if by_name[s.piece.group].piece == p.name]
         piece_ctx = dataclasses.replace(ctx, options={"atlas_px": p.atlas_px, **ctx.options})
-        piece.hull = cv.write_hull(out_dir, piece.stem, cv.hull_parts(mine, piece.frame), piece.sections, spec.style.style, piece_ctx, comments,
+        piece.hull = cv.write_hull(out_dir, piece.stem, cv.hull_parts(mine, piece.frame, marks), piece.sections, spec.style.style, piece_ctx, comments,
                                    low_shrink=LOW_SHRINK)
         files += piece.hull.files
         for surface in piece.hull.mesh_section["surfaces"]:

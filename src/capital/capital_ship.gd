@@ -54,6 +54,8 @@ var flight_spec: ShipSpec = null
 var helm: CapitalHelm = null
 var rotors: Array[CapitalRotor] = []
 var hull_piece: RenderPiece = null
+## The bays' roll-up doors (M10-T22), by bay name; shut until a launch or a docking opens one.
+var bay_doors: Dictionary = {}
 ## 1 when this ship wears its style's second colouring (M10-T06: about a fifth of the Vorlons are red-based), else 0: drawn from
 ## the ship's own name, the same in every run. Its break-up chunks take the same value (`HullSheenMaterial.set_variant`).
 var skin_variant: float = 0.0
@@ -380,6 +382,7 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	hull_piece.set_skin_variant(skin_variant)
 	add_child(hull_piece)
 	_add_marks(display_name)
+	_add_doors()
 	targetable = Targetable.new()
 	targetable.name = "Targetable"
 	targetable.display_name = display_name
@@ -400,6 +403,32 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	damageable.hit_taken.connect(_on_hit)
 	_packed_volumes = Station.pack_volumes(volumes)
 	_packed_hulls = Station.pack_hulls(shapes, volumes)
+
+
+## Opens (true) or shuts a bay's door; false when the hull has no door for that bay (T17 calls this around a launch or a docking).
+func set_bay_door(bay: String, open: bool, instant: bool = false) -> bool:
+	var door: BayDoorNode = bay_doors.get(bay) as BayDoorNode
+	if door == null:
+		return false
+	if instant:
+		door.snap(open)
+	else:
+		door.set_open(open)
+	return true
+
+
+## Whether a bay's door is open or opening; false for a shut door or an unknown bay.
+func bay_door_open(bay: String) -> bool:
+	var door: BayDoorNode = bay_doors.get(bay) as BayDoorNode
+	return door != null and door.is_open()
+
+
+## The roll-up doors the hull carries, all shut.
+func _add_doors() -> void:
+	for door: Dictionary in BayDoors.doors_of(_hardpoints):
+		var node: BayDoorNode = BayDoorNode.create(door)
+		bay_doors[node.bay] = node
+		hull_piece.add_child(node)
 
 
 ## The painted lettering the hull carries (an Omega's name letter on each shield), chosen by the name it spawns under. A type with

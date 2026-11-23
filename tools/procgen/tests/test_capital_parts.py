@@ -132,6 +132,25 @@ class CapitalPartsTests(unittest.TestCase):
         self.assertGreater(float(lo[2]), -1.0, "nothing stands more than a lamp proud of the mouth")
         self.assertLessEqual(float(hi[0]), 11.0 + 1e-6, "nor outside the housing")
 
+    def test_a_bay_door_and_an_unlit_rim_are_off_unless_asked_for(self) -> None:
+        ea = ea_capital().style
+        lit = bays.launch_bay("bay", (18.0, 10.0), 10.5, ea, 1.0, lit=True)
+        np.testing.assert_array_equal(bays.launch_bay("bay", (18.0, 10.0), 10.5, ea, 1.0, lit=True, rim=True, door=False).part.mesh.vertices,
+                                      lit.part.mesh.vertices, err_msg="the defaults build what they always did")
+        self.assertNotIn(cp.DOOR, [h.kind for h in lit.hardpoints])
+        quiet = bays.launch_bay("bay", (18.0, 10.0), 10.5, ea, 1.0, lit=True, rim=False, door=True)
+        band = ea.material("bay_light").name
+        mesh = quiet.part.mesh
+        faces = [i for i, m in enumerate(mesh.face_material.tolist()) if mesh.materials[m].name == band]
+        self.assertGreater(float(mesh.vertices[mesh.faces[faces]].reshape(-1, 3)[:, 2].min()), 0.0, "the red stays inside the hall")
+        door = next(h for h in quiet.hardpoints if h.kind == cp.DOOR)
+        self.assertEqual(door.name, "bay_door")
+        self.assertLess(float(door.position[2]), 0.0, "the shutter hangs just outside the mouth")
+        self.assertGreaterEqual(door.params["size_m"][1], 10.0, "and covers it")
+        lo, hi = mesh.bounds()
+        self.assertLess(float(lo[2]), float(door.position[2]), "the roll housing stands proud of the shutter")
+        self.assertGreater(float(hi[1]), 5.0 + 1.0, "over the mouth")
+
     def test_a_tube_starts_at_its_breech_and_its_bore_is_open(self) -> None:
         tube = self.parts["launch_tube"]
         (point,) = tube.hardpoints
