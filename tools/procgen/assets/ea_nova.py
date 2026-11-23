@@ -38,6 +38,7 @@ GENERATOR_VERSION = 1
 SHIP_CLASS = "capital"
 LENGTH_M = nv.LENGTH_M
 ATLAS_PX = 4096
+FINISH = "soft"
 
 # Blast energies (docs/assets-capital.md, "Sections, mounts and blasts": 5e6 J a point of D0; a capital's rows).
 BLAST_J = {"fuel": 5.0e6 * 1200.0, "reactor": 5.0e6 * 4500.0}
@@ -58,6 +59,7 @@ PLASMA, BEAM, INTERCEPTOR = "ea_plasma_medium", "ea_sweep_beam_nova", "ea_interc
 UP, DOWN, RIGHT = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0), (1.0, 0.0, 0.0)
 TURRET_M = 16.0
 FLANK_Z = (("fore", "spine_fore", (434.0, 452.0)), ("mid", "spine_mid", (860.0, 880.0)), ("aft", "spine_aft", (960.0, 1022.0)))
+FLANK_FROM_Z = 373.0  # the fore spine's waist and shelves start behind the open bow (the reference's)
 MID_END_Z = 903.0  # where the mid spine (the first aft bay's gun deck) gives way to the aft spine
 CHANNEL_Z = ((438.0, "spine_fore"), (876.0, "spine_mid"), (971.0, "spine_aft"))
 
@@ -106,20 +108,25 @@ def light_modules() -> list[cp.Module]:
     return [
         lamp("light_starboard", "starboard", (0.05, 1.0, 0.1), 400.0, 4.0).mounted((nv.PLATE_X, 50.0, 360.0), RIGHT).in_section("bow").on_side(cp.LONE),
         lamp("light_port", "port", (1.0, 0.05, 0.03), 400.0, 4.0).mounted((-nv.PLATE_X, 50.0, 360.0), (-1.0, 0.0, 0.0)).in_section("bow").on_side(cp.LONE),
-        lamp("light_top", "top", (1.0, 1.0, 1.0), 400.0, 4.0).mounted((0.0, 74.0, 290.0), UP).in_section("bridge"),
+        lamp("light_top", "top", (1.0, 1.0, 1.0), 400.0, 4.0).mounted((0.0, nv.ROOF_TOP_Y, 290.0), UP).in_section("bridge"),
         lamp("light_keel", "beacon", RUNNING_RED, 600.0, 4.0).mounted((0.0, -171.0, 240.0), DOWN).in_section("bow"),
         lamp("light_stern", "beacon", RUNNING_RED, 600.0, 4.0).mounted((0.0, 106.0, 1290.0), UP).in_section("reactor"),
     ]
 
 
+def style(look: str = DEFAULT_LOOK) -> cap.CapitalStyle:
+    """The fleet's look in the soft finish (Q64): the Hyperion's skin in the Omega's colours, the bay lined in grey metal."""
+    return ea_capital(look, finish=FINISH)
+
+
 def modules(look: str = DEFAULT_LOOK) -> list[cp.Module]:
     """Every module in its place and section (centre modules and the starboard one of each pair)."""
-    s = ea_capital(look).style
+    s = style(look).style
     (c0, c1), (r0, r1, r2) = nv.COLLARS_Z, nv.RINGS_Z
     return [
-        *nv.armour(s), *nv.command_block(s), *nv.flank_strake(s), *nv.tankage(s), *nv.aerials(s),
-        *nv.spine(s, "spine_fore", "spine_fore", (nv.SPINE_Z[0], c0[0]), shelf_x=62.0), *nv.ring(s, "ring_fore", "spine_fore", r0),
-        *nv.flank_fittings(s, "spine_fore", "spine_fore", waists=((nv.SPINE_Z[0], 402.0),), decks=((402.0, 481.0),), strips=((456.0, 519.0),),
+        *nv.armour(s), *nv.command_block(s), *nv.flank_strake(s), *nv.fore_plates(s), *nv.tankage(s), *nv.aerials(s),
+        *nv.spine(s, "spine_fore", "spine_fore", (nv.SPINE_Z[0], c0[0]), shelf_x=62.0, shelf_from=FLANK_FROM_Z), *nv.ring(s, "ring_fore", "spine_fore", r0),
+        *nv.flank_fittings(s, "spine_fore", "spine_fore", waists=((FLANK_FROM_Z, 402.0),), decks=((402.0, 481.0),), strips=((456.0, 519.0),),
                            pods=((466.8, 508.2),)),
         nv.collar(s, "collar_fore", "spine_fore", c0),
         *nv.spine(s, "spine_hangar", "hangar", nv.HANGAR_Z), *nv.hangar_block(s, "hangar"),
@@ -142,7 +149,7 @@ def spec(look: str = DEFAULT_LOOK) -> cap.CapitalSpec:
         ship_class=SHIP_CLASS,
         modules=tuple(modules(look)),
         sections=SECTIONS,
-        style=ea_capital(look),
+        style=style(look),
         bridge=cap.Pose((0.0, 1.5, nv.PLATE_Z[0] + 2.0)),
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=1500.0, mouth_radius_m=400.0),

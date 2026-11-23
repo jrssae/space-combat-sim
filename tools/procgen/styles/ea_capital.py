@@ -15,6 +15,7 @@ sRGB, laid over the look's own paint (the ``stripe`` role is the command section
 
 from __future__ import annotations
 
+import dataclasses
 from collections.abc import Mapping
 from dataclasses import dataclass
 
@@ -81,12 +82,29 @@ LOOKS: dict[str, Look] = {
 DEFAULT_LOOK = "a"
 
 
-def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None) -> CapitalStyle:
-    """The fleet's capital style in one of the looks, any role repainted by ``livery`` (the renegades' marking, M10-T02)."""
+FINISHES = ("fleet", "soft")
+# The soft finish (Q64): the Hyperion's plating, its plates' tone wander and grime kept as small as the Hyperion's, its seam lines as faint.
+SOFT_TONE, SOFT_GRIME, SOFT_LINE_DARKNESS, SOFT_GROOVE_M = 0.04, 0.05, 0.89, 0.003
+
+
+def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None, finish: str = "fleet") -> CapitalStyle:
+    """The fleet's capital style in one of the looks, any role repainted by ``livery`` (the renegades' marking, M10-T02).
+    ``finish="soft"`` (Q64; the Nova's, the Omega's from T68) wears the look's colours in the Hyperion's skin, shallow narrow seams
+    with small patches of darker plates (``ea_hyperion.HyperionMosaic``), and lines its bays in Babylon 5's grey bay metal."""
     if look not in LOOKS:
         raise ValueError(f"ea_capital has no look {look!r}; it has {sorted(LOOKS)}")
+    if finish not in FINISHES:
+        raise ValueError(f"ea_capital has no finish {finish!r}; it has {list(FINISHES)}")
     chosen = LOOKS[look]
-    return capital_style(chosen, f"ea_capital_{look}", PREFIX, fleet_mosaic(chosen), livery)
+    if finish == "fleet":
+        return capital_style(chosen, f"ea_capital_{look}", PREFIX, fleet_mosaic(chosen), livery)
+    from .ea_hyperion import HyperionMosaic  # noqa: PLC0415 - ea_hyperion builds on this module
+
+    skin = HyperionMosaic(plate_m=(18.0, 9.0), splits=2, tone=SOFT_TONE, grime=SOFT_GRIME, frames_m=30.0, major_every=4)
+    style = capital_style(chosen, f"ea_capital_{look}_soft", PREFIX, skin, livery)
+    materials = {**style.style.materials, **bay_metal_materials(style.style.materials["hull"].name.removesuffix("_hull"))}
+    return dataclasses.replace(style, style=dataclasses.replace(style.style, materials=materials, panel_line_darkness=SOFT_LINE_DARKNESS,
+                                                                groove_depth_m=SOFT_GROOVE_M))
 
 
 def fleet_mosaic(chosen: Look) -> PanelMosaic:
@@ -145,4 +163,4 @@ def bay_metal_materials(tag: str) -> dict[str, Material]:
                                   emissive_strength=BAY_TUNNEL_STRENGTH)}
 
 
-__all__ = ["DEFAULT_LOOK", "FIXED", "LOOKS", "ROLES", "Look", "bay_light_materials", "bay_metal_materials", "capital_style", "ea_capital", "fleet_mosaic"]
+__all__ = ["DEFAULT_LOOK", "FINISHES", "FIXED", "LOOKS", "ROLES", "Look", "bay_light_materials", "bay_metal_materials", "capital_style", "ea_capital", "fleet_mosaic"]
