@@ -6,8 +6,8 @@ prongs). A window is (u0, u1, v0, v1) in the plane's (u, v). The reference is sy
 axis, so no part needs moving (:data:`PART_AXIS_X` stays for parts that would).
 
 Planes stay clear of the reference's groove round the hull (the paint lines: 56-59, 92-95, 137-141, 333-336 and 367-370 m along
-the forward hull, 48-50, 78-80, -75 and -98 to -100 m up the tower), which the ship does not have, and of the Starfury bays in
-the hangar bump, which the reference does not have (Q58). The bells are open shells in the reference and hollow in the build
+the forward hull, 48-50, 78-80, -75 and -98 to -100 m up the tower), which the ship does not have, and of the Starfury bays' halls in
+the hangar bump, which the reference does not have (Q58); the frames they open through are the reference's (M10-T22). The bells are open shells in the reference and hollow in the build
 only near the mouth, so they are compared by outline.
 """
 

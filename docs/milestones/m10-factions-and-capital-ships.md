@@ -1002,6 +1002,13 @@ On top of it:
   decal); the hull number "21" white with a black outline (Q65); floods light the bow name, the emblem and the crown. Smooth
   particle-cannon barrels. Fidelity: top 0.944, side 0.918, front 0.963, 31 sections at 0.926 or over. Sheet
   `references/screenshots/M10-T22 Hyperion/refine/final_sheet_4.png`. **Open:** the look is (H) in play.
+- **T22 bays done (2026-11-23, option c).** The V5c's three proud door frames on each flank of the bump (28.5 x 18.5 m, out to
+  x = 16.5), each round a 21.9 x 12.1 m roll-up door (the maintainer's 17.9 x 8.1 m Starfury plus 2 m), halls 15.5 m deep back to
+  back with a 1 m wall; Starfuries face out. The shuttle bay in the tower's aft face is 28 x 24 m (y 70-94) and 42 m deep (z 426-468),
+  one shuttle at a time (`berths` 1, capacity still 2): its `poses` param gives each shuttle tail-first entry and an inset to sit
+  mid-hall, and the Kestrel's wings folded up 90 degrees at their joints (22.9 x 19.4 m); the fold animation is left for T17.
+  Fidelity: top 0.944, side 0.919, front 0.964; girder z570 0.943, z605 0.931, tower z455 0.919, every section 0.919 or over.
+  Sheet `references/screenshots/M10-T22 Hyperion/bays/bays_built.png`.
 - **Faction fighters (T38 to T42):** the fighter pipeline (the generator as `raider_fighter`, not the capital framework),
   with T06's parts where organic; its `ShipSpec`, thruster layout, guns per T03, a pilot profile, break-up chunks. Done
   when a seeded fight against Starfuries also runs headless; its carriers launch it in T17.

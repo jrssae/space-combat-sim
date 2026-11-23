@@ -39,7 +39,7 @@ TEST_OPTIONS = {"atlas_px": 512, "detail_px": 128}  # the default sample spacing
 LENGTH, SPAN, HEIGHT = 1025.39, 254.4, 319.5  # T01's length; the engine block, the tower's turret to the big pod's interceptor
 SECTIONS = ("bow", "magazine", "bridge", "hangar_r", "hangar_l", "truss", "reactor", "spine_aft", "fuel_r", "fuel_l", "engines")
 MOUNTS = {"turret": 8, "beam": 2, "missile": 2, "interceptor": 4}
-LAUNCHES = {"starfury_ally": 6, "ea_shuttle": 2}
+LAUNCHES = {"starfury_ally": 6, "ea_shuttle": 2}  # both shuttles through the one bay, one at a time
 
 
 class HyperionBuildTests(unittest.TestCase):
@@ -216,6 +216,40 @@ class HyperionBuildTests(unittest.TestCase):
             self.assertGreaterEqual(door["slats"], 4)
         lamps = [m for m in self.hp["lights"] if m["role"] == "bay"]
         self.assertEqual(len(lamps), 7, "the red stays inside: one light a bay")
+
+    def test_the_bays_fit_their_craft_in_the_v5cs_frames(self) -> None:
+        """M10-T22 (option c): the Starfury doors in the V5c's proud frames, sized for the maintainer's Starfury with 2 m clear,
+        and one shuttle at a time in the tower's bay, the Kestrel with its wings folded."""
+        bays = {b["name"]: b for b in self.hp["bays"]}
+        for k, z in enumerate(hy.FURY_BAY_ZS):
+            bay = bays[f"bay_fury_{k + 1}_r"]
+            self.assertEqual(bay["mouth_m"], [21.9, 12.1])
+            self.assertGreaterEqual(bay["mouth_m"][0], 17.9 + 4.0)
+            self.assertGreaterEqual(bay["mouth_m"][1], 8.1 + 4.0)
+            self.assertGreaterEqual(bay["depth_m"], 9.83 + 2.0, "the in-game Starfury's length and clearance")
+            mouth = self.authored(bay["exit"])
+            self.assertAlmostEqual(float(mouth[0]), hy.FURY_FRAME_X, places=3, msg="the door is in the frame's face")
+            self.assertAlmostEqual(float(mouth[2]), z, places=3)
+            frame = np.concatenate([m.part.mesh.vertices for m in eh.modules() if m.name.startswith(f"bay_frame_{k + 1}_")])
+            np.testing.assert_allclose(frame.min(axis=0), [hy.GIRDER_W, 25.75, z - 14.25], atol=1e-6)
+            np.testing.assert_allclose(frame.max(axis=0), [16.5, 44.25, z + 14.25], atol=1e-6)
+        self.assertAlmostEqual(hy.FURY_FRAME_X - hy.FURY_BAY_DEPTH - hy.FURY_BAY_WALL, 0.5, msg="a 1 m wall between the halls' backs")
+        shuttle = bays["bay_shuttle"]
+        self.assertEqual((shuttle["mouth_m"], shuttle["depth_m"], shuttle["berths"]), ([28.0, 24.0], 42.0, 1))
+        self.assertGreaterEqual(shuttle["depth_m"], 38.0 + 4.0, "the crew shuttle backs in with 2 m clear fore and aft")
+        poses = shuttle["poses"]
+        for craft, nose, length in (("ea_shuttle", 23.4955, 38.0), ("ea_atmo_shuttle", 20.1249, 29.0)):  # each origin's distance behind its nose
+            ahead = nose - poses[craft]["inset_m"]  # its nose ahead of the hall's middle, where the bay's craft point is
+            self.assertLessEqual(ahead, 0.5 * shuttle["depth_m"] - 2.0, f"{craft}'s nose 2 m inside the mouth")
+            self.assertLessEqual(length - ahead, 0.5 * shuttle["depth_m"] - 2.0 + 0.01, f"{craft}'s tail 2 m off the back wall")
+        self.assertEqual(poses["ea_shuttle"]["entry"], "tail_first")
+        kestrel = poses["ea_atmo_shuttle"]
+        self.assertEqual((kestrel["wings"], kestrel["fold_deg"]), ("folded_up", 90.0))
+        self.assertLessEqual(kestrel["folded_size_m"][0] + 4.0, shuttle["mouth_m"][0])
+        self.assertLessEqual(kestrel["folded_size_m"][1] + 4.0, shuttle["mouth_m"][1])
+        at = float(self.authored(shuttle["position"])[1])
+        self.assertGreaterEqual(at + kestrel["folded_y_m"][0], hy.SHUTTLE_BAY_Y - 0.5 * shuttle["mouth_m"][1] + 1.0, "folded, it clears the deck")
+        self.assertLessEqual(at + kestrel["folded_y_m"][1], hy.SHUTTLE_BAY_Y + 0.5 * shuttle["mouth_m"][1] - 1.0, "and the roof")
 
     def test_the_hull_number_is_painted_on_both_flanks_aft_of_the_bow_band(self) -> None:
         nums = {m["name"]: m for m in self.hp["marks"] if m.get("text") == "number"}

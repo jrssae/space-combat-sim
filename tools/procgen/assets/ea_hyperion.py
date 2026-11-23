@@ -13,8 +13,8 @@ and names the damage sections. The loadout is ``data/capitals/loadouts.json``, `
 * 4 light pulse dome turrets: on the turret deck, the tower's drum, the reactor module and the engine block;
 * 2 torpedo tubes in the bow face's recess;
 * 4 interceptors: one on each pod under the tower and one on each sponson's aft face;
-* three single-Starfury bays in each flank of the hangar bump on the spine, and a shuttle bay for both shuttles in the
-  tower's aft face (Q58): 6 Starfuries and 2 shuttles.
+* three single-Starfury bays in each flank of the hangar bump on the spine, and a shuttle bay for both shuttles, one at a time, in the
+  tower's aft face (Q58, M10-T22): 6 Starfuries and 2 shuttles.
 
 Sections: bow, magazine (the forward hull's aft half and the sponsons, over the torpedo stowage), bridge (the tower, its
 pods and the shuttle bay), the hangar bays either side, the truss, the reactor (the module), the aft spine, the fuel tanks

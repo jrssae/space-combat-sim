@@ -15,7 +15,7 @@ Bow to stern:
   each aft face;
 * **command tower** (346 to 468 m): from 127 m below the axis to 105 m above, its front sloping back top and bottom; a drum
   and turret on its roof, a dish on a mast ahead of it, two pods under it; the shuttle bay in its aft face;
-* **truss** (468 to 675 m): a neck, the girder with the hangar bump (three Starfury bays a side, Q58), the lower box, the
+* **truss** (468 to 675 m): a neck, the girder with the hangar bump (three Starfury bays a side in the V5c's proud frames, Q58), the lower box, the
   lower chord rising aft, the web's diagonals and the frame ahead of the module;
 * **reactor module** (675 to 725.5 m), **aft spine** (725 to 907 m) with its chord falling to the engine block;
 * **fuel tanks** (817.5 to 907 m): two big capsules and six small ones each side, in a frame;
@@ -71,12 +71,24 @@ SPONSON_Y = (-25.0, -69.2)
 GIRDER_W, GIRDER_Y = 13.0, (21.5, 39.5)  # the spine's girder: half width, foot and top
 BOX_W, BOX_Y = 19.8, (4.5, 21.5)  # the spine's lower box
 BUMP_Z, BUMP_TOP = (510.0, 532.0, 645.0, 668.0), 51.2  # the hangar bump: its slopes' feet and tops
-# Q58: three single-Starfury bays in each flank of the bump, one Starfury each, opening outward.
-FURY_BAY_ZS = (553.0, 588.0, 623.0)
-FURY_BAY_Y, FURY_BAY_MOUTH, FURY_BAY_DEPTH, FURY_BAY_WALL = 42.0, (18.0, 10.0), 10.5, 1.0  # a Starfury is 15.4 m across, 7.5 m tall, 9.8 m long
-# Q58: the shuttle bay in the tower's aft face, launching aft over the Starfury bays; both shuttles dock there.
-SHUTTLE_BAY_Y, SHUTTLE_BAY_MOUTH, SHUTTLE_BAY_DEPTH, SHUTTLE_BAY_WALL = 90.0, (18.0, 9.0), 26.0, 2.0
+# Q58: three single-Starfury bays in each flank of the bump, one Starfury each, opening outward. Their doors sit in the V5c's
+# three proud frames (28.5 x 18.5 m, standing out to x = 16.5), sized for the maintainer's 17.9 x 8.1 m Starfury with 2 m clear;
+# the halls are 15.5 m deep, their backs either side of a 1 m wall on the axis (M10-T22, option c).
+FURY_BAY_ZS = (555.25, 590.25, 625.75)
+FURY_BAY_Y, FURY_BAY_MOUTH, FURY_BAY_DEPTH, FURY_BAY_WALL = 35.0, (21.9, 12.1), 15.5, 0.5  # the in-game Starfury is 15.4 m across, 7.5 m tall, 9.8 m long
+FURY_FRAME, FURY_FRAME_X = (28.5, 18.5), 16.5  # each frame's size (along z, up) and its face, where the door is
+# Q58: the shuttle bay in the tower's aft face, launching aft over the Starfury bays. One shuttle at a time in its 42 m hall
+# (M10-T22): the 38 m crew shuttle backs in tail first so it launches nose first; the Kestrel docks with its wings folded up.
+SHUTTLE_BAY_Y, SHUTTLE_BAY_MOUTH, SHUTTLE_BAY_DEPTH, SHUTTLE_BAY_WALL = 82.0, (28.0, 24.0), 42.0, 2.0
 STARFURIES_PER_BAY, SHUTTLES_PER_BAY = 1, 2
+# How each craft sits in the shuttle bay, for the docking and launch code (T17): which way in; how far behind the bay's craft
+# point its origin goes so its length sits mid-hall (both origins are well aft of mid-length); and the Kestrel's folded wings,
+# each turned up 90 degrees about its root joint (in its own frame), leaving it 22.9 m across, 19.4 m tall, clear of deck and roof.
+SHUTTLE_POSES = {
+    "ea_shuttle": {"entry": "tail_first", "inset_m": 4.5},
+    "ea_atmo_shuttle": {"entry": "tail_first", "inset_m": 5.62, "wings": "folded_up", "fold_deg": 90.0, "fold_joint_m": [10.766, -1.104],
+                        "folded_size_m": [22.9, 19.4, 29.0], "folded_y_m": [-5.46, 13.91]},
+}
 FURY, SHUTTLE = "starfury_ally", "ea_shuttle"
 
 HULL = HullRoles(side="hull", deck="hull_panel", keel="hull")  # the show's ship is light all over, its keel too
@@ -404,16 +416,22 @@ def tower(s: Style) -> list[cp.Module]:
     w, h, wall = SHUTTLE_BAY_MOUTH[0] / 2 + SHUTTLE_BAY_WALL, SHUTTLE_BAY_MOUTH[1] / 2 + SHUTTLE_BAY_WALL, SHUTTLE_BAY_WALL
     slot = (SHUTTLE_BAY_Y - h, SHUTTLE_BAY_Y + h)
     back = TOWER_Z[1] - SHUTTLE_BAY_DEPTH - wall
-    levels = [TOWER_BOTTOM, -110.0, l0, l1, -60.0, ROOF_Y, b0, b1, slot[0]]
-    out = [_tower_piece(f"tower_{k + 1}", a, b, s, BAND if (a, b) in ((l0, l1), (b0, b1)) else HULL) for k, (a, b) in enumerate(zip(levels, levels[1:], strict=False))]
+    levels = [TOWER_BOTTOM, -110.0, l0, l1, -60.0, ROOF_Y, b0, min(b1, slot[0])]
+    out = [_tower_piece(f"tower_{k + 1}", a, b, s, BAND if (a, b) in ((l0, l1), (b0, b1)) or a == b0 else HULL) for k, (a, b) in enumerate(zip(levels, levels[1:], strict=False))]
     xs, names = renegade_xs(), name_marks()
     out[5] = dataclasses.replace(out[5], hardpoints=(names["tower_r"], names["tower_l"], *emblem_marks()))
-    out.append(_tower_piece("tower_slot_fore", *slot, s, HULL, keeps=(lambda p: back - p[1],)))
-    side = _tower_piece("tower_slot_side_r", *slot, s, HULL, keeps=(lambda p: p[0] - w, lambda p: p[1] - back))
+    # The tower round the bay, in heights so the band carries on past the bay's foot.
+    cuts = sorted({slot[0], slot[1], *(b for b in (b1,) if slot[0] < b < slot[1])})
+    sides = []
+    for k, (a, b) in enumerate(zip(cuts, cuts[1:], strict=False)):
+        roles = BAND if b <= b1 else HULL
+        out.append(_tower_piece(f"tower_slot_fore_{k + 1}", a, b, s, roles, keeps=(lambda p: back - p[1],)))
+        sides.append(_tower_piece(f"tower_slot_side_{k + 1}_r", a, b, s, roles, keeps=(lambda p: p[0] - w, lambda p: p[1] - back)))
     out.append(_tower_piece("tower_top", slot[1], TOWER_TOP, s, HULL))
     out[-1] = dataclasses.replace(out[-1], hardpoints=(xs["tower_r"], xs["tower_l"]))
     bay = bays.launch_bay("bay_shuttle", SHUTTLE_BAY_MOUTH, SHUTTLE_BAY_DEPTH, s, SHUTTLE_BAY_WALL, lit=True, rim=False, door=True)
-    out.append(bay.transformed(np.diag([-1.0, 1.0, -1.0]), (0.0, SHUTTLE_BAY_Y, TOWER_Z[1])).with_params(cp.BAY, craft=SHUTTLE, capacity=SHUTTLES_PER_BAY))
+    out.append(bay.transformed(np.diag([-1.0, 1.0, -1.0]), (0.0, SHUTTLE_BAY_Y, TOWER_Z[1]))
+               .with_params(cp.BAY, craft=SHUTTLE, capacity=SHUTTLES_PER_BAY, berths=1, poses=SHUTTLE_POSES))
     hull = s.material("hull")
     out.append(cs.round_body("tower_pedestal", (0.0, TOWER_TOP - 1.0, TOWER_DRUM_Z), (0.0, 125.0, TOWER_DRUM_Z), [(0.0, 0.0), (0.0, 14.5), (21.0, 14.5), (21.0, 0.0)],
                              s, hull, sides=20, creases={1, 2}))
@@ -428,7 +446,7 @@ def tower(s: Style) -> list[cp.Module]:
         cap, length = 3.0, TOWER_BOTTOM + 1.0 - foot
         profile = [(0.0, 0.0), (0.0, r), (length - cap, r), (length - 0.3 * cap, 0.7 * r), (length, 0.0)]
         out.append(cs.round_body(f"tower_pod_{k + 1}", (0.0, TOWER_BOTTOM + 1.0, z), (0.0, foot, z), profile, s, hull, sides=20, creases={1, 2}))
-    return [_put("bridge", m) for m in out] + [_put("bridge", side, cp.RIGHT)]
+    return [_put("bridge", m) for m in out] + [_put("bridge", m, cp.RIGHT) for m in sides]
 
 
 # --- the truss, the hangar bump, the reactor module and the aft spine -------------------------------------------------------
@@ -473,8 +491,9 @@ def truss(s: Style) -> list[cp.Module]:
 
 
 def hangar(s: Style) -> list[cp.Module]:
-    """The hangar bump on the girder (Q58): solid between and round the Starfury bays, a cap over them, the core between
-    their backs, and the three starboard bays, each opening outward and holding one Starfury (the port ones are their twins)."""
+    """The hangar bump on the girder (Q58): solid between and round the Starfury bays, a cap over them, the wall between
+    their backs, and the three starboard bays, each opening outward through its proud frame and holding one Starfury (the port
+    ones are their twins)."""
     f0, f1, a1, a0 = BUMP_Z
     half = FURY_BAY_MOUTH[0] / 2 + FURY_BAY_WALL
     lo = FURY_BAY_Y - FURY_BAY_MOUTH[1] / 2 - FURY_BAY_WALL
@@ -490,13 +509,19 @@ def hangar(s: Style) -> list[cp.Module]:
            slab("bump_cap", first, last, BUMP_TOP, BUMP_TOP, hi)]
     for k, (za, zb) in enumerate(zip(FURY_BAY_ZS, FURY_BAY_ZS[1:], strict=False)):
         out.append(slab(f"bump_web_{k + 1}", za + half, zb - half, BUMP_TOP, BUMP_TOP))
-    back = w - FURY_BAY_DEPTH - FURY_BAY_WALL
+    back = FURY_FRAME_X - FURY_BAY_DEPTH - FURY_BAY_WALL
     out.append(cs.box("bump_core", (-back, lo, first), (back, hi, last), s, HULL))
     out = [_put("truss", m) for m in out]
     outward = np.array([[0.0, 0.0, -1.0], [0.0, 1.0, 0.0], [1.0, 0.0, 0.0]])  # a bay's way out (-z) turned to +x, its width along z
+    fz, fy = FURY_FRAME[0] / 2, FURY_FRAME[1] / 2
     for k, z in enumerate(FURY_BAY_ZS):
-        bay = bays.launch_bay(f"bay_fury_{k + 1}_r", FURY_BAY_MOUTH, FURY_BAY_DEPTH, s, FURY_BAY_WALL, lit=True, rim=False, door=True).transformed(outward, (w, FURY_BAY_Y, z))
-        out.append(_put("hangar_r", bay.with_params(cp.BAY, craft=FURY, capacity=STARFURIES_PER_BAY), cp.RIGHT))
+        bay = bays.launch_bay(f"bay_fury_{k + 1}_r", FURY_BAY_MOUTH, FURY_BAY_DEPTH, s, FURY_BAY_WALL, lit=True, rim=False, door=True)
+        out.append(_put("hangar_r", bay.transformed(outward, (FURY_FRAME_X, FURY_BAY_Y, z)).with_params(cp.BAY, craft=FURY, capacity=STARFURIES_PER_BAY), cp.RIGHT))
+        # The proud frame round the bay's housing, from the bump's flank out to the door's face.
+        y0, y1 = FURY_BAY_Y - fy, FURY_BAY_Y + fy
+        for name, a, b in (("fore", (y0, z - fz), (y1, z - half)), ("aft", (y0, z + half), (y1, z + fz)),
+                           ("top", (hi, z - half), (y1, z + half)), ("foot", (y0, z - half), (lo, z + half))):
+            out.append(_put("hangar_r", cs.box(f"bay_frame_{k + 1}_{name}_r", (w, a[0], a[1]), (FURY_FRAME_X, b[0], b[1]), s, HULL), cp.RIGHT))
     return out
 
 
@@ -773,8 +798,8 @@ def hull_numbers() -> tuple[cp.Hardpoint, cp.Hardpoint]:
                                     NUMBER_HEIGHT_M, colour=NUMBER_INK, text="number", outline=True) for name, sx in (("mark_number_r", 1), ("mark_number_l", -1)))  # type: ignore[return-value]
 
 
-__all__ = ["BLOCK_Y", "BLOCK_Z", "BOW_Z", "ROOF_Y", "DECK_H", "DECK_Z", "ENGINE_Y", "FIN_BOTTOM", "FORE_BANDS", "FORE_END_Z", "FURY", "FURY_BAY_ZS",
-           "LENGTH_M", "MODULE_Y", "MODULE_Z", "NOZZLE_XS", "NUMBER_Z", "SHUTTLE", "SHUTTLES_PER_BAY", "SPONSON_X", "SPONSON_Z", "STARFURIES_PER_BAY",
+__all__ = ["BLOCK_Y", "BLOCK_Z", "BOW_Z", "ROOF_Y", "DECK_H", "DECK_Z", "ENGINE_Y", "FIN_BOTTOM", "FORE_BANDS", "FORE_END_Z", "FURY", "FURY_BAY_DEPTH", "FURY_BAY_WALL", "FURY_BAY_ZS", "FURY_FRAME", "FURY_FRAME_X", "GIRDER_W",
+           "LENGTH_M", "MODULE_Y", "MODULE_Z", "NOZZLE_XS", "NUMBER_Z", "SHUTTLE", "SHUTTLE_BAY_Y", "SHUTTLE_POSES", "SHUTTLES_PER_BAY", "SPONSON_X", "SPONSON_Z", "STARFURIES_PER_BAY",
            "TOWER_DRUM_Y", "TOWER_DRUM_Z", "TOWER_TOP", "TOWER_Z", "aft_spine", "front_array", "deck", "dome_turret", "engines", "fore_hull", "fore_outline",
            "BOW_LAMP", "EMBLEM_Z", "FLOODS", "Flood", "NOSE_FLOOR_Z", "NOSE_LIP_M", "NOSE_RECESS_M", "NOSE_RING", "DISH_FWD_R", "DISH_FWD_Y", "DISH_FWD_Z", "emblem_marks", "forward_dish", "nose_recess", "flood_brackets", "flood_pools", "fore_pieces", "hangar", "hull_numbers", "keel", "lattice", "module", "name_marks", "particle_cannon", "renegade_xs", "sponson", "tanks", "tower",
            "tower_plan", "truss"]
