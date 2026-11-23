@@ -376,7 +376,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T66 | A | Fidelity checks: slice sweeps, front-face depth maps, STL against STL and screenshot sheets (`tools/refview/fidelity.py`, Q61) | - | Sonnet | done |
 | T67 | A | Nova bow face from T66 (the Omega's moves to T68): each generator kept separate (Q62), the open-frame bow, the octagonal launch bay in place of the red square, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement on the Nova (Q61, Q62) | T66 | Fable | not started |
 | T68 | A | Omega rebuilt on the new 4-part kit (Q63): assemble the kit into one reference, sheet to the maintainer, re-measure (silhouettes, sections, T66 sweeps and bow depth map), open-frame bow and octagonal bay (Q62), the drum in the kit's pose | T66 | Fable | not started |
-| T69 | F | Re-size the small EA craft (Q65): `ea_construction_tender` to 8 m, `ea_atmo_shuttle` (Kestrel) to 29 m, `ea_shuttle` (crew shuttle) to 38 m; check each STL's proportions still hold (90 % rule at the new length), ShipSpecs (mass, thrust, hull points by size), hardpoints, collision, the docks and bays that hold them, the ship line-up spacing, docs/assets-capital.md and the catalogue page | T55, T57 | Sonnet | in progress |
+| T69 | F | Re-size the small EA craft (Q65): `ea_construction_tender` to 8 m, `ea_atmo_shuttle` (Kestrel) to 29 m, `ea_shuttle` (crew shuttle) to 38 m; check each STL's proportions still hold (90 % rule at the new length), ShipSpecs (mass, thrust, hull points by size), hardpoints, collision, the docks and bays that hold them, the ship line-up spacing, docs/assets-capital.md and the catalogue page | T55, T57 | Sonnet | done |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -1066,6 +1066,23 @@ On top of it:
   Tests: `test_ea_work_ships.py` (59, with collision coverage and the loadout check), `tests/integration/
   test_ea_work_ships.gd` (3: import with the low set, flight, in play and break-up), a case in `test_ship_catalog.gd`.
   Look sheets, option sheets and compare overlays: `references/screenshots/M10-T51 T55 Panama and tender/`; judging the
+  look is (H).
+
+- **T69 done (2026-11-23).** The small EA craft at Q65's lengths: `ea_shuttle` **38.00 x 18.76 x 10.72 m**,
+  `ea_atmo_shuttle` **29.00 x 51.56 x 9.59 m** (the wingspan grew with it), `ea_construction_tender` **8.00 x 11.15 x
+  3.84 m**. The parts stay authored at T01's sizes; `Craft.scale` (`assets/ea_shuttles.py`) grows the assembled pieces, their
+  seams, plating and paint, buried volumes, collision, chunks and every hardpoint by one factor (`core/civilian.py`,
+  `scaled_pieces`; `SeamLayout.evaluate` reads a scaled group's lines at the hull's texel), so the proportions hold: the 90 %
+  compare at the new lengths gives the same scores (0.984, 0.984, 0.971; 0.973, 0.974, 0.932; 0.934, 0.959, 0.926; sizes
+  within 1.2 %). Still small craft (one 2 048 px atlas): texels 3.8, 3.5 and 1.0 cm. ShipSpecs scaled from T55/T57's by
+  size (mass, thrust and fuel by length squared, inertia by its fourth power, torque by its cube, turn rates by one over
+  its square root, hull points by length): the shuttle 250 t, 1.5 MN a pod, 28/28/42 deg/s, 400 hull points; the Kestrel
+  115 t, 0.44 MN a pod, 33/33/47 deg/s, 300; the tender 10 t, 10 kN a pod, 30/30/45 deg/s, 50 (`loadouts.json` with them).
+  `test_ea_work_ships.gd` places the tender 190 m off (at its old 2.2 km its death was a far flash without chunks).
+  Docs: `docs/assets-civilian.md`, `docs/assets-capital.md`, `docs/design-references.md`, `docs/catalogue/ships.md`. The
+  showcase line-up keeps its places (gaps 170 m and more). **Open:** the Hyperion's shuttle bay (18 x 9 m mouth, 26 m
+  deep, Q58) no longer holds the 38 m shuttle; the Victory (T34) launches Kestrels, so its bay needs 52 x 10 m. Scale
+  sheet: `references/screenshots/M10-T69 craft resize/scale_sheet.png` (each beside a Starfury at one distance); judging the
   look is (H).
 
 ### M10-T43 to T47 Mechanics, sounds, bench, scenarios and performance
