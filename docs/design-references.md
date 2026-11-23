@@ -1585,7 +1585,7 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 ### EA construction tender (`ea_construction_tender`, T55)
 
 - **Reference.** `EA_construction_tender.stl` (182 000 triangles), mapping `--right=-x --up=+z --aft=+y`, **50 m** (Q49,
-  an estimate). Box 70 m wide (the truss), 24 m tall. Show: `ea_construction_tender/WORKPOD2.webp` (work pods at a
+  an estimate; built at **8 m**, Q65, T69: box 11.2 x 3.8 m). Box 70 m wide (the truss), 24 m tall. Show: `ea_construction_tender/WORKPOD2.webp` (work pods at a
   construction frame). Civilian pipeline (Q49).
 - **Shape.** A boxy **work body** (20 to 75 %, about 15 m across) with a cockpit block forward; four **claw arms** forward
   (0 to 25 %), two above and two below, each with a two-fingered grab; a **truss crossbar** across the body at 62 to 75 %
@@ -1600,7 +1600,7 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 
 ### EA shuttle (`ea_shuttle`, T57)
 
-- **Reference.** `EA Shuttle.stl`, mapping `--right=-x --up=+z --aft=+y`, 18.64 m. Box 9.2 m wide, 5.3 m tall. Show:
+- **Reference.** `EA Shuttle.stl`, mapping `--right=-x --up=+z --aft=+y`, 18.64 m (built at **38 m**, Q65, T69: box 18.8 x 10.7 m). Box 9.2 m wide, 5.3 m tall. Show:
   `ea_shuttle/` (three stills). Civilian pipeline; M24 makes it a player ship.
 - **Shape.** A blunt box hull: a sloped, faceted **nose** (0 to 25 %) with the cockpit windows, a long cabin body (25 to
   85 %) with a row of six side windows each side and angled chines, four small engine bells and RCS blocks aft.
@@ -1610,7 +1610,7 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 
 ### EA atmospheric shuttle (`ea_atmo_shuttle`, T57)
 
-- **Reference.** `EA_Atmospheric_Shuttle.stl`, mapping `--right=-x --up=+z --aft=+y`, 25.59 m. Box **45.6 m wide**, 8.6 m
+- **Reference.** `EA_Atmospheric_Shuttle.stl`, mapping `--right=-x --up=+z --aft=+y`, 25.59 m (built at **29 m**, Q65, T69: 51.6 m across, 9.6 m tall). Box **45.6 m wide**, 8.6 m
   tall. Show: `ea_atmo_shuttle/` (two stills).
 - **Shape.** A lifting body: a rounded **nose** and a broad flat fuselage (0 to 75 %), long **swept wings** from 40 % out
   to the tips (x ±23) at 90 %, three engines and two canted tail fins at the stern.

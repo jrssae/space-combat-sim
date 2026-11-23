@@ -279,10 +279,10 @@ within a pixel; the splat column is gone with the splats.
 | `brakiri_bokmai` | whole ship with its three pods (`--pods-from-hardpoints`, no shift) | 0.966 | 0.977 | 0.954 | 0.999 | 0.999 | 0.999 | 2026-11-07 |
 | `centauri_brezebel` | whole ship (best shift x -0.15 m, the model's fins sit 0.2 m to port; unshifted 0.972, 0.983, 0.945) | 0.965 | 0.983 | 0.970 | 1.000 | 1.000 | 0.999 | 2026-11-07 |
 | `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 2026-11-07 |
-| `ea_shuttle` | whole craft (no shift; M10-T57) | 0.984 | 0.984 | 0.971 | 1.000 | 0.999 | 0.998 | 2026-11-20 |
-| `ea_atmo_shuttle` | whole craft (best shift x +0.06 m, the model's vanes sit 0.15 m to starboard; unshifted 0.979, 0.974, 0.917; M10-T57) | 0.973 | 0.974 | 0.932 | 1.000 | 0.999 | 0.988 | 2026-11-20 |
+| `ea_shuttle` | whole craft at 38 m (no shift; M10-T57, re-run at T69's size) | 0.984 | 0.984 | 0.971 | 1.000 | 0.999 | 0.998 | 2026-11-23 |
+| `ea_atmo_shuttle` | whole craft at 29 m (best shift x +0.07 m, the model's vanes sit 0.15 m to starboard; unshifted 0.979, 0.974, 0.917; M10-T57, re-run at T69's size) | 0.973 | 0.974 | 0.932 | 1.000 | 0.999 | 0.988 | 2026-11-23 |
 | `ea_panama` | whole hull (no shift; M10-T51) | 0.982 | 0.983 | 0.972 | 1.000 | 0.999 | 1.006 | 2026-11-21 |
-| `ea_construction_tender` | whole craft (no shift; M10-T55) | 0.934 | 0.959 | 0.926 | 1.000 | 1.000 | 1.000 | 2026-11-21 |
+| `ea_construction_tender` | whole craft at 8 m (no shift; M10-T55, re-run at T69's size) | 0.934 | 0.959 | 0.926 | 1.000 | 1.000 | 1.000 | 2026-11-23 |
 
 **The generator sections below** record each task as it was built on splats (T12 to T22). Their geometry, hardpoints and
 fidelity stand; their splat counts, level shares, lighting records and splat-check numbers are history since M5-T27,
@@ -593,18 +593,25 @@ build them at their measured size and let the splat check show the reading loss.
 (`core/civilian.py`). Both are **small craft** by the class budgets (`docs/assets-capital.md`, "Class budgets", M10 Q38):
 one 2 048 px atlas, the low texture set a mip level down. Neither carries a turret.
 
-**As built (2026-11-20, seed 42).**
+**Built at Q65's lengths (M10-T69, 2026-11-23).** The maintainer re-sized the small EA craft: the shuttle **38 m** (it
+was modelled at 18.64 m), the atmospheric shuttle **29 m** (modelled at 25.59 m), the construction tender **8 m** (modelled
+at 50 m). The parts stay authored at the old size; `Craft.scale` grows the assembled pieces, their seams, plating and paint,
+the buried volumes, the collision and every hardpoint by one factor (`core/civilian.py`, `scaled_pieces`), so the
+proportions, and the 90 % scores, are the STL's at the new length. The tables below give the **authored** numbers; multiply
+positions and sizes by 2.039 (shuttle), 1.133 (atmospheric shuttle) or 0.16 (tender) for the built ones.
+
+**As built (2026-11-20, seed 42; sizes, texels and spacings as T69 builds them).**
 
 | | `ea_shuttle` | `ea_atmo_shuttle` |
 |---|---|---|
-| Size (L x W x H) | 18.64 x 9.20 x 5.26 m | 25.59 x 45.50 x 8.46 m |
+| Size (L x W x H) | 38.00 x 18.76 x 10.72 m (authored 18.64 x 9.20 x 5.26) | 29.00 x 51.56 x 9.59 m (authored 25.59 x 45.50 x 8.46) |
 | Triangles (budget 30 000) | 1 456 | 3 074 |
-| Texel, atlas fill | 1.9 cm, 0.74 | 3.0 cm, 0.70 |
+| Texel, atlas fill | 3.8 cm, 0.74 | 3.5 cm, 0.70 |
 | Texture memory, high / low set (budget 16.0 / 6.0 MB) | 13.3 / 3.3 MB | 13.3 / 3.3 MB |
 | Video memory on the GPU, high set (RX 6950 XT, read off the sheet run) | about 13 MB | about 14 MB |
 | Chunks | `bow`, `cabin`, `stern` | `body`, `wing_l`, `wing_r`, `tail`, `engines` |
 | Collision primitives | 65 | 71 |
-| Sample spacing | 0.20 m | 0.25 m |
+| Sample spacing (authored 0.20 and 0.25 m, grown with the craft) | 0.41 m | 0.28 m |
 
 | Craft | Parts (authored frame: x to starboard, y up, z aft from the nose, x and y on the reference's box centre) |
 |---|---|
@@ -643,16 +650,17 @@ starboard of their engines; here they are centred on them, which costs the front
 Every visible surface sample lies inside a primitive grown by one sample spacing, and no primitive reaches more than
 0.5 m past the hull's box (`test_ea_shuttles.py`).
 
-**In the game.** `assets/ships/ea_shuttle.tres` (60 t, two pods of 0.36 MN: 12 m/s², 40/40/60 deg/s, 200 hull points)
-and `assets/ships/ea_atmo_shuttle.tres` (90 t, four pods of 0.34 MN: 15 m/s², 35/35/50 deg/s, 260 hull points); first
-numbers, to be tuned when a mission flies them (M24 makes the shuttle a player ship). Both are catalogue civilians of
+**In the game.** `assets/ships/ea_shuttle.tres` (250 t, two pods of 1.5 MN: 12 m/s², 28/28/42 deg/s, 400 hull points)
+and `assets/ships/ea_atmo_shuttle.tres` (115 t, four pods of 0.44 MN: 15 m/s², 33/33/47 deg/s, 300 hull points). T69
+scaled T57's numbers by size: mass, thrust and fuel by the length squared (the accelerations stay), inertia by its fourth
+power, torque by its cube, turn rates by one over its square root, hull points by the length; first numbers, to be tuned when a mission flies them (M24 makes the shuttle a player ship). Both are catalogue civilians of
 `earth_alliance` with `random_pool: false`: `ShipCatalog.is_civilian` holds, but random traffic, encounters and
 `random_civilian` spawns do not draw them, so the seeded picks of older scenarios stay as they were; a mission places them
 by type. Callsigns `SHUTTLE` and `KESTREL` (TBP's class name for the atmospheric shuttle, Q50).
 
 ```
-.venv/bin/python3 -I tools/refview/compare.py "references/EA Shuttle.stl" ea_shuttle --length 18.64 --right=-x --up=+z --aft=+y
-.venv/bin/python3 -I tools/refview/compare.py references/EA_Atmospheric_Shuttle.stl ea_atmo_shuttle --length 25.59 --right=-x --up=+z --aft=+y
+.venv/bin/python3 -I tools/refview/compare.py "references/EA Shuttle.stl" ea_shuttle --length 38 --right=-x --up=+z --aft=+y
+.venv/bin/python3 -I tools/refview/compare.py references/EA_Atmospheric_Shuttle.stl ea_atmo_shuttle --length 29 --right=-x --up=+z --aft=+y
 ```
 
 ## `ea_panama` and `ea_construction_tender` (M10-T51, M10-T55)
@@ -673,14 +681,14 @@ Babylon 5's docking bay, so it is seen from a few metres; a 2 048 px atlas would
 
 | | `ea_panama` | `ea_construction_tender` |
 |---|---|---|
-| Size (L x W x H) | 180.00 x 44.83 x 29.61 m (41.7 x 26.3 m without the aerials) | 50.00 x 69.70 x 24.01 m |
+| Size (L x W x H) | 180.00 x 44.83 x 29.61 m (41.7 x 26.3 m without the aerials) | 8.00 x 11.15 x 3.84 m (T69, Q65; authored 50.00 x 69.70 x 24.01, its part numbers below are the authored ones, times 0.16 as built) |
 | Triangles (budget) | 3 862 (60 000) | 11 712 (30 000) |
-| Texel, atlas fill | 5.2 cm, 0.72 | 6.5 cm, 0.66 |
+| Texel, atlas fill | 5.2 cm, 0.72 | 1.0 cm (a fighter's), 0.66 |
 | Texture memory, high / low set (budget) | 53.3 / 13.3 MB (56.0 / 16.0) | 13.3 / 3.3 MB (16.0 / 6.0) |
 | Video memory on the GPU, high / low set (RX 6950 XT, read off the sheet runs) | about 53 / 13 MB | about 14 / 4 MB |
 | Chunks | `bow`, `hold_fore`, `hold_aft`, `stern` | `body`, `stern`, `boom_l`, `boom_r`, `claws_l`, `claws_r` |
 | Collision primitives | 49 | 92 |
-| Sample spacing | 1.5 m | 0.4 m |
+| Sample spacing | 1.5 m | 0.064 m (authored 0.4 m) |
 
 | Craft | Parts (authored frame: x to starboard, y up, z aft from the bow, x and y on the reference's box centre) |
 |---|---|
@@ -723,8 +731,8 @@ Every visible surface sample lies inside a primitive grown by one sample spacing
 0.5 m past the hull's box (`test_ea_work_ships.py`); the Panama's aerials are left out of it.
 
 **In the game.** `assets/ships/ea_panama.tres` (16 000 t, two engines of 8 MN: 1.0 m/s², 1.1/1.5/3 deg/s, 600 hull
-points) and `assets/ships/ea_construction_tender.tres` (400 t, two pods of 0.4 MN: 2.0 m/s², braking at half that,
-12/12/18 deg/s, 300 hull points); first numbers, to be tuned when a mission flies them. Hull points and "unarmed" are
+points) and `assets/ships/ea_construction_tender.tres` (10 t, two pods of 10 kN: 2.0 m/s², braking at half that,
+30/30/45 deg/s, 50 hull points; T69 scaled T55's 50 m numbers to 8 m as the shuttles'); first numbers, to be tuned when a mission flies them. Hull points and "unarmed" are
 T03's (`data/capitals/loadouts.json`, where the Panama's class is now `cruiser`, as its budget). Both are catalogue
 civilians of `earth_alliance` with `random_pool: false` and no docking class: random traffic, encounters and station
 traffic do not draw them, so older scenarios' seeded picks stay as they were; a mission places them by type. Callsigns
@@ -732,7 +740,7 @@ traffic do not draw them, so older scenarios' seeded picks stay as they were; a 
 
 ```
 .venv/bin/python3 -I tools/refview/compare.py "references/EA Panama class.STL" ea_panama --length 180 --right=-x --up=+z --aft=+y
-.venv/bin/python3 -I tools/refview/compare.py references/EA_construction_tender.stl ea_construction_tender --length 50 --right=-x --up=+z --aft=+y
+.venv/bin/python3 -I tools/refview/compare.py references/EA_construction_tender.stl ea_construction_tender --length 8 --right=-x --up=+z --aft=+y
 ```
 
 ## Styles

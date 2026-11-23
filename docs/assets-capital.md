@@ -768,10 +768,10 @@ All fighters: the fighter pipeline (the Starfury's); none opens a jump point (Q2
 | `ea_panama` | T51 | Panama transport | **180** (est.) | none | | y/x/z | 45 x 29 | yes | gate | **civilian** (Q49) | "Panama" is not on TBP; the show images match TBP's "White Star" type commercial transport (no length, no jump engine). Two of the maintainer's stills seem to show it inside a docking bay: at 180 m its section just fits B5's main bay core (45.5 x 30 m) |
 | `ea_explorer` | T52 | Explorer | **6 103** | SotG; WPL (citation needed); TBP ("over six kilometres") | | y/x/z | 846 x 2 526 (975 without the mast) | no (the mast), hull yes | own (builds gates) | capital | The long antenna mast is 2.5 km tall at this length |
 | `ea_asimov` | T53 | Asimov liner | **600** | TBP (unsourced) | | y/x/z (sphere) | 347 x 347 | yes | gate (TBP: no jump engine) | capital | **One generator with T56** (Q49): the liner variant |
-| `ea_construction_tender` | T55 | Construction tender | **50** (est.) | none | | y/x/z | 70 x 24 (truss span) | yes | gate | **civilian** (Q49) | No class of this name found; the still is a work pod by a construction frame. A tug with claws and a truss |
+| `ea_construction_tender` | T55, T69 | Construction tender | **8** (Q65; T55 built it at 50, est.) | none | | y/x/z | 11.2 x 3.8 (truss span) | yes | gate | **civilian** (Q49) | No class of this name found; the still is a work pod by a construction frame. A tug with claws and a truss |
 | `ea_mining_transport` | T56 | Mining transport | **632** closed, 716 open (Q50; the Asimov's sphere and scale) | none | | y/x/z | 330 x 330 | yes | gate | capital | **T53's generator, the mining variant** (Q49): the Asimov's sphere with cargo doors (closed 182, open 206 units long), doors moving (Q43); the show still in its folder (an orange-engined freighter) is a different ship |
-| `ea_shuttle` | T57 | EA shuttle | **18.64** | TE 1.1; TBP | 18 to 25 by variant (SotG) | y/x/z | 9.2 x 5.3 | | | civilian | |
-| `ea_atmo_shuttle` | T57 | EA atmospheric shuttle | **25.59** | TE 1.1; TBP ("Kestrel" class) | | y/x/z | 45.6 x 8.6 | | | civilian | Wingspan 1.8 times the length (TE's drawing: about 1.45) |
+| `ea_shuttle` | T57, T69 | EA shuttle | **38** (Q65; T57 built it at 18.64) | TE 1.1; TBP | 18 to 25 by variant (SotG) | y/x/z | 18.8 x 10.7 | | | civilian | |
+| `ea_atmo_shuttle` | T57, T69 | EA atmospheric shuttle | **29** (Q65; T57 built it at 25.59) | TE 1.1; TBP ("Kestrel" class) | | y/x/z | 51.6 x 9.6 | | | civilian | Wingspan 1.8 times the length (TE's drawing: about 1.45) |
 | `centauri_shuttle` | T58 | Centauri shuttle | **36** | SotG | | x/y/z | 52 x 13.5 | | | civilian | |
 | `minbari_flyer` | T58 | Minbari Flyer | **29.19** | TE 1.1; TBP | | x/y/z | 13.5 x 6.0 | | gate (TBP: jump yes; Q22: small craft never) | civilian | |
 
@@ -955,7 +955,7 @@ excluding interceptors.
 | Asimov T53, mining transport T56 | capital | 9 000 | unarmed | | | | 0 |
 | Strike carrier T19, test cruiser T07 | cruiser | 10 000, 20 000 | unarmed (as built) | | 6 Delta-Vs / none | | 0 |
 
-\* T04 placeholders. Unarmed civilians (Q53): the Panama 600, the construction tender 300, the Centauri shuttle 250 and the
+\* T04 placeholders. Unarmed civilians (Q53): the Panama 600, the construction tender 50 (T69: 8 m long), the Centauri shuttle 250 and the
 Minbari Flyer 300 hull points; the EA shuttles as built.
 
 **Fighters** (flight numbers are the hull tasks'):

@@ -90,10 +90,10 @@ class WorkShipChecks:
         cls.manifest = manifest_io.read_manifest(cls.dir_a)
         cls.hp = json.loads((cls.dir_a / es.HARDPOINTS_NAME).read_text(encoding="utf-8"))
         cls.offset = np.array(cls.manifest["centroid_offset"])
-        cls.pieces = cls.CRAFT.assemble(cls.CRAFT.look.style)
+        cls.pieces = cv.scaled_pieces(cls.CRAFT.assemble(cls.CRAFT.look.style), cls.CRAFT.scale)  # at the built size
         cls.spacing = float(cls.manifest["surface_spacing_m"])
         solid = [p for p in cls.pieces if not p.name.startswith(cls.NO_HIT_VOLUME)] if cls.NO_HIT_VOLUME else cls.pieces
-        sampled = cv.sample_pieces(solid, BuildContext(cls.dir_a, seed=42), cls.spacing, buried_margin=es.BURIED_MARGIN_M)
+        sampled = cv.sample_pieces(solid, BuildContext(cls.dir_a, seed=42), cls.spacing, buried_margin=es.BURIED_MARGIN_M * cls.CRAFT.scale)
         cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
 
     @classmethod
@@ -353,11 +353,12 @@ class EaPanamaTests(WorkShipChecks, unittest.TestCase):
 class EaConstructionTenderTests(WorkShipChecks, unittest.TestCase):
     CRAFT = ws.TENDER
     BUILD = staticmethod(ws.build_tender)
-    LENGTH, SPAN, HEIGHT = 50.0, 69.74, 24.0  # Q49's length and the reference's box at it
+    K = 8.0 / 50.0  # Q65's length over Q49's
+    LENGTH, SPAN, HEIGHT = 8.0, 69.74 * K, 24.0 * K  # Q65's length and the reference's box at it
     SHIP_CLASS, ATLAS_PX, TEXEL_MAX_M = "small_craft", 2048, 0.08
     CHUNKS = ("body", "stern", "boom_l", "boom_r", "claws_l", "claws_r")
-    THRUST_Y = 4.646  # the pods' axes
-    HULL_POINTS = 300
+    THRUST_Y = 4.646 * K  # the pods' axes
+    HULL_POINTS = 50  # Q65: an 8 m work craft
     PAINT_SRGB = 0xC29A2C  # the maintainer's choice (2026-11-21): ochre all over, yellow claws striped black
 
     def test_the_look_is_ochre_with_striped_claws(self) -> None:
@@ -392,17 +393,17 @@ class EaConstructionTenderTests(WorkShipChecks, unittest.TestCase):
 
     def test_the_pods_are_at_the_booms_tips_and_drive_the_ship(self) -> None:
         mains = {pod["name"]: self.authored(pod["main"]["position"]) for pod in self.hp["pods"]}
-        self.assertAlmostEqual(mains["r"][0], 29.92, places=3)
-        self.assertAlmostEqual(mains["l"][0], -29.92, places=3)
+        self.assertAlmostEqual(mains["r"][0], 29.92 * self.K, places=3)
+        self.assertAlmostEqual(mains["l"][0], -29.92 * self.K, places=3)
         for pod in self.hp["pods"]:
-            self.assertLess(self.authored(pod["retro"]["position"])[2], 35.0, "the forward bells brake")
+            self.assertLess(self.authored(pod["retro"]["position"])[2], 35.0 * self.K, "the forward bells brake")
 
     def test_the_landing_gear_stands_to_port_of_the_centre_line(self) -> None:
         gear = next(p for p in self.pieces if p.name == "gear")
         self.assertEqual(gear.side, cv.LONE)
-        feet = gear.part.mesh.vertices[gear.part.mesh.vertices[:, 1] < -11.6]
-        self.assertAlmostEqual(float(feet[:, 1].min()), -12.0, places=2, msg="the feet are the lowest point")
-        self.assertAlmostEqual(0.5 * float(feet[:, 0].min() + feet[:, 0].max()), -0.95, places=2)
+        feet = gear.part.mesh.vertices[gear.part.mesh.vertices[:, 1] < -11.6 * self.K]
+        self.assertAlmostEqual(float(feet[:, 1].min()), -12.0 * self.K, places=2, msg="the feet are the lowest point")
+        self.assertAlmostEqual(0.5 * float(feet[:, 0].min() + feet[:, 0].max()), -0.95 * self.K, places=2)
 
     def test_no_docking_port(self) -> None:
         self.assertEqual(self.hp["docking_ports"], [])

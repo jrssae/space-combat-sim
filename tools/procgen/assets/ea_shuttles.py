@@ -3,8 +3,9 @@ docs/design-references.md, "EA shuttle" and "EA atmospheric shuttle").
 
 Both are small craft by the class budgets (M10 Q38): one 2 048 px atlas, the low texture set a mip level down.
 
-Composition only: the pieces of ``parts/ea_shuttle.py`` (18.64 m, a blunt octagonal box hull) and
-``parts/ea_atmo_shuttle.py`` (25.59 m long, 45.6 m across its swept wings, a lifting body), each in its look from
+Composition only: the pieces of ``parts/ea_shuttle.py`` (modelled at 18.64 m, a blunt octagonal box hull) and
+``parts/ea_atmo_shuttle.py`` (modelled at 25.59 m long, 45.6 m across its swept wings, a lifting body), built at the
+maintainer's lengths (M10 Q65, T69: 38 m and 29 m), each in its look from
 ``styles/ea_shuttle.py``, through the shared civilian pipeline (``core/civilian.py``): one textured mesh with a full and
 a low texture set, the fallback mesh, the break-up chunks as cuts of the hull, ``hardpoints.json`` and the manifest,
 every output derived from the placed pieces so they agree by construction. Neither craft carries a turret.
@@ -40,6 +41,8 @@ from ..styles.ea_shuttle import ATMO_LOOK, SHUTTLE_LOOK, Look
 SHUTTLE_ID = "ea_shuttle"
 ATMO_ID = "ea_atmo_shuttle"
 GENERATOR_VERSION = 1
+SHUTTLE_LENGTH_M = 38.0  # the maintainer's lengths (M10 Q65): the parts are modelled at T01's, then grown
+ATMO_LENGTH_M = 29.0
 SHIP_CLASS = "small_craft"  # the class budget both are held to (docs/assets-capital.md, "Class budgets")
 HARDPOINTS_NAME = "hardpoints.json"
 BURIED_MARGIN_M = 0.02
@@ -59,7 +62,7 @@ class Craft:
     construction tender (``assets/ea_work_ships.py``) are built through it too."""
 
     asset_id: str
-    spacing_m: float  # the surface samples' spacing: the body origin and the chunks' offsets
+    spacing_m: float  # the surface samples' spacing at the authored size: the body origin and the chunks' offsets
     chunk_order: tuple[str, ...]
     look: Look
     assemble: Callable[[Any], list[cv.Piece]]
@@ -74,6 +77,7 @@ class Craft:
     docks: Callable[[dict[str, Part]], list[tuple[str, np.ndarray, np.ndarray]]]  # name, position, the way out of the hull
     ship_class: str = SHIP_CLASS  # the class budget it is held to
     atlas_px: int = cv.HULL_ATLAS_PX
+    scale: float = 1.0  # built this many times the authored size (M10-T69, Q65); every authored number above is at 1
 
 
 # --- surfaces ------------------------------------------------------------------------------------------------------------------
@@ -212,21 +216,26 @@ def no_docks(by_name: dict[str, Part]) -> list[tuple[str, np.ndarray, np.ndarray
 
 SHUTTLE = Craft(SHUTTLE_ID, 0.2, ("bow", "cabin", "stern"), SHUTTLE_LOOK, sp.assemble, dress_shuttle, sp.AXIS_Y,
                 (("l", "left", "engine_l", 0.6), ("r", "right", "engine_r", 0.6)), 0.0, (1.5, sp.AXIS_Y, sp.HULL_STATIONS[0][0], 0.25),
-                shuttle_ports, shuttle_lights, shuttle_joints, shuttle_docks)  # fmt: skip
+                shuttle_ports, shuttle_lights, shuttle_joints, shuttle_docks, scale=SHUTTLE_LENGTH_M / sp.LENGTH_M)  # fmt: skip
 ATMO = Craft(ATMO_ID, 0.25, ("body", "wing_l", "wing_r", "tail", "engines"), ATMO_LOOK, ap.assemble, dress_atmo, ap.ENGINE_Y,
              (("l", "left", "engine_l", ap.ENGINE_EXIT_R), ("cl", "left", "engine_c", 0.5 * ap.ENGINE_EXIT_R),
               ("cr", "right", "engine_c", 0.5 * ap.ENGINE_EXIT_R), ("r", "right", "engine_r", ap.ENGINE_EXIT_R)), 0.3,
-             (2.0, ap.EDGE_Y, 0.8, 0.3), atmo_ports, atmo_lights, atmo_joints, no_docks)  # fmt: skip
+             (2.0, ap.EDGE_Y, 0.8, 0.3), atmo_ports, atmo_lights, atmo_joints, no_docks, scale=ATMO_LENGTH_M / ap.LENGTH_M)  # fmt: skip
 
 
 def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]], offset: np.ndarray) -> dict[str, Any]:
-    """The hardpoints document in the body frame (authored positions minus ``offset``); ``chunks`` are the ``write_chunks``
-    entries. No turrets and no muzzles: the shuttles are unarmed."""
-    parts = [p.part for p in cv.with_twins(pieces)]
-    by_name = {p.name: p for p in parts}
+    """The hardpoints document in the body frame (authored positions at the craft's scale, minus ``offset``); ``pieces`` are
+    the authored ones, ``chunks`` the ``write_chunks`` entries. No turrets and no muzzles: the shuttles are unarmed."""
+    k = craft.scale
+    authored = [p.part for p in cv.with_twins(pieces)]
+    by_name = {p.name: p for p in authored}  # the craft's hardpoint helpers read authored numbers
+    parts = [cv.scaled_part(p, k) for p in authored] if k != 1.0 else authored
     lo, hi = Mesh.concatenate(p.mesh for p in parts).bounds()
     length = float(hi[2] - lo[2])
-    com = np.array([0.0, craft.thrust_y, float(mass_centroid(parts)[2])])  # on the thrust line, so main thrust makes no pitch torque
+    com = k * np.array([0.0, craft.thrust_y, float(mass_centroid(authored)[2])])  # on the thrust line, so main thrust makes no pitch torque
+
+    def at(v: Any) -> list[float]:
+        return cv.r(k * np.asarray(v, dtype=float) - offset)
 
     retro_x, retro_y, retro_z, retro_r = craft.retros
     pods = []
@@ -239,18 +248,18 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
         pods.append({
             "name": name,
             "side": side,
-            "center": cv.r(engine.anchor("centre").position + shift - offset),
-            "main": {"position": cv.r(main.position + shift - offset), "exhaust": cv.r(main.direction), "radius": round(radius, 3)},
-            "retro": {"position": cv.r(retro - offset), "exhaust": [0.0, 0.0, -1.0], "radius": retro_r},
+            "center": at(engine.anchor("centre").position + shift),
+            "main": {"position": at(main.position + shift), "exhaust": cv.r(main.direction), "radius": round(k * radius, 3)},
+            "retro": {"position": at(retro), "exhaust": [0.0, 0.0, -1.0], "radius": round(k * retro_r, 3)},
         })  # fmt: skip
 
     rcs = []
     for name, position, exhaust in craft.ports(by_name):
         p, e = np.asarray(position, dtype=float), np.asarray(exhaust, dtype=float)
         twins = [(name, p, e)] + ([("l_" + name[2:], p * FLIP, e * FLIP)] if name.startswith("r_") else [])
-        for n, at, out in twins:
-            rcs.append({"name": n, "pod": "l" if at[0] < -1e-6 else "r", "position": cv.r(at - offset), "exhaust": cv.r(out),
-                        "tags": pilot_tags(at, out, com)})  # fmt: skip
+        for n, spot, out in twins:
+            rcs.append({"name": n, "pod": "l" if spot[0] < -1e-6 else "r", "position": at(spot), "exhaust": cv.r(out),
+                        "tags": pilot_tags(k * spot, out, com)})  # fmt: skip
 
     lights = craft.lights(by_name)
     joints = craft.joints(by_name)
@@ -266,25 +275,25 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
         "mass_kg": round(total_mass(parts), 1),
         "inertia_estimate_kg_m2": cv.r(cv.inertia_estimate(parts, com)),
         "center_of_mass": cv.r(com - offset),
-        "cockpit_camera": {"position": cv.r(eye - offset), "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0]},
+        "cockpit_camera": {"position": at(eye), "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0]},
         "chase_anchor": {"position": cv.r((0.0, CHASE_ANCHOR_SHARE[0] * length, CHASE_ANCHOR_SHARE[1] * length))},
         "muzzles": [],
         "pods": pods,
         "rcs": rcs,
         "collision": cv.collision_json(parts, offset),
         "nav_lights": {
-            "port": cv.r(lights.get("port", lights["starboard"] * FLIP) - offset),
-            "starboard": cv.r(lights["starboard"] - offset),
-            "top": cv.r(lights["top"] - offset),
-            "top_lamp": cv.r(lights["top_lamp"] - offset),
+            "port": at(lights.get("port", lights["starboard"] * FLIP)),
+            "starboard": at(lights["starboard"]),
+            "top": at(lights["top"]),
+            "top_lamp": at(lights["top_lamp"]),
             "top_lamp_range_m": round(NAV_LAMP_RANGE_SHARE * length, 2),
-            "cabin": cv.r(eye - offset),
+            "cabin": at(eye),
             "cabin_range_m": round(max(NAV_CABIN_RANGE_SHARE * length, 1.0), 2),
         },
         "turrets": [],
-        "docking_ports": [{"name": name, "position": cv.r(np.asarray(at) - offset), "out": cv.r(out), "up": [0.0, 1.0, 0.0]}
-                          for name, at, out in craft.docks(by_name)],
-        "chunks": [{**c, "joint": cv.r(joints[c["name"]] - offset)} for c in chunks],
+        "docking_ports": [{"name": name, "position": at(spot), "out": cv.r(out), "up": [0.0, 1.0, 0.0]}
+                          for name, spot, out in craft.docks(by_name)],
+        "chunks": [{**c, "joint": at(joints[c["name"]])} for c in chunks],
     }
 
 
@@ -292,10 +301,10 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
 def build_craft(craft: Craft, ctx: BuildContext) -> AssetOutputs:
     """Generate one craft into ``ctx.out_dir``.
 
-    Options: ``spacing`` (m, the surface samples' spacing), ``atlas_px`` (the hull's atlas, default 2 048), ``occlusion``
+    Options: ``spacing`` (m at the built size, the surface samples' spacing), ``atlas_px`` (the hull's atlas, default 2 048), ``occlusion``
     (default off).
     """
-    spacing = float(ctx.option("spacing", craft.spacing_m))
+    spacing = float(ctx.option("spacing", craft.spacing_m * craft.scale))
     if spacing <= 0.0 or not math.isfinite(spacing):
         raise ValueError("spacing must be positive")
     ctx = BuildContext(ctx.out_dir, ctx.seed, {"atlas_px": craft.atlas_px, **ctx.options})
@@ -305,7 +314,8 @@ def build_craft(craft: Craft, ctx: BuildContext) -> AssetOutputs:
     comments = (f"{craft.asset_id} generator v{GENERATOR_VERSION} seed {ctx.seed}",)
 
     pieces, markings = craft.dress(craft.assemble(look.style), look)
-    sampled = cv.sample_pieces(pieces, ctx, spacing, buried_margin=BURIED_MARGIN_M)
+    built, markings = cv.scaled_pieces(pieces, craft.scale), cv.scaled_markings(markings, craft.scale)
+    sampled = cv.sample_pieces(built, ctx, spacing, buried_margin=BURIED_MARGIN_M * craft.scale)
     offset = cv.centroid(sampled)
     hull = cv.write_hull(out_dir, craft.asset_id, cv.hull_parts(sampled, offset, markings), craft.chunk_order, look.style, ctx, comments,
                          low_shrink=LOW_SHRINK)

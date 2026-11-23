@@ -2,7 +2,7 @@
 docs/assets-civilian.md and docs/design-references.md, "EA Panama-class transport" and "EA construction tender").
 
 Composition only: the pieces of ``parts/ea_panama.py`` (180 m, a lopsided wedge-section cargo hull) and
-``parts/ea_construction_tender.py`` (50 m, a hexagonal work body with claws, a boom and two thruster pods), each in a
+``parts/ea_construction_tender.py`` (modelled at 50 m and built at 8 m, Q65; a hexagonal work body with claws, a boom and two thruster pods), each in a
 look from ``styles/ea_work_ships.py``, through the shuttles' shared build (``assets/ea_shuttles.py``, ``build_craft``) on
 the civilian pipeline (``core/civilian.py``). Neither carries a weapon.
 
@@ -29,6 +29,7 @@ from .ea_shuttles import NAV_CLEARANCE_M, Craft, Port, build_craft
 
 PANAMA_ID = "ea_panama"
 TENDER_ID = "ea_construction_tender"
+TENDER_LENGTH_M = 8.0  # the maintainer's length (M10 Q65): the parts are modelled at 50 m, then shrunk
 INF = float("inf")
 X_AXIS, Y_AXIS, Z_AXIS = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
 Marks = dict[str, tuple[Marking, ...]]
@@ -191,7 +192,7 @@ PANAMA = Craft(PANAMA_ID, 1.5, ("bow", "hold_fore", "hold_aft", "stern"), PANAMA
                ship_class="cruiser", atlas_px=4096)  # fmt: skip
 TENDER = Craft(TENDER_ID, 0.4, ("body", "stern", "boom_l", "boom_r", "claws_l", "claws_r"), TENDER_LOOK, tp.assemble, dress_tender, tp.POD_AT[1],
                (("l", "left", "pod_l", 1.4), ("r", "right", "pod_r", 1.4)), 0.0, (tp.POD_AT[0], tp.POD_AT[1], tp.POD_Z[0] + 1.3, 1.4),
-               tender_ports, tender_lights, tender_joints, no_docks)  # fmt: skip
+               tender_ports, tender_lights, tender_joints, no_docks, scale=TENDER_LENGTH_M / tp.LENGTH_M)  # fmt: skip
 
 
 def build_panama(ctx: BuildContext) -> AssetOutputs:

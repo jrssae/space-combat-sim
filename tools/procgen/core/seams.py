@@ -411,7 +411,7 @@ class Hexes(Feature):
 @dataclass(frozen=True)
 class SeamLayout:
     """A part's features, in groups that each keep the frame they were drawn in (``matrix`` columns are that frame's axes in the
-    part's current frame, ``origin`` its origin), so the layout follows the part through moves, turns and mirrors."""
+    part's current frame, ``origin`` its origin), so the layout follows the part through moves, turns, mirrors and uniform scales."""
 
     groups: tuple[tuple[np.ndarray, np.ndarray, tuple[Feature, ...]], ...] = ()
 
@@ -448,10 +448,14 @@ class SeamLayout:
         for matrix, origin, features in self.groups:
             if not features:
                 continue
-            p = (np.asarray(positions, dtype=float) - origin) @ matrix  # the matrix is orthogonal: its transpose undoes it
+            p = (np.asarray(positions, dtype=float) - origin) @ matrix  # the matrix is orthogonal (times a scale): its transpose undoes the turn
             n = np.asarray(normals, dtype=float) @ matrix
+            line = line_m
+            k = float(np.cbrt(abs(np.linalg.det(matrix))))
+            if abs(k - 1.0) > 1e-9:  # a hull built at another size (M10-T69): its layout grows with it, the lines keep their width
+                p, n, line = p / (k * k), n / k, line_m / k
             for f in features:
-                f.paint(p, n, line_m, depth_m, out)
+                f.paint(p, n, line, depth_m, out)
         return out
 
 

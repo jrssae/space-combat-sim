@@ -84,8 +84,8 @@ class ShuttleChecks:
         cls.obj = read_obj(cls.dir_a / f"{cls.asset_id}.obj")
         cls.offset = np.array(cls.manifest["centroid_offset"])
         cls.spacing = float(cls.manifest["surface_spacing_m"])
-        cls.pieces = cls.CRAFT.assemble(cls.CRAFT.look.style)
-        sampled = cv.sample_pieces(cls.pieces, BuildContext(cls.dir_a, seed=42), cls.spacing, buried_margin=es.BURIED_MARGIN_M)
+        cls.pieces = cv.scaled_pieces(cls.CRAFT.assemble(cls.CRAFT.look.style), cls.CRAFT.scale)  # at the built size
+        sampled = cv.sample_pieces(cls.pieces, BuildContext(cls.dir_a, seed=42), cls.spacing, buried_margin=es.BURIED_MARGIN_M * cls.CRAFT.scale)
         cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
 
     @classmethod
@@ -308,9 +308,10 @@ class ShuttleChecks:
 class EaShuttleTests(ShuttleChecks, unittest.TestCase):
     CRAFT = es.SHUTTLE
     BUILD = staticmethod(es.build_shuttle)
-    LENGTH, SPAN, HEIGHT = 18.64, 9.21, 5.27  # T01's length and the reference's box at it
+    K = 38.0 / 18.64  # Q65's length over T01's
+    LENGTH, SPAN, HEIGHT = 38.0, 9.21 * K, 5.27 * K  # Q65's length and the reference's box at it
     CHUNKS = ("bow", "cabin", "stern")
-    THRUST_Y = -0.31  # the hull's centre line under the box centre
+    THRUST_Y = -0.31 * K  # the hull's centre line under the box centre
     ASYMMETRIC = ("nose_blocks",)
     BAND_SRGB = 0x2E8B4E  # the maintainer's choice (2026-11-20): worn dark grey, green band, number 03
 
@@ -323,7 +324,7 @@ class EaShuttleTests(ShuttleChecks, unittest.TestCase):
         self.assertEqual((port["name"], port["out"], port["up"]), ("stern_hatch", [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]))
         at = self.authored(port["position"])
         np.testing.assert_allclose(at[:2], [0.0, self.THRUST_Y], atol=1e-4)
-        self.assertGreater(at[2], 18.0)
+        self.assertGreater(at[2], 18.0 * self.K)
         self.assertLessEqual(at[2], self.LENGTH)
 
     def test_the_bow_carries_the_reference_off_centre_blocks(self) -> None:
@@ -335,9 +336,10 @@ class EaShuttleTests(ShuttleChecks, unittest.TestCase):
 class EaAtmoShuttleTests(ShuttleChecks, unittest.TestCase):
     CRAFT = es.ATMO
     BUILD = staticmethod(es.build_atmo)
-    LENGTH, SPAN, HEIGHT = 25.59, 45.56, 8.56  # T01's length and the reference's box at it
+    K = 29.0 / 25.59  # Q65's length over T01's
+    LENGTH, SPAN, HEIGHT = 29.0, 45.56 * K, 8.56 * K  # Q65's length and the reference's box at it
     CHUNKS = ("body", "wing_l", "wing_r", "tail", "engines")
-    THRUST_Y = -0.47  # the three nacelles' axes
+    THRUST_Y = -0.47 * K  # the three nacelles' axes
     BAND_SRGB = 0xA8322C  # the maintainer's choice (2026-11-20): fleet grey, one red band
 
     def test_the_atmospheric_shuttle_has_no_docking_port(self) -> None:
@@ -347,15 +349,15 @@ class EaAtmoShuttleTests(ShuttleChecks, unittest.TestCase):
     def test_three_engines_the_centre_one_as_two_pods(self) -> None:
         mains = {pod["name"]: self.authored(pod["main"]["position"]) for pod in self.hp["pods"]}
         self.assertEqual(set(mains), {"l", "cl", "cr", "r"})
-        self.assertAlmostEqual(mains["r"][0], 4.43, places=3)
+        self.assertAlmostEqual(mains["r"][0], 4.43 * self.K, places=2)
         self.assertAlmostEqual(mains["cl"][0], -mains["cr"][0], places=5)
-        self.assertLess(abs(mains["cr"][0]), 0.6, "inside the centre nozzle")
+        self.assertLess(abs(mains["cr"][0]), 0.6 * self.K, "inside the centre nozzle")
 
     def test_the_wings_sweep_back_and_rise_to_the_tips(self) -> None:
         port, starboard = (self.authored(self.hp["nav_lights"][k]) for k in ("port", "starboard"))
-        self.assertGreater(starboard[0], 22.0)
-        self.assertGreater(starboard[1], 3.0, "dihedral")
-        self.assertGreater(starboard[2], 23.0, "sweep")
+        self.assertGreater(starboard[0], 22.0 * self.K)
+        self.assertGreater(starboard[1], 3.0 * self.K, "dihedral")
+        self.assertGreater(starboard[2], 23.0 * self.K, "sweep")
         self.assertAlmostEqual(port[0], -starboard[0], places=4)
 
 

@@ -23,7 +23,7 @@ from typing import Any
 
 import numpy as np
 
-from ..parts import Part
+from ..parts import Anchor, Collision, Part
 from ..parts.solids import Solid
 from ..styles import Style
 from .chunks import ChunkCut, ChunkSource, chunk_offsets, write_chunks
@@ -81,6 +81,48 @@ def with_twins(pieces: Sequence[Piece]) -> list[Piece]:
         if p.side == RIGHT:
             out.append(p.mirrored())
     return out
+
+
+# --- a hull built at another size --------------------------------------------------------------------------------------
+def scaled_part(part: Part, k: float) -> Part:
+    """The part grown ``k`` times about the authored origin, so a hull modelled at one length can be built at another
+    (M10-T69); its seams and plating grow with it, its mass by volume."""
+    m = part.mesh
+    mesh = Mesh(m.vertices * k, m.faces.copy(), m.face_material.copy(), m.materials, m.face_chart.copy(), m.face_uv * k, m.vertex_normal)
+    anchors = {name: Anchor(a.position * k, a.direction) for name, a in part.anchors.items()}
+    collision = [Collision(c.kind, c.center * k, c.basis, None if c.size is None else c.size * k, None if c.radius is None else c.radius * k,
+                           None if c.height is None else c.height * k, c.name) for c in part.collision]  # fmt: skip
+    return Part(part.name, mesh, anchors, collision, part.mass_kg * k**3, part.group, part.seams.transformed(k * np.eye(3)))
+
+
+def scaled_solid(solid: Solid, k: float) -> Solid:
+    """The buried volume grown with its part."""
+    test = solid.test
+    lo, hi = solid.local_bounds
+    return Solid(lambda p, margin: test(p / k, margin / k), (lo * k, hi * k), solid.rotation, solid.origin * k)
+
+
+def scaled_pieces(pieces: Sequence[Piece], k: float) -> list[Piece]:
+    """Every piece grown ``k`` times; at 1 the pieces themselves."""
+    if k == 1.0:
+        return list(pieces)
+    return [Piece(scaled_part(p.part, k), None if p.solid is None else scaled_solid(p.solid, k), p.side, p.fine) for p in pieces]
+
+
+def scaled_markings(markings: dict[str, tuple[Marking, ...]], k: float) -> dict[str, tuple[Marking, ...]]:
+    """The paint grown with the hull: every point it is placed by and every size (the ``_m`` values)."""
+    if k == 1.0:
+        return markings
+
+    def grown(marking: Marking) -> Marking:
+        params = {}
+        for key, value in marking.params.items():
+            if key in ("centre", "exit") or key.endswith("_m"):
+                value = tuple(float(v) * k for v in value) if isinstance(value, tuple) else float(value) * k
+            params[key] = value
+        return dataclasses.replace(marking, params=params)
+
+    return {name: tuple(grown(m) for m in marks) for name, marks in markings.items()}
 
 
 @dataclass

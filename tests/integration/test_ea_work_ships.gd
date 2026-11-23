@@ -6,7 +6,10 @@ extends TestSteps
 
 const TYPES: Array[StringName] = [&"ea_panama", &"ea_construction_tender"]
 ## The hull points of T03's loadouts (`data/capitals/loadouts.json`, Q53).
-const HULL_POINTS: Dictionary[StringName, float] = {&"ea_panama": 600.0, &"ea_construction_tender": 300.0}
+const HULL_POINTS: Dictionary[StringName, float] = {&"ea_panama": 600.0, &"ea_construction_tender": 50.0}
+## Where each is placed off the player: near enough that its death is drawn in full, chunks and all (the 8 m tender's
+## fireball would be a far flash at the Panama's distance, M10-T69).
+const SPAWN_AT: Dictionary[StringName, Vector3] = {&"ea_panama": Vector3(900.0, 0.0, -1200.0), &"ea_construction_tender": Vector3(120.0, 0.0, -150.0)}
 const GEN_ASSETS_HINT: String = "run scripts/gen_assets.sh and import first"
 ## Godot's importer may weld a few vertices; the box must still match the manifest's to a centimetre.
 const AABB_TOLERANCE_M: float = 0.01
@@ -117,7 +120,7 @@ func test_in_play_each_is_an_earth_alliance_civilian_that_breaks_into_its_chunks
 	for i: int in TYPES.size():
 		var type: StringName = TYPES[i]
 		assert_eq(main.ensure_pool(type, 1), 1, "%s: the pool builds one, watched like the scenario's own" % type)
-		var at: Vector3 = main.ship.global_position + Vector3(900.0 * (i + 1), 0.0, -1200.0)
+		var at: Vector3 = main.ship.global_position + SPAWN_AT[type]
 		var c: Combatant = main.ships.acquire("WORK %d" % i, main.world.to_universe(at), Basis.IDENTITY, Vector3.ZERO, IdleBrain.new(true), type)
 		assert_not_null(c, "%s: the pool gives one" % type)
 		if c == null:

@@ -1007,7 +1007,7 @@
   "ea_construction_tender": {
    "task": "T55",
    "class": "small_craft",
-   "hull": 300,
+   "hull": 50,
    "jump": "gate",
    "weapons": {},
    "interceptors": {},
@@ -1017,7 +1017,7 @@
   "ea_shuttle": {
    "task": "T57",
    "class": "small_craft",
-   "hull": 200,
+   "hull": 400,
    "jump": "gate",
    "weapons": {},
    "interceptors": {},
@@ -1027,7 +1027,7 @@
   "ea_atmo_shuttle": {
    "task": "T57",
    "class": "small_craft",
-   "hull": 260,
+   "hull": 300,
    "jump": "gate",
    "weapons": {},
    "interceptors": {},
