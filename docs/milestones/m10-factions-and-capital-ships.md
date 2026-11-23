@@ -93,6 +93,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q64 | Hyperion look approved; skins and bays (2026-11-22) | The refined Hyperion (V5c, old-STL antenna, brighter look A) is the best ship so far; its **skin** (light grey plates with small patches of medium and darker grey, shallow soft seams: `HyperionMosaic`/`PatchPlates`) is the model for the **Omega and Nova skins** too (T67, T68). The Hyperion carries its name, hull number and an emblem in the EarthForce emblem's place, **drawn from scratch in code but kept close to the show's design** (maintainer: a free fan project, it need not differ much; still no copied or ripped logo file). **Omega and Nova bays: no glowing outer edge and no doors** (the red light stays inside); only the Hyperion's bays have roll-down doors |
 | Q65 | Small EA craft lengths; Hyperion number (2026-11-23) | New lengths: the **construction tender 8 m** (was 50 m), the **Kestrel atmospheric shuttle 29 m** (`ea_atmo_shuttle`, was 25.59 m), the **crew shuttle 38 m** (`ea_shuttle`, was 18.64 m) (T69). The Hyperion's side hull number is **white with a black outline**, like the bow name (T22) |
 | Q66 | Panama size; work order (2026-11-23) | The **Panama** keeps its proportions and is scaled to **20 m tall**: about 124 x 31 x 20 m (was 180 x 45 x 29; T71). Work order, Opus, one task at a time: T22's bays (in progress), then T67, T68, T14, T71; small checks (T70) may run beside them |
+| Q67 | New approved lengths; the Drakh (2026-11-23) | The lengths now in the STL file names are approved and **replace T01/Q49's**: Brakiri Avioki **1 000 m**, Drakh carrier **7 000 m** (`Drakh carrier 7km.STL`; too big for the jump gates: it **opens its own jump points**), Drakh fighter **215 m**, ISA Victory **2 990 m**, ISA White Star **266 m**, Shadow scout **356 m**, Vree Xill **500 m**, Narn G'Quan **1 400 m**, Narn Frazi **16.8 m** (and as before Vorchan 360, Warlock 1 992, Sharlin 1 600, Explorer 6 103, Asimov 600, mining transport 600, Nial 22, Shadow fighter 15.3, Minbari Flyer 40). The **Drakh fighter** is a multi-crew vessel a little smaller than a White Star and a fairly even match for one: built on the capital framework like the Shadow scout (T40). The **Drakh carrier holds 40 Drakh fighters, hanging on the outside of its belly** (was 24, Q53). STL file names in this file now match `references/` |
 
 ## The hulls
 
@@ -105,23 +106,23 @@ identification, its length (Q4) and the fighters it launches.
 | Task | Hull | Faction | Role | Reference | Launches |
 |---|---|---|---|---|---|
 | T19 | Raider strike carrier (done) | raiders | carrier | `Rader_strike_carrier.stl`, `radier strike carrier.jpg`, `raider ships docked to strike carrier.jpg` | Delta-V |
-| T21 | Omega-class destroyer | EA, renegades | destroyer and carrier, rotating section | `EA Omega Destroyer.stl` | 32 Starfuries (Q53) |
+| T21 | Omega-class destroyer | EA, renegades | destroyer and carrier, rotating section | the 4-part kit `EA Omega head_x1.stl`, `middle_x1`, `rear_x1`, `outerrotate_x2`, laid out by `EA Omega (lacking detail).stl` (Q63) | 32 Starfuries (Q53) |
 | T22 | Hyperion-class heavy cruiser | EA, renegades | heavy cruiser | `EA Hyperion Class Heavy Cruiser.stl` | 6 Starfuries, 2 shuttles (Q49) |
 | T23 | Nova-class dreadnought | EA, renegades | dreadnought | `EA Nova class destroyer.STL` | 24 Starfuries (Q53) |
-| T24 | Warlock-class destroyer | EA, renegades | advanced destroyer | `EA-Warlock_destroyer.stl` | 12 Starfuries (Thunderbolts after M11; Q53) |
-| T25 | G'Quan-class heavy cruiser | Narn | heavy cruiser and carrier | `Narn Gquon battlecruiser.stl` | 12 Frazi (Q53) |
-| T26 | Vorchan-class warship | Centauri | cruiser | `Centauri Vorchan Cruiser.stl` | none |
+| T24 | Warlock-class destroyer | EA, renegades | advanced destroyer | `EA-Warlock_destroyer_1992m.stl` | 12 Starfuries (Thunderbolts after M11; Q53) |
+| T25 | G'Quan-class heavy cruiser | Narn | heavy cruiser and carrier | `Narn Gquon battlecruiser 1400m.stl` | 12 Frazi (Q53) |
+| T26 | Vorchan-class warship | Centauri | cruiser | `Centauri Vorchan Cruiser 360m.stl` | none |
 | T27 | Primus-class battlecruiser | Centauri | battlecruiser | `Centauri_Primus_1586m.stl`, `Centauri_Primus_w_mass_driver.stl` (Q41) | none: no fighter bays (Q49) |
-| T28 | Sharlin-class warcruiser | Minbari | warcruiser | `Minbari_Sharlin_cruiser.stl` | Nial |
+| T28 | Sharlin-class warcruiser | Minbari | warcruiser | `Minbari_Sharlin_cruiser_1600m.stl` | Nial |
 | T29 | Sunhawk | Drazi | cruiser | `Drazi_Sunhawk_crusier_350m.stl` (197 m, Q49) | none (one Sky Serpent may ride a dorsal cradle) |
 | T30 | Stormfalcon | Drazi | heavy cruiser and carrier | `Drazi_Stormfalcon_cruiser_820m.stl` | 13 Sky Serpents: 1, and 12 in place of the Star Snakes, which have no reference (Q53) |
-| T31 | Avioki cruiser | Brakiri | cruiser | `Brakiri_Avioki_cruiser.stl` | none: 2 assault shuttles (Q49) |
-| T32 | Xill | Vree | saucer warship | `Vree_Xill_cruiser.stl` | none (no Vree fighter reference) |
-| T33 | White Star | ISA | light warship | `ISA Whitestar.stl` | 4 Nial (Q50) |
-| T34 | Victory-class destroyer | ISA | destroyer | `ISA Destroyer.stl` | Starfury, Thunderbolt (after M11), Kestrel shuttle (Q50) |
-| T35 | Shadow battlecrab | Shadows | warship, organic | `Shadow_Battlecrab.stl` | 6 Shadow fighters (Q53) |
+| T31 | Avioki cruiser | Brakiri | cruiser | `Brakiri_Avioki_cruiser_1000m.stl` | none: 2 assault shuttles (Q49) |
+| T32 | Xill | Vree | saucer warship | `Vree_Xill_cruiser_500m.stl` | none (no Vree fighter reference) |
+| T33 | White Star | ISA | light warship | `ISA Whitestar 266m.stl` | 4 Nial (Q50) |
+| T34 | Victory-class destroyer | ISA | destroyer | `ISA Destroyer  2990m.stl` | Starfury, Thunderbolt (after M11), Kestrel shuttle (Q50) |
+| T35 | Shadow battlecrab | Shadows | warship, organic | `Shadow_Battlecrab_3_sizes.stl` | 6 Shadow fighters (Q53) |
 | T36 | Vorlon destroyer (131 m, Q49) | Vorlons | destroyer, organic | `Vorlon_Destroyer (missing pedals) - 131m.stl` (the body), with the petals from `Vorlon_Destroyer-Open_petal_position.stl` and `Vorlon_Destroyer-Closed_petal_position.stl` | none (no source lists any) |
-| T37 | Drakh carrier | Drakh | carrier | `Drakh carrier.STL` | 24 Drakh fighters (Q53) |
+| T37 | Drakh carrier | Drakh | carrier | `Drakh carrier 7km.STL` | 24 Drakh fighters (Q53) |
 | T59 | Drazi Firehawk | Drazi | advanced cruiser (Mongoose's Ships of the Galaxy; the Sunhawk's hull with a solar cannon), 197 m (Q49) | `Drazi_Firehawk_350m.stl` | none (Q49) |
 | T60 | Vorlon heavy cruiser (1 528 m, Q49) | Vorlons | heavy cruiser, organic | `Vorlon Dreadnought - 1528m.stl` (the file name is wrong: it is the heavy cruiser; it fits the gate's mouth) | Vorlon fighters (Babylon 5 Wars: 6, and 2 shuttles) |
 
@@ -129,10 +130,10 @@ identification, its length (Q4) and the fighters it launches.
 
 | Task | Fighter | Faction | Reference |
 |---|---|---|---|
-| T38 | Frazi; Sentri | Narn; Centauri | `Narn_Fighter.stl`; `Centari_Sentri_Fighter.stl` |
-| T39 | Nial; Sky Serpent | Minbari; Drazi | `Minbari Liara fighter.stl` (the file name says Liara; it is the Nial, Q49); `Drazi_Sky_serpant_fighter_19m.stl` |
-| T40 | Falkosi; Drakh fighter | Brakiri; Drakh | `Brakiri_Falkosi_fighter.STL`; `Drakh_Fighter.stl` |
-| T41 | Shadow fighter; Shadow scout | Shadows | `Shadow_advanced_fighter.stl`; `Shadow_Scout_fighter_201m.stl` (201 m: a small capital ship, built on the capital framework with the battlecrab's organic parts, Q49) |
+| T38 | Frazi; Sentri | Narn; Centauri | `Narn_Fighter 16.8m.stl`; `Centari_Sentri_Fighter.stl` |
+| T39 | Nial; Sky Serpent | Minbari; Drazi | `Minbari_Nial_22m.stl` (Q49); `Drazi_Sky_serpant_fighter_19m.stl` |
+| T40 | Falkosi; Drakh fighter | Brakiri; Drakh | `Brakiri_Falkosi_fighter.STL`; `Drakh_Fighter_215m.stl` |
+| T41 | Shadow fighter; Shadow scout | Shadows | `Shadow_advanced_fighter_15.3m.stl`; `Shadow_Scout_fighter_356m.stl` (201 m: a small capital ship, built on the capital framework with the battlecrab's organic parts, Q49) |
 | T42 | Vorlon light fighter | Vorlons | `Vorlon_Light_Fighter (pedals open).stl` |
 | T50 | Thunderbolt (model only; M11 makes it flyable) | EA, renegades | `EA_Thunderbolt_fighter.stl` |
 
@@ -145,12 +146,12 @@ T01 gives each its length and confirms its pipeline (the table's choice holds un
 | Task | Hull | Faction | Role | Reference | Pipeline |
 |---|---|---|---|---|---|
 | T51 | Panama class | EA | civilian cargo vessel (Q5) | `EA Panama class.STL` | civilian pipeline (Q49) |
-| T52 | Explorer class | EA | exploration vessel | `EA Explorer class.stl` | capital framework |
-| T53 | Asimov liner | EA | passenger liner (M24's evacuation liner) | `EA Asimov liner.stl` | capital framework; one generator with T56 (the liner variant, Q49) |
+| T52 | Explorer class | EA | exploration vessel | `EA Explorer class 6103m.stl` | capital framework |
+| T53 | Asimov liner | EA | passenger liner (M24's evacuation liner) | `EA Asimov liner 600m.stl` | capital framework; one generator with T56 (the liner variant, Q49) |
 | T55 | Construction tender | EA | construction ship | `EA_construction_tender.stl` | civilian pipeline (Q49) |
-| T56 | Mining transport (M18's mining colony ship) | EA | mining transport | `EA_Mining_Transport.stl`, `EA_Mining_Transport_doors_open.stl` (Q43) | capital framework; T53's generator, the mining variant (Q49) |
+| T56 | Mining transport (M18's mining colony ship) | EA | mining transport | `EA_Mining_Transport_600m.stl`, `EA_Mining_Transport_doors_open.stl` (Q43) | capital framework; T53's generator, the mining variant (Q49) |
 | T57 | EA shuttle; EA atmospheric shuttle | EA | shuttles (M24 makes the first a player ship) | `EA Shuttle.stl`; `EA_Atmospheric_Shuttle.stl` | civilian pipeline |
-| T58 | Centauri shuttle; Minbari Flyer | Centauri; Minbari | shuttle; diplomat transport | `Centauri_Shuttle.stl`; `Minbari_Flyer_diplomat_transport.stl` | civilian pipeline |
+| T58 | Centauri shuttle; Minbari Flyer | Centauri; Minbari | shuttle; diplomat transport | `Centauri_Shuttle.stl`; `Minbari_Flyer_diplomat_transport_40m.stl` | civilian pipeline |
 
 ### Not in M10
 

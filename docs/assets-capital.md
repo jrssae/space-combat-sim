@@ -734,13 +734,13 @@ points (Q22; T03 finalises it): **own**, **gate** (uses a gate or another ship's
 | `minbari_sharlin` | T28 | Sharlin warcruiser | **1 600** | TBP; WPL (Mongoose, after Brandon Bray: 1 600 long, about 1 900 tall) | | x/y/z | 557 x 1 952 | rolled | own | capital | Taller than long: the STL's height-to-length (1.22) matches the 1 900/1 600 quote. Passes the mouth only on its side; it opens its own points anyway |
 | `drazi_sunhawk` | T29 | Sunhawk | **197** | ITF and SotG (197 x 135 x 49) | 350 (FN; WPL, mass 280 kt): wrong (Q49) | x/y/z | 142 x 45 | yes | gate (no Drazi jump engine; SotG lists no hyperdrive) | capital | ITF's proportions match the STL (1 : 0.69 : 0.25 against 1 : 0.72 : 0.23). Can carry one Sky Serpent on a dorsal cradle (TBP, WPL) |
 | `drazi_stormfalcon` | T30 | Stormfalcon | **820** | SotG (est.); FN | | x/y/z | 706 x 200 | yes | own (SotG hyperdrive) | capital | SotG complement: 12 Star Snake light fighters, 1 Sky Serpent, 2 shuttles |
-| `brakiri_avioki` | T31 | Avioki cruiser | **1 024** | SotG; TBP ("over a kilometre") | | x/y/z | 711 x 1 338 | yes | own (SotG, TBP) | capital | The STL's blade wing is taller (826 units) than the hull is long (632). **Launches none**: SotG lists 2 assault shuttles (Q49) |
-| `vree_xill` | T32 | Xill | **350** (diameter) | SotG (est.) | 500 (a hidden, unsourced TBP note) | x (diameter)/y/z | 350 x 97 | yes | gate (Q22) | capital | OG: jump engine, 15 antimatter cannons, 1 500 troops |
-| `isa_whitestar` | T33 | White Star | **475.6** | TE 1.0, 1.3; TBP; WPL | | x/y/z | 222 x 78 | yes | own (its signature) | capital | Opening its own points is canon and iconic; an exception to Q22's "small ships use gates" |
-| `isa_victory` | T34 | Victory destroyer | **2 012** | episode dialogue ("a mile and a quarter", per WPL); Q49 | 2 990.31 (TE 1.0, as *Excalibur*; TBP; SotG): too big for a gate | x/y/z | 1 324 x 1 107 | yes | own (a destroyer) | capital | |
+| `brakiri_avioki` | T31 | Avioki cruiser | **1 000** (Q67) | SotG; TBP ("over a kilometre") | | x/y/z | 711 x 1 338 | yes | own (SotG, TBP) | capital | The STL's blade wing is taller (826 units) than the hull is long (632). **Launches none**: SotG lists 2 assault shuttles (Q49) |
+| `vree_xill` | T32 | Xill | **500** (Q67) | SotG (est.) | 500 (a hidden, unsourced TBP note) | x (diameter)/y/z | 350 x 97 | yes | gate (Q22) | capital | OG: jump engine, 15 antimatter cannons, 1 500 troops |
+| `isa_whitestar` | T33 | White Star | **266** (Q67) | TE 1.0, 1.3; TBP; WPL | | x/y/z | 222 x 78 | yes | own (its signature) | capital | Opening its own points is canon and iconic; an exception to Q22's "small ships use gates" |
+| `isa_victory` | T34 | Victory destroyer | **2 990** (Q67) | episode dialogue ("a mile and a quarter", per WPL); Q49 | 2 990.31 (TE 1.0, as *Excalibur*; TBP; SotG): too big for a gate | x/y/z | 1 324 x 1 107 | yes | own (a destroyer) | capital | |
 | `shadow_battlecrab` | T35 | Shadow battlecrab | **1 500** (the leg span, Q49) | SotG ("Shadow cruiser") | 1 000 (merzo.net chart); 1 to 2 km (h2g2); TBP: "variable" | span x / run y / z | run 641, height 310 | yes | shimmer (Q44) | capital + organic (T06) | The span is the STL's largest extent (148 units); the body's run is 63. Fighters: 6 (B5W) to 36 (SotG, Traveller) |
 | `vorlon_destroyer` | T36 | Vorlon destroyer (Q49) | **131** | FN; TBP (the Vorlon transport, the same shape) | 925 (SotG "Vorlon Destroyer") | y/x/z (round) | 20 x 20 (body only) | yes | own | capital + organic | **Show images: the folder `references/show/m10/vorlon_heavy_cruiser/`** (named before Q49). Petals from its two petal STLs (stage 2). No source lists fighters |
-| `drakh_carrier` | T37 | Drakh carrier | **3 316** (Q49) | TE 1.0 (the Drakh cruiser, "essentially identical" in shape, TBP) | 14 000 (MD); "much larger than a cruiser" (TBP) | y/x/z | 1 021 x 504 | yes | **gate** (canon: no jump engine; it ran for a gate in "Lines of Communication") | capital | MD complement: 10 heavy or 40 light raiders, 40 shuttles |
+| `drakh_carrier` | T37 | Drakh carrier | **7 000** (Q67; own jump points) | TE 1.0 (the Drakh cruiser, "essentially identical" in shape, TBP) | 14 000 (MD); "much larger than a cruiser" (TBP) | y/x/z | 1 021 x 504 | yes | **gate** (canon: no jump engine; it ran for a gate in "Lines of Communication") | capital | MD complement: 10 heavy or 40 light raiders, 40 shuttles |
 | `drazi_firehawk` | T59 | Firehawk | **197** (Q49) | the Sunhawk's length: the STL is the Sunhawk's hull | 270 (SotG, est.); 350 (FN): wrong | x/y/z | 142 x 44 | yes | gate (Q22) | capital | SotG's Drazi "Firehawk Advanced Cruiser", a Mongoose design (not seen in the show) carrying a solar cannon. **Launches none** (Q49). Its STL has the Sunhawk's box to 1 % (the same hull, other weapons) |
 | `vorlon_heavy_cruiser` | T60 | Vorlon heavy cruiser (Q49) | **1 528** | FN; ITF gave the heavy cruiser 1 330 | "over 1 300" (a B5 game, per WPL and TBP, for a "Star Dreadnought") | y/x/z | 461 x 302 | yes (ellipse 0.08) | own | capital + organic | The file says "Dreadnought"; it is the heavy cruiser (Q49). **Show images: the folder `references/show/m10/vorlon_dreadnought/`**, plus `vorlon_heavy_cruiser/Pasted image.png`. B5W: 6 Vorlon fighters, 2 shuttles |
 
@@ -748,14 +748,14 @@ points (Q22; T03 finalises it): **own**, **gate** (uses a gate or another ship's
 
 | Id | Task | Craft | Length (m) | Sources | Alternatives | Axes L/W/H | Box W x H (m) | Flags |
 |---|---|---|---|---|---|---|---|---|
-| `narn_frazi` | T38 | Frazi | **17.53** | TE 1.1; TBP; SotG | | y/x/z | 8.8 x 3.6 | |
+| `narn_frazi` | T38 | Frazi | **16.8** (Q67) | TE 1.1; TBP; SotG | | y/x/z | 8.8 x 3.6 | |
 | `centauri_sentri` | T38 | Sentri | **22.25** | TE 1.1; TBP | 22.26 (SotG) | x/y/z | 36.0 x 9.5 | Span wider than length; TE's drawing agrees (about 38 m) |
 | `minbari_nial` | T39 | Nial | **22.23** | TE 1.1 ("Minbari Fighter"); TBP | | y/x/z | 7.7 x 7.9 | **"Liara"**: no such craft on TBP or the web (the nearest name is the *Liandra*, a 160 m Ranger ship); the file's three-armed fighter is the Nial |
 | `drazi_sky_serpent` | T39 | Sky Serpent | **19.12** | TE 1.1 ("Drazi Fighter"); TBP; FN (19 m) | 15.3 (ITF); 30 (SotG, a two-seat variant) | y/x/z | 13.1 x 4.7 | |
 | `brakiri_falkosi` | T40 | Falkosi | **15** | SotG (est.) | | y/x/z | 12.1 x 8.7 | The only figure |
-| `drakh_fighter` | T40 | Drakh fighter | **17.8** | MD ("light raider", est.) | 76.2 (MD "heavy raider") | y/x/z | 9.1 x 8.6 | |
+| `drakh_fighter` | T40 | Drakh fighter | **215** (Q67; multi-crew, capital framework) | MD ("light raider", est.) | 76.2 (MD "heavy raider") | y/x/z | 9.1 x 8.6 | |
 | `shadow_fighter` | T41 | Shadow fighter | **15.3** | ITF (via TBP); SotG | | x/y/z | 10.9 x 6.3 | |
-| `shadow_scout` | T41 | Shadow scout | **201** | FN | 350 (SotG) | x/y/z | 168 x 120 | A small capital ship: **capital framework with the battlecrab's organic parts** (Q49). Shimmers (Q44) |
+| `shadow_scout` | T41 | Shadow scout | **356** (Q67) | FN | 350 (SotG) | x/y/z | 168 x 120 | A small capital ship: **capital framework with the battlecrab's organic parts** (Q49). Shimmers (Q44) |
 | `vorlon_fighter` | T42 | Vorlon light fighter | **21.92** | TE 1.1; TBP | 25.5 (a B5 game, per WPL; SotG) | y/x/z | 15.9 x 15.9 (petals open) | TBP: Vorlon fighters seem to jump on their own (for T04) |
 | `ea_thunderbolt` | T50 | Thunderbolt | **16.24** | TE 1.1 | 15.3 (TBP, SotG) | turned 42 degrees about file z, then 168 x 228 x 89 units | 22.0 x 8.6 (if the shorter in-plane extent is the length) | **The STL is not axis-aligned**: `refview --turn z=42` squares it up (M10-T50) |
 
@@ -810,34 +810,34 @@ is the approved length unless noted.
 | `ea_omega` | `EA Omega Destroyer.stl` | `+y +z +x` | the drum is turned about 40 degrees in the file |
 | `ea_hyperion` | `EA Hyperion Class Heavy Cruiser.stl` | `+x +z -y` | |
 | `ea_nova` | `EA Nova class destroyer.STL` | `-x +z +y` | |
-| `ea_warlock` | `EA-Warlock_destroyer.stl` | `+x +z -y` | |
-| `narn_gquan` | `Narn Gquon battlecruiser.stl` | `-x +z +y` | |
-| `centauri_vorchan` | `Centauri Vorchan Cruiser.stl` | `+y +z +x` | |
+| `ea_warlock` | `EA-Warlock_destroyer_1992m.stl` | `+x +z -y` | |
+| `narn_gquan` | `Narn Gquon battlecruiser 1400m.stl` | `-x +z +y` | |
+| `centauri_vorchan` | `Centauri Vorchan Cruiser 360m.stl` | `+y +z +x` | |
 | `centauri_primus` | `Centauri_Primus_1586m.stl` | `-x +z +y` | bow at the twin barrels |
 | `centauri_primus` (mass driver) | `Centauri_Primus_w_mass_driver.stl` | `+y +z +x` | the driver: ventral, 16 to 46 %, 253 m across its mounts, to y -115 |
-| `minbari_sharlin` | `Minbari_Sharlin_cruiser.stl` | `+y +z +x` | |
+| `minbari_sharlin` | `Minbari_Sharlin_cruiser_1600m.stl` | `+y +z +x` | |
 | `drazi_sunhawk`, `drazi_firehawk` | `Drazi_Sunhawk_crusier_350m.stl`, `Drazi_Firehawk_350m.stl` | `+y +z +x` | one hull; the Firehawk's aft bulb is windowed |
 | `drazi_stormfalcon` | `Drazi_Stormfalcon_cruiser_820m.stl` | `+y +z +x` | |
-| `brakiri_avioki` | `Brakiri_Avioki_cruiser.stl` | `+y +z +x` | |
-| `vree_xill` | `Vree_Xill_cruiser.stl` | `+y +z +x` | a saucer: the bow is chosen |
-| `isa_whitestar` | `ISA Whitestar.stl` | `+y +z +x` | bow at the single point |
-| `isa_victory` | `ISA Destroyer.stl` | `+y +z +x` | |
-| `shadow_battlecrab` | `Shadow_Battlecrab.stl` | `+x +z -y` | `--length 640.6` (the body's run) gives the 1 500 m span |
+| `brakiri_avioki` | `Brakiri_Avioki_cruiser_1000m.stl` | `+y +z +x` | |
+| `vree_xill` | `Vree_Xill_cruiser_500m.stl` | `+y +z +x` | a saucer: the bow is chosen |
+| `isa_whitestar` | `ISA Whitestar 266m.stl` | `+y +z +x` | bow at the single point |
+| `isa_victory` | `ISA Destroyer  2990m.stl` | `+y +z +x` | |
+| `shadow_battlecrab` | `Shadow_Battlecrab_3_sizes.stl` | `+x +z -y` | `--length 640.6` (the body's run) gives the 1 500 m span |
 | `vorlon_destroyer` | `Vorlon_Destroyer (missing pedals) - 131m.stl` | `+x +z -y` | petals below |
 | `vorlon_heavy_cruiser` | `Vorlon Dreadnought - 1528m.stl` | `-x +z +y` | bow at the claws |
-| `drakh_carrier` | `Drakh carrier.STL` | `+x +z -y` | bow at the prongs |
-| `narn_frazi` | `Narn_Fighter.stl` | `-x +z +y` | bow at the gun barrels |
+| `drakh_carrier` | `Drakh carrier 7km.STL` | `+x +z -y` | bow at the prongs |
+| `narn_frazi` | `Narn_Fighter 16.8m.stl` | `-x +z +y` | bow at the gun barrels |
 | `centauri_sentri` | `Centari_Sentri_Fighter.stl` | `+y +z +x` | |
-| `minbari_nial` | `Minbari Liara fighter.stl` | `+x +z -y` | |
+| `minbari_nial` | `Minbari_Nial_22m.stl` | `+x +z -y` | |
 | `drazi_sky_serpent` | `Drazi_Sky_serpant_fighter_19m.stl` | `+x +z -y` | |
 | `brakiri_falkosi` | `Brakiri_Falkosi_fighter.STL` | `-x +z +y` | |
-| `drakh_fighter` | `Drakh_Fighter.stl` | `-x +z +y` | |
-| `shadow_fighter` | `Shadow_advanced_fighter.stl` | `+y +z +x` | |
-| `shadow_scout` | `Shadow_Scout_fighter_201m.stl` | `+y +z +x` | |
+| `drakh_fighter` | `Drakh_Fighter_215m.stl` | `-x +z +y` | |
+| `shadow_fighter` | `Shadow_advanced_fighter_15.3m.stl` | `+y +z +x` | |
+| `shadow_scout` | `Shadow_Scout_fighter_356m.stl` | `+y +z +x` | |
 | `vorlon_fighter` | `Vorlon_Light_Fighter (pedals open).stl` | `+x +z -y` | |
 | `ea_thunderbolt` | `EA_Thunderbolt_fighter.stl` | turn +42 degrees about file z, then `-x +z +y` | `--turn z=42` (M10-T50) |
 | `ea_panama`, `ea_explorer`, `ea_construction_tender`, `ea_shuttle`, `ea_atmo_shuttle` | (their files) | `-x +z +y` | the Explorer's bow is the end with the dome and the launch bay (Q50) |
-| `ea_asimov`, `ea_mining_transport` | `EA Asimov liner.stl`, `EA_Mining_Transport.stl`, `..._doors_open.stl` | `-x +z +y` | one scale (3.47 m a unit): the liner 600 m, the mining transport 632 m closed and 716 m open (`--length 632.4` and `716.3`) |
+| `ea_asimov`, `ea_mining_transport` | `EA Asimov liner 600m.stl`, `EA_Mining_Transport_600m.stl`, `..._doors_open.stl` | `-x +z +y` | one scale (3.47 m a unit): the liner 600 m, the mining transport 632 m closed and 716 m open (`--length 632.4` and `716.3`) |
 | `centauri_shuttle`, `minbari_flyer` | (their files) | `+y +z +x` | |
 
 **Vorlon destroyer's petals (Q10).** Both petal STLs are single petals at the body's scale (0.18 m a unit), laid out as
