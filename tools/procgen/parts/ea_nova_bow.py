@@ -27,16 +27,17 @@ from .capital_hull import HullRoles
 from .ea_omega import DARK, DECKED, PANEL, _put
 
 # The bay: its octagonal mouth (width, height, the corners' legs) at the frame's face, the hall back to the reference's wall.
-BAY_MOUTH, BAY_CORNER = (62.0, 26.0), 6.5
-BAY_MOUTH_Z, BAY_Y, BAY_WALL = 182.5, 2.0, 2.0
-BAY_DEPTH = 146.5
+BAY_MOUTH, BAY_CORNER = (62.0, 27.0), 6.5
+BAY_MOUTH_Z, BAY_Y, BAY_WALL = 190.0, 0.5, 2.0
+BAY_DEPTH = 139.0
 BAY_BACK_Z = BAY_MOUTH_Z + BAY_DEPTH + BAY_WALL
-# The frame: a lip round the mouth at its face, bevelled back to the outer octagon (half width and height, centre's y, corners).
-LIP_HALF, LIP_Y, LIP_CUT = (34.0, 16.0), 1.75, (6.0, 6.0)
-FRAME_HALF, FRAME_Y, FRAME_CUT = (36.5, 17.5), 1.0, (7.0, 7.0)
+# The frame: a flat lip standing proud of the mouth, bevelled back to the mouth inside and to the outer octagon outside (each
+# octagon's half width and height, centre's y and corners).
+LIP_IN, LIP_OUT, LIP_Y, LIP_Z = ((33.0, 15.0), (7.0, 7.0)), ((35.0, 17.0), (7.5, 7.5)), 1.0, 182.6
+FRAME_HALF, FRAME_Y, FRAME_CUT = (37.0, 18.5), 1.5, (8.0, 8.0)
 FRAME_BEVEL_Z, FRAME_BACK_Z = 189.5, 196.0
 # The four thin probes standing forward from the lip's corners: x, the top and bottom one's y, their tips' z and radius.
-PROBE_X, PROBE_YS, PROBE_TIP_Z, PROBE_R = 24.9, (16.95, -15.15), 136.5, 0.45
+PROBE_X, PROBE_YS, PROBE_TIP_Z, PROBE_R = 25.0, (17.15, -15.0), 136.5, 0.52
 FINS = (("top", (3.5, 6.5)), ("low", (-6.0, -2.5)))  # the wedge fins' heights at the frame
 METAL = HullRoles(side="bay_metal", deck="bay_metal", keel="bay_metal", cap="bay_metal")
 # The deck blocks seen through the open front: name, x from and to, y from and to, the face's z and the back's (read off the
@@ -55,9 +56,9 @@ DECKS: tuple[tuple[str, float, float, float, float, float, float], ...] = (
     ("deck_lower_mid", -14.0, -2.0, 21.5, 46.5, 208.0, 380.0),
     ("deck_lower_stbd", -2.0, 42.0, 21.5, 46.5, 218.0, 380.0),
     ("deck_lower_stbd_edge", 42.0, 54.0, 21.5, 46.5, 219.0, 230.0),
-    ("deck_plate_low", -40.0, 40.0, 18.5, 21.5, 193.0, 380.0),
-    ("deck_plate_low_port", -52.0, -40.0, 18.5, 21.5, 210.0, 380.0),
-    ("deck_plate_low_stbd", 40.0, 52.0, 18.5, 21.5, 210.0, 380.0),
+    ("deck_plate_low", -40.0, 40.0, 18.5, 21.5, 196.0, 380.0),
+    ("deck_sill", -36.0, 36.0, -21.0, -19.0, 212.0, 380.0),
+    ("deck_plate_under", -38.0, 38.0, -23.0, -21.0, 193.0, 380.0),
     ("deck_under_port_edge", -54.0, -42.0, -34.0, -22.0, 217.0, 366.0),
     ("deck_under_port_in", -42.0, -30.0, -34.0, -22.0, 203.0, 380.0),
     ("deck_under_mid_l", -30.0, -26.0, -34.0, -22.0, 217.0, 380.0),
@@ -71,12 +72,16 @@ DECKS: tuple[tuple[str, float, float, float, float, float, float], ...] = (
     ("tank_backing", -42.0, 42.0, -52.0, -34.0, 219.0, 375.0),
     ("tank_backing_stbd_edge", 42.0, 54.0, -52.0, -34.0, 219.0, 243.0),
 )
+# The deck plates' ends beside the frame, sloping back to the armour: name, y from and to, x from and to, the face's z at each.
+PLATE_WINGS = (("deck_plate_low_wing", (18.5, 21.5), (40.0, 54.0), (196.0, 216.0)), ("deck_plate_under_wing", (-23.0, -21.0), (38.0, 54.0), (197.0, 216.0)))
+# The bulkhead beside the hall, seen past the strake (x from and to, y from and to, z from and to).
+SIDE_BULKHEAD = ((36.0, 54.0), (-19.0, 19.0), (331.0, 336.0))
 # The upper side blocks narrow with the upper armour plate leaning in: their outer edge at the plate's root and at the deck plate.
 UPPER_EDGE = ((52.0, 62.5), (43.0, 74.5))
 ROOF_BLOCK = ([(-36.0, 77.5), (36.0, 77.5), (33.0, 85.0), (-33.0, 85.0)], (223.0, 320.0))
 ROOF_HUMP = ((14.0, 28.0), (84.5, 90.0))  # a raised hump each side of the roof block: x from and to, y from and to
 # Small fittings: the boxes either side under the bay's frame and the keel block; name, low corner, high corner.
-FITTINGS = (("bay_sill_r", (18.0, -22.0, 214.0), (30.0, -18.0, 240.0)),)
+FITTINGS: tuple[tuple[str, tuple[float, float, float], tuple[float, float, float]], ...] = ()
 KEEL_BLOCK = ((-17.0, -150.0, 210.0), (-1.0, -128.0, 240.0))
 KEEL_SPHERES = ((4.0, -144.0), (20.0, -144.0))  # x, y; their fronts at the reference's 176 m
 SPHERE_R, SPHERE_FRONT_Z = 5.0, 176.0
@@ -92,6 +97,7 @@ KEEL_PIPE_PATH = ((-118.0, 283.0), (-112.0, 323.0), (-58.0, 370.0))  # (y, z): u
 # The retro thrusters' radial struts on each side: y, and the strut's inner and outer x with its z at each.
 STRUTS = (-60.0, -68.0, -92.0, -100.0)
 STRUT_X, STRUT_Z, STRUT_R = (26.0, 37.0), (184.0, 190.0), 1.1
+RETRO_LIP_BACK, RETRO_RIM = 8.0, 1.5  # the retro thrusters' rounded lips: how far back of the mouth their outer edge stands, the flat rim's width
 INTERIOR_MODULES = ("bay_fore", *(name for name, *_ in DECKS))  # T72's interior layer (Q68): the bow's open interior
 
 
@@ -111,17 +117,18 @@ def bay(s: Style) -> list[cp.Module]:
         fillet = cs.prism(f"bay_fore_fillet_{tag}_r", [(w, BAY_Y + sy * h), (w - c, BAY_Y + sy * h), (w, BAY_Y + sy * (h - c))],
                           BAY_MOUTH_Z, BAY_MOUTH_Z + BAY_DEPTH, s, METAL)
         out.append(_put("bow", fillet, cp.RIGHT))
-    outer, lip, inner = _octagon(FRAME_HALF, FRAME_CUT, FRAME_Y), _octagon(LIP_HALF, LIP_CUT, LIP_Y), _octagon((w, h), (c, c), BAY_Y)
+    outer, inner = _octagon(FRAME_HALF, FRAME_CUT, FRAME_Y), _octagon((w, h), (c, c), BAY_Y)
+    lip_in, lip_out = _octagon(*LIP_IN, LIP_Y), _octagon(*LIP_OUT, LIP_Y)
     ring = []
     for k in range(8):
         a, b = (k, (k + 1) % 8)
-        pts = [(*p, z) for p, z in ((inner[a], BAY_MOUTH_Z), (inner[b], BAY_MOUTH_Z), (lip[a], BAY_MOUTH_Z), (lip[b], BAY_MOUTH_Z),
-                                    (outer[a], FRAME_BEVEL_Z), (outer[b], FRAME_BEVEL_Z))]
+        pts = [(*p, z) for p, z in ((inner[a], BAY_MOUTH_Z), (inner[b], BAY_MOUTH_Z), (lip_in[a], LIP_Z), (lip_in[b], LIP_Z), (lip_out[a], LIP_Z),
+                                    (lip_out[b], LIP_Z), (outer[a], FRAME_BEVEL_Z), (outer[b], FRAME_BEVEL_Z))]
         pts += [(*p, FRAME_BACK_Z) for p in (outer[a], outer[b], inner[a], inner[b])]
         ring.append(cs.convex(f"frame_{k}", pts, s, PANEL))
     out.append(_put("bow", cs.compound("bay_fore_frame", ring)))
     for tag, y in zip(("top", "low"), PROBE_YS, strict=True):
-        out.append(_put("bow", cs.rod(f"bay_fore_probe_{tag}_r", (PROBE_X, y, BAY_MOUTH_Z), (PROBE_X, y, PROBE_TIP_Z), PROBE_R, s), cp.RIGHT))
+        out.append(_put("bow", cs.rod(f"bay_fore_probe_{tag}_r", (PROBE_X, y, LIP_Z), (PROBE_X, y, PROBE_TIP_Z), PROBE_R, s), cp.RIGHT))
     for tag, (y0, y1) in FINS:
         fin = cs.convex(f"bay_fin_{tag}_r", [(x, y, z) for x, ys, zs in ((FRAME_HALF[0] - 0.5, (y0, y1), (185.0, 214.0)), (54.0, (y0 + 0.5, y1 - 0.5), (199.0, 214.0)))
                                             for y in ys for z in zs], s, DARK)
@@ -155,6 +162,12 @@ def decks(s: Style) -> list[cp.Module]:
     out += [_put("bridge", m) for m in (roof, frame, glass)] + [_put("bridge", hump, cp.RIGHT)]
     for name, lo, hi in FITTINGS:
         out.append(_put("bow", cs.box(name, lo, hi, s, DARK), cp.RIGHT))
+    back = 380.0
+    for name, (y0, y1), (x0, x1), (z0, z1) in PLATE_WINGS:
+        wing = cs.convex(name + "_r", [(x, y, z) for x, zf in ((x0, z0), (x1, z1)) for y in (y0, y1) for z in (zf, back)], s, PANEL)
+        out.append(_put("bow", wing, cp.RIGHT))
+    (bx0, bx1), (by0, by1), (bz0, bz1) = SIDE_BULKHEAD
+    out.append(_put("bow", cs.box("side_bulkhead_r", (bx0, by0, bz0), (bx1, by1, bz1), s, DECKED), cp.RIGHT))
     return out
 
 
@@ -162,6 +175,23 @@ def struts(s: Style) -> list[cp.Module]:
     """The retro thrusters' radial struts out to the armour, either side of the pair."""
     (x0, x1), (z0, z1) = STRUT_X, STRUT_Z
     return [_put("fuel", cs.rod(f"retro_strut_{k + 1}_r", (x0, y, z0), (x1, y, z1), STRUT_R, s), cp.RIGHT) for k, y in enumerate(STRUTS)]
+
+
+def retro_lip(name: str, x: float, y: float, z: float, half: tuple[float, float], wall: float, s: Style) -> cp.Module:
+    """A retro thruster's lip, rounded off from the mouth at ``z`` back to the nozzle's outer wall (the reference's), so the
+    nozzle behind it starts ``RETRO_LIP_BACK`` further aft. ``half`` and ``wall`` as ``ea_omega.retro_nozzle``'s."""
+    half_w, half_h = half
+
+    def outline(r: float) -> list[tuple[float, float]]:
+        arc = np.linspace(0.0, np.pi, 7)  # every other corner of the nozzle's, so the two meet
+        top, low = y + half_h - half_w, y - half_h + half_w
+        return [(x + r * np.cos(a), top + r * np.sin(a)) for a in arc] + [(x - r * np.cos(a), low - r * np.sin(a)) for a in arc]
+
+    outer, rim, mouth, n = outline(half_w), outline(half_w - wall + RETRO_RIM), outline(half_w - wall), 14
+    back = z + RETRO_LIP_BACK
+    ring = [cs.convex(f"{name}_{k}", [(*mouth[k], z), (*mouth[(k + 1) % n], z), (*rim[k], z), (*rim[(k + 1) % n], z), (*mouth[k], back),
+                                      (*mouth[(k + 1) % n], back), (*outer[k], back), (*outer[(k + 1) % n], back)], s, PANEL) for k in range(n)]
+    return cs.compound(name, ring)
 
 
 def keel(s: Style, inner) -> list[cp.Module]:  # noqa: ANN001 - inner(y): the lower plates' inner face's x at height y
@@ -189,4 +219,4 @@ def keel(s: Style, inner) -> list[cp.Module]:  # noqa: ANN001 - inner(y): the lo
 
 
 __all__ = ["BAY_BACK_Z", "BAY_CORNER", "BAY_DEPTH", "BAY_MOUTH", "BAY_MOUTH_Z", "BAY_WALL", "BAY_Y", "DECKS", "INTERIOR_MODULES", "bay", "decks",
-           "keel", "struts"]
+           "keel", "retro_lip", "struts"]

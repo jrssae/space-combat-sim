@@ -31,7 +31,7 @@ from tools.refview.sections import PASS_IOU, section_score
 
 ROOT = Path(__file__).resolve().parents[3]
 STL = ROOT / "references" / "EA Nova class destroyer.STL"
-TEST_OPTIONS = {"atlas_px": 512, "detail_px": 128}  # the default sample spacing: the coverage check needs it
+TEST_OPTIONS = {"atlas_px": 1024, "detail_px": 128}  # the default sample spacing: the coverage check needs it; the open bow's charts need 1 024 px
 LENGTH, SPAN, HEIGHT = 1502.1, 208.0, 443.7  # T01's length; the beam's tips across, the roof masts to the keel mast
 SECTIONS = ("bow", "bridge", "fuel", "spine_fore", "hangar", "spine_mid", "spine_aft", "reactor", "engine_r", "engine_l")
 MOUNTS = {"turret": 18, "beam": 6, "interceptor": 6}
@@ -97,7 +97,7 @@ class NovaBuildTests(unittest.TestCase):
         exit_at = self.authored(bay["exit"])
         self.assertAlmostEqual(exit_at[2], en.nv.BAY_MOUTH_Z, places=3, msg="its mouth at the bridge tube's front")
         self.assertAlmostEqual(exit_at[0], 0.0, places=3)
-        retros = [m for m in cp.with_twins(en.modules()) if m.name.startswith("retro_")]
+        retros = [m for m in cp.with_twins(en.modules()) if m.name.startswith("retro_") and "strut" not in m.name]
         self.assertEqual(len(retros), 2, "two oval retro thrusters")
         retro_top = max(float(m.part.mesh.bounds()[1][1]) for m in retros)
         self.assertGreater(en.nv.BAY_Y - 0.5 * en.nv.BAY_MOUTH[1], retro_top, "the mouth above the retro thrusters")

@@ -75,11 +75,13 @@ STARFURIES = 24
 # The flank's wing behind the armour: (x, its y from and to, its z from and to) at its root, its middle and its tip.
 WING = ((40.0, (-21.0, 25.0), (359.0, 401.0)), (75.0, (-19.0, 23.0), (360.0, 399.0)), (88.5, (-11.8, 16.8), (365.2, 393.8)))
 # The fore spine's flank plates (name, low corner, high corner, roles), each mirrored below the axis.
-FORE_PLATES = (("fore_fin", (CORE_W - 1.0, 18.0, 401.0), (63.0, 22.0, 418.0), "dark"), ("fore_ledge", (CORE_W - 1.0, 36.0, 398.0), (58.0, 42.0, 406.0), "panel"),
-               ("fore_block", (CORE_W - 1.0, 28.0, 430.0), (44.0, 38.0, 452.0), "decked"))
+FORE_PLATES = (("fore_fin", (CORE_W - 1.0, 19.5, 405.0), (63.0, 24.0, 418.0), "dark"), ("fore_ledge", (CORE_W - 1.0, 37.0, 401.0), (56.0, 42.0, 418.0), "panel"),
+               ("fore_block", (CORE_W - 1.0, 27.0, 430.0), (48.0, 42.0, 452.0), "decked"))
+# The flank strake's section, a flattened hexagon tapering out through the vertical plate (the reference's front).
+STRAKE_OUTLINE = ((34.0, 14.0), (34.0, -15.0), (54.0, -8.5), (63.0, -6.5), (63.0, 4.5), (54.0, 7.5))
 CRAFT = "starfury_ally"  # the catalogue's pooled Starfury (data/capitals/loadouts.json, launches)
 # The two oval retro thrusters under the bridge tube (the reference's): centre, mouth and throat z, half width and height.
-RETRO_XY, RETRO_Z, RETRO_HALF, RETRO_WALL = (14.2, -79.55), (165.0, 236.0), (12.0, 26.2), 4.8
+RETRO_XY, RETRO_Z, RETRO_HALF, RETRO_WALL = (14.2, -79.55), (165.0, 236.0), (12.0, 26.2), 4.8  # the mouth at the lip's front
 ROLES = {"dark": DARK, "panel": PANEL, "decked": DECKED}
 MARK_HEIGHT_M = 36.0  # the Omega's letter in the Nova's measure (its share of the armour's height)
 X_HEIGHT_M = 30.0
@@ -139,7 +141,7 @@ def command_block(s: Style) -> list[cp.Module]:
 
 def flank_strake(s: Style) -> list[cp.Module]:
     """The diamond strake along the starboard flank through the vertical plate, ending in a thick wing beside the spine."""
-    pts = [(x, y, z) for z in (257.8, 400.0) for x, y in ((34.0, 15.0), (34.0, -15.0), (62.0, 0.0))]
+    pts = [(x, y, z) for z in (257.8, 400.0) for x, y in STRAKE_OUTLINE]
     strake = cs.convex("flank_strake_r", pts, s, DARK)
     wing = cs.convex("flank_wing_r", [(x, y, z) for x, (ya, yb), (za, zb) in WING for y in (ya, yb) for z in (za, zb)], s, DECKED)
     return [_put("bow", strake, cp.RIGHT), _put("spine_fore", wing, cp.RIGHT)]
@@ -164,7 +166,8 @@ def tankage(s: Style) -> list[cp.Module]:
         return cs.round_body(name, (x, y, z[0]), (x, y, z[1]), profile, s, s.material("hull_panel"), sides=20, skin=cp.SKIN_FITTING)
 
     beam = cs.box("tank_beam", (-52.0, -50.0, 197.0), (52.0, -47.6, 236.0), s, DARK)
-    retro = retro_nozzle("retro_r", *RETRO_XY, RETRO_Z, RETRO_HALF, RETRO_WALL, s)
+    nozzle = retro_nozzle("retro_r_nozzle", *RETRO_XY, (RETRO_Z[0] + bow.RETRO_LIP_BACK, RETRO_Z[1]), RETRO_HALF, RETRO_WALL, s)
+    retro = cs.compound("retro_r", [nozzle, bow.retro_lip("retro_r_lip", *RETRO_XY, RETRO_Z[0], RETRO_HALF, RETRO_WALL, s)])
     return [_put("fuel", capsule("tank_r", 39.5, -44.0, (176.0, 229.0), 12.8), cp.RIGHT), _put("fuel", capsule("tank_mid", 0.0, -47.8, (190.0, 230.0), 10.0)),
             _put("fuel", retro, cp.RIGHT), _put("fuel", beam)]
 
