@@ -118,6 +118,33 @@ class ParallelFailureTests(unittest.TestCase):
         self.assertEqual([line.split()[1].rstrip(":") for line in out.splitlines() if line.startswith("built")],
                          ["alpha", "bravo", "charlie"], "reported in the asked order")
 
+    def test_builds_start_only_while_their_peaks_fit_the_memory(self) -> None:
+        # M10-T21: CI's 16 GB runner died running two 6 GB bakes at once; three 5 GB builds in a 12 GB budget run two at a time.
+        import json
+        import time
+
+        def timed(name: str):
+            inner = make_fake([], name)
+
+            def builder(ctx: BuildContext) -> AssetOutputs:
+                start = time.monotonic()
+                time.sleep(0.3)
+                out = inner(ctx)
+                (self.out / f"{name}.json").write_text(json.dumps([start, time.monotonic()]))
+                return out
+
+            return builder
+
+        names = ("alpha", "bravo", "charlie")
+        fakes = {i: timed(i) for i in names}
+        with (mock.patch.dict(ASSETS, fakes, clear=True), mock.patch.object(cli, "BUILD_ALONE", frozenset()),
+              mock.patch.dict(cli.PEAK_MB, {i: 5000 for i in names}), mock.patch.dict(os.environ, {"PROCGEN_MEM_MB": "12000"})):
+            code, out, err = run("build", "all", "--out", str(self.out), "--jobs", "3")
+        self.assertEqual(code, 0, err)
+        spans = sorted(json.loads((self.out / f"{i}.json").read_text()) for i in names)
+        self.assertLess(spans[1][0], spans[0][1], "two fit together")
+        self.assertGreaterEqual(spans[2][0], min(spans[0][1], spans[1][1]), "the third waits for memory")
+
 
 class GenAssetsJobsTests(unittest.TestCase):
     def test_gen_assets_takes_its_jobs_from_the_cores_up_to_four(self) -> None:

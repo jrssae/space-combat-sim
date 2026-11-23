@@ -23,6 +23,11 @@ on:
 permissions:
   contents: read
 
+# The memory the asset builds may share on a 16 GB runner (M10-T21: tools/procgen/__main__.py starts a build only while the
+# running builds' measured peaks fit it; a bigger bake builds alone).
+env:
+  PROCGEN_MEM_MB: "12000"
+
 # A newer push to the same branch replaces the run still going for an older commit: the newest commit carries every older
 # change, and a superseded run would only time out or fail on something already fixed (and send a failure email).
 concurrency:
@@ -35,7 +40,7 @@ jobs:
   assets:
     name: generated assets
     runs-on: ubuntu-latest
-    timeout-minutes: 90  # the capital hulls (Omega, Hyperion, Nova) build alone at about 10 GB each
+    timeout-minutes: 90  # the heaviest bakes (the station, the capitals) build alone at 6-7 GB each
     outputs:
       shards: ${{ steps.shards.outputs.shards }}
       gut_shards: ${{ steps.shards.outputs.gut_shards }}
