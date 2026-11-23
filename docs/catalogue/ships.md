@@ -26,7 +26,7 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `raider_strike_carrier` | raiders | capital (strike_carrier) | 112.0 x 85.5 x 84.3 | 10000 | none | yes | yes (18 cradles) |
 | `capital_test_cruiser` | earth_alliance | capital (cruiser) | 300.0 x 60.0 x 45.6 | 20000 | none | yes | no |
 | `ea_omega` | earth_alliance | capital (destroyer) | 1714.3 x 620.0 x 478.0 | 30000 | none | yes | no |
-| `ea_nova` | earth_alliance | capital (dreadnought) | 1502.1 x 208.0 x 443.7 | 36000 | none | yes | no |
+| `ea_nova` | earth_alliance | capital (dreadnought) | 1502.1 x 382.0 x 443.7 | 36000 | none | yes | no |
 | `ea_hyperion` | earth_alliance | capital (destroyer) | 1069.2 x 254.4 x 319.5 | 17000 | none | yes | no |
 | `ea_shuttle` | earth_alliance | civilian | 38.0 x 18.8 x 10.7 | 400 | none | no | no |
 | `ea_atmo_shuttle` | earth_alliance | civilian | 29.0 x 51.6 x 9.6 | 300 | none | no | no |
