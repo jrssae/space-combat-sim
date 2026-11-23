@@ -559,7 +559,7 @@ Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as
 | Length | **1 502.1 m** (T01) |
 | Span, height | 208.0 m (the cross beam's tips behind the housing) x 443.7 m (roof masts to keel mast); the STL 210.4 x 446.1 |
 | Pieces | `hull` only, one 4 096 px atlas |
-| Triangles | 13 802 (budget 100 000) |
+| Triangles | 15 660 (budget 100 000; T67's open bow) |
 | Texture sets | 56.0 MB high, 16.0 MB low (budget 109.3 and 29.3); measured 56 MB and 16 MB on the RX 6950 XT (model sheet, against the empty scene) |
 | Build | about 3.6 to 4.2 min (3 min 44 s with the forward bays) and 10 GB at its peak on the maintainer's machine (`BUILD_ALONE`) |
 
@@ -610,8 +610,8 @@ the show's Schwarzkopf first.
 
 | View | IoU | | Dimension | Mesh / STL |
 |---|---|---|---|---|
-| top | 0.951 | | length | 1.000 (1 502.1 / 1 502.1 m) |
-| side | 0.948 | | width | 0.989 (208.0 / 210.4 m) |
+| top | 0.952 | | length | 1.000 (1 502.1 / 1 502.1 m) |
+| side | 0.956 | | width | 0.989 (208.0 / 210.4 m) |
 | front | 0.965 | | height | 0.995 (443.7 / 446.1 m) |
 
 **Per-part sections** (`parts/ea_nova_fidelity.py`, `tools/refview/sections.py`; `test_ea_nova.py` holds them): the command
@@ -622,6 +622,14 @@ since its bays left), 36 planes, every one at 0.90 or over (lowest 0.903, the ha
 hall lies inside the command block's planes (by outline, 0.979 to 0.980). Its mouth alone by relief, in the tube's window,
 scores 0.80 at 250 m and 0.84 at 300 m: the reference's tube is a thin frame a metre off the centre line, among loose parts the
 build leaves out; not a gate, for the maintainer.
+
+**Bow face** (T67, T66's `tools/refview/fidelity.py`; `FACE_SWEEPS`, `FACE_MEAN_IOU`, `FACE_DEPTH` in `ea_nova_fidelity.py`,
+`test_the_bow_face_holds_its_floors`): outline sweeps z 150 to 450 m every 4 m (mean 0.952, 67 of 76 at 0.90 or over), x -70 to
+70 m every 5 m (mean 0.840, 4 of 29) and y -175 to 95 m (mean 0.957, 52 of 55); the front depth map over the face agrees within
+2 m on 64 % of it, 7.4 m apart on average (before T67's tuning: z 59 of 76, x 2 of 29, depth 58 % and 10.1 m). Below 0.90: the z
+cuts at 194 m (the frame's back) and 406 to 450 m (the plasma guns' mounts ahead of the reference's); most x cuts, where an
+outline row runs from its first surface to its last anywhere along the plane, so the reference's open shell (deck blocks a few
+metres deep, rows filled through its gaps) sets the row's end, not the face; the open question is with the maintainer.
 
 ### In the game
 
