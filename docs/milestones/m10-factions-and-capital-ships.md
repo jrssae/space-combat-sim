@@ -581,6 +581,15 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Done when:** face slices (T66 sweep, z 150 to 450 m and the face's x and y cuts) >= 0.90 for each ship against its STL
   (the Omega's interior against the Nova STL's detail scaled), a depth-diff limit on the bow face, the screenshot sheets beside
   `references/Ship references/`, and the maintainer has seen the bay close-ups (H).
+- **Done notes (2026-11-23; the maintainer closes the row).** The Nova's bow rebuilt on the open frame with the octagonal launch
+  bay, frame, probes and wedge fins, the decks behind the armour, retro lips and strake (`parts/ea_nova_bow.py`), the soft finish
+  (Q64) and the Omega's letter placement. The reference is now `EA_Nova_Dreadnought_(with_guns).stl` (thing:6820713): its 18
+  twin cannon pods replace the waist and roof turrets (`parts/ea_nova_guns.py`, 12-sided barrels grown to a round barrel's area).
+  Collision is back at 64 shapes a section: `col.Budget.max_excess_m` (2.5 m) stops the merge joining two shapes whose hull stands
+  out of its parts, so thin masts and fins never join their twins across the girder; the pods beside the command block moved to
+  `bridge`. Scores: silhouettes 0.933 / 0.945 / 0.927, sizes within 0.5 %; 54 sections, lowest 0.903; bow face z 73 of 76 (mean
+  0.951), x by face depth 21 of 29 (0.912), y by outline 51 of 55 (0.952; by face depth 0.866, reported only); depth map 59 %
+  within 2 m, 8.0 m mean. 45 744 triangles (22 872 in the hull, as many in its chunks; 50 928 with 16-sided barrels). Details: `docs/assets-capital.md`, "ea_nova".
 
 ### M10-T68 Omega on the new kit (Q63)
 

@@ -559,7 +559,7 @@ Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as
 | Length | **1 502.1 m** (T01) |
 | Span, height | 383.0 m (the wing guns' masts) x 443.7 m (roof masts to keel mast); the STL 382.6 x 446.1 |
 | Pieces | `hull` only, one 4 096 px atlas |
-| Triangles | 50 928 (budget 100 000; T67's guns) |
+| Triangles | 45 744 as the build counts them: 22 872 in the hull (budget 100 000) and as many in its damage chunks; 50 928 before T67 cut the gun barrels to 12 sides |
 | Texture sets | 56.0 MB high, 16.0 MB low (budget 109.3 and 29.3); measured 56 MB and 16 MB on the RX 6950 XT (model sheet, against the empty scene) |
 | Build | about 3.6 to 4.2 min (3 min 44 s with the forward bays) and 10 GB at its peak on the maintainer's machine (`BUILD_ALONE`) |
 
@@ -572,14 +572,17 @@ Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 
 - 18 `ea_plasma_medium` twin cannon pods (T67, `parts/ea_nova_guns.py`, the reference with guns): a faceted housing round two
   long barrels, a mast through it, the turret hardpoint at the barrels' roots in the housing's nose (two barrels, 180 degrees of
-  traverse, -10 to 90 of elevation). One beside the command block and one on the flank wing's tip each side (`bow`), one on each
+  traverse, -10 to 90 of elevation). One beside the command block (`bridge`) and one on the flank wing's tip (`bow`) each side, one on each
   flank of the hangar block (`hangar`), and four on each ring lug's outriggers, above and below either side (`spine_fore`,
   `spine_mid`, `spine_aft`; the aft lug's face the stern), each on an outrigger plate out to 113.5 m with a brace under it. The
   loadout's count is the reference's; T67 moved the mounts from the waist and the roof's channel (the older STL had no guns);
 - the girder's roof and keel channel aft of the hangar holds the reference's blocks and thin decks (`CHANNEL_BLOCKS`,
   `CHANNEL_DECKS`), and the hangar block's roof and keel a channel 44 m wide with four ribs across it (`HANGAR_CHANNEL`);
-  collision keeps up to 96 shapes a section (`COLLISION`: at the capital default of 64 a top and a low pod's masts merge into one
-  wall through the girder);
+  the barrels are 12-sided, grown to a round barrel's area (`BARREL_SIDES`, `BARREL_GROW`). Collision keeps the capital
+  standard of 64 shapes a section; `COLLISION`'s `max_excess_m` (2.5 m, the coverage check's reach) stops the merge joining two
+  shapes whose hull stands out of the parts it covers by more, so a thin mast or fin is never joined to its twin across the
+  girder (T67: without it a top and a low pod's masts became one wall through the ship). The pods beside the command block are in
+  `bridge` so the `bow` section can merge to 64 within that limit;
 - 6 `ea_sweep_beam_nova` emitters (the Omega's beams at 80 %): one on each flank of the command block covering the fore
   hemisphere, four on the engine housing's corners the aft;
 - 6 `ea_interceptor` domes along the flanks;
@@ -618,8 +621,8 @@ the show's Schwarzkopf first.
 
 | View | IoU | | Dimension | Mesh / STL |
 |---|---|---|---|---|
-| top | 0.931 | | length | 1.000 (1 502.1 / 1 502.1 m) |
-| side | 0.947 | | width | 0.998 (382.0 / 382.6 m) |
+| top | 0.933 | | length | 1.000 (1 502.1 / 1 502.1 m) |
+| side | 0.945 | | width | 0.998 (382.0 / 382.6 m) |
 | front | 0.927 | | height | 0.995 (443.7 / 446.1 m) |
 
 Against the reference with guns before T67's pods: top 0.743, side 0.856, front 0.802, width 0.544 (the older STL's 0.952, 0.956,
@@ -637,13 +640,14 @@ gate, for the maintainer.
 
 **Bow face** (T67, T66's `tools/refview/fidelity.py`; `FACE_SWEEPS`, `FACE_BY_DEPTH`, `FACE_MEAN_IOU`, `FACE_DEPTH` in
 `ea_nova_fidelity.py`, `test_the_bow_face_holds_its_floors`). The reference's face is an open shell, so the z cuts (150 to 450 m
-every 4 m) are scored by outline and the x cuts (-70 to 70 m every 5 m) and y cuts (-175 to 95 m) by **face depth**
-(`fidelity.sweep(face=True)`, `--face`: each line filled from its first surface aft, so a deck block a few metres deep counts by
-where its face stands, not by what a row fill sees through its gaps). With the guns: z mean 0.952, 73 of 76 at 0.90 or over (the
-frame's back at 194 m, 446 and 450 m); x by face depth mean 0.912, 21 of 29 (by outline 0.845, 6 of 29); y by face depth mean
-0.866, 35 of 55 (by outline 0.952, 51 of 55: face depth is lower round the bay's mouth, y -20 to 15 m, and at the roof's edge);
-the front depth map agrees within 2 m on 59 % of the face, 8.0 m apart on average (against the older STL before T67's pods:
-z 67 of 76, x 4 of 29 by outline, 64 % and 7.4 m; the pods beside the command block now stand in the z cuts' window).
+every 4 m) and the y cuts (-175 to 95 m every 5 m) are gated by outline, and the x cuts (-70 to 70 m every 5 m) by **face
+depth** (`fidelity.sweep(face=True)`, `--face`: each line filled from its first surface aft, so a deck block a few metres deep
+counts by where its face stands, not by what a row fill sees through its gaps; by outline they score 0.845, 6 of 29). With the
+guns: z mean 0.951, 73 of 76 at 0.90 or over (the frame's back at 194 m, 446 and 450 m); x by face depth mean 0.912, 21 of 29;
+y by outline mean 0.952, 51 of 55 (by face depth, reported only on the maintainer's word: mean 0.866, 35 of 55, lower round the
+bay's mouth, y -20 to 15 m, and at the roof's edge); the front depth map agrees within 2 m on 59 % of the face, 8.0 m apart on
+average (against the older STL before T67's pods: z 67 of 76, x 4 of 29 by outline, 64 % and 7.4 m; the pods beside the command
+block now stand in the z cuts' window).
 
 ### In the game
 

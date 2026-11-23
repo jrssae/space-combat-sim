@@ -64,6 +64,9 @@ class NovaBuildTests(unittest.TestCase):
         manifest_io.validate_manifest(self.manifest)
         cover = self.manifest["collision"]["coverage"]
         self.assertEqual((cover["covered"], cover["within_reach"]), (1.0, 1.0))
+        # M10-T67: the capital standard of 64 shapes a section, the gun pods' masts kept apart by the merge's excess limit.
+        self.assertEqual(en.COLLISION.max_shapes, 64)
+        self.assertTrue(all(len(p["shapes"]) <= 64 for p in self.manifest["collision"]["pieces"]))
 
     def test_size(self) -> None:
         dims = self.manifest["dimensions_m"]
@@ -218,7 +221,7 @@ class NovaSectionTests(unittest.TestCase):
                 self.assertEqual(failures, [], f"{part}: sections under {PASS_IOU}")
 
     def test_the_bow_face_holds_its_floors(self) -> None:
-        """T66's sweeps and depth map over the open-frame bow (M10-T67): each sweep's mean IoU (the x and y cuts by face depth) and
+        """T66's sweeps and depth map over the open-frame bow (M10-T67): each sweep's mean IoU (the x cuts by face depth) and
         the face's depth agreement."""
         from tools.refview import fidelity  # noqa: PLC0415
 

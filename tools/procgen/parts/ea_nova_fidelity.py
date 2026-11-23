@@ -54,18 +54,19 @@ EXEMPT: dict[str, str] = {}
 
 # The bow face (M10-T67, T66's sweeps): cuts every ``step`` metres across ``span``, in ``window`` (None: both meshes), and the
 # front depth map over FACE_BOX. The x and y cuts see the face only, from the bow to the armour's end (z 150 to 380). The reference's
-# face is an open shell (deck blocks a few metres deep), so the z cuts are scored by outline and the x and y cuts by face depth (each
-# line filled from its first surface aft, ``fidelity.face_fill``), not by row fill.
+# face is an open shell (deck blocks a few metres deep), so the z and y cuts are scored by outline and the x cuts by face depth (each
+# line filled from its first surface aft, ``fidelity.face_fill``), not by row fill. The y cuts by face depth are reported, not
+# gated (the maintainer, M10-T67): they fall round the bay's mouth, where the reference's loose parts stand in the line.
 FACE_SWEEPS: dict[str, tuple[tuple[float, float], float, tuple[float, float, float, float] | None]] = {
     "z": ((150.0, 450.0), 4.0, None),
     "x": ((-70.0, 70.0), 5.0, (150.0, 380.0, -185.0, 100.0)),
     "y": ((-175.0, 95.0), 5.0, (-75.0, 75.0, 150.0, 380.0)),
 }
-FACE_BY_DEPTH = {"z": False, "x": True, "y": True}
+FACE_BY_DEPTH = {"z": False, "x": True, "y": False}
 FACE_BOX = (-75.0, 75.0, -180.0, 100.0, 150.0, 450.0)
 # The floors the face holds today (the maintainer's target is every slice >= 0.90; see docs/assets-capital.md, "ea_nova"):
 # each sweep's mean IoU, and the depth map's share within 2 m and its mean difference (m).
-FACE_MEAN_IOU = {"z": 0.95, "x": 0.91, "y": 0.86}
+FACE_MEAN_IOU = {"z": 0.95, "x": 0.91, "y": 0.95}
 FACE_DEPTH = {"within_tolerance": 0.585, "mean_abs_depth_diff_m": 8.1}
 
 __all__ = ["EXEMPT", "FACE_BOX", "FACE_BY_DEPTH", "FACE_DEPTH", "FACE_MEAN_IOU", "FACE_SWEEPS", "PLANES", "REFERENCE", "REFERENCE_AXIS", "REFERENCE_MAPPING"]

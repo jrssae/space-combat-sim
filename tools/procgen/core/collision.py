@@ -35,10 +35,13 @@ FLAT = 1e-7  # of a point set's size: thinner than this is no volume
 
 @dataclass(frozen=True)
 class Budget:
-    """The most shapes one piece's body may hold and the most points one of its hulls may have."""
+    """The most shapes one piece's body may hold and the most points one of its hulls may have. ``max_excess_m``, when set:
+    how far a joined hull may stand out of the shapes it was built from, so the merge never bridges two parts across open
+    space (the Nova's gun masts and fins, M10-T67)."""
 
     max_shapes: int = MAX_SHAPES_PER_PIECE
     max_hull_points: int = MAX_HULL_POINTS
+    max_excess_m: float | None = None
 
     def __post_init__(self) -> None:
         if self.max_shapes < 1 or self.max_hull_points < 4:
@@ -424,6 +427,7 @@ def merge_to_budget(shapes: Sequence[Shape], budget: Budget = Budget()) -> list[
     """The shapes, joined pairwise into hulls until they fit the budget. The pair joined is the one whose common bounding
     box adds the least empty space, so neighbours go first and the body grows as little as it can."""
     out = list(shapes)
+    rejected: set[tuple[int, int]] = set()
     while len(out) > budget.max_shapes:
         lo = np.array([s.bounds()[0] for s in out])
         hi = np.array([s.bounds()[1] for s in out])
@@ -431,11 +435,26 @@ def merge_to_budget(shapes: Sequence[Shape], budget: Budget = Budget()) -> list[
         joint = np.prod(np.maximum(hi[:, None], hi[None]) - np.minimum(lo[:, None], lo[None]), axis=2)
         added = joint - own[:, None] - own[None]
         added[np.tril_indices(len(out))] = np.inf
-        i, j = (int(k) for k in np.unravel_index(int(np.argmin(added)), added.shape))
-        joined = hull(out[i].name, np.concatenate([out[i].corners(), out[j].corners()]), budget.max_hull_points)
+        for flat in np.argsort(added, axis=None):
+            i, j = (int(k) for k in np.unravel_index(int(flat), added.shape))
+            if not np.isfinite(added[i, j]):
+                raise ValueError(f"no two of {len(out)} shapes join within {budget.max_excess_m} m; the budget is {budget.max_shapes}")
+            if (id(out[i]), id(out[j])) in rejected:
+                continue
+            joined = hull(out[i].name, np.concatenate([out[i].corners(), out[j].corners()]), budget.max_hull_points)
+            if budget.max_excess_m is None or _stays_within(joined, shapes, budget.max_excess_m):
+                break
+            rejected.add((id(out[i]), id(out[j])))
         out[i] = joined
         del out[j]
     return out
+
+
+def _stays_within(joined: Shape, shapes: Sequence[Shape], reach: float) -> bool:
+    """Whether every point of the joined hull's surface is within ``reach`` of the shapes it stands in for."""
+    lo, hi = joined.bounds()
+    near = [s for s in shapes if np.all(s.bounds()[0] <= hi + reach) and np.all(s.bounds()[1] >= lo - reach)]
+    return bool(gaps(near, joined.surface_points(reach)).max() <= reach)
 
 
 def check_budget(name: str, shapes: Sequence[Shape], budget: Budget = Budget()) -> None:

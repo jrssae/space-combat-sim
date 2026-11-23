@@ -1120,8 +1120,9 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   140 m wide and 270 m tall, its upper half straight-sided, its lower half a wedge tapering to a keel at y -130, two
   thin masts above to y +220 and one below to -220.
 - **Gun spine** (25 to 75 %). A long box spine about 120 m wide and 90 m tall in three bays split by two raised collars
-  (at 37 % and 55 %, each a block about 60 m long). Along both flanks and the roof the spine carries the **twin gun
-  turrets** in rows (TBP: 18 twin cannons), and four outrigger lugs per bay.
+  (at 37 % and 55 %, each a block about 60 m long), with four outrigger lugs per bay. The 18 twin cannons (TBP) are the
+  reference's pods (**Guns**): four on each ring lug's outriggers, one each side beside the command block, on the wing's tip and
+  on the hangar block's flank.
 - **Engine section** (75 to 100 %). A tapered housing (75 to 82 %) widening to about 190 m with angled flank plates, then
   **four engine pods** in a square (82 to 97 %), the same layout as the Omega's.
 - **Weapons and bays.** TBP: 18 twin cannons; no fighter bays are confirmed (the table's "Starfury" stays as the EA's

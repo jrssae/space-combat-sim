@@ -23,6 +23,9 @@ from .ea_omega import DARK, PANEL
 
 BARREL_X, BARREL_R, BARREL_M, BORE_M = 12.0, 8.9, 70.0, 3.0  # each barrel's offset across, its radius, length and bore's depth
 MUZZLE_R = (9.6, 5.0)  # the muzzle sleeve's radius and the bore's
+BARREL_SIDES = 12  # eighteen pods of 16-sided barrels cost 2 600 triangles more (the maintainer, M10-T67)
+# Grows a barrel's corners so its 12-sided section holds a round barrel's area (the pod's planes are scored on it).
+BARREL_GROW = float(np.sqrt(2.0 * np.pi / (BARREL_SIDES * np.sin(2.0 * np.pi / BARREL_SIDES))))
 HOUSING_Z = ((58.0, 94.0), (94.0, 118.0))  # the housing's nose and body, from and to, behind the muzzles
 HOUSING_W, HOUSING_IN, HOUSING_OUT = 29.0, -14.0, 14.0  # half width across; its inner face and its top, out from the barrels' axis
 TAIL_Z, POD_M = 141.0, 141.0  # the narrow tail behind the housing ends the pod
@@ -51,7 +54,7 @@ class Gun(NamedTuple):
 
 RIGHT, UP, DOWN = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)
 GUNS = (
-    Gun("plasma_bow_r", "bow", (77.5, 0.8, 179.2), RIGHT, -1.0, 20.0, (102.5, 12.6)),
+    Gun("plasma_bow_r", "bridge", (77.5, 0.8, 179.2), RIGHT, -1.0, 20.0, (102.5, 12.6)),
     Gun("plasma_wing_r", "bow", (105.5, 0.8, 286.6), RIGHT, -1.0, 17.5, (102.5, 85.5)),
     Gun("plasma_fore_top_r", "spine_fore", (95.0, 75.5, 380.0), UP, -1.0, 24.5, (102.5, 86.0)),
     Gun("plasma_fore_low_r", "spine_fore", (95.0, -75.5, 380.0), DOWN, -1.0, 24.5, (102.5, 86.0)),
@@ -66,12 +69,13 @@ GUNS = (
 def _barrel(name: str, x: float, s: Style) -> cp.Module:
     """A long barrel from the housing to the muzzle: a thicker sleeve over its last stretch, a ring round that, and a dark bore.
     One twelve-sided hull collides for it: eighteen pods' worth of round steps would overrun a section's shape budget."""
-    r, m, bore_m = BARREL_R, BARREL_M, BORE_M
-    sleeve, bore_r = MUZZLE_R
+    m, bore_m = BARREL_M, BORE_M
+    r, sleeve, bore_r = (BARREL_GROW * v for v in (BARREL_R, *MUZZLE_R))
     profile = [(0.0, 0.0), (0.0, r), (m - 26.0, r), (m - 26.0, sleeve), (m - 20.0, sleeve), (m - 20.0, sleeve + 0.8), (m - 16.0, sleeve + 0.8),
                (m - 16.0, sleeve), (m, sleeve), (m, bore_r), (m - bore_m, 0.0)]
     bar, bore = s.material("barrel"), s.material("bore")
-    body = cs.round_body(name, (x, 0.0, m), (x, 0.0, 0.0), profile, s, [bar] * 9 + [bore], sides=16, creases=set(range(1, 10)), skin=cp.SKIN_NONE)
+    body = cs.round_body(name, (x, 0.0, m), (x, 0.0, 0.0), profile, s, [bar] * 9 + [bore], sides=BARREL_SIDES, creases=set(range(1, 10)),
+                         skin=cp.SKIN_NONE)
     reach = sleeve + 0.9
     ring = [(x + reach * np.cos(a), reach * np.sin(a)) for a in np.linspace(0.0, 2.0 * np.pi, 12, endpoint=False)]
     return dataclasses.replace(body, shapes=(col.hull(name, np.array([(u, v, z) for z in (0.0, m) for u, v in ring])),))

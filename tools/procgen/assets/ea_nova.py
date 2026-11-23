@@ -57,9 +57,9 @@ SECTIONS = (
     cap.Section("engine_r", "engine", 0.10),  # and its port twin, engine_l
 )
 PIECES = (cap.PieceSpec(cap.HULL_PIECE, ATLAS_PX),)
-# Shapes a section may keep (the capital default is 64): the spine's sections carry four gun pods each, and merging them to 64
-# joins a top and a low pod's masts into one wall through the girder (M10-T67).
-COLLISION = col.Budget(max_shapes=96)
+# The capital standard of 64 shapes a section, no joined hull standing out of its parts by more than the coverage check's reach
+# (M10-T67): the gun pods' masts and fins are thin, so the cheapest join would be with a twin across the girder.
+COLLISION = col.Budget(max_shapes=64, max_excess_m=2.5)
 
 BEAM, INTERCEPTOR = "ea_sweep_beam_nova", "ea_interceptor"
 UP, DOWN, RIGHT = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0), (1.0, 0.0, 0.0)

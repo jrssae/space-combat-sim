@@ -111,6 +111,17 @@ class MergeTests(unittest.TestCase):
         np.testing.assert_allclose(merged[0].bounds(), ([-0.5, -0.5, -0.5], [1.5, 0.5, 0.5]))
         np.testing.assert_allclose(merged[1].bounds(), ([9.5, -0.5, -0.5], [11.5, 0.5, 0.5]))
 
+    def test_an_excess_limit_keeps_thin_twins_apart(self) -> None:
+        """M10-T67: two thin masts either side of a gap are the cheapest join by box volume; with ``max_excess_m`` the merge
+        joins a block to its neighbour instead of bridging the gap."""
+        masts = [col.capsule_between(f"mast_{s}", (0.0, 5.0 * s, 0.0), (0.0, 40.0 * s, 0.0), 0.5) for s in (1.0, -1.0)]
+        blocks = [col.box("block_a", (30.0, 0.0, 0.0), (4.0, 4.0, 4.0)), col.box("block_b", (35.0, 0.0, 0.0), (4.0, 4.0, 4.0))]
+        names = lambda merged: sorted(s.name for s in merged)  # noqa: E731
+        self.assertEqual(names(col.merge_to_budget(masts + blocks, col.Budget(max_shapes=3))), ["block_a", "block_b", "mast_1.0"])
+        self.assertEqual(names(col.merge_to_budget(masts + blocks, col.Budget(max_shapes=3, max_excess_m=1.0))), ["block_a", "mast_-1.0", "mast_1.0"])
+        with self.assertRaisesRegex(ValueError, "join within"):
+            col.merge_to_budget(masts + blocks, col.Budget(max_shapes=2, max_excess_m=1.0))
+
     def test_a_merged_hull_holds_both_shapes_and_the_point_budget(self) -> None:
         shapes = [col.capsule("tank", (0.0, 0.0, 0.0), 2.0, 12.0), col.hull("ball", sphere_points(400, 2.0) + (5.0, 0.0, 0.0))]
         budget = col.Budget(max_shapes=1, max_hull_points=16)
