@@ -20,15 +20,17 @@ static func build_all(marks: Array[Dictionary], atlas: Dictionary, dir: String, 
 	var chars: String = str(atlas.get("chars", ""))
 	for mark: Dictionary in marks:
 		var text: String = HullMarks.text_for(mark, display_name, chars, ShipNames.hull_number_of(display_name))
+		var offsets: PackedFloat32Array = HullMarks.offsets(text, atlas, float(mark.get("stretch", 1.0)))
 		for i: int in text.length():
-			var node: HullMarkNode = create(mark, text, i, atlas, texture, path)
+			var node: HullMarkNode = create(mark, text, i, atlas, texture, path, offsets[i])
 			if node != null:
 				out.append(node)
 	return out
 
 
-## Character `index` of `text` on `mark`: letters of a longer text sit side by side, centred on the mark.
-static func create(mark: Dictionary, text: String, index: int, atlas: Dictionary, texture: Texture2D, path: String) -> HullMarkNode:
+## Character `index` of `text` on `mark`, `offset` letter heights from the mark's centre (`HullMarks.offsets`); with no offset
+## given, letters sit at an even pitch, centred on the mark.
+static func create(mark: Dictionary, text: String, index: int, atlas: Dictionary, texture: Texture2D, path: String, offset: float = NAN) -> HullMarkNode:
 	var cell: Vector2i = HullMarks.cell_of(text.substr(index, 1), atlas)
 	if cell.x < 0:
 		return null
@@ -36,12 +38,12 @@ static func create(mark: Dictionary, text: String, index: int, atlas: Dictionary
 	var normal := _vec(mark.get("normal"))
 	var basis: Basis = HullMarks.quad_basis(normal, _vec(mark.get("up")))
 	var side: float = HullMarks.quad_side_m(height, atlas)
-	var pitch: float = 0.8 * height  # a letter's advance, m
-	var shift: float = (float(index) - 0.5 * float(text.length() - 1)) * pitch
+	var stretch: float = float(mark.get("stretch", 1.0))
+	var shift: float = (offset if not is_nan(offset) else HullMarks.offsets(text, atlas, stretch)[index]) * height
 	var node := HullMarkNode.new()
 	node.name = "Mark%s%d" % [str(mark.get("name", "mark")).to_pascal_case().validate_node_name(), index]
 	var quad := QuadMesh.new()
-	quad.size = Vector2(side, side)
+	quad.size = Vector2(side * stretch, side)
 	node.mesh = quad
 	node.material_override = _material(texture, path, cell, int(atlas.get("columns", 1)), _colour(mark.get("colour")))
 	node.only_faction = StringName(str(mark.get("only_faction", "")))
@@ -60,6 +62,7 @@ static func _material(texture: Texture2D, path: String, cell: Vector2i, columns:
 	m.uv1_scale = Vector3(1.0 / columns, 1.0 / columns, 1.0)
 	m.uv1_offset = Vector3(float(cell.x) / columns, float(cell.y) / columns, 0.0)
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC  # crisp when the hull is seen edge-on
 	m.roughness = 0.6
 	m.metallic = 0.2
 	_materials[key] = m

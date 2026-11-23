@@ -113,8 +113,8 @@ class HyperionBuildTests(unittest.TestCase):
         np.testing.assert_allclose(xs, sorted(eh.hy.NOZZLE_XS), atol=1e-3)
         self.assertAlmostEqual(xs[0], -xs[2], msg="the bells stand symmetric about the hull's axis")
         roles = sorted(light["role"] for light in self.hp["lights"])
-        self.assertEqual(roles, ["bay"] * 7 + ["beacon", "beacon"] + ["flood"] * 6 + ["port", "starboard", "top"],
-                         "one red light in each bay and the six flood lamps")
+        self.assertEqual(roles, ["bay"] * 7 + ["beacon", "beacon"] + ["flood"] * 7 + ["port", "starboard", "top"],
+                         "one red light in each bay and the seven flood lamps")
         port = next(light for light in self.hp["lights"] if light["role"] == "port")
         self.assertLess(port["position"][0], 0.0, "red to port")
 
@@ -136,6 +136,9 @@ class HyperionBuildTests(unittest.TestCase):
         self.assertGreater(min(names["mark_name_roof"]["colour"]), 0.8, "light across the bow's roof")
         roof_z = float(self.authored(names["mark_name_roof"]["position"])[2])
         self.assertTrue(hy.BOW_Z < roof_z < hy.FORE_BANDS[0][0], "between the bow face and the bow band")
+        muzzle = min(float(m.part.mesh.bounds()[0][2]) for m in eh.modules() if m.name == "particle_top")
+        self.assertLess(roof_z + 0.5 * hy.NAME_HEIGHT_M["roof"], muzzle, "ahead of the top cannon, so its barrels never hide it")
+        self.assertGreater(roof_z - 0.5 * hy.NAME_HEIGHT_M["roof"], hy.NOSE_RING[1], "on grey, behind the nose ring")
         r, l = self.authored(names["mark_name_r"]["position"]), self.authored(names["mark_name_l"]["position"])
         self.assertAlmostEqual(float(r[0]), -float(l[0]), places=3)
         self.assertGreater(float(r[1]), hy.ROOF_Y + 10.0, "on the tower, above the roof")
@@ -159,7 +162,8 @@ class HyperionBuildTests(unittest.TestCase):
     def test_the_floods_lamps_stand_where_their_pools_are_thrown_from(self) -> None:
         lamps = [light for light in self.hp["lights"] if light["role"] == "flood"]
         pools = [m for _, m in eh.spec().markings if m.kind == "flood"]
-        self.assertEqual((len(lamps), len(pools)), (6, 4), "a pool for each tower and roof lamp; the bow's two light the array")
+        thrown = {tuple(np.round(p.params["centre"], 3)) for p in pools}
+        self.assertEqual((len(lamps), len(thrown)), (7, 5), "a pool for each tower and roof lamp; the bow's two light the array")
         for pool in pools:
             lamp = min(lamps, key=lambda light: float(np.linalg.norm(self.authored(light["position"]) - np.asarray(pool.params["centre"]))))
             self.assertLess(float(np.linalg.norm(self.authored(lamp["position"]) - np.asarray(pool.params["centre"]))), 2.0, lamp["name"])
@@ -168,6 +172,24 @@ class HyperionBuildTests(unittest.TestCase):
         self.assertEqual(len(bow), 2)
         for light in bow:
             self.assertLess(float(light["direction"][2]), -0.99, "the bow's lamps shine ahead")
+
+    def test_a_lamp_under_each_emblem_shines_up_onto_it_and_one_lights_the_bows_name(self) -> None:
+        lamps = {light["name"]: light for light in self.hp["lights"] if light["role"] == "flood"}
+        emblem = next(m for _, m in eh.spec().markings if m.kind == "emblem" and m.params["centre"][0] > 0.0)
+        under = lamps["flood_emblem_r"]
+        at, centre = self.authored(under["position"]), np.asarray(emblem.params["centre"])
+        self.assertAlmostEqual(float(at[2]), float(centre[2]), delta=0.5, msg="directly below the emblem")
+        self.assertLess(float(at[1]), float(centre[1]) - 0.5 * emblem.params["height_m"], "under it")
+        self.assertGreater(float(under["direction"][1]), 0.7, "shining up")
+        self.assertTrue(hy.SPONSON_Z[1] < float(centre[2]) - 0.5 * hy.EMBLEM_WIDTH_M and float(centre[2]) + 0.5 * hy.EMBLEM_WIDTH_M < hy.TOWER_Z[1],
+                        "the emblem is on the smooth flank, aft of the forward hull and the sponson")
+        bow = lamps["flood_name_roof"]
+        name = next(m for m in self.hp["marks"] if m["name"] == "mark_name_roof")
+        lamp_at, name_at = self.authored(bow["position"]), self.authored(name["position"])
+        self.assertAlmostEqual(float(lamp_at[0]), 0.0, places=3)
+        self.assertTrue(hy.BOW_Z < float(lamp_at[2]) < float(name_at[2]), "at the front of the roof, ahead of the name")
+        self.assertGreater(float(bow["direction"][2]), 0.9, "shining aft over it")
+        self.assertIn("flood_name_roof_bracket", {m.name for m in eh.modules()}, "it stands on a post")
 
     def test_every_bay_has_a_shut_roll_up_door_and_no_glowing_rim(self) -> None:
         doors = {d["name"]: d for d in self.hp["doors"]}
@@ -191,7 +213,13 @@ class HyperionBuildTests(unittest.TestCase):
         r, l = self.authored(nums["mark_number_r"]["position"]), self.authored(nums["mark_number_l"]["position"])
         self.assertAlmostEqual(float(r[0]), -float(l[0]), places=3)
         self.assertTrue(hy.FORE_BANDS[0][1] < hy.NUMBER_Z < 263.0, "between the bow band and the flank dome turret")
-        self.assertEqual(nums["mark_number_r"]["normal"][0], 1.0)
+        n = np.asarray(nums["mark_number_r"]["normal"])
+        self.assertGreater(float(n[0]), 0.98, "on the starboard flank")
+        # Every digit stands proud of the widening flank: the mark's plane is outside the hull at both ends of the number.
+        tangent = np.array([-n[2], 0.0, n[0]])
+        for end in (-1.0, 1.0):
+            p = r + end * 0.6 * hy.NUMBER_HEIGHT_M * tangent
+            self.assertGreater(float(p[0]) + 0.6, hy._lerp(float(p[2]), hy.HALF_W), f"the {'fore' if end < 0 else 'aft'} digit is clear of the hull")
 
     def test_the_bands_wrap_the_hull_belly_included(self) -> None:
         keels = hy.keel(ea_hyperion(DEFAULT_LOOK).style)
@@ -202,7 +230,11 @@ class HyperionBuildTests(unittest.TestCase):
         hull = hy.fore_hull(ea_hyperion(DEFAULT_LOOK).style)
         painted = [m for m in hull if m.name.startswith("fore_band_")]
         nose = min(hull, key=lambda m: float(m.part.mesh.bounds()[0][2]))
-        self.assertFalse(nose.name.startswith("fore_band_"), "the maintainer's call: the nose is hull grey, as the stills paint it")
+        self.assertTrue(nose.name.startswith("fore_hull_"), "the maintainer's call: the face is hull grey, as the stills paint it")
+        self.assertLess(float(nose.part.mesh.bounds()[1][2]) - hy.BOW_Z, 0.5, "a thin grey lip only")
+        ring = next(m for m in hull if m.name == "nose_ring")
+        self.assertEqual((round(float(ring.part.mesh.bounds()[0][2]), 2), round(float(ring.part.mesh.bounds()[1][2]), 2)), hy.NOSE_RING,
+                         "the blue ring round the nose, just behind the face")
         self.assertGreater(min(float(m.part.mesh.bounds()[0][2]) for m in painted), hy.BOW_Z + 30.0, "no band near the face")
         for lo, hi in hy.FORE_BANDS:
             inside = [m for m in painted if lo - 0.01 <= float(m.part.mesh.bounds()[0][2]) and float(m.part.mesh.bounds()[1][2]) <= hi + 0.01]

@@ -60,6 +60,29 @@ static func cell_of(char: String, atlas: Dictionary) -> Vector2i:
 	return Vector2i(-1, -1) if at < 0 or char.is_empty() else Vector2i(at % columns, at / columns)
 
 
+## Where each character of `text` sits along the mark, in letter heights from the text's centre: the atlas's own widths and
+## tracking (`tools/procgen/core/glyphs.py`) when it has them, an even 0.8 pitch when it does not. `stretch` widens the print.
+static func offsets(text: String, atlas: Dictionary, stretch: float = 1.0) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	var chars: String = str(atlas.get("chars", ""))
+	var widths: Array = atlas.get("widths", []) if atlas.get("widths") is Array else []
+	var tracking: float = float(atlas.get("tracking", 0.0))
+	var pen: float = 0.0
+	for c: String in text:
+		var at: int = chars.find(c)
+		var w: float = 0.8 - tracking
+		if c == " ":
+			w = float(atlas.get("space", 0.32))
+		elif at >= 0 and at < widths.size():
+			w = float(widths[at])
+		out.append((pen + 0.5 * w) * stretch)
+		pen += w + tracking
+	var middle: float = 0.5 * maxf(pen - tracking, 0.0) * stretch
+	for i: int in out.size():
+		out[i] -= middle
+	return out
+
+
 ## The quad's side, m, for letters `height_m` tall: the glyph fills only part of its square cell.
 static func quad_side_m(height_m: float, atlas: Dictionary) -> float:
 	return height_m / maxf(float(atlas.get("glyph_height_share", 1.0)), 0.1)

@@ -44,6 +44,7 @@ from .capital_hull import HullRoles
 LENGTH_M = 1025.39
 BOW_Z, FORE_END_Z = 50.0, 411.5  # the forward hull's face and its square aft end
 FORE_BANDS = ((95.0, 137.0), (336.0, 367.0))  # the bow band and the aft band, at the reference's grooves
+NOSE_RING = (50.3, 58.0)  # the blue ring round the nose, just behind its grey face (the stills)
 ROOF_Y = 17.2
 DECK_W, DECK_H = 29.0, 46.2  # the raised deck's half width and its top
 DECK_Z = (104.0, 188.0, 352.0)  # its slope's foot and top, and its end inside the tower
@@ -133,15 +134,22 @@ def fore_outline(z: float) -> list[tuple[float, float]]:
     return _rounded(_lerp(z, HALF_W), ROOF_Y, _lerp(z, FLOOR_Y), _lerp(z, EDGE_R))
 
 
-def fore_hull(s: Style) -> list[cp.Module]:
-    """The forward hull in lengths between its stations, the two bands painted (the nose is hull grey); ahead of 250 m the bow, aft
-    the magazine."""
-    stations = sorted({*(z for z, _ in HALF_W), *(z for z, _ in FLOOR_Y if z >= BOW_Z), *(z for band in FORE_BANDS for z in band)})
+def fore_pieces() -> list[tuple[str, float, float]]:
+    """The forward hull's lengths between its stations, each named for its paint: the nose ring, a band, or hull grey."""
+    stations = sorted({*(z for z, _ in HALF_W), *(z for z, _ in FLOOR_Y if z >= BOW_Z), *NOSE_RING, *(z for band in FORE_BANDS for z in band)})
     out = []
     for k, (a, b) in enumerate(zip(stations, stations[1:], strict=False)):
-        band = _painted(a, b, FORE_BANDS)  # the nose is hull grey: no band reaches the face
-        name = f"fore_band_{k + 1}" if band else f"fore_hull_{k + 1}"
-        m = cs.convex(name, _ring(fore_outline(a), a) + _ring(fore_outline(b), b), s, BAND if band else HULL)
+        name = "nose_ring" if (a, b) == NOSE_RING else f"fore_band_{k + 1}" if _painted(a, b, FORE_BANDS) else f"fore_hull_{k + 1}"
+        out.append((name, a, b))
+    return out
+
+
+def fore_hull(s: Style) -> list[cp.Module]:
+    """The forward hull in lengths between its stations, the two bands and the nose ring painted (the face itself is hull grey: a
+    thin grey lip ahead of the ring); ahead of 250 m the bow, aft the magazine."""
+    out = []
+    for name, a, b in fore_pieces():
+        m = cs.convex(name, _ring(fore_outline(a), a) + _ring(fore_outline(b), b), s, HULL if name.startswith("fore_hull") else BAND)
         if a <= NAME_ROOF_Z < b:
             m = dataclasses.replace(m, hardpoints=(name_marks()["roof"],))
         if a <= NUMBER_Z < b:
@@ -574,9 +582,10 @@ def renegade_xs() -> dict[str, cp.Hardpoint]:
 
 NAME_BLUE = (0.141, 0.322, 0.706)  # the bands' royal blue (sRGB), as the show's lettering on the tower
 NAME_LIGHT = (0.86, 0.87, 0.88)  # the stills' light lettering across the bow's roof
-NAME_HEIGHT_M = {"roof": 10.0, "tower": 8.0}
+NAME_HEIGHT_M = {"roof": 8.0, "tower": 8.0}
+NAME_ROOF_STRETCH = 1.2  # the bow's name is printed wider than the tower's (the stills)
 NAME_TOWER_Y = 40.0  # just under the tower's upper band
-NAME_ROOF_Z = 75.0  # between the bow face and the bow band
+NAME_ROOF_Z = 63.0  # between the nose ring and the top particle cannon's muzzles (70 m), which hide the roof aft of them from above
 
 
 def name_marks() -> dict[str, cp.Hardpoint]:
@@ -584,18 +593,20 @@ def name_marks() -> dict[str, cp.Hardpoint]:
     bow band (reading from above with the bow below), royal blue along each flank of the tower under its upper band. Keyed by
     where they go."""
     def mark(name: str, at: tuple[float, float, float], normal: tuple[float, float, float], up: tuple[float, float, float], where: str,
-             colour: tuple[float, float, float]) -> cp.Hardpoint:
-        return fittings.hull_mark(name, at, normal, up, NAME_HEIGHT_M[where], colour=colour, text="name")
-    at = _tower_flank(NAME_TOWER_Y, 0.5 * (_lerp(NAME_TOWER_Y, TOWER_FRONT) + TOWER_Z[1]))
-    return {"roof": mark("mark_name_roof", (0.0, ROOF_Y + 0.05, NAME_ROOF_Z), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), "roof", NAME_LIGHT),
+             colour: tuple[float, float, float], stretch: float = 1.0) -> cp.Hardpoint:
+        return fittings.hull_mark(name, at, normal, up, NAME_HEIGHT_M[where], colour=colour, text="name", stretch=stretch)
+    at = _tower_flank(NAME_TOWER_Y, EMBLEM_Z)
+    return {"roof": mark("mark_name_roof", (0.0, ROOF_Y + 0.05, NAME_ROOF_Z), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0), "roof", NAME_LIGHT, NAME_ROOF_STRETCH),
             "tower_r": mark("mark_name_r", at, (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), "tower", NAME_BLUE),
             "tower_l": mark("mark_name_l", (-at[0], at[1], at[2]), (-1.0, 0.0, 0.0), (0.0, 1.0, 0.0), "tower", NAME_BLUE)}
 
 
 # The Earth Alliance emblem (Q64, ``core/hull_decals.py``), painted into the hull's maps on each flank of the tower under the name,
-# as the side still (``references/ships/Hyperion/Pasted image.png``) sets it: centred under HYPERION, as wide as the name is long.
+# as the side still (``references/ships/Hyperion/Pasted image.png``) sets it: centred under HYPERION, as wide as the name is long, on
+# the smooth flank aft of where the forward hull and the sponson meet the tower.
 EMBLEM_BLUE, EMBLEM_YELLOW = (8, 57, 148), (255, 206, 0)  # the reference's colours (sRGB)
-EMBLEM_WIDTH_M = 46.0
+EMBLEM_WIDTH_M = 42.0
+EMBLEM_Z = 0.5 * (SPONSON_Z[1] + TOWER_Z[1] - 2.0)  # mid-way along the smooth flank, from the sponson's end to the aft chamfer
 EMBLEM_HEIGHT_M = EMBLEM_WIDTH_M * hull_decals.DESIGN_H / hull_decals.DESIGN_W
 EMBLEM_Y = NAME_TOWER_Y - 0.5 * NAME_HEIGHT_M["tower"] - 2.0 - 0.5 * EMBLEM_HEIGHT_M
 
@@ -607,16 +618,17 @@ def _linear(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
 def emblems() -> list[tuple[str, Marking]]:
     """The emblem on each flank of the tower, by the module that carries it; it reads with the name (toward the bow on the starboard
     flank, the stern on the port)."""
-    at = _tower_flank(EMBLEM_Y, 0.5 * (_lerp(NAME_TOWER_Y, TOWER_FRONT) + TOWER_Z[1]))
+    at = _tower_flank(EMBLEM_Y, EMBLEM_Z)
     return [("tower_6", Marking.emblem("", (sx * at[0], at[1], at[2]), (0.0, 0.0, -float(sx)), (0.0, 1.0, 0.0), (float(sx), 0.0, 0.0), EMBLEM_HEIGHT_M,
                                        _linear(EMBLEM_BLUE), _linear(EMBLEM_YELLOW))) for sx in (1, -1)]
 
 
 @dataclasses.dataclass(frozen=True)
 class Flood:
-    """A hull-mounted flood lamp (starboard; the port one is its mirror) and the pool it throws: the warm lamps on the tower's roof
-    that light the bridge's pedestal and drum (the show's stills light the tower's crown warm), and the lamps on the bow's roof
-    that light the tower's flanks from below, the pool brightest under the emblem and fading up over it (the side still)."""
+    """A hull-mounted flood lamp (starboard, the port one its mirror; or one on the axis when ``centre``), the pool it throws on
+    ``parts``, and the bracket it stands on (``bracket``: a box's corners, or none): the warm lamps on the tower's roof that light
+    the bridge's pedestal and drum (the show's stills light the tower's crown warm), the lamps under the emblems shining up onto
+    them, and the lamp at the front of the bow's roof lighting the name (the stills)."""
 
     name: str
     lamp: tuple[float, float, float]
@@ -626,41 +638,76 @@ class Flood:
     range_m: float
     colour: tuple[int, int, int]
     strength: float
+    parts: tuple[str, ...] = ("tower_6",)
+    centre: bool = False
+    bracket: tuple[tuple[float, float, float], tuple[float, float, float]] | None = None
+    section: str = "bridge"
+
+    @property
+    def sides(self) -> tuple[float, ...]:
+        return (1.0,) if self.centre else (1.0, -1.0)
 
     def direction(self, sx: float = 1.0) -> np.ndarray:
         d = np.subtract(self.aim, self.lamp) * (sx, 1.0, 1.0)
         return d / np.linalg.norm(d)
 
 
+def _emblem_flood() -> Flood:
+    """The lamp under the emblem, on a short bracket off the flank, shining up the flank onto it."""
+    y = EMBLEM_Y - 0.5 * EMBLEM_HEIGHT_M - 7.0
+    x = _lerp(y, TOWER_W)
+    return Flood("flood_emblem", (x + 3.0, y, EMBLEM_Z), (x, EMBLEM_Y + 3.0, EMBLEM_Z), 42.0, 16.0, 40.0, (244, 240, 232), 0.9,
+                 parts=("tower_5", "tower_6", "tower_7"), bracket=((x - 0.5, y - 1.4, EMBLEM_Z - 1.4), (x + 2.4, y - 0.6, EMBLEM_Z + 1.4)))
+
+
+def _name_flood() -> Flood:
+    """The lamp at the front of the bow's roof, on a short post, shining aft over the name."""
+    lamp = (0.0, ROOF_Y + 4.2, BOW_Z + 3.0)
+    return Flood("flood_name_roof", lamp, (0.0, ROOF_Y, NAME_ROOF_Z + 6.0), 40.0, 16.0, 50.0, (244, 240, 232), 0.85,
+                 parts=tuple(name for name, a, _ in fore_pieces() if a < FORE_BANDS[0][0] + 10.0), centre=True,
+                 bracket=((-1.0, ROOF_Y - 0.5, lamp[2] - 1.0), (1.0, lamp[1] - 0.7, lamp[2] + 1.0)), section="bow")
+
+
 FLOODS = (
     Flood("flood_crown", (17.0, TOWER_TOP + 0.5, 390.0), (0.0, 130.0, TOWER_DRUM_Z), 24.0, 10.0, 95.0, (255, 226, 194), 0.9),
-    Flood("flood_name", (50.0, ROOF_Y + 0.3, 398.0), (_lerp(22.0, TOWER_W), 22.0, 410.0), 45.0, 20.0, 55.0, (244, 240, 232), 0.75),
+    _emblem_flood(),
+    _name_flood(),
 )
 
 BOW_LAMP = (27.0, 10.0, BOW_Z)  # the white flood lamp on the bow's face, between the array's rods (no pool: it lights the rods)
 
 
 def flood_pools() -> list[tuple[str, Marking]]:
-    """Each flood's pool of light baked into the hull's glow, both sides."""
-    return [("tower_6", Marking.flood("", (sx * f.lamp[0], f.lamp[1], f.lamp[2]), tuple(f.direction(sx)), f.outer_deg, f.inner_deg, f.range_m,
-                                      _linear(f.colour), f.strength)) for f in FLOODS for sx in (1.0, -1.0)]
+    """Each flood's pool of light baked into the hull's glow, on each of its parts, both sides."""
+    return [(part, Marking.flood("", (sx * f.lamp[0], f.lamp[1], f.lamp[2]), tuple(f.direction(sx)), f.outer_deg, f.inner_deg, f.range_m,
+                                 _linear(f.colour), f.strength)) for f in FLOODS for sx in f.sides for part in f.parts]
+
+
+def flood_brackets(s: Style) -> list[cp.Module]:
+    """The brackets and posts the floods' lamps stand on."""
+    return [cs.box(f"{f.name}_bracket" if f.centre else f"{f.name}_bracket_r", *f.bracket, s, PANEL, skin=cp.SKIN_FITTING)
+            .in_section(f.section).on_side(cp.CENTRE if f.centre else cp.RIGHT) for f in FLOODS if f.bracket is not None]
 
 
 NUMBER_INK = (0.07, 0.10, 0.24)  # the show's hull number is dark slate blue, darker than the bands
 NUMBER_HEIGHT_M = 26.0
 NUMBER_Z = 168.0  # just aft of the bow band, ahead of the flank dome turret (263 m on), as the stills paint it
+NUMBER_Y = -16.0  # mid-way down the flank's flat
 
 
 def hull_numbers() -> tuple[cp.Hardpoint, cp.Hardpoint]:
     """The ship's hull number (the show's "21") painted on each flank of the forward hull aft of the bow band; the game picks the
-    digits from the ship's name (``data/ships/names.json``, ``hull_numbers``)."""
-    y, w = -14.0, _lerp(NUMBER_Z, HALF_W)
-    return tuple(fittings.hull_mark(name, (sx * w, y, NUMBER_Z), (float(sx), 0.0, 0.0), (0.0, 1.0, 0.0), NUMBER_HEIGHT_M,
-                                    colour=NUMBER_INK, text="number") for name, sx in (("mark_number_r", 1), ("mark_number_l", -1)))  # type: ignore[return-value]
+    digits from the ship's name (``data/ships/names.json``, ``hull_numbers``). The flank widens aft, so the mark leans with it: a
+    flat mark square to the beam would sink its aft digit into the hull."""
+    span = 0.5 * NUMBER_HEIGHT_M
+    w, slope = _lerp(NUMBER_Z, HALF_W), (_lerp(NUMBER_Z + span, HALF_W) - _lerp(NUMBER_Z - span, HALF_W)) / (2.0 * span)
+    n = np.array([1.0, 0.0, -slope]) / np.hypot(1.0, slope)
+    return tuple(fittings.hull_mark(name, (sx * w, NUMBER_Y, NUMBER_Z), (sx * round(float(n[0]), 5), 0.0, round(float(n[2]), 5)), (0.0, 1.0, 0.0),
+                                    NUMBER_HEIGHT_M, colour=NUMBER_INK, text="number") for name, sx in (("mark_number_r", 1), ("mark_number_l", -1)))  # type: ignore[return-value]
 
 
 __all__ = ["BLOCK_Y", "BLOCK_Z", "BOW_Z", "ROOF_Y", "DECK_H", "DECK_Z", "ENGINE_Y", "FIN_BOTTOM", "FORE_BANDS", "FORE_END_Z", "FURY", "FURY_BAY_ZS",
            "LENGTH_M", "MODULE_Y", "MODULE_Z", "NOZZLE_XS", "NUMBER_Z", "SHUTTLE", "SHUTTLES_PER_BAY", "SPONSON_X", "SPONSON_Z", "STARFURIES_PER_BAY",
            "TOWER_DRUM_Y", "TOWER_DRUM_Z", "TOWER_TOP", "TOWER_Z", "aft_spine", "front_array", "deck", "dome_turret", "engines", "fore_hull", "fore_outline",
-           "BOW_LAMP", "FLOODS", "Flood", "emblems", "flood_pools", "hangar", "hull_numbers", "keel", "lattice", "module", "name_marks", "particle_cannon", "renegade_xs", "sponson", "tanks", "tower",
+           "BOW_LAMP", "EMBLEM_Z", "FLOODS", "Flood", "NOSE_RING", "emblems", "flood_brackets", "flood_pools", "fore_pieces", "hangar", "hull_numbers", "keel", "lattice", "module", "name_marks", "particle_cannon", "renegade_xs", "sponson", "tanks", "tower",
            "tower_plan", "truss"]

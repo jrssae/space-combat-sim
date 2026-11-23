@@ -100,8 +100,8 @@ def light_modules() -> list[cp.Module]:
         lamp("light_top", "top", (1.0, 1.0, 1.0), 300.0, 3.0).mounted((0.0, hy.TOWER_TOP, 425.0), UP).in_section("bridge"),
         lamp("light_keel", "beacon", RUNNING_RED, 450.0, 3.0).mounted((0.0, hy.FIN_BOTTOM, 444.0), DOWN).in_section("bridge"),
         lamp("light_stern", "beacon", RUNNING_RED, 450.0, 3.0).mounted((0.0, hy.BLOCK_Y[1], 958.0), UP).in_section("engines"),
-        *(lamp(f"{f.name}_r", "flood", FLOOD_LAMP, f.range_m, 1.6, 6.0).mounted(f.lamp, tuple(f.direction()))
-          .in_section("bridge").on_side(cp.RIGHT) for f in hy.FLOODS),
+        *(lamp(f"{f.name}" if f.centre else f"{f.name}_r", "flood", FLOOD_LAMP, f.range_m, 1.6, 6.0).mounted(f.lamp, tuple(f.direction()))
+          .in_section(f.section).on_side(cp.CENTRE if f.centre else cp.RIGHT) for f in hy.FLOODS),
         # The white lamps on the bow's face (the stills light it there), shining out along the antenna array.
         lamp("flood_bow_r", "flood", FLOOD_LAMP, 120.0, 1.4, 6.0).mounted(hy.BOW_LAMP, FORE, UP).in_section("bow").on_side(cp.RIGHT),
     ]
@@ -113,7 +113,7 @@ def modules(look: str = DEFAULT_LOOK) -> list[cp.Module]:
     return [
         *hy.fore_hull(s), *hy.deck(s), *hy.keel(s), *hy.sponson(s), *hy.tower(s),
         *hy.truss(s), *hy.module(s), *hy.aft_spine(s), *hy.tanks(s), *hy.engines(s),
-        *weapon_modules(s), *light_modules(),
+        *weapon_modules(s), *light_modules(), *hy.flood_brackets(s),
     ]  # fmt: skip
 
 

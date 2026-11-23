@@ -53,3 +53,19 @@ func test_a_faction_only_mark_shows_on_that_faction() -> void:
 	assert_true(HullMarks.shown_for({"text": "initial"}, &"earth_alliance"), "no restriction: every ship")
 	assert_true(HullMarks.shown_for({"only_faction": "renegades"}, &"renegades"))
 	assert_false(HullMarks.shown_for({"only_faction": "renegades"}, &"earth_alliance"))
+
+
+func test_letters_are_spaced_by_their_own_widths_and_centred() -> void:
+	var widths: Array = []
+	for c: String in ATLAS["chars"]:
+		widths.append(0.17 if c == "I" else 0.6)
+	var atlas: Dictionary = ATLAS.merged({"widths": widths, "tracking": 0.1, "space": 0.3})
+	var at: PackedFloat32Array = HullMarks.offsets("HI", atlas)
+	assert_almost_eq(at[0], -0.5 * (0.6 + 0.1 + 0.17) + 0.3, 1e-5, "H's centre")
+	assert_almost_eq(at[1] - at[0], 0.3 + 0.1 + 0.085, 1e-5, "a narrow I sits close")
+	assert_almost_eq(at[0] + at[1], (0.3 - 0.435) + (0.785 - 0.435), 1e-5)
+	var wide: PackedFloat32Array = HullMarks.offsets("HI", atlas, 1.5)
+	assert_almost_eq(wide[1] - wide[0], 1.5 * (at[1] - at[0]), 1e-5, "stretched print spreads out")
+	var even: PackedFloat32Array = HullMarks.offsets("AB", ATLAS)
+	assert_almost_eq(even[1] - even[0], 0.8, 1e-5, "an atlas without widths keeps an even pitch")
+	assert_almost_eq(even[0] + even[1], 0.0, 1e-5)

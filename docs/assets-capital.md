@@ -107,9 +107,12 @@ tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part,
   - `rotors[]`: `piece`, `pivot`, `axis`, `spin_rad_s`, `sections`;
   - `lights[]`: `direction`, `role` (`port`, `starboard`, `top`, `beacon`, `flood`), `colour` (linear RGB), `range_m`;
   - `marks[]` (M10-T21, painted lettering): `position` (the letter's centre on the face), `normal`, `up`, `text` (`initial`, the
-    first letter of the ship's name, or a fixed string), `height_m`, `colour`; with `mark_atlas` (`file`, `chars`, `columns`,
-    `glyph_height_share`) when any exist. `parts/capital_fittings.hull_mark` makes one; `core/glyphs.py` draws the blocky
-    A to Z and 0 to 9 set into `<asset>_marks.png` (6 by 6 cells of 128 px, lossless, no geometry or hull texture spent);
+    first letter of the ship's name, or a fixed string), `height_m`, `colour`, optional `stretch` (wider print); with `mark_atlas`
+    (`file`, `chars`, `columns`, `glyph_height_share`, `widths`, `tracking`, `space`: the letters' own widths, so `HullMarks.offsets`
+    spaces them as type) when any exist. `parts/capital_fittings.hull_mark` makes one; `core/glyphs.py` draws a bold condensed
+    sans A to Z and 0 to 9 in the show's style (M10-T22: strokes in code, no font file, edges antialiased from the exact
+    distance) into `<asset>_marks.png` (6 by 6 cells of 256 px, lossless with mipmaps, sampled anisotropically; no geometry or
+    hull texture spent);
   - `chunks[]` gain `piece`; `jump_point` as the carrier's.
 - **Collision** (above): one entry of `collision.pieces` per section, named for it, with `piece` (the body that carries
   it); 64 shapes a section and 32 points a hull by default; `coverage` over the whole skin. A bay's hall and a rotating
@@ -649,10 +652,17 @@ along the roof's starboard edge is gone.
 
 **Name and hull number**: the ship's whole name in the bands' blue across the forward roof and on each flank of the tower
 (`mark_name_*`, `text: "name"`), and its hull number, the show's "21" (still 02), in dark slate on each flank of the forward
-hull between the bow band and the flank dome turret (`mark_number_r` and `_l`, 24 m, `text: "number"`). The number is data:
+hull between the bow band and the flank dome turret (`mark_number_r` and `_l`, 26 m, `text: "number"`; each leans with the
+widening flank so neither digit sinks into it). The number is data:
 `data/ships/names.json` `hull_numbers` gives each Hyperion name its own (`Hyperion` 21, `Lexington` 34, ...); `ShipNames.hull_number_of`
 reads it (a repeated name, "Hyperion 2", keeps its number) and `HullMarks.text_for` prints it. **Renegades**: red X marks on
 both tower flanks and the roof (`only_faction` `renegades`).
+
+**Nose, emblem and floods (M10-T22 refinement)**: the bow's face is hull grey with a blue ring just behind it (`nose_ring`,
+50.3 to 58 m, behind a 0.3 m grey lip). The emblem and the tower's name sit on the smooth tower flank aft of the forward hull and
+the sponson (`EMBLEM_Z`), the emblem lit by a lamp on a bracket directly below it shining up (`flood_emblem`); a lamp on a post
+at the front of the roof lights the bow's name (`flood_name_roof`, on the axis); the crown floods as before. Each flood's pool
+is baked onto every hull part it reaches (`Flood.parts`).
 
 ### Fidelity (Q10)
 
