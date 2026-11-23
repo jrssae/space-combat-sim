@@ -1,5 +1,5 @@
 """``ea_nova`` (M10-T23, Q53): the Nova-class dreadnought on the capital framework, in the Omega's parts and look. Files and
-piece, size, the sections, the hardpoints against the loadout (30 mounts, one forward bay of 24 Starfuries), the lone sensor boom, the
+piece, size, the sections, the hardpoints against the loadout (30 mounts, one forward bay of 24 Starfuries), the gun pods, the lone sensor boom, the
 name letter and the renegades' marks, collision coverage, the class budget, and each part's sections against the reference STL
 (CLAUDE.md, "STL fidelity").
 
@@ -30,9 +30,9 @@ from tools.procgen.tests.budget_table import read_budgets
 from tools.refview.sections import PASS_IOU, section_score
 
 ROOT = Path(__file__).resolve().parents[3]
-STL = ROOT / "references" / "EA Nova class destroyer.STL"
+STL = ROOT / "references" / fid.REFERENCE
 TEST_OPTIONS = {"atlas_px": 1024, "detail_px": 128}  # the default sample spacing: the coverage check needs it; the open bow's charts need 1 024 px
-LENGTH, SPAN, HEIGHT = 1502.1, 208.0, 443.7  # T01's length; the beam's tips across, the roof masts to the keel mast
+LENGTH, SPAN, HEIGHT = 1502.1, 383.0, 443.7  # T01's length; the wing guns' masts across, the roof masts to the keel mast
 SECTIONS = ("bow", "bridge", "fuel", "spine_fore", "hangar", "spine_mid", "spine_aft", "reactor", "engine_r", "engine_l")
 MOUNTS = {"turret": 18, "beam": 6, "interceptor": 6}
 BAYS, STARFURIES = 1, 24
@@ -97,10 +97,23 @@ class NovaBuildTests(unittest.TestCase):
         exit_at = self.authored(bay["exit"])
         self.assertAlmostEqual(exit_at[2], en.nv.BAY_MOUTH_Z, places=3, msg="its mouth at the bridge tube's front")
         self.assertAlmostEqual(exit_at[0], 0.0, places=3)
-        retros = [m for m in cp.with_twins(en.modules()) if m.name.startswith("retro_") and "strut" not in m.name]
+        retros = [m for m in cp.with_twins(en.modules()) if m.name.startswith("retro_")]
         self.assertEqual(len(retros), 2, "two oval retro thrusters")
         retro_top = max(float(m.part.mesh.bounds()[1][1]) for m in retros)
         self.assertGreater(en.nv.BAY_Y - 0.5 * en.nv.BAY_MOUTH[1], retro_top, "the mouth above the retro thrusters")
+
+    def test_the_guns_are_the_references_pods(self) -> None:
+        """M10-T67: the 18 twin cannon pods of the reference with guns, each a two-barrel turret with the medium plasma gun: two on
+        each flank (beside the command block, on the wing's tip) and one on each of the hangar block's, four on each ring lug,
+        the aft lug's four facing the stern."""
+        guns = [w for w in self.hp["weapons"] if w["kind"] == "turret"]
+        self.assertEqual(len(guns), MOUNTS["turret"])
+        self.assertEqual({(w["weapon"], w["barrels"]) for w in guns}, {("ea_plasma_medium", 2)})
+        ups = [np.round(w["up"], 3).tolist() for w in guns]
+        self.assertEqual((sum(abs(u[0]) == 1.0 for u in ups), sum(abs(u[1]) == 1.0 for u in ups)), (6, 12), "six on the flanks, twelve on the lugs")
+        self.assertEqual(sum(w["forward"][2] > 0.5 for w in guns), 4, "the aft lug's four face the stern")
+        for w in guns:
+            self.assertGreater(abs(self.authored(w["position"])[0]), 70.0, f"{w['name']} stands out on its pod")
 
     def test_engines_and_lights(self) -> None:
         self.assertEqual(len(self.hp["engines"]), 4)
@@ -205,11 +218,13 @@ class NovaSectionTests(unittest.TestCase):
                 self.assertEqual(failures, [], f"{part}: sections under {PASS_IOU}")
 
     def test_the_bow_face_holds_its_floors(self) -> None:
-        """T66's sweeps and depth map over the open-frame bow (M10-T67): each sweep's mean IoU and the face's depth agreement."""
+        """T66's sweeps and depth map over the open-frame bow (M10-T67): each sweep's mean IoU (the x and y cuts by face depth) and
+        the face's depth agreement."""
         from tools.refview import fidelity  # noqa: PLC0415
 
         for axis, (span, step, window) in fid.FACE_SWEEPS.items():
-            scores = fidelity.sweep(self.stl, self.model, "xyz".index(axis), span, step, 1.0, window, outline=True)
+            by_depth = fid.FACE_BY_DEPTH[axis]
+            scores = fidelity.sweep(self.stl, self.model, "xyz".index(axis), span, step, 1.0, window, outline=not by_depth, face=by_depth)
             with self.subTest(axis=axis):
                 self.assertGreaterEqual(float(np.mean([s.iou for s in scores])), fid.FACE_MEAN_IOU[axis])
         maps = [fidelity.depth_map(m, "front", fid.FACE_BOX, 1.0) for m in (self.stl, self.model)]

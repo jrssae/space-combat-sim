@@ -53,11 +53,13 @@ SPINE_Z = (330.0, 1103.0)
 CORE_W, CORE_H = 39.5, 45.0
 RINGS_Z = ((450.8, 479.2), (821.2, 849.8), (930.2, 958.2))
 RING_W, RING_H = 57.5, 56.0
-OUTRIGGER_X = 91.0
+OUTRIGGER_X = 113.5  # the outrigger plates reach out under the gun pods (the reference with guns)
 COLLARS_Z = ((525.2, 559.0), (741.0, 774.2))
 COLLAR_W, COLLAR_H, COLLAR_CUT = 56.0, 57.0, (30.0, 12.0)
 HANGAR_Z = (558.8, 740.8)
 HANGAR_W, HANGAR_H, HANGAR_CUT = 67.5, 69.5, (31.5, 16.0)
+# The channel along the roof and the keel (half width, its floor's y) and the ribs across it (z from, to): the reference's.
+HANGAR_CHANNEL, HANGAR_RIBS = (22.0, 60.0), ((558.8, 568.0), (574.0, 592.0), (690.0, 700.0), (734.0, 740.8))
 RECESS_X, RECESS_Y, PILLAR_M = 59.0, 45.0, 11.0  # the flank's recessed panels: their face, their top edge; the pillars' length
 BOX_X, BOX_Z = 73.0, (620.0, 655.0)  # the box standing out of the launch strip: its face and its length
 STRIP_H, STRIP_DEPTH = 16.0, 32.0  # the launch strip through the axis: its height and how deep it is set into the flank
@@ -207,6 +209,25 @@ def spine(s: Style, name: str, section: str, z: tuple[float, float], shelf_x: fl
     return out
 
 
+# What fills the girder's roof and keel channel between the posts aft of the hangar (the reference's): blocks (z from, to, the
+# side: 1 the roof, -1 the keel) standing to 53 m off the axis, and thin decks at 50 m.
+CHANNEL_BLOCKS = ((863.0, 873.0, 1.0), (913.0, 930.0, 1.0), (999.0, 1009.0, 1.0), (913.0, 930.0, -1.0))
+CHANNEL_DECKS = ((797.0, 815.0, 1.0), (861.0, 893.0, 1.0), (961.0, 995.0, 1.0), (1043.0, 1061.0, 1.0), (861.0, 893.0, -1.0),
+                 (955.0, 987.0, -1.0))
+CHANNEL_HALF = 20.5  # between the posts
+
+
+def channel_fill(s: Style) -> list[cp.Module]:
+    """The roof's and keel's blocks and decks in the channel, each in the spine section it stands on."""
+    out: list[cp.Module] = []
+    for kind, rows, (y0, y1), roles in (("block", CHANNEL_BLOCKS, (CORE_H - 1.0, 53.0), DECKED), ("deck", CHANNEL_DECKS, (49.0, 50.5), DARK)):
+        for k, (z0, z1, side) in enumerate(rows):
+            section = "spine_mid" if z1 <= 903.0 else "spine_aft"
+            tag = "roof" if side > 0.0 else "keel"
+            out.append(_put(section, cs.box(f"channel_{kind}_{tag}_{k + 1}", (-CHANNEL_HALF, side * y0, z0), (CHANNEL_HALF, side * y1, z1), s, roles)))
+    return out
+
+
 def _pair(section: str, m: cp.Module, low: str) -> list[cp.Module]:
     """A starboard part above the axis and its mirror below."""
     return [_put(section, m, cp.RIGHT), _put(section, _flip_y(m, low), cp.RIGHT)]
@@ -235,8 +256,8 @@ def ring(s: Style, name: str, section: str, z: tuple[float, float]) -> list[cp.M
     each of their corners and a block on each flank above and below the axis."""
     z0, z1 = z
     roof = cs.box(f"{name}_roof", (-RING_W, CORE_H - 1.0, z0), (RING_W, RING_H, z1), s, DECKED)
-    plate = cs.box(f"{name}_outrigger_top_r", (RING_W - 1.0, RING_H - 1.5, z0 + 1.0), (OUTRIGGER_X, RING_H + 0.5, z1 - 1.0), s, PANEL)
-    flank = cs.box(f"{name}_flank_top_r", (CORE_W - 1.0, 15.0, z0), (49.0, CORE_H, z1), s, DECKED)
+    plate = cs.box(f"{name}_outrigger_top_r", (RING_W - 1.0, RING_H - 2.5, z0 + 1.0), (OUTRIGGER_X, RING_H, z1 - 1.0), s, PANEL)
+    flank = cs.box(f"{name}_flank_top_r", (CORE_W - 1.0, 15.0, z0), (50.5, CORE_H, z1), s, DECKED)
     return [_put(section, roof), _put(section, _flip_y(roof, f"{name}_keel")), *_pair(section, plate, f"{name}_outrigger_low_r"),
             *_pair(section, flank, f"{name}_flank_low_r")]
 
@@ -253,10 +274,17 @@ def hangar_block(s: Style, section: str) -> list[cp.Module]:
     strip = 0.5 * STRIP_H
     back = HANGAR_W - STRIP_DEPTH
     cut_y = HANGAR_H - HANGAR_CUT[1]
-    top = cs.prism("hangar_roof", [(HANGAR_W, RECESS_Y), (HANGAR_W, cut_y), (HANGAR_W - HANGAR_CUT[0], HANGAR_H), (-HANGAR_W + HANGAR_CUT[0], HANGAR_H),
-                                   (-HANGAR_W, cut_y), (-HANGAR_W, RECESS_Y)], z0, z1, s, DECKED)
+    # The roof up to the channel's floor, a rail each side of the channel, and the ribs across it.
+    floor_x = HANGAR_W - (HANGAR_CHANNEL[1] - cut_y) * HANGAR_CUT[0] / HANGAR_CUT[1]  # the chamfer's x at the floor
+    half, floor = HANGAR_CHANNEL
+    top = cs.prism("hangar_roof", [(HANGAR_W, RECESS_Y), (HANGAR_W, cut_y), (floor_x, floor), (-floor_x, floor), (-HANGAR_W, cut_y), (-HANGAR_W, RECESS_Y)],
+                   z0, z1, s, DECKED)
+    rail = cs.prism("hangar_rail_top_r", [(half, floor - 0.5), (floor_x, floor - 0.5), (HANGAR_W - HANGAR_CUT[0], HANGAR_H), (half, HANGAR_H)], z0, z1, s, DECKED)
     middle = cs.box("hangar_middle", (-back, -RECESS_Y - 0.5, z0), (back, RECESS_Y + 0.5, z1), s, DECKED)
-    out = [_put(section, top), _put(section, _flip_y(top, "hangar_keel")), _put(section, middle)]
+    out = [_put(section, top), _put(section, _flip_y(top, "hangar_keel")), _put(section, middle), *_pair(section, rail, "hangar_rail_low_r")]
+    for k, (a, b) in enumerate(HANGAR_RIBS):
+        rib = cs.box(f"hangar_rib_top_{k + 1}", (-half - 0.5, floor - 0.5, a), (half + 0.5, HANGAR_H, b), s, PANEL)
+        out += [_put(section, rib), _put(section, _flip_y(rib, f"hangar_rib_low_{k + 1}"))]
     panel = cs.box("hangar_panel_top_r", (back - 0.5, strip - 0.5, z0), (RECESS_X, RECESS_Y + 0.5, z1), s, PANEL)
     out += _pair(section, panel, "hangar_panel_low_r")
     for tag, (a, b) in (("fore", (z0, z0 + PILLAR_M)), ("aft", (z1 - PILLAR_M, z1))):
@@ -265,7 +293,7 @@ def hangar_block(s: Style, section: str) -> list[cp.Module]:
     upper = cs.prism("hangar_box_top_r", [(RECESS_X - 0.5, strip), (BOX_X, strip), (BOX_X, 12.0), (64.0, 20.0), (RECESS_X - 0.5, 20.0)], *BOX_Z, s, DECKED)
     out += _pair(section, upper, "hangar_box_low_r")
     out.append(_put(section, cs.box("hangar_box_r", (RECESS_X - 0.5, -strip - 0.5, BOX_Z[0]), (BOX_X, strip + 0.5, BOX_Z[1]), s, DECKED), cp.RIGHT))
-    bump = cs.box("hangar_bump", (-11.0, HANGAR_H - 1.0, 640.0), (11.0, 75.0, 662.0), s, DARK)
+    bump = cs.box("hangar_bump", (-11.0, HANGAR_CHANNEL[1] - 0.5, 640.0), (11.0, 75.0, 662.0), s, DARK)
     out += [_put(section, bump), _put(section, _flip_y(bump, "hangar_bump_low"))]
     out.append(_put(section, cs.box("hangar_strip_r", (back - 0.5, -strip, z0 + PILLAR_M - 0.5), (HANGAR_W, strip, z1 - PILLAR_M + 0.5), s, DARK), cp.RIGHT))
     return out

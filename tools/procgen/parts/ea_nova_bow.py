@@ -177,7 +177,7 @@ def decks(s: Style) -> list[cp.Module]:
 def struts(s: Style) -> list[cp.Module]:
     """The retro thrusters' radial struts out to the armour, either side of the pair."""
     (x0, x1), (z0, z1) = STRUT_X, STRUT_Z
-    return [_put("fuel", cs.rod(f"retro_strut_{k + 1}_r", (x0, y, z0), (x1, y, z1), STRUT_R, s), cp.RIGHT) for k, y in enumerate(STRUTS)]
+    return [_put("fuel", cs.rod(f"bow_strut_{k + 1}_r", (x0, y, z0), (x1, y, z1), STRUT_R, s), cp.RIGHT) for k, y in enumerate(STRUTS)]
 
 
 def retro_lip(name: str, x: float, y: float, z: float, half: tuple[float, float], wall: float, s: Style) -> cp.Module:

@@ -555,11 +555,11 @@ Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as
 
 | | |
 |---|---|
-| Reference | `EA Nova class destroyer.STL`, mapping `--right=-x --up=+z --aft=+y`; its spine's axis is 43.3 m above its box's middle |
+| Reference | `EA_Nova_Dreadnought_(with_guns).stl` (T67), mapping `--right=-x --up=+z --aft=+y`, 0.2854 m a unit; its spine's axis is 43.3 m above its box's middle and 0.25 m to starboard of it |
 | Length | **1 502.1 m** (T01) |
-| Span, height | 208.0 m (the cross beam's tips behind the housing) x 443.7 m (roof masts to keel mast); the STL 210.4 x 446.1 |
+| Span, height | 383.0 m (the wing guns' masts) x 443.7 m (roof masts to keel mast); the STL 382.6 x 446.1 |
 | Pieces | `hull` only, one 4 096 px atlas |
-| Triangles | 15 660 (budget 100 000; T67's open bow) |
+| Triangles | 50 928 (budget 100 000; T67's guns) |
 | Texture sets | 56.0 MB high, 16.0 MB low (budget 109.3 and 29.3); measured 56 MB and 16 MB on the RX 6950 XT (model sheet, against the empty scene) |
 | Build | about 3.6 to 4.2 min (3 min 44 s with the forward bays) and 10 GB at its peak on the maintainer's machine (`BUILD_ALONE`) |
 
@@ -570,8 +570,16 @@ probes and fins, the open front's decks and the roof; T67 moved them here so nei
 `reactor` (the engine housing and the engine frame), `engine_r` and `engine_l`; blast energies on the fuel and the reactor.
 Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 
-- 18 `ea_plasma_medium` twin turrets (TBP's twin cannons): six on each flank's waist in the gun-deck rows, three in the roof's
-  channel and three under the keel;
+- 18 `ea_plasma_medium` twin cannon pods (T67, `parts/ea_nova_guns.py`, the reference with guns): a faceted housing round two
+  long barrels, a mast through it, the turret hardpoint at the barrels' roots in the housing's nose (two barrels, 180 degrees of
+  traverse, -10 to 90 of elevation). One beside the command block and one on the flank wing's tip each side (`bow`), one on each
+  flank of the hangar block (`hangar`), and four on each ring lug's outriggers, above and below either side (`spine_fore`,
+  `spine_mid`, `spine_aft`; the aft lug's face the stern), each on an outrigger plate out to 113.5 m with a brace under it. The
+  loadout's count is the reference's; T67 moved the mounts from the waist and the roof's channel (the older STL had no guns);
+- the girder's roof and keel channel aft of the hangar holds the reference's blocks and thin decks (`CHANNEL_BLOCKS`,
+  `CHANNEL_DECKS`), and the hangar block's roof and keel a channel 44 m wide with four ribs across it (`HANGAR_CHANNEL`);
+  collision keeps up to 96 shapes a section (`COLLISION`: at the capital default of 64 a top and a low pod's masts merge into one
+  wall through the girder);
 - 6 `ea_sweep_beam_nova` emitters (the Omega's beams at 80 %): one on each flank of the command block covering the fore
   hemisphere, four on the engine housing's corners the aft;
 - 6 `ea_interceptor` domes along the flanks;
@@ -603,33 +611,39 @@ the show's Schwarzkopf first.
 ### Fidelity (Q10)
 
 ```
-.venv/bin/python3 -I tools/refview/compare.py "references/EA Nova class destroyer.STL" ea_nova --length 1502.1 --right=-x --up=+z --aft=+y --model-offset 0,-43.3,0
+.venv/bin/python3 -I tools/refview/compare.py "references/EA_Nova_Dreadnought_(with_guns).stl" ea_nova --length 1502.1 --right=-x --up=+z --aft=+y --model-offset -0.25,-43.3,0
 ```
 
 (`--model-offset` moves the STL's axis onto the build's: 43.3 m is past the compare's 2 % shift window).
 
 | View | IoU | | Dimension | Mesh / STL |
 |---|---|---|---|---|
-| top | 0.952 | | length | 1.000 (1 502.1 / 1 502.1 m) |
-| side | 0.956 | | width | 0.989 (208.0 / 210.4 m) |
-| front | 0.965 | | height | 0.995 (443.7 / 446.1 m) |
+| top | 0.931 | | length | 1.000 (1 502.1 / 1 502.1 m) |
+| side | 0.947 | | width | 0.998 (382.0 / 382.6 m) |
+| front | 0.927 | | height | 0.995 (443.7 / 446.1 m) |
 
-**Per-part sections** (`parts/ea_nova_fidelity.py`, `tools/refview/sections.py`; `test_ea_nova.py` holds them): the command
-block (by outline: the reference's is a shell of plates round loose parts, open at the front), the keel wedge, the tankage, the
-flank wing, the fore spine, the three ring lugs, both collars, the hangar block, the mid and aft spine, the engine housing and
-the engines, with the retro thrusters by relief (0.931, 0.926) and the hangar block's fore end at 575 m again (0.935, whole
-since its bays left), 36 planes, every one at 0.90 or over (lowest 0.903, the hangar block at 600 m); no exemptions. The bay's
-hall lies inside the command block's planes (by outline, 0.979 to 0.980). Its mouth alone by relief, in the tube's window,
-scores 0.80 at 250 m and 0.84 at 300 m: the reference's tube is a thin frame a metre off the centre line, among loose parts the
-build leaves out; not a gate, for the maintainer.
+Against the reference with guns before T67's pods: top 0.743, side 0.856, front 0.802, width 0.544 (the older STL's 0.952, 0.956,
+0.965).
 
-**Bow face** (T67, T66's `tools/refview/fidelity.py`; `FACE_SWEEPS`, `FACE_MEAN_IOU`, `FACE_DEPTH` in `ea_nova_fidelity.py`,
-`test_the_bow_face_holds_its_floors`): outline sweeps z 150 to 450 m every 4 m (mean 0.952, 67 of 76 at 0.90 or over), x -70 to
-70 m every 5 m (mean 0.840, 4 of 29) and y -175 to 95 m (mean 0.957, 52 of 55); the front depth map over the face agrees within
-2 m on 64 % of it, 7.4 m apart on average (before T67's tuning: z 59 of 76, x 2 of 29, depth 58 % and 10.1 m). Below 0.90: the z
-cuts at 194 m (the frame's back) and 406 to 450 m (the plasma guns' mounts ahead of the reference's); most x cuts, where an
-outline row runs from its first surface to its last anywhere along the plane, so the reference's open shell (deck blocks a few
-metres deep, rows filled through its gaps) sets the row's end, not the face; the open question is with the maintainer.
+**Per-part sections** (`parts/ea_nova_fidelity.py`, `tools/refview/sections.py`; `test_ea_nova.py` holds them), against the
+reference with guns: the command block (by outline: the reference's is a shell of plates round loose parts, open at the front),
+the keel wedge, the tankage, the flank wing, the fore spine, the three ring lugs, both collars, the hangar block, the mid and aft
+spine, the engine housing and the engines, with the retro thrusters by relief, and (T67) each starboard gun pod across its
+barrels and its housing's body by outline (its housing is an open shell round the barrels; the reference's port pods sit a few
+metres off the mirror image): 54 planes, every one at 0.90 or over (lowest 0.903, the fore spine at 500 m; the pods 0.917 to
+0.956); no exemptions. The bay's hall lies inside the command block's planes. Its mouth alone by relief, in the tube's window,
+scores about 0.8: the reference's tube is a thin frame a metre off the centre line, among loose parts the build leaves out; not a
+gate, for the maintainer.
+
+**Bow face** (T67, T66's `tools/refview/fidelity.py`; `FACE_SWEEPS`, `FACE_BY_DEPTH`, `FACE_MEAN_IOU`, `FACE_DEPTH` in
+`ea_nova_fidelity.py`, `test_the_bow_face_holds_its_floors`). The reference's face is an open shell, so the z cuts (150 to 450 m
+every 4 m) are scored by outline and the x cuts (-70 to 70 m every 5 m) and y cuts (-175 to 95 m) by **face depth**
+(`fidelity.sweep(face=True)`, `--face`: each line filled from its first surface aft, so a deck block a few metres deep counts by
+where its face stands, not by what a row fill sees through its gaps). With the guns: z mean 0.952, 73 of 76 at 0.90 or over (the
+frame's back at 194 m, 446 and 450 m); x by face depth mean 0.912, 21 of 29 (by outline 0.845, 6 of 29); y by face depth mean
+0.866, 35 of 55 (by outline 0.952, 51 of 55: face depth is lower round the bay's mouth, y -20 to 15 m, and at the roof's edge);
+the front depth map agrees within 2 m on 59 % of the face, 8.0 m apart on average (against the older STL before T67's pods:
+z 67 of 76, x 4 of 29 by outline, 64 % and 7.4 m; the pods beside the command block now stand in the z cuts' window).
 
 ### In the game
 
@@ -835,7 +849,7 @@ is the approved length unless noted.
 |---|---|---|---|
 | `ea_omega` | `EA Omega Destroyer.stl` | `+y +z +x` | the drum is turned about 40 degrees in the file |
 | `ea_hyperion` | `EA Hyperion Class Heavy Cruiser.stl` | `+x +z -y` | |
-| `ea_nova` | `EA Nova class destroyer.STL` | `-x +z +y` | |
+| `ea_nova` | `EA_Nova_Dreadnought_(with_guns).stl` | `-x +z +y` | the older `EA Nova class destroyer.STL` has no guns |
 | `ea_warlock` | `EA-Warlock_destroyer_1992m.stl` | `+x +z -y` | |
 | `narn_gquan` | `Narn Gquon battlecruiser 1400m.stl` | `-x +z +y` | |
 | `centauri_vorchan` | `Centauri Vorchan Cruiser 360m.stl` | `+y +z +x` | |

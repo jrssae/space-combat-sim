@@ -6,8 +6,9 @@ The structure is ``parts/ea_nova.py`` (measured off the reference model); this f
 it and names the damage sections. The loadout is ``data/capitals/loadouts.json``, ``ea_nova`` (M10-T03, Q53): each mount's
 ``weapon`` names the weapon that stands on it and each bay's ``craft`` and ``capacity`` what it launches.
 
-* 18 twin plasma turrets (TBP's twin cannons) along the girder: six on each flank's waist, three on the roof's channel and
-  three under the keel;
+* 18 twin plasma cannon pods (``parts/ea_nova_guns.py``, the reference with guns, M10-T67): one beside the command block and
+  one on the flank wing's tip each side, one on each flank of the hangar block, and four on each ring lug's outriggers (the
+  aft lug's facing the stern);
 * 6 sweeping beams at 80 % (the Omega's): one on each flank of the command block covering the fore hemisphere, four on the
   engine housing's corners covering the aft;
 * 6 interceptors along the flanks;
@@ -23,15 +24,17 @@ Options: ``look`` (``styles/ea_capital.LOOKS``), and ``spacing``, ``atlas_px``, 
 from __future__ import annotations
 
 from ..core import capital as cap
+from ..core import collision as col
 from ..core.context import AssetOutputs, BuildContext
 from ..parts import capital as cp
 from ..parts import capital_fittings as fittings
 from ..parts import capital_solids as cs
 from ..parts import capital_weapons as weapons
 from ..parts import ea_nova as nv
+from ..parts import ea_nova_guns
 from ..styles import Style
 from ..styles.ea_capital import DEFAULT_LOOK, ea_capital
-from .ea_omega import HEMISPHERE_DEG, RUNNING_RED, TURRET_ARC, _turret
+from .ea_omega import HEMISPHERE_DEG, RUNNING_RED
 
 ASSET_ID = "ea_nova"
 GENERATOR_VERSION = 1
@@ -54,22 +57,14 @@ SECTIONS = (
     cap.Section("engine_r", "engine", 0.10),  # and its port twin, engine_l
 )
 PIECES = (cap.PieceSpec(cap.HULL_PIECE, ATLAS_PX),)
+# Shapes a section may keep (the capital default is 64): the spine's sections carry four gun pods each, and merging them to 64
+# joins a top and a low pod's masts into one wall through the girder (M10-T67).
+COLLISION = col.Budget(max_shapes=96)
 
-PLASMA, BEAM, INTERCEPTOR = "ea_plasma_medium", "ea_sweep_beam_nova", "ea_interceptor"
+BEAM, INTERCEPTOR = "ea_sweep_beam_nova", "ea_interceptor"
 UP, DOWN, RIGHT = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0), (1.0, 0.0, 0.0)
-TURRET_M = 16.0
-FLANK_Z = (("fore", "spine_fore", (434.0, 452.0)), ("mid", "spine_mid", (860.0, 880.0)), ("aft", "spine_aft", (960.0, 1022.0)))
 FLANK_FROM_Z = 373.0  # the fore spine's waist and shelves start behind the open bow (the reference's)
 MID_END_Z = 903.0  # where the mid spine (the first aft bay's gun deck) gives way to the aft spine
-CHANNEL_Z = ((438.0, "spine_fore"), (876.0, "spine_mid"), (971.0, "spine_aft"))
-
-
-def _flank_turret(name: str, z: float, s: Style) -> cp.Module:
-    """A twin turret on the starboard waist, its pedestal standing out of the flank."""
-    x0, x1 = 45.0, 47.0
-    base = cs.box("pedestal", (x0, -8.0, z - 8.0), (x1, 8.0, z + 8.0), s, nv.DARK, skin=cp.SKIN_FITTING)
-    gun = weapons.turret_mount(name, TURRET_M, s, elevation_deg=TURRET_ARC).mounted((x1, 0.0, z), RIGHT, (0.0, 0.0, -1.0))
-    return cs.compound(name, [gun, base]).with_params(weapon=PLASMA)
 
 
 def weapon_modules(s: Style) -> list[cp.Module]:
@@ -79,12 +74,7 @@ def weapon_modules(s: Style) -> list[cp.Module]:
     def add(section: str, m: cp.Module, side: str = cp.CENTRE) -> None:
         out.append(m.in_section(section).on_side(side))
 
-    for tag, section, zs in FLANK_Z:
-        for k, z in enumerate(zs):
-            add(section, _flank_turret(f"plasma_{tag}_{k + 1}_r", z, s), cp.RIGHT)
-    for k, (z, section) in enumerate(CHANNEL_Z):
-        add(section, _turret(f"plasma_top_{k + 1}", (0.0, nv.CORE_H, z), UP, TURRET_M, PLASMA, s, (9.0, 4.0)))
-        add(section, _turret(f"plasma_low_{k + 1}", (0.0, -nv.CORE_H, z), DOWN, TURRET_M, PLASMA, s, (9.0, 4.0)))
+    out += ea_nova_guns.guns(s)
 
     # The beams: fore on the command block's flanks, aft on the housing's corners at its stern edge.
     fore = weapons.beam_emitter("beam_fore_r", 30.0, s, arc_deg=HEMISPHERE_DEG).mounted((nv.PLATE_X, 32.0, 236.0), RIGHT)
@@ -136,7 +126,7 @@ def modules(look: str = DEFAULT_LOOK) -> list[cp.Module]:
         *nv.spine(s, "spine_aft", "spine_aft", (MID_END_Z, nv.SPINE_Z[1])), *nv.ring(s, "ring_aft", "spine_aft", r2),
         *nv.flank_fittings(s, "spine_aft", "spine_aft", waists=((910.0, 940.0), (1038.0, nv.SPINE_Z[1])), decks=((946.0, 1031.0),),
                            strips=((936.0, 998.0), (1045.0, 1056.0)), pods=((944.8, 967.2),)),
-        *nv.housing(s, "reactor"),
+        *nv.channel_fill(s), *nv.housing(s, "reactor"),
         nv.engine(s, "engine_top_r", "engine_r", 1.0), nv.engine(s, "engine_low_r", "engine_r", -1.0), *nv.engine_frame(s, "reactor"),
         *weapon_modules(s), *light_modules(),
     ]  # fmt: skip
@@ -153,6 +143,7 @@ def spec(look: str = DEFAULT_LOOK) -> cap.CapitalSpec:
         bridge=cap.Pose((0.0, 1.5, nv.PLATE_Z[0] + 2.0)),
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=1500.0, mouth_radius_m=400.0),
+        collision=COLLISION,
         notes=("the renegades' red X marks (M10-T02) are `mark` hardpoints with `only_faction`: the game draws them on a renegade ship",),
     )
 

@@ -1108,8 +1108,14 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 
 ### EA Nova-class dreadnought (`ea_nova`, T23)
 
-- **Reference.** `EA Nova class destroyer.STL` (the file's name is wrong: it is the Nova), mapping `--right=-x --up=+z
-  --aft=+y`, 1 502.1 m. Box 210 m wide, 446 m tall (with its masts). Show: `ea_nova/` (three stills).
+- **Reference.** `EA_Nova_Dreadnought_(with_guns).stl` (thing:6820713, M10-T67; the older `EA Nova class destroyer.STL` is the
+  same hull without the guns), mapping `--right=-x --up=+z --aft=+y`, 1 502.1 m (0.2854 m a unit). Box 383 m wide (the wing
+  guns' masts; 256 m over the pods), 446 m tall (with its masts). Show: `ea_nova/` (three stills).
+- **Guns** (the reference with guns). Eighteen twin cannon pods, one shape: a faceted housing round two long barrels (17.8 m
+  across, 70 m from the housing's nose back) with a ring near the muzzle, a narrow tail with a fin, and a mast through the
+  housing. One stands off each flank beside the command block (muzzles at 12 %, a short mast), one on each flank wing's tip and
+  one on each flank of the hangar block (masts 86 m out to the side), and four on each ring lug's outriggers, above and below
+  either side (masts 86 m up and down); the fore and middle lugs' face the bow, the aft lug's the stern.
 - **Bow** (0 to 25 %). Long sensor spikes forward (0 to 12 %), then the **command block** (14 to 24 %): a tall block about
   140 m wide and 270 m tall, its upper half straight-sided, its lower half a wedge tapering to a keel at y -130, two
   thin masts above to y +220 and one below to -220.

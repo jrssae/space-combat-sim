@@ -44,6 +44,17 @@ class SweepTests(unittest.TestCase):
         self.assertAlmostEqual(row["missing_m2"], 72.0, delta=2.0)
         self.assertEqual(row["extra_m2"], 0.0)
 
+    def test_face_depth_scores_where_the_face_stands_not_what_lies_behind(self) -> None:
+        """M10-T67: a thin plate at the face scores as a solid block behind it; a face set back scores its depth's share."""
+        block, plate = box((-5, -5, 10), (5, 5, 40)), box((-5, -5, 10), (5, 5, 12))
+        window = (0.0, 40.0, -6.0, 6.0)
+        for axis in (0, 1):
+            win = window if axis == 0 else (-6.0, 6.0, 0.0, 40.0)
+            self.assertLess(fd.sweep(block, plate, axis, (0.0, 0.0), 1.0, 0.5, win)[0].iou, 0.2, "row fill sees the plate as thin")
+            self.assertAlmostEqual(fd.sweep(block, plate, axis, (0.0, 0.0), 1.0, 0.5, win, face=True)[0].iou, 1.0, places=6)
+        back = box((-5, -5, 25), (5, 5, 40))
+        self.assertAlmostEqual(fd.sweep(block, back, 0, (0.0, 0.0), 1.0, 0.5, window, face=True)[0].iou, 0.5, places=2)
+
     def test_the_step_sets_the_plane_count(self) -> None:
         self.assertEqual(fd.plane_values((0.0, 100.0), 5.0)[-1], 100.0)
         self.assertEqual(len(fd.plane_values((0.0, 100.0), 1.0)), 101)

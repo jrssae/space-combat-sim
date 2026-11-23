@@ -44,8 +44,10 @@ REFERENCES = ROOT / "references"
 PRESETS: dict[str, dict] = {
     "omega": {"stl": "EA Omega Destroyer.stl", "mapping": ("+y", "+z", "+x"), "length": 1714.3, "axis": (0.0, 35.58, 0.0),
               "asset": "ea_omega", "turn": (560.0, 880.0, 45.0)},
-    "nova": {"stl": "EA Nova class destroyer.STL", "mapping": ("-x", "+z", "+y"), "length": 1502.1, "axis": (0.0, 43.3, 0.0),
+    "nova": {"stl": "EA_Nova_Dreadnought_(with_guns).stl", "mapping": ("-x", "+z", "+y"), "length": 1502.1, "axis": (0.25, 43.3, 0.0),
              "asset": "ea_nova", "turn": None},
+    "nova1": {"stl": "EA Nova class destroyer.STL", "mapping": ("-x", "+z", "+y"), "length": 1502.1, "axis": (0.0, 43.3, 0.0),
+              "asset": "ea_nova", "turn": None},
     "hyperion": {"stl": "EA-Hyperion-V5c.stl", "mapping": ("-x", "+z", "+y"), "length": 1025.39, "axis": (0.0, 0.0, 0.0),
                  "asset": "ea_hyperion", "turn": None},
     "hyperion1": {"stl": "EA Hyperion Class Heavy Cruiser.stl", "mapping": ("+x", "+z", "-y"), "length": 1025.39, "axis": (-3.4, 0.0, 0.0),
@@ -114,14 +116,34 @@ def plane_values(span: tuple[float, float], step: float) -> list[float]:
     return [span[0] + i * step for i in range(n + 1)]
 
 
+def face_fill(mask: np.ndarray, axis: int) -> np.ndarray:
+    """An x or y cut's section filled from the first surface the bow meets back to the window's aft edge: the face's depth along
+    each line, whatever lies behind it. An open shell (deck blocks a few metres deep) then counts by where its face stands."""
+    if axis == 0:  # rows are y, columns z from the bow
+        seen = np.cumsum(mask, axis=1) > 0
+    elif axis == 1:  # rows are z from aft (top) to the bow (bottom), columns x
+        seen = np.cumsum(mask[::-1], axis=0)[::-1] > 0
+    else:
+        raise ValueError("a face fill is for x and y cuts")
+    return seen
+
+
 def sweep(ref: np.ndarray, model: np.ndarray, axis: int, span: tuple[float, float], step: float, pixel_m: float,
           window: tuple[float, float, float, float] | None = None, relief: bool = False,
-          outline: bool = False) -> list[SectionScore]:
-    """The section score of every plane across ``axis`` from span[0] to span[1]."""
+          outline: bool = False, face: bool = False) -> list[SectionScore]:
+    """The section score of every plane across ``axis`` from span[0] to span[1]; ``face`` scores x and y cuts by
+    :func:`face_fill`."""
     window = window or sweep_window(axis, ref, model, span)
     name = "xyz"[axis]
-    return [section_score(ref, model, SectionPlane(f"{name}{v:.1f}", axis, v, window, relief=relief and axis == 2, outline=outline), pixel_m)
-            for v in plane_values(span, step)]
+    planes = [SectionPlane(f"{name}{v:.1f}", axis, v, window, relief=relief and axis == 2, outline=outline and not face) for v in plane_values(span, step)]
+    if not face:
+        return [section_score(ref, model, p, pixel_m) for p in planes]
+    out = []
+    for p in planes:
+        a, b = (face_fill(section_mask(m, p, pixel_m), axis) for m in (ref, model))
+        union = int((a | b).sum())
+        out.append(SectionScore(p, 1.0 if union == 0 else float((a & b).sum()) / union, a, b))
+    return out
 
 
 def sweep_rows(scores: list[SectionScore], pixel_m: float) -> list[dict]:
@@ -401,7 +423,7 @@ def cmd_sweep(args: argparse.Namespace) -> int:
     axis = "xyz".index(args.axis)
     span = parse_pair(args.span) if args.span else (float(bounds(ref)[0][axis]) + 0.5, float(bounds(ref)[1][axis]) - 0.5)
     window = tuple(float(v) for v in args.window.split(",")) if args.window else None
-    scores = sweep(ref, model, axis, span, args.step, args.pixel, window, relief=args.relief, outline=args.outline)
+    scores = sweep(ref, model, axis, span, args.step, args.pixel, window, relief=args.relief, outline=args.outline, face=args.face)
     tag = args.tag or f"{args.reference}_vs_{args.model}_{args.axis}_{span[0]:g}-{span[1]:g}_step{args.step:g}"
     rows = sweep_rows(scores, args.pixel)
     write_csv(out / f"{tag}.csv", rows)
@@ -482,6 +504,7 @@ def main(argv: list[str] | None = None) -> int:
     s.add_argument("--step", type=float, default=5.0)
     s.add_argument("--window", default=None, help="u0,u1,v0,v1 of the cut's plane (default holds both meshes)")
     s.add_argument("--relief", action="store_true", help="z cuts: what the bow sees in front of the plane")
+    s.add_argument("--face", action="store_true", help="x and y cuts: each line filled from its first surface aft (an open shell's face)")
     s.add_argument("--tile", type=int, default=200, help="largest tile side in pixels")
     s.add_argument("--rows-per-column", type=int, default=30)
     s.set_defaults(fn=cmd_sweep)
