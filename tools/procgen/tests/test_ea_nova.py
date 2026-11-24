@@ -146,8 +146,14 @@ class NovaBuildTests(unittest.TestCase):
         self.assertAlmostEqual(right["up"][2], 0.0, places=3, msg="square to the plate's fore and aft edges")
         self.assertEqual(right.get("outline"), True, "light grey rimmed in black (M10-T67)")
         self.assertGreater(min(right["colour"]), 0.7)
-        at = self.authored(right["position"])
-        self.assertTrue(-120.0 < at[1] < -95.0 and 235.0 < at[2] < 285.0, f"the middle of the lower plate, not its keel edge: {at}")
+        # The panel's lower half, halfway down it and halfway across the plate at that height (maintainer, M10-T67).
+        (y0, z0, z1), (ky, kz0, kz1) = (en.nv.PLATE_Y[0], *en.nv.PLATE_Z), (en.nv.KEEL_EDGE[1], *en.nv.KEEL_Z)
+        fore, aft = z0 + 0.75 * (kz0 - z0), z1 + 0.75 * (kz1 - z1)
+        root, keel_x = en.nv.PLATE_ROOT_X, en.nv.KEEL_EDGE[0]
+        want = np.array([root + 0.75 * (keel_x - root), y0 + 0.75 * (ky - y0), 0.5 * (fore + aft)])
+        for mark, mirror in ((right, 1.0), (left, -1.0)):
+            at = self.authored(mark["position"]) * np.array([mirror, 1.0, 1.0])
+            self.assertLess(float(np.linalg.norm(at - want)), 0.05, f"centred in the lower plate's bottom half: {at} against {want}")
         xs = [m for m in self.hp["marks"] if m.get("text") == "X"]
         self.assertEqual(len(xs), 3, "one on each vertical plate and one on the roof")
         for m in xs:

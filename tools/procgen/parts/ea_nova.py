@@ -95,11 +95,12 @@ def _slab_at(name: str, outline: list[tuple[float, float, float]], s: Style, rol
     return cs.slab(name, outline, PLATE_THICK, (-1.0, 0.0, 0.0), s, roles)
 
 
-def _centroid(face: np.ndarray) -> np.ndarray:
-    """The middle of a flat convex face (its area's centre), from its corners in order."""
-    tris = [(face[0], face[k], face[k + 1]) for k in range(1, len(face) - 1)]
-    areas = np.array([np.linalg.norm(np.cross(b - a, c - a)) for a, b, c in tris])
-    return np.sum([w * (a + b + c) / 3.0 for w, (a, b, c) in zip(areas, tris, strict=True)], axis=0) / areas.sum()
+def _lower_half_middle(face: np.ndarray) -> np.ndarray:
+    """The middle of a plate's lower half: halfway down that half, halfway across the plate there. ``face`` runs top fore,
+    top aft, bottom aft, bottom fore, its top and bottom edges level."""
+    fore = face[0] + 0.75 * (face[3] - face[0])
+    aft = face[1] + 0.75 * (face[2] - face[1])
+    return 0.5 * (fore + aft)
 
 
 def _plane_basis(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -120,10 +121,10 @@ def armour(s: Style) -> list[cp.Module]:
     root = PLATE_ROOT_X
     upper = _slab_at("armour_upper_r", [(root, y1, z0), (root, y1, z1), (*ROOF_EDGE, ROOF_Z[1]), (*ROOF_EDGE, ROOF_Z[0])], s, DECKED)
     lower = _slab_at("armour_lower_r", [(root, y0, z0), (root, y0, z1), (*KEEL_EDGE, KEEL_Z[1]), (*KEEL_EDGE, KEEL_Z[0])], s)
-    # The letter as the stills paint it: at the middle of the lower plate's face, square to its edges, light grey rimmed in black.
+    # The letter as the stills paint it: centred in the lower half of the lower plate, square to its edges, light grey rimmed in black.
     face = np.array([(root, y0, z0), (root, y0, z1), (*KEEL_EDGE, KEEL_Z[1]), (*KEEL_EDGE, KEEL_Z[0])])
     normal, up = _plane_basis(*face[[0, 1, 3]])
-    letter = fittings.hull_mark("mark_initial_r", _centroid(face) + 0.001 * normal, normal, up, MARK_HEIGHT_M, colour=LETTER_INK, outline=True)
+    letter = fittings.hull_mark("mark_initial_r", _lower_half_middle(face) + 0.001 * normal, normal, up, MARK_HEIGHT_M, colour=LETTER_INK, outline=True)
     cross = fittings.hull_mark("mark_x_r", (PLATE_X, 30.0, 330.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), X_HEIGHT_M, colour=RENEGADE_RED, text="X",
                                only_faction="renegades")
     side = dataclasses.replace(side, hardpoints=(cross,))
