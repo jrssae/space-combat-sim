@@ -1,9 +1,9 @@
 {
   "battle_on_the_old_paths": {
-    "rows": "822a8dd567d0087a54f36050508a414bd4bfe37b4350f9bb6e2149eefb77bf0f",
-    "commands": "ce6e748affb915495d80386ac3ad6d12e0963e7dd5bf1acfb94b81be0549b28c",
-    "hits": "449e21ed12b5b197af56c3f7482d0a502a2e4ae30d3d4984b7b6b2dc4075505b",
-    "hits_total": 67.0,
+    "rows": "3cd846925e2fe5ab4266dcfc69b5b5c642ad6cf90d0666fbce0c96d404f16b08",
+    "commands": "c49af284bfbb8fd744f1d7dd838c7e336e70e029c7e9db54e5d8a77743d6709a",
+    "hits": "731c0d93ec1db7a7166da552d5bf9d6ae7073aa32affd2f16d5555ac7b37d64c",
+    "hits_total": 119.0,
     "rams": 0.0,
     "ticks": 240.0
   },

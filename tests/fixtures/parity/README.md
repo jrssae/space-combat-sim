@@ -79,3 +79,13 @@ ticks early. Only the mine fields of those ticks moved (mines set off, the mines
 26-38, `rebase_at_90` 3-18, `relation_changed_at_120` 18-24); every turret's pick, aim and shot, every projectile made, every
 kill and the end counts are byte for byte the old recording's (compared against the log of the commit before M7-T64, which still
 gave the stored digests).
+
+
+**M10-T14's follow-up re-recorded the native entries of every fight with Starfuries in it** (Q76: the Starfury fires both cannons
+together, a pair every 0.25 s from a capacitor of 200 at +50/s, twice M5's bolts; a bolt still does 10). Run as M7-T16's command
+above. What moved (old → new): `weapon_rows_battle` 704, 321, 132, 146, 25, 36 → 1 156, 340, 133, 145, 24, 36; the 100-ship
+battle of `bolt_rows`, `core_state`, `driver_step` and `row_commands` 67 → 119 hits, 1 → 4 kills (thinks 8 239 → 8 242 far rate,
+12 034 → 12 037; the digests new); `flight_parity_fight` 43 → 95 hits over 10 s and 144 → 247 over 30 s, mix attack 20 evade 5 →
+attack 16 evade 9; `brain_tolerance` native hits furball 268, 248, 285 → 485, 537, 457, spread 330, 324, 293 → 568, 561, 515.
+The GDScript entries cannot be flown again with two cannons, so both Q16 files print their hits against them, no longer gate
+them; `brain_tolerance` still gates the mix (within 5 points on every seed) and both gate the native step bit for bit.
