@@ -71,6 +71,35 @@ func test_letters_are_spaced_by_their_own_widths_and_centred() -> void:
 	assert_almost_eq(even[0] + even[1], 0.0, 1e-5)
 
 
+func test_a_name_board_fits_the_name_with_its_margin() -> void:
+	var board: Dictionary = {"colour": [0.8, 0.81, 0.8], "line_colour": [0.03, 0.03, 0.03], "margin": 0.35, "line_width": 0.07}
+	var mark: Dictionary = {"text": "name", "height_m": 10.0, "placard": board}
+	var long: Vector2 = HullMarks.placard_size(mark, "SCHWARZKOPF", ATLAS)
+	assert_almost_eq(long.x, 11 * 0.8 * 10.0 + 7.0, 1e-4, "the name's width and a margin each end")
+	assert_almost_eq(long.y, 17.0, 1e-4, "the letters' height and a margin above and below")
+	assert_lt(HullMarks.placard_size(mark, "BOHR", ATLAS).x, long.x, "a short name, a short board")
+	assert_almost_eq(HullMarks.placard_line_m(mark), 0.7, 1e-5)
+	assert_eq(HullMarks.placard_size({"height_m": 10.0}, "BOHR", ATLAS), Vector2.ZERO, "no board asked for")
+	assert_almost_eq(HullMarks.text_width("AB", ATLAS), 1.6, 1e-5)
+
+
+func test_a_name_board_sits_behind_its_letters() -> void:
+	var mark: Dictionary = {"name": "mark_name_r", "position": [0.0, 0.0, 0.0], "normal": [1.0, 0.0, 0.0], "up": [0.0, 1.0, 0.0], "height_m": 10.0,
+		"placard": {"colour": [0.8, 0.81, 0.8], "line_colour": [0.03, 0.03, 0.03], "margin": 0.35, "line_width": 0.07}}
+	var nodes: Array[HullMarkNode] = HullMarkNode.create_placard(mark, Vector2(40.0, 17.0))
+	assert_eq(nodes.size(), 2, "a light panel and its black line")
+	var panel: HullMarkNode = nodes[0]
+	var line: HullMarkNode = nodes[1]
+	assert_lt(panel.transform.origin.x, HullMarks.STANDOFF_M, "behind the letters")
+	assert_lt(line.transform.origin.x, panel.transform.origin.x, "the line behind the panel")
+	assert_almost_eq((line.mesh as QuadMesh).size.x, 41.4, 1e-4, "a line's width round the panel")
+	assert_gt((panel.material_override as StandardMaterial3D).albedo_color.r, 0.7)
+	assert_lt((line.material_override as StandardMaterial3D).albedo_color.r, 0.1)
+	for n: HullMarkNode in nodes:
+		n.free()
+	assert_eq(HullMarkNode.create_placard({"height_m": 10.0}, Vector2.ZERO).size(), 0)
+
+
 func test_an_outlined_mark_prints_from_the_outlined_atlas() -> void:
 	var atlas: Dictionary = ATLAS.merged({"file": "x_marks.png", "outlined_file": "x_marks_outlined.png"})
 	assert_eq(HullMarks.atlas_file({"text": "name", "outline": true}, atlas), "x_marks_outlined.png", "the bow name and hull number")

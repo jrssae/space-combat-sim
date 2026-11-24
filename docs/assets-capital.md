@@ -559,7 +559,7 @@ Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as
 | Length | **1 502.1 m** (T01) |
 | Span, height | 383.0 m (the wing guns' masts) x 443.7 m (roof masts to keel mast); the STL 382.6 x 446.1 |
 | Pieces | `hull` only, one 4 096 px atlas |
-| Triangles | 45 744 as the build counts them: 22 872 in the hull (budget 100 000) and as many in its damage chunks; 50 928 before T67 cut the gun barrels to 12 sides |
+| Triangles | 50 864 as the build counts them: 25 432 in the hull (budget 100 000) and as many in its damage chunks (T67's red fittings and running lights add 2 560 to each); 50 928 before T67 cut the gun barrels to 12 sides |
 | Texture sets | 56.0 MB high, 16.0 MB low (budget 109.3 and 29.3); measured 56 MB and 16 MB on the RX 6950 XT (model sheet, against the empty scene) |
 | Build | about 3.6 to 4.2 min (3 min 44 s with the forward bays) and 10 GB at its peak on the maintainer's machine (`BUILD_ALONE`) |
 
@@ -607,24 +607,30 @@ Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
   four engines in a square, and a jump anchor 1 500 m ahead with a 400 m mouth.
 
 **Name letter**: each Nova wears the first letter of its name in the Omega's place (Q61, Q62): on the lower plate's face, a
-fifth of the way up from its keel edge (`ea_omega.MARK_AT`), mid-length (`mark_initial_r` and `_l`, 36 m, `HullMarks`). **Renegades**: a red X on each
+at the middle of the lower plate's face (its area's centre), square to its edges, light grey rimmed in black as the stills paint it (`mark_initial_r` and `_l`, 36 m, `HullMarks`). **Renegades**: a red X on each
 vertical plate and on the roof (`only_faction` `renegades`). **Names**: `data/ships/names.json`, twenty generals and admirals,
 the show's Schwarzkopf first.
 
 **Paint and lamps** (T67, `parts/ea_nova_marks.py`, from the show's stills and the Omega's): the ship's name (`mark_name_r`, `_l`,
-10 m, light outlined in black like the Hyperion's) high on each vertical plate above the gun pod, ahead of where the spine's fins come through the plate at 330 m; the Earth Alliance emblem
+10 m, black print on a light grey board ringed by a black line, the stills' name board: `placard`, which the game sizes to the
+name, `HullMarkNode.create_placard`) high on each vertical plate just under its top edge, ahead of where the spine's fins come through the plate at 330 m; the Earth Alliance emblem
 (`mark_emblem_r`, `_l`, 56 m wide, `core/hull_decals.py`) low on it under the pod; a flood lamp on a bracket under each, shining
 up the plate, its pool baked into the plate's maps (the emblem's glow passed to its decal); red beacons beside the top mast's, the
 keel mast's and the sensor boom's tips; and a darker grey band 4.5 m wide, 0.5 m in from the edges of the armour plates, the
-hangar block's roof and keel, the collars and the housing (`parts/capital_paint.py`, a placed `Marking.paint`; for the Omega in
-T68). The soft finish's grey is re-read from the stills (`ea_capital.SOFT_PAINT`: hull `#7D807C`, panels `#6B6E6A`, dark
+hangar block's roof and keel, the collars and the housing (`parts/capital_paint.py`, a placed `Marking.paint`, 0.36 of the hull's
+albedo; for the Omega in T68). Along the spine: rows of small red-lit fittings on the shelves' edges beside the gun-deck bays (430
+to 520, 780 to 850, 940 to 1 000 m) and red running lights every 18 m along the fins' tips, glowing paint with no light of their
+own; and a soft red lamp (`light_bow`, 40 m) on the starboard lower deck's face beside the bay, the stills' bow lamp. The soft finish's grey is re-read from the stills (`ea_capital.SOFT_PAINT`: hull `#7D807C`, panels `#6B6E6A`, dark
 `#3A3C3A`, from look A's `#8C9199`, `#747A84`, `#3F434B`), its patches in two shades (`SOFT_PATCH_TIERS`: three quarters 12 %
 darker, a quarter 40 %, on 35 % of the plates). The seams are the Hyperion's (5e083eb9: 0.22 of the groove's depth, 0.6 of the
 line's width, line darkness 0.89, groove 3 mm).
 
 **Bay mouth** (T67): the frame's inner faces lay on the hall's walls and the fillets from 190 to 196 m and flickered; the frame's
 back now slants out from the mouth's edge, and the tube starts at the frame's back (`test_the_bay_mouth_has_no_flickering_faces`,
-`core/coplanar.py`).
+`core/coplanar.py`). **No shared faces anywhere** (T67, second round): wherever two parts lay flush in one plane facing the same
+way (the spine's fins on its core, the keel's block on its wedge, the deck plates' wings on the flank wings, a ring's outrigger
+under its gun arm: 334 pairs), `parts/capital_flush.py` sets the part with less face in that plane 0.1 m back behind it, a few
+rounds where fittings stack (87 parts, by 0.1 to 0.5 m); `test_no_two_parts_share_a_face_anywhere` holds the whole hull to it.
 
 ### Fidelity (Q10)
 

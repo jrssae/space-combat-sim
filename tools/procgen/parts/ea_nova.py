@@ -38,7 +38,7 @@ from . import capital_fittings as fittings
 from . import capital_solids as cs
 from .capital_hull import HullRoles
 from . import ea_nova_bow as bow
-from .ea_omega import DARK, DECKED, MARK_AT, PANEL, PLAIN, RENEGADE_RED, _flip_y, _octagon, _put, _ring, around_hole, retro_nozzle
+from .ea_omega import DARK, DECKED, PANEL, PLAIN, RENEGADE_RED, _flip_y, _octagon, _put, _ring, around_hole, retro_nozzle
 
 LENGTH_M = 1502.1
 # The command block's armour: the outer face of the side plate (x, its bottom and top edge's y, its z), the roof edge and
@@ -86,12 +86,20 @@ CRAFT = "starfury_ally"  # the catalogue's pooled Starfury (data/capitals/loadou
 RETRO_XY, RETRO_Z, RETRO_HALF, RETRO_WALL = (14.2, -79.55), (165.0, 236.0), (12.0, 26.2), 4.8  # the mouth at the lip's front
 ROLES = {"dark": DARK, "panel": PANEL, "decked": DECKED}
 MARK_HEIGHT_M = 36.0  # the Omega's letter in the Nova's measure (its share of the armour's height)
+LETTER_INK = (0.8, 0.81, 0.82)  # the stills' light grey letter
 X_HEIGHT_M = 30.0
 
 
 def _slab_at(name: str, outline: list[tuple[float, float, float]], s: Style, roles: HullRoles = PLAIN) -> cp.Module:
     """An armour plate whose outer face is ``outline``, its thickness inward along -x."""
     return cs.slab(name, outline, PLATE_THICK, (-1.0, 0.0, 0.0), s, roles)
+
+
+def _centroid(face: np.ndarray) -> np.ndarray:
+    """The middle of a flat convex face (its area's centre), from its corners in order."""
+    tris = [(face[0], face[k], face[k + 1]) for k in range(1, len(face) - 1)]
+    areas = np.array([np.linalg.norm(np.cross(b - a, c - a)) for a, b, c in tris])
+    return np.sum([w * (a + b + c) / 3.0 for w, (a, b, c) in zip(areas, tris, strict=True)], axis=0) / areas.sum()
 
 
 def _plane_basis(a: np.ndarray, b: np.ndarray, c: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
@@ -112,11 +120,10 @@ def armour(s: Style) -> list[cp.Module]:
     root = PLATE_ROOT_X
     upper = _slab_at("armour_upper_r", [(root, y1, z0), (root, y1, z1), (*ROOF_EDGE, ROOF_Z[1]), (*ROOF_EDGE, ROOF_Z[0])], s, DECKED)
     lower = _slab_at("armour_lower_r", [(root, y0, z0), (root, y0, z1), (*KEEL_EDGE, KEEL_Z[1]), (*KEEL_EDGE, KEEL_Z[0])], s)
-    # The letter in the Omega's place (Q61, Q62): on the lower plate's face, MARK_AT of the way up from its keel edge, mid to mid.
-    top, keel = np.array([root, y0, 0.5 * (z0 + z1)]), np.array([*KEEL_EDGE, 0.5 * sum(KEEL_Z)])
-    normal, up = _plane_basis(np.array([root, y0, z0]), np.array([root, y0, z1]), np.array([*KEEL_EDGE, KEEL_Z[0]]))
-    at = keel + MARK_AT * (top - keel) + 0.001 * normal
-    letter = fittings.hull_mark("mark_initial_r", at, normal, up, MARK_HEIGHT_M)
+    # The letter as the stills paint it: at the middle of the lower plate's face, square to its edges, light grey rimmed in black.
+    face = np.array([(root, y0, z0), (root, y0, z1), (*KEEL_EDGE, KEEL_Z[1]), (*KEEL_EDGE, KEEL_Z[0])])
+    normal, up = _plane_basis(*face[[0, 1, 3]])
+    letter = fittings.hull_mark("mark_initial_r", _centroid(face) + 0.001 * normal, normal, up, MARK_HEIGHT_M, colour=LETTER_INK, outline=True)
     cross = fittings.hull_mark("mark_x_r", (PLATE_X, 30.0, 330.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), X_HEIGHT_M, colour=RENEGADE_RED, text="X",
                                only_faction="renegades")
     side = dataclasses.replace(side, hardpoints=(cross,))

@@ -125,8 +125,10 @@ class NovaBuildTests(unittest.TestCase):
         for e in self.hp["engines"]:
             self.assertAlmostEqual(self.authored(e["position"])[2], en.nv.ENGINE_MOUTH_Z, places=3)
         roles = sorted(light["role"] for light in self.hp["lights"])
-        self.assertEqual(roles, ["bay"] * BAYS + ["beacon"] * 5 + ["flood"] * 4 + ["port", "starboard", "top"],
-                         "one red light in each bay, the beacons at the tips, a flood under each name and emblem")
+        self.assertEqual(roles, ["bay"] * BAYS + ["beacon"] * 6 + ["flood"] * 4 + ["port", "starboard", "top"],
+                         "one red light in each bay, the beacons at the tips and the bow's lamp, a flood under each name and emblem")
+        bow = next(light for light in self.hp["lights"] if light["name"] == "light_bow")
+        self.assertLess(self.authored(bow["position"])[2], en.nv.bow.DECKS[11][5], "the bow lamp stands on the deck's face, facing ahead")
         port = next(light for light in self.hp["lights"] if light["role"] == "port")
         self.assertLess(port["position"][0], 0.0, "red to port")
 
@@ -141,6 +143,11 @@ class NovaBuildTests(unittest.TestCase):
         self.assertLess(right["normal"][1], -0.2, "the lower plate leans in towards the keel")
         self.assertAlmostEqual(left["position"][0], -right["position"][0], places=3)
         self.assertAlmostEqual(float(np.dot(right["normal"], right["up"])), 0.0, places=3)
+        self.assertAlmostEqual(right["up"][2], 0.0, places=3, msg="square to the plate's fore and aft edges")
+        self.assertEqual(right.get("outline"), True, "light grey rimmed in black (M10-T67)")
+        self.assertGreater(min(right["colour"]), 0.7)
+        at = self.authored(right["position"])
+        self.assertTrue(-120.0 < at[1] < -95.0 and 235.0 < at[2] < 285.0, f"the middle of the lower plate, not its keel edge: {at}")
         xs = [m for m in self.hp["marks"] if m.get("text") == "X"]
         self.assertEqual(len(xs), 3, "one on each vertical plate and one on the roof")
         for m in xs:
@@ -150,7 +157,12 @@ class NovaBuildTests(unittest.TestCase):
         """M10-T67: the name high on the plate above the pod, the emblem low under it, both lit by a flood; mirrored to port."""
         marks = {m["name"]: m for m in self.hp["marks"]}
         name, emblem = marks["mark_name_r"], marks["mark_emblem_r"]
-        self.assertEqual((name["text"], name["section"], name.get("outline")), ("name", "bow", True))
+        self.assertEqual((name["text"], name["section"]), ("name", "bow"))
+        self.assertLess(max(name["colour"]), 0.1, "black print")
+        board = name["placard"]
+        self.assertGreater(min(board["colour"]), 0.7, "on a light grey board")
+        self.assertLess(max(board["line_colour"]), 0.1, "ringed in black")
+        self.assertGreater(self.authored(name["position"])[1] + (0.5 + board["margin"]) * name["height_m"], 55.0, "high under the plate's top")
         self.assertTrue(emblem["image"].endswith("ea_emblem.png"), "the Earth Alliance emblem")
         self.assertIn("glow", emblem, "lit by the flood under it")
         for m in (name, emblem):
@@ -211,6 +223,27 @@ class NovaSpecTests(unittest.TestCase):
 
         parts = [(m.name, m.part.mesh) for m in cp.with_twins(en.modules())]
         self.assertEqual(coplanar_overlaps(parts, MOUTH_LO, MOUTH_HI), {})
+
+    def test_no_two_parts_share_a_face_anywhere(self) -> None:
+        """M10-T67: no two parts of the whole hull lie flush in one plane facing the same way (the spine's fins on its core, the keel's
+        block on its wedge, the deck plates' wings on the flank wings flickered); each fitting is set back from the plate it sits on."""
+        from tools.procgen.core.coplanar import coplanar_overlaps  # noqa: PLC0415
+
+        parts = [(m.name, m.part.mesh) for m in cp.with_twins(en.modules())]
+        self.assertEqual(coplanar_overlaps(parts, (-1e4,) * 3, (1e4,) * 3), {})
+
+    def test_the_spine_wears_red_fittings_and_running_lights(self) -> None:
+        """M10-T67: rows of red fittings beside the gun-deck bays and red running lights along the fins, glowing only (no lights)."""
+        mods = {m.name: m for m in en.modules()}
+        for prefix, rows in (("red_fittings", len(en.marks.RED_ROWS)), ("running_lights", len(en.marks.RUNNING_STRETCHES))):
+            found = [m for name, m in mods.items() if name.startswith(prefix)]
+            self.assertEqual(len(found), 2 * rows, prefix)
+            for m in found:
+                self.assertEqual(m.side, cp.RIGHT)
+                self.assertFalse(m.hardpoints, "glowing paint, no light of its own")
+                self.assertTrue(all(mat.emissive_strength > 0.0 for mat in m.part.mesh.materials))
+        lit = [float(z) for m in found for z in m.part.mesh.vertices[:, 2]]
+        self.assertGreater(len(lit), 8 * 40, "many lamps")
 
     def test_the_big_plates_wear_the_edge_band(self) -> None:
         """M10-T67: the band is painted round the armour's, the hangar block's, the collars' and the housing's plates, both sides."""

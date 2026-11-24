@@ -13,6 +13,8 @@ const NAME: String = "name"
 const NUMBER: String = "number"
 ## How far a letter floats off the hull face, m, so it never z-fights the plating.
 const STANDOFF_M: float = 0.6
+## How far behind its letters a name board's panel sits, and its line behind the panel, m: apart, so neither flickers.
+const PLACARD_STEP_M: float = 0.08
 
 
 ## The text mark `mark` shows on a ship called `display_name`: the ship's initial, its name, or the mark's own string. Uppercase,
@@ -77,23 +79,52 @@ static func cell_of(char: String, atlas: Dictionary) -> Vector2i:
 ## tracking (`tools/procgen/core/glyphs.py`) when it has them, an even 0.8 pitch when it does not. `stretch` widens the print.
 static func offsets(text: String, atlas: Dictionary, stretch: float = 1.0) -> PackedFloat32Array:
 	var out := PackedFloat32Array()
-	var chars: String = str(atlas.get("chars", ""))
-	var widths: Array = atlas.get("widths", []) if atlas.get("widths") is Array else []
 	var tracking: float = float(atlas.get("tracking", 0.0))
 	var pen: float = 0.0
 	for c: String in text:
-		var at: int = chars.find(c)
-		var w: float = 0.8 - tracking
-		if c == " ":
-			w = float(atlas.get("space", 0.32))
-		elif at >= 0 and at < widths.size():
-			w = float(widths[at])
+		var w: float = _char_width(c, atlas)
 		out.append((pen + 0.5 * w) * stretch)
 		pen += w + tracking
-	var middle: float = 0.5 * maxf(pen - tracking, 0.0) * stretch
+	var middle: float = 0.5 * text_width(text, atlas, stretch)
 	for i: int in out.size():
 		out[i] -= middle
 	return out
+
+
+## How wide `text` prints, in letter heights, as `offsets` lays it out.
+static func text_width(text: String, atlas: Dictionary, stretch: float = 1.0) -> float:
+	var tracking: float = float(atlas.get("tracking", 0.0))
+	var pen: float = 0.0
+	for c: String in text:
+		pen += _char_width(c, atlas) + tracking
+	return maxf(pen - tracking, 0.0) * stretch
+
+
+static func _char_width(c: String, atlas: Dictionary) -> float:
+	if c == " ":
+		return float(atlas.get("space", 0.32))
+	var widths: Array = atlas.get("widths", []) if atlas.get("widths") is Array else []
+	var at: int = str(atlas.get("chars", "")).find(c)
+	if at >= 0 and at < widths.size():
+		return float(widths[at])
+	return 0.8 - float(atlas.get("tracking", 0.0))
+
+
+## The board behind `text` on `mark` (its `placard`: the destroyers' name boards, M10-T67), m: the panel the letters sit on, its
+## margin clear of them all round, and its black line's width. Zero when the mark has no board or no text.
+static func placard_size(mark: Dictionary, text: String, atlas: Dictionary) -> Vector2:
+	var board: Dictionary = mark.get("placard", {}) if mark.get("placard") is Dictionary else {}
+	if board.is_empty() or text.is_empty():
+		return Vector2.ZERO
+	var height: float = float(mark.get("height_m", 10.0))
+	var margin: float = 2.0 * float(board.get("margin", 0.35)) * height
+	return Vector2(text_width(text, atlas, float(mark.get("stretch", 1.0))) * height + margin, height + margin)
+
+
+## The width of the line round a mark's board, m.
+static func placard_line_m(mark: Dictionary) -> float:
+	var board: Dictionary = mark.get("placard", {}) if mark.get("placard") is Dictionary else {}
+	return float(board.get("line_width", 0.0)) * float(mark.get("height_m", 10.0))
 
 
 ## The quad's side, m, for letters `height_m` tall: the glyph fills only part of its square cell.

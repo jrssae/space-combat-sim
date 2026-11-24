@@ -27,12 +27,14 @@ Options: ``look`` (``styles/ea_capital.LOOKS``), and ``spacing``, ``atlas_px``, 
 from __future__ import annotations
 
 import dataclasses
+import functools
 
 from ..core import capital as cap
 from ..core import collision as col
 from ..core.context import AssetOutputs, BuildContext
 from ..parts import capital as cp
 from ..parts import capital_fittings as fittings
+from ..parts.capital_flush import set_back_flush_parts
 from ..parts import capital_solids as cs
 from ..parts import capital_weapons as weapons
 from ..parts import ea_nova as nv
@@ -116,10 +118,15 @@ def style(look: str = DEFAULT_LOOK) -> cap.CapitalStyle:
 
 
 def modules(look: str = DEFAULT_LOOK) -> list[cp.Module]:
-    """Every module in its place and section (centre modules and the starboard one of each pair)."""
+    """Every module in its place and section (centre modules and the starboard one of each pair), no two sharing a face."""
+    return list(_modules(look))
+
+
+@functools.lru_cache(maxsize=4)
+def _modules(look: str) -> tuple[cp.Module, ...]:
     s = style(look).style
     (c0, c1), (r0, r1, r2) = nv.COLLARS_Z, nv.RINGS_Z
-    return [_with_marks(m) for m in [
+    return tuple(set_back_flush_parts([_with_marks(m) for m in [
         *nv.armour(s), *nv.command_block(s), *nv.flank_strake(s), *nv.fore_plates(s), *nv.tankage(s), *nv.aerials(s),
         *nv.spine(s, "spine_fore", "spine_fore", (nv.SPINE_Z[0], c0[0]), shelf_x=62.0, shelf_from=FLANK_FROM_Z), *nv.ring(s, "ring_fore", "spine_fore", r0),
         *nv.flank_fittings(s, "spine_fore", "spine_fore", waists=((FLANK_FROM_Z, 402.0),), decks=((402.0, 481.0),), strips=((456.0, 519.0),),
@@ -134,8 +141,8 @@ def modules(look: str = DEFAULT_LOOK) -> list[cp.Module]:
                            strips=((936.0, 998.0), (1045.0, 1056.0)), pods=((944.8, 967.2),)),
         *nv.channel_fill(s), *nv.housing(s, "reactor"),
         nv.engine(s, "engine_top_r", "engine_r", 1.0), nv.engine(s, "engine_low_r", "engine_r", -1.0), *nv.engine_frame(s, "reactor"),
-        *weapon_modules(s), *light_modules(), *marks.lamps(), *marks.brackets(s),
-    ]]  # fmt: skip
+        *weapon_modules(s), *light_modules(), *marks.lamps(), *marks.brackets(s), *marks.red_fittings(), *marks.running_lights(), marks.bow_lamp(),
+    ]]))  # fmt: skip
 
 
 def _with_marks(m: cp.Module) -> cp.Module:

@@ -29,6 +29,7 @@ static func build_all(marks: Array[Dictionary], atlas: Dictionary, dir: String, 
 		var texture: Texture2D = load(path) as Texture2D
 		var text: String = HullMarks.text_for(mark, display_name, chars, ShipNames.hull_number_of(display_name))
 		var offsets: PackedFloat32Array = HullMarks.offsets(text, atlas, float(mark.get("stretch", 1.0)))
+		out.append_array(create_placard(mark, HullMarks.placard_size(mark, text, atlas)))
 		for i: int in text.length():
 			var node: HullMarkNode = create(mark, text, i, atlas, texture, path, offsets[i])
 			if node != null:
@@ -58,6 +59,44 @@ static func create(mark: Dictionary, text: String, index: int, atlas: Dictionary
 	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	node.transform = Transform3D(basis, _vec(mark.get("position")) + normal.normalized() * HullMarks.STANDOFF_M + basis.x * shift)
 	return node
+
+
+## The board behind a name (`HullMarks.placard_size`): a light panel and, behind it, a black one a line's width bigger all round.
+## Opaque, so the letters in front always draw over them. None for a mark without a board.
+static func create_placard(mark: Dictionary, size: Vector2) -> Array[HullMarkNode]:
+	var out: Array[HullMarkNode] = []
+	if size == Vector2.ZERO:
+		return out
+	var board: Dictionary = mark["placard"]
+	var normal := _vec(mark.get("normal"))
+	var basis: Basis = HullMarks.quad_basis(normal, _vec(mark.get("up")))
+	var line: float = HullMarks.placard_line_m(mark)
+	# Each layer: its name, size, colour and how many steps behind the letters it sits.
+	for layer: Array in [["Panel", size, board.get("colour"), 1.0], ["Line", size + Vector2.ONE * 2.0 * line, board.get("line_colour"), 2.0]]:
+		var node := HullMarkNode.new()
+		node.name = "Mark%s%s" % [str(mark.get("name", "mark")).to_pascal_case().validate_node_name(), layer[0]]
+		var quad := QuadMesh.new()
+		quad.size = layer[1]
+		node.mesh = quad
+		node.material_override = _board_material(_colour(layer[2]))
+		node.only_faction = StringName(str(mark.get("only_faction", "")))
+		node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var standoff: float = HullMarks.STANDOFF_M - float(layer[3]) * HullMarks.PLACARD_STEP_M
+		node.transform = Transform3D(basis, _vec(mark.get("position")) + normal.normalized() * standoff)
+		out.append(node)
+	return out
+
+
+static func _board_material(colour: Color) -> StandardMaterial3D:
+	var key: String = "board|%s" % colour.to_html()
+	if _materials.has(key):
+		return _materials[key]
+	var m := StandardMaterial3D.new()
+	m.albedo_color = colour
+	m.roughness = 0.6
+	m.metallic = 0.2
+	_materials[key] = m
+	return m
 
 
 ## A picture mark (`HullMarks.is_image`): one quad its size showing its image, sharp at any range (mipmapped, filtered

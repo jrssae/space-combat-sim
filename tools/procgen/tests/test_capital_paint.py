@@ -8,9 +8,11 @@ import unittest
 import numpy as np
 
 from tools.procgen.core.civilian import moved_marking
-from tools.procgen.core.coplanar import coplanar_overlaps
+from tools.procgen.core.coplanar import SET_BACK_M, coplanar_overlaps, flush_planes, set_back
 from tools.procgen.core.textures import Marking
+from tools.procgen.parts import capital as cp
 from tools.procgen.parts import capital_solids as cs
+from tools.procgen.parts.capital_flush import set_back_flush_parts
 from tools.procgen.parts.capital_paint import EdgeBand, edge_band, flat_faces
 from tools.procgen.parts.ea_omega import PLAIN
 from tools.procgen.styles.ea_capital import ea_capital
@@ -72,6 +74,32 @@ class CoplanarTests(unittest.TestCase):
     def test_abutting_and_back_to_back_faces_are_not(self) -> None:
         a, b, c = _plate("a"), _plate("b", (40.0, 0.0, 0.0), (60.0, 2.0, 30.0)), _plate("c", (0.0, 2.0, 0.0), (40.0, 4.0, 30.0))
         self.assertEqual(coplanar_overlaps([("a", a), ("b", b), ("c", c)], (-1.0, -1.0, -1.0), (70.0, 5.0, 50.0)), {})
+
+
+class FlushTests(unittest.TestCase):
+    def test_the_fitting_on_a_plate_is_set_back_from_it(self) -> None:
+        """A block sitting on a plate with its top flush with the plate's: the block, with less face there, steps down."""
+        plate, block = _plate("plate"), _plate("block", (10.0, 0.0, 10.0), (20.0, 2.0, 20.0))
+        planes = flush_planes([("plate", plate), ("block", block)])
+        self.assertEqual(set(planes), {"block"}, "the bigger face stays where it was")
+        moved = set_back(block, planes["block"])
+        self.assertAlmostEqual(float(moved.vertices[:, 1].max()), 2.0 - SET_BACK_M)
+        self.assertAlmostEqual(float(moved.vertices[:, 1].min()), SET_BACK_M)
+        self.assertEqual(coplanar_overlaps([("plate", plate), ("block", moved)], (-1.0, -1.0, -1.0), (50.0, 5.0, 50.0)), {})
+
+    def test_a_part_too_thin_keeps_its_plane(self) -> None:
+        sheet = _plate("sheet", (10.0, 1.8, 10.0), (20.0, 2.0, 20.0))
+        self.assertTrue(np.array_equal(set_back(sheet, [(np.array([0.0, 1.0, 0.0]), 2.0)]).vertices, sheet.vertices))
+
+    def test_port_twins_and_stacks_settle(self) -> None:
+        """A starboard fitting on a centre plate, its twin found to port too, and a second fitting stacked on the first."""
+        plate = cs.box("plate", (-40.0, 0.0, 0.0), (40.0, 2.0, 30.0), STYLE, PLAIN)
+        first = cs.box("first_r", (10.0, 0.0, 10.0), (20.0, 2.0, 20.0), STYLE, PLAIN).on_side(cp.RIGHT)
+        second = cs.box("second_r", (12.0, 0.0, 12.0), (14.0, 2.0, 14.0), STYLE, PLAIN).on_side(cp.RIGHT)
+        out = set_back_flush_parts([plate, first, second])
+        parts = [(m.name, m.part.mesh) for m in cp.with_twins(out)]
+        self.assertEqual(coplanar_overlaps(parts, (-50.0, -1.0, -1.0), (50.0, 5.0, 50.0)), {})
+        self.assertTrue(np.array_equal(out[0].part.mesh.vertices, plate.part.mesh.vertices), "the plate stays put")
 
 
 if __name__ == "__main__":

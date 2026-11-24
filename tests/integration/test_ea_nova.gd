@@ -137,7 +137,8 @@ func test_its_name_and_emblem_are_painted_on_each_vertical_plate() -> void:
 	if cap == null:
 		return
 	main.world.spawn(cap, main.world.to_universe(main.ship.global_position + Vector3(0.0, 0.0, -9000.0)), Basis.IDENTITY)
-	assert_eq(_marks(cap, "MarkName").size(), 2 * "SCHWARZKOPF".length(), "the whole name on each plate (M10-T67)")
+	assert_eq(_marks(cap, "MarkName").size(), 2 * "SCHWARZKOPF".length() + 4, "the whole name on each plate, on a board ringed in black (M10-T67)")
+	assert_eq(_marks(cap, "Panel").size(), 2, "a light board behind each name")
 	var emblems: Array[HullMarkNode] = _marks(cap, "MarkEmblem")
 	assert_eq(emblems.size(), 2, "an emblem on each plate")
 	if emblems.size() == 2:
