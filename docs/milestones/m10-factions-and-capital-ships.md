@@ -922,6 +922,27 @@ parity green.
   renegade capital is not disguised at spawn (T02 does fighters only); a capital's rotor rows broadcast no disguise (beams skip
   hull-only rows as targets for it); mounts on a rotating piece would aim from the piece at rest; fighter beams (Shadow, Vorlon)
   wait for T04; the far stand-ins' beam rolls stay until T45.
+- **T14 done (2026-11-24).** Capital turrets and missiles on the native rows (`docs/architecture.md` §22.7, D12.9): every
+  `CapitalShip`'s `turret` and `missile` mounts are rows of `ScsCapitalGuns` (`capital_gun_kernels.rs`, engine-free under the guard;
+  `capital_gun_rows.rs`), stepped from `SimCore.step_now` after the station turrets, before the bolts move; shots are the core's own
+  bolts, landed by the hit sweep by section (T08), a missile's or torpedo's warhead blasting where it strikes (`missile`, `torpedo`
+  blast rows). Turrets lead and slew in their cone; fixed guns (the Hyperion's heavies, the Nova's 14 pulse cannons, Q71: 10 ahead,
+  4 astern) fire when their barrel's line meets the target, holding it in a cone 25 deg wider for the helm (T16); launchers fire
+  salvos guided by proportional navigation (120 deg arc, a torpedo tube 45). Picks by role and what the ship perceives, so a
+  disguised renegade is passed by, launchers included (Q55); the stand-ins' near strike and gun picks too (`weapon_kernels`). A
+  gun's own hull must not hide its target: it aims at the centre, else at a big hull's highest-lying visible volume. Renegade
+  capitals now broadcast Earth Alliance from their spawn (Q55, capitals included) and a disguised shooter's shot at the player
+  or an Earth Alliance ship reveals it (`Transponder.note_shot_at`). `CapitalGunMounts` (pure), `CapitalGuns` (hold, set_order,
+  state, digest), `NativeHostility` (shared with the beams). Q56: `push` dropped from the traits; the Brakiri's graviton beam is
+  gone and the pulsar renamed: `brakiri_pulse_laser_heavy` (bolt_heavy 3 x 41 / 10 s, fore 90 deg, the beams' 49 dps),
+  `brakiri_pulse_laser` (4 / 0.6 s) and `brakiri_interceptor` x4 on the Avioki (`loadouts.json`, `factions.json`,
+  `docs/assets-capital.md`). Console `gun [info|fire|clear|hold|free]`, provider `capital_guns` (`info.md`). Tests (staged copy):
+  RESULTS_PLACEHOLDER. Cost (release library, debug Godot): about 0.6 us a tick per mount holding a target; 4 Omegas against 4
+  raider Omegas broadside (144 mounts), the step 70 to 100 us a tick (p99 about 300 us), held 5 to 10 us, alike with 1 and 6
+  threads. **Open:** the brain and helm (T16) do not turn a ship to bring fixed guns or broadsides to bear, so a bow-on Omega fires
+  few guns; no muzzle flash or sound per shot; mounts on a rotating piece aim from the piece at rest; the interceptor count on the
+  Avioki (4) is my call; renegade capitals do not yet show red engines (capitals are not on the livery shader; the X marks are
+  T21's); the far tier's fire stays until T45.
 - **T16 and T17 (AI):** D12.10: the `capital` brain and fighters' attacks on capitals (tests on its choices and T03's
   balance fights); carriers launching by faction (tests on the launch poses and rates). Done when AC10.
   The Nova (Q71) launches and recovers its 24 Starfuries through its one forward bay on a hidden elevator: the bay hardpoint

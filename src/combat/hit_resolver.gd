@@ -542,7 +542,7 @@ func _land(i: int, delta: float) -> void:
 			-relative.normalized() if relative.length_squared() > 1e-12 else Vector3.ZERO,
 			relative.length() / maxf(delta, 1e-6))
 	info.volume = _best_volume
-	var warhead: bool = _is_missile(i)
+	var warhead: StringName = _warhead(i)
 	_spend(i)
 	if _best_stop:
 		friendly_stops += 1
@@ -557,14 +557,17 @@ func _land(i: int, delta: float) -> void:
 	if fx != null:
 		_throw_sparks(info, t0 + move * t, move / maxf(delta, 1e-6))
 	hit_resolved.emit(info)
-	if warhead:
-		BlastResolver.set_off(BlastTable.spec(MISSILE_BLAST), info.point, info.faction, shooter_id)  # on top of the impact (D12.6)
+	if not warhead.is_empty():
+		BlastResolver.set_off(BlastTable.spec(warhead), info.point, info.faction, shooter_id)  # on top of the impact (D12.6)
 
 
-# Whether candidate `c` is a missile, whose warhead blasts where it strikes (M10-T09).
-func _is_missile(c: int) -> bool:
+# The blast row of candidate `c`'s warhead, which blasts where it strikes (M10-T09): a missile node's, or a capital launcher's
+# missile or torpedo on the core's rows (M10-T14); `&""` for a plain bolt.
+func _warhead(c: int) -> StringName:
 	var bolt: Projectile = _bolt_node(_bolt_index[c], _bolt_ids[c])
-	return bolt != null and bolt.kind == Projectile.KIND_MISSILE
+	if bolt != null:
+		return MISSILE_BLAST if bolt.kind == Projectile.KIND_MISSILE else &""
+	return CapitalGuns.warhead_blast(_bolt_ids[c])
 
 
 # The bolt's flash where it struck, sized to its damage, riding with the hull. A destroyed hull is hidden and the explosion replaces the flash; a

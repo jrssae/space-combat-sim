@@ -31,7 +31,7 @@
      "mine": "drazi_mine", "battle_mine": "", "marking": ""},
     {"id": "brakiri", "name": "Brakiri Syndicracy",
      "style": "brakiri", "fighters": ["brakiri_falkosi"],
-     "weapons": ["brakiri_graviton_beam", "brakiri_graviton_pulsar", "falkosi_bolt"],
+     "weapons": ["brakiri_pulse_laser_heavy", "brakiri_pulse_laser", "brakiri_interceptor", "falkosi_bolt"],
      "mine": "brakiri_mine", "battle_mine": "", "marking": ""},
     {"id": "vree", "name": "Vree",
      "style": "vree", "fighters": [],

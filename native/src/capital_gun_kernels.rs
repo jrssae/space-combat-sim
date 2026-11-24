@@ -30,6 +30,8 @@ const KIND_CAPITAL: u8 = 1;
 pub const FIGHTER_RADIUS_MAX_M: f64 = 50.0;
 /// A mount with no target looks for one this many ticks apart, staggered by its index (as the beams do).
 pub const PICK_EVERY: u32 = 15;
+/// A mount whose every candidate its own hull hid looks again this many ticks later, staggered as its picks are.
+pub const HIDDEN_WAIT: u32 = 60;
 /// How much further than its range a gun picks a target, so it is already laid when the target comes in.
 pub const PICK_REACH: f64 = 1.1;
 // Score offsets that rank the pick's classes ahead of distance (a gun's own class first).
@@ -38,6 +40,8 @@ const CLASS_PENALTY: f64 = 16.0;
 /// `CAPITAL_AIM_MIN_M`), since a long hull is far thinner than its bounding sphere.
 pub const CAPITAL_AIM_SHARE: f64 = 0.1;
 pub const CAPITAL_AIM_MIN_M: f64 = 20.0;
+/// How many of a big hull's nearest surface volumes a pick tries to aim at past its own hull (the pick's cost).
+pub const AIM_POINTS_TRIED: usize = 6;
 /// How far from its cell a missile starts, m (clear of the launcher's own housing).
 pub const CELL_CLEAR_M: f64 = 6.0;
 
@@ -104,6 +108,11 @@ pub struct Mount {
     pub zero: Vector3,
     /// The lowest elevation above the cone's base plane, rad (the cone's half angle is 90 deg less this).
     pub min_elevation: f64,
+    /// A fixed gun (Q71): it fires along its axis when its ship's helm brings the target onto the line.
+    pub fixed: bool,
+    /// The lowest elevation a target may lie at to be picked or held, rad: the aim's own, wider for a fixed gun so it holds
+    /// a target the helm is turning onto.
+    pub pick_min_elevation: f64,
     pub barrel_m: f64,
     pub spec: GunSpec,
     /// Its mount works (alive, its section standing, the ship neither disabled nor destroyed).
@@ -114,6 +123,9 @@ pub struct Mount {
     pub elevation: f64,
     /// The body it holds, 0 none.
     pub target: i64,
+    /// Where on that body it aims, in the body's frame: a big hull's surface volume its own hull does not hide, else the
+    /// centre (zero).
+    pub aim_local: Vector3,
     pub ready_at: f64,
     pub burst_fired: u32,
     pub burst_started_s: f64,
@@ -125,6 +137,7 @@ pub struct Mount {
 impl Mount {
     /// A mount at `local_at` covering a cone of `half_rad` round `axis` (ship frame), its barrel resting on the axis when
     /// `rest_on_axis` (a fixed gun, a launcher), else on the cone's edge toward `zero` (a turret lying on its base).
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         owner: i64,
         id: i64,
@@ -147,6 +160,8 @@ impl Mount {
             axis,
             zero,
             min_elevation,
+            fixed: rest_on_axis && !spec.launcher,
+            pick_min_elevation: min_elevation,
             barrel_m: barrel_m.max(0.0),
             spec,
             works: true,
@@ -158,12 +173,20 @@ impl Mount {
                 min_elevation.max(0.0)
             },
             target: 0,
+            aim_local: Vector3::ZERO,
             ready_at: f64::NEG_INFINITY,
             burst_fired: 0,
             burst_started_s: 0.0,
             pick_wait: 0,
             shots: 0,
         }
+    }
+
+    /// The same mount picking targets within `half_rad` of its axis (never narrower than its aim's cone).
+    pub fn with_pick_cone(mut self, half_rad: f64) -> Mount {
+        let half = half_rad.clamp(0.0, std::f64::consts::PI);
+        self.pick_min_elevation = (std::f64::consts::FRAC_PI_2 - half).clamp(-std::f64::consts::FRAC_PI_2, self.min_elevation);
+        self
     }
 }
 
@@ -216,6 +239,8 @@ pub struct Tally {
     pub blocked: i64,
     /// Picks that found a target.
     pub picks: i64,
+    /// Candidates a pick passed over because the ship's own hull hid them.
+    pub hidden: i64,
 }
 
 /// One tick of every mount, in order: targets kept or picked, guns laid and fired through their gate, launchers fired
@@ -251,7 +276,9 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
             m.target = 0;
         }
         if m.target == 0 {
-            m.target = choose(m, owner, world, r, &basis, pivot);
+            let (target, aim_local) = choose(m, owner, world, r, &basis, pivot, tally);
+            m.target = target;
+            m.aim_local = aim_local;
             if m.target != 0 {
                 tally.picks += 1;
             }
@@ -305,7 +332,7 @@ fn fire_gun<F: Fn(i64) -> Option<usize>>(
         m.elevation,
         m.min_elevation,
         &gun,
-        rows.positions[j],
+        aim_point(rows, j, m.aim_local),
         target_velocity(world, j),
         dt,
     );
@@ -316,12 +343,21 @@ fn fire_gun<F: Fn(i64) -> Option<usize>>(
     } else {
         rows.radii[j]
     };
-    if !tk::gate(&a, &gun, allowance, m.ready_at, now_s) {
+    let open = if m.fixed {
+        fixed_gate(m, &a, &gun, world, j, pivot, ship_velocity, now_s)
+    } else {
+        tk::gate(&a, &gun, allowance, m.ready_at, now_s)
+    };
+    if !open {
         return;
     }
     let from = add(pivot, scale(frame.up, LINE_LIFT_M as f32));
-    if own_hull_blocks(world, owner, from, a.lead_point) {
+    // A fixed gun's bolt flies down its barrel's line, wherever its aim point lies.
+    let to = if m.fixed { add(pivot, scale(a.axis, a.range_m as f32)) } else { a.lead_point };
+    if own_hull_blocks(world, owner, from, to) {
+        // Its own hull came between (the ship or the target turned): it looks for another point or target.
         tally.blocked += 1;
+        m.target = 0;
         return;
     }
     let next = tk::next_ready(
@@ -350,7 +386,7 @@ fn fire_gun<F: Fn(i64) -> Option<usize>>(
             mount: i as u32,
             start,
             velocity,
-            target: 0,
+            target: m.target,
         });
     }
 }
@@ -421,6 +457,46 @@ fn launch<F: Fn(i64) -> Option<usize>>(
             target: rows.body_ids[j],
         });
     }
+}
+
+// A fixed gun's gate (Q71): ready, the target in reach, and the line its bolt flies (against the target's own motion over the
+// flight) meeting the target's hull: its surface for a big hull, its sphere otherwise. Its arc is the helm's business.
+#[allow(clippy::too_many_arguments)]
+fn fixed_gate<F: Fn(i64) -> Option<usize>>(
+    m: &Mount,
+    a: &tk::Aim,
+    gun: &Gun,
+    world: &GunWorld<'_, F>,
+    j: usize,
+    pivot: Vector3,
+    ship_velocity: Vector3,
+    now_s: f64,
+) -> bool {
+    if a.range_m > gun.range_m || now_s + 1e-6 < m.ready_at {
+        return false;
+    }
+    let rows = world.rows;
+    let relative = sub(add(ship_velocity, scale(a.axis, gun.muzzle_speed as f32)), target_velocity(world, j));
+    let flight = gun.lifetime_s.min(gun.range_m / gun.muzzle_speed.max(1.0));
+    let from = add(pivot, scale(a.axis, m.barrel_m as f32));
+    let to = add(from, scale(relative, flight as f32));
+    let (basis, origin) = (&rows.bases[j], rows.positions[j]);
+    match rows.surface(j) {
+        Some(s) => enters_from_outside(s, into_body(basis, origin, from), into_body(basis, origin, to)),
+        None => segment_distance(from, to, origin) <= rows.radii[j] + gun.hit_radius,
+    }
+}
+
+// The distance from `p` to the segment `a`-`b`.
+fn segment_distance(a: Vector3, b: Vector3, p: Vector3) -> f64 {
+    let ab = sub(b, a);
+    let len_sq = f64::from(dot(ab, ab));
+    let t = if len_sq < 1e-12 {
+        0.0
+    } else {
+        (f64::from(dot(sub(p, a), ab)) / len_sq).clamp(0.0, 1.0)
+    };
+    f64::from(length(sub(p, add(a, scale(ab, t as f32)))))
 }
 
 /// One tick of every missile's guidance, in launch order: each bolt still in the table turned toward its target by
@@ -561,15 +637,17 @@ fn takes<F: Fn(i64) -> Option<usize>>(
     d < 1e-6 || in_cone(m, basis, rel, d)
 }
 
-// Whether a World offset `rel` (length `d`) from the pivot lies inside the mount's cone.
+// Whether a World offset `rel` (length `d`) from the pivot lies inside the cone the mount picks in.
 fn in_cone(m: &Mount, basis: &Basis, rel: Vector3, d: f64) -> bool {
     let along = f64::from(dot(xform_inv(basis, rel), m.axis)) / d;
-    along.clamp(-1.0, 1.0).asin() >= m.min_elevation
+    along.clamp(-1.0, 1.0).asin() >= m.pick_min_elevation
 }
 
-// The target mount `m` takes when it has none: its brain's order (an anti-capital or dual weapon) when that bears, else (on
-// its staggered pick tick) the best hostile in reach and cone by its role, nearest first, that its own hull does not hide.
-// 0: none; it looks again `PICK_EVERY` ticks later.
+// The target mount `m` takes when it has none, and the point on it to aim at, on its staggered pick tick: its brain's order (an
+// anti-capital or dual weapon) when that bears and shows, else the best hostile in reach and cone by its role, nearest
+// first, that its own hull does not wholly hide. 0: none; it looks again `PICK_EVERY` ticks later (`HIDDEN_WAIT` when its own
+// hull hid every candidate).
+#[allow(clippy::too_many_arguments)]
 fn choose<F: Fn(i64) -> Option<usize>>(
     m: &mut Mount,
     owner: &Owner,
@@ -577,25 +655,27 @@ fn choose<F: Fn(i64) -> Option<usize>>(
     r: usize,
     basis: &Basis,
     pivot: Vector3,
-) -> i64 {
-    if m.spec.role != ROLE_AF
-        && owner.order != 0
-        && bears(m, owner, world, r, basis, pivot, owner.order, 1.0)
-    {
-        return owner.order;
-    }
+    tally: &mut Tally,
+) -> (i64, Vector3) {
+    let from = add(pivot, scale(normalized(xform(basis, m.axis)), LINE_LIFT_M as f32));
     if m.pick_wait > 0 {
         m.pick_wait -= 1;
-        return 0;
+        return (0, Vector3::ZERO);
     }
-    m.pick_wait = PICK_EVERY - 1;
+    let ordered = m.spec.role != ROLE_AF && owner.order != 0 && bears(m, owner, world, r, basis, pivot, owner.order, 1.0);
+    if let Some(aim) = ordered
+        .then(|| (world.row_of)(owner.order).and_then(|j| visible_point(m, world, owner, basis, from, j)))
+        .flatten()
+    {
+        m.pick_wait = PICK_EVERY - 1;
+        return (owner.order, aim);
+    }
     let rows = world.rows;
     let reach = m.spec.range_m * PICK_REACH;
     let reach_sq = reach * reach;
-    let from = add(pivot, scale(normalized(xform(basis, m.axis)), LINE_LIFT_M as f32));
-    let mut best = 0;
-    let mut best_score = f64::INFINITY;
-    for &h in world.hull_rows {
+    // Every hostile it could hold, best first; its own hull is tested only down that list, until one shows.
+    let mut ranked: Vec<(f64, usize, usize)> = Vec::new();
+    for (k, &h) in world.hull_rows.iter().enumerate() {
         let j = h as usize;
         if !takes(m, owner, world, r, basis, pivot, j, PICK_REACH) {
             continue;
@@ -605,18 +685,74 @@ fn choose<F: Fn(i64) -> Option<usize>>(
         let off_class = match m.spec.role {
             ROLE_AF => capital,
             ROLE_AC => !capital,
+            ROLE_DUAL => false,
             _ => false,
         };
         if off_class {
             score += CLASS_PENALTY * reach_sq;
         }
-        // The hull is tested only for a candidate that would win, off the common path.
-        if score < best_score && !own_hull_blocks(world, owner, from, rows.positions[j]) {
-            best_score = score;
-            best = rows.body_ids[j];
-        }
+        ranked.push((score, k, j));
     }
-    best
+    // Equal scores keep the hull rows' order, so a pick never depends on the sort.
+    ranked.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    for &(_, _, j) in &ranked {
+        if let Some(aim) = visible_point(m, world, owner, basis, from, j) {
+            m.pick_wait = PICK_EVERY - 1;
+            return (rows.body_ids[j], aim);
+        }
+        tally.hidden += 1;
+    }
+    // Nothing, or only hulls its own hull hides: it looks again later, longer when they were all hidden (they take a while
+    // to come round).
+    m.pick_wait = if ranked.is_empty() { PICK_EVERY - 1 } else { HIDDEN_WAIT - 1 };
+    (0, Vector3::ZERO)
+}
+
+// Where on row `j`, in its body frame, mount `m` at `from` (its ship's basis `own_basis`) can see past its own hull: the centre
+// when it shows (always, for a launcher), else for a big hull the first that shows of the `AIM_POINTS_TRIED` surface volume
+// centres lying highest over the mount's base; none when its own hull hides them.
+fn visible_point<F: Fn(i64) -> Option<usize>>(
+    m: &Mount,
+    world: &GunWorld<'_, F>,
+    owner: &Owner,
+    own_basis: &Basis,
+    from: Vector3,
+    j: usize,
+) -> Option<Vector3> {
+    let rows = world.rows;
+    // A launcher's rounds climb out of their cells and turn: its own hull never hides a target.
+    if m.spec.launcher || !own_hull_blocks(world, owner, from, rows.positions[j]) {
+        return Some(Vector3::ZERO);
+    }
+    let surface = rows.surface(j)?;
+    let (basis, origin) = (&rows.bases[j], rows.positions[j]);
+    // The parts lying highest over the mount's base (for a fixed gun, nearest its line) clear its own hull most easily.
+    let axis = normalized(xform(own_basis, m.axis));
+    let mut points: Vec<(f32, usize, Vector3)> = surface
+        .volumes
+        .iter()
+        .enumerate()
+        .map(|(k, v)| {
+            let local = Vector3::new(v.centre[0] as f32, v.centre[1] as f32, v.centre[2] as f32);
+            (-dot(normalized(sub(add(origin, xform(basis, local)), from)), axis), k, local)
+        })
+        .collect();
+    // Only the best few are tried, so only they are put in order (ties by the volume's place).
+    let best = |a: &(f32, usize, Vector3), b: &(f32, usize, Vector3)| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1));
+    if points.len() > AIM_POINTS_TRIED {
+        points.select_nth_unstable_by(AIM_POINTS_TRIED - 1, best);
+        points.truncate(AIM_POINTS_TRIED);
+    }
+    points.sort_by(best);
+    points
+        .into_iter()
+        .find(|&(_, _, local)| !own_hull_blocks(world, owner, from, add(origin, xform(basis, local))))
+        .map(|(_, _, local)| local)
+}
+
+// The World point a gun aims at on row `j`: `aim_local` in its body frame.
+fn aim_point(rows: &Rows, j: usize, aim_local: Vector3) -> Vector3 {
+    add(rows.positions[j], xform(&rows.bases[j], aim_local))
 }
 
 // `hint` laid flat on the plane across unit `axis` (unit); any direction across it when `hint` runs along it.

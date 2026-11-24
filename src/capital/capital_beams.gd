@@ -36,9 +36,7 @@ var _mounts: Array[Dictionary] = []
 var _console: BeamConsole = null
 var _held: Dictionary = {}  # ship -> true: told to hold its beams' fire
 var _links: Dictionary = {}  # ship -> [[signal, callable], ...]: what tells it a ship's emitters changed
-var _relations_count: int = -1
-var _relations_table: FactionTable = null
-var _relations_revision: int = -1
+var _hostility := NativeHostility.new()
 
 
 func _init() -> void:
@@ -190,7 +188,7 @@ func _physics_process(delta: float) -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree())
 	if sim == null or not sim.ensure_synced():
 		return
-	_refresh_relations(sim)
+	_hostility.refresh(_rows, sim)
 	var out: Array = _rows.step(delta)
 	step_us = float(_rows.last_us())
 	kernel_us = float(_rows.kernel_us())
@@ -251,24 +249,6 @@ func _draw(out: Array) -> void:
 				draw.add_pulse(starts[k], ends[k], spec.bolt_color, spec.beam_width_m)
 	if draw != null:
 		draw.set_lines(lines)
-
-
-# The hostility table again when the core knows a new faction, another table is active or a relation changed.
-func _refresh_relations(sim: SimCore) -> void:
-	var count: int = int(_rows.faction_count())
-	var table: FactionTable = Factions.table()
-	if count == _relations_count and table == _relations_table and table.revision == _relations_revision:
-		return
-	_relations_count = count
-	_relations_table = table
-	_relations_revision = table.revision
-	var names: Array = sim.core.factions()
-	var matrix := PackedByteArray()
-	matrix.resize(count * count)
-	for a: int in count:
-		for b: int in count:
-			matrix[a * count + b] = 1 if Factions.is_hostile(names[a], names[b]) else 0
-	_rows.set_hostility(count, matrix)
 
 
 func _native() -> Object:

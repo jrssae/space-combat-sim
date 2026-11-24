@@ -419,3 +419,72 @@ fn a_ship_out_of_the_rows_holds_its_state_and_two_runs_fire_alike() {
     assert!(parked.first_shots(60).is_none());
     assert_eq!(parked.mounts, before);
 }
+
+// Q71: a fixed gun with no gimbal holds a target its wide pick cone sees, but fires only once the line along its axis meets it.
+#[test]
+fn a_fixed_gun_with_no_gimbal_fires_only_when_its_line_meets_the_target() {
+    let spec = gun(ROLE_DUAL);
+    let mount = Mount::new(1, 1, v(0.0, 0.0, -200.0), v(0.0, 0.0, -1.0), v(0.0, 1.0, 0.0), 0.0, true, 10.0, spec)
+        .with_pick_cone(30f64.to_radians());
+    assert!(mount.fixed);
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(600.0, 0.0, -2000.0), 8.0, 0, 1, LIVE)];
+    let mut run = Run::with(rows_of(&bodies, None), mount);
+    assert!(run.first_shots(60).is_none(), "17 deg off its line: held, not fired");
+    assert_eq!(run.mounts[0].target, 2, "the wide cone holds it for the helm");
+    run.rows.positions[1] = v(5.0, 0.0, -2000.0);
+    let (shots, _) = run.first_shots(5).expect("on its line it fires");
+    let d = normalized(shots[0].velocity);
+    assert!(d.z < -0.9999, "straight along the axis: {d:?}");
+}
+
+// A fixed gun at a big hull fires when its line crosses the hull's surface, though the hull's centre is well off the line.
+#[test]
+fn a_fixed_gun_fires_when_its_line_crosses_a_big_hulls_surface() {
+    let spec = gun(ROLE_AC);
+    let mount = Mount::new(1, 1, v(0.0, 0.0, -200.0), v(0.0, 0.0, -1.0), v(0.0, 1.0, 0.0), 0.0, true, 10.0, spec)
+        .with_pick_cone(30f64.to_radians());
+    // A long hull lying across the line 3 km ahead, its centre 150 m to the side: its box reaches 200 m along x.
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(150.0, 0.0, -3000.0), 210.0, 1, 1, LIVE)];
+    let mut rows = rows_of(&bodies, None);
+    rows.roles[1] = ROLE_SURFACE;
+    let across = from_packed(&[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 200.0, 10.0, 20.0], 0.0);
+    let mut map = HashMap::new();
+    map.insert(2_i64, Arc::new(across));
+    rows.surfaces = Some(Arc::new(map));
+    let mut run = Run::with(rows, mount);
+    assert!(run.first_shots(5).is_some(), "the line meets the hull's near end");
+    run.rows.positions[1] = v(260.0, 0.0, -3000.0);
+    run.mounts[0].ready_at = f64::NEG_INFINITY;
+    assert!(run.first_shots(5).is_none(), "moved 110 m on, the hull's end is past the line");
+}
+
+// A big hull whose centre its own hull hides is aimed at on a surface volume that shows past it; one wholly hidden waits longer.
+#[test]
+fn a_gun_aims_at_the_part_of_a_big_hull_its_own_hull_does_not_hide() {
+    let bodies = [(1, v(0.0, 0.0, 0.0), 210.0, 1, 0, LIVE), (2, v(0.0, -60.0, -1500.0), 120.0, 1, 1, LIVE)];
+    let mut rows = rows_of(&bodies, Some(hull()));
+    rows.roles[1] = ROLE_SURFACE;
+    // Its hull low below the shooter's deck line, a tower rising above it.
+    let target = from_packed(
+        &[
+            0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 30.0, 20.0, 100.0, //
+            0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 80.0, 0.0, 10.0, 20.0, 10.0,
+        ],
+        0.0,
+    );
+    if let Some(map) = rows.surfaces.as_mut() {
+        Arc::make_mut(map).insert(2, Arc::new(target));
+    }
+    let mut run = Run::new(rows, gun(ROLE_AC));
+    run.tick();
+    assert_eq!(run.mounts[0].target, 2, "picked on the part that shows");
+    assert_eq!(run.mounts[0].aim_local, v(0.0, 80.0, 0.0), "the tower, not the hidden centre");
+    // Lower the tower out of sight: wholly hidden, it is passed over and looked for again only after `HIDDEN_WAIT`.
+    let mut hidden = run.rows.clone();
+    hidden.positions[1] = v(0.0, -200.0, -1500.0);
+    let mut low = Run::new(hidden, gun(ROLE_AC));
+    let (_, tally) = low.tick();
+    assert_eq!(low.mounts[0].target, 0);
+    assert!(tally.hidden > 0);
+    assert_eq!(low.mounts[0].pick_wait, HIDDEN_WAIT - 1);
+}

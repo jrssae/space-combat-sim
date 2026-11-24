@@ -7310,6 +7310,63 @@ assets/weapons/<id>.tres     a WeaponSpec per capital beam weapon of data/capita
   hull dead ahead by section; a lost mount stops while its sister fires; a disabled ship is silent; a disguised renegade left alone
   until its beam gives it away; the console); `test_beam_threads`; `test_sim_core`'s guard holds the kernel to the kernels' rules.
 - **Known gaps.** The `capital` brain (T16) gives no orders yet, so beams pick their own targets; a renegade capital is not disguised
-  at spawn (T02 disguises fighters; a test or the console does it); mounts on a rotating piece would aim from the piece at rest; the
-  `push` trait (Brakiri) is carried but not applied; charging draws nothing and a hit draws no impact flash; the far tier's own beam
+  at spawn (T02 disguises fighters; T14 does capitals); mounts on a rotating piece would aim from the piece at rest; the
+  `push` trait is gone (Q56: no push beams; the Brakiri carry pulse lasers); charging draws nothing and a hit draws no impact flash; the far tier's own beam
   rolls (`tier_fire`, the stand-ins) stay until T45; interceptors never stop beams (D12.9), so T13 has nothing to do here.
+
+### 22.7 Capital guns and missiles (D12.9; T14)
+
+```
+native/src/capital_gun_kernels.rs   the mounts' pick, aim, gate and shots, the missiles' guidance; engine-free, under test_sim_core's
+                                    guard; Rust tests in capital_gun_kernels/tests.rs
+native/src/capital_gun_rows.rs      ScsCapitalGuns: the mounts as rows, stepped from SimCore.step_now; shots become the core's own bolts
+src/capital/capital_gun_mounts.gd   CapitalGunMounts (pure): a hull's turret, fixed gun and launcher mounts with their WeaponSpecs
+src/capital/capital_guns.gd         CapitalGuns (a child of World): ships join and leave, works and rate pushed, the step and the reveal
+src/capital/gun_console.gd          the `gun` command and the `capital_guns` provider
+src/capital/native_hostility.gd     the hostility table by the core's faction indices, kept in step with Factions (beams and guns)
+```
+
+- **Mounts.** Every `turret` and `missile` mount of a capital's hardpoints whose weapon has a bolt or launcher `WeaponSpec`
+  (`assets/weapons/<id>.tres`, T03's numbers; `barrels` bolts a shot, `burst_shots` a burst; the hull's `damage_scale` on an
+  anti-capital weapon, Q54). Three shapes: a **turret** covers the cone round its base's up down to its lowest elevation (the
+  usual 10 deg below the base) and slews at its traverse and elevation rates; a **fixed gun** (traverse under 90 deg: the
+  Hyperion's bow heavies, the Nova's 14 pulse cannons, Q71) aims only within its gimbal round its `forward` and holds targets in a
+  cone 25 deg wider, so the helm can bring one onto its line; a **launcher** covers 120 deg round its cells' axis (its rounds climb
+  out and turn; a torpedo tube 45 deg). Interceptor mounts are T13's, beams T12's.
+- **Pick.** On a staggered tick every 15 while it holds nothing: its ship's order (`CapitalGuns.set_order`, for T16) for an
+  anti-capital or dual weapon, else the nearest hostile by role (anti-fighter guns fighters first, anti-capital capitals first,
+  dual the nearest; a torpedo capitals only), within 1.1 x its range and its cone. Hostility is what its ship perceives
+  (`rows::seen_ix`), so a renegade broadcasting Earth Alliance is passed by, launchers included (Q55). A gun's own hull (hull
+  and rotors) must not hide the target: it aims at the centre when that shows, else at the first of a big hull's six surface
+  volume centres lying highest over its base that does (`aim_local`, in the target's frame); a mount whose every candidate is
+  hidden waits 60 ticks. A launcher is never hidden.
+- **Fire.** A gun leads its aim point (the turret kernels' `aim`, `gate`, `spread`, `shot`) and fires when its miss is within the
+  target's radius (a capital: a tenth of it, at least 20 m); a fixed gun fires when its barrel's line, against the target's
+  motion over the flight, meets the target's surface (its sphere for a small hull). The line from the trunnion to the lead point
+  (a fixed gun's barrel line) must clear its own hull, else it drops the target and picks again. A launcher fires a salvo of its
+  barrels between its cells' axis and the target's lead, guided by proportional navigation at its gain and turn rate until its
+  bolt is spent. Every shot is an owned bolt row (a missile's of the missile kind): the hit sweep lands it like any bolt, a
+  capital's by the section its volume names (T08); a missile's or torpedo's warhead blasts there too (`BlastTable` rows `missile`
+  and `torpedo`, `CapitalGuns.warhead_blast`). Interceptors (the grid's now, T13's later) see missiles as missile-kind bolts.
+- **Works and the disguise.** `mount_lost`, `section_changed`, `ship_disabled`, `restored` and `destroyed` push each mount's
+  `works` and the rate of fire (`fire_rate()`) to the rows; `CapitalGuns.hold` holds a ship's guns. A renegade capital broadcasts
+  its faction's transponder from its spawn (Q55; `CapitalShip` calls `disguise_as`), and a disguised shooter's shot at the
+  player or a friend of its transponder gives it away (`Transponder.note_shot_at`), as a hit does.
+- **Threads.** All on the main thread, from `SimCore.step_now` after the station turrets and before the bolts move, over the
+  rows of the tick's sync, in mount order, the spread from a hash of the mount and the tick: 1 and 6 threads fire and land the
+  same byte for byte (`test_capital_gun_threads`). The parity recordings are untouched.
+- **Cost** (release library, debug Godot): about 0.6 us per mount holding a target a tick (its lead and slew), well under that
+  idle; 8 Omegas (144 mounts) firing broadside, 70 to 100 us a tick (p99 about 300 us, on pick ticks with hulls hidden), the same
+  with 1 and 6 threads; held, 5 to 10 us.
+- **Console.** `gun [info|fire [player|selection|<capital name>]|clear|hold|free]` on the `capital` command's focus; provider
+  `capital_guns` (`info.md`).
+- **Tests.** Rust `capital_gun_kernels::tests` (lead and cycle, friends and range, arcs, roles, orders, lost mounts and half rate,
+  the disguise, its own hull, a hidden centre aimed past, fixed guns on their line and across a big hull, bursts, barrels,
+  salvos, torpedoes, guidance, determinism); GUT `test_capital_gun_mounts` (every gun and launcher spec against the loadouts, no
+  `push`, the Brakiri's pulse lasers, the Omega's, Nova's and Hyperion's mounts), `test_capital_guns` (the main scene: Omegas
+  side by side hit by section and the missiles blast; a lost mount and a disabled ship; the renegade's disguise; the Nova's fixed
+  guns; the console), `test_capital_gun_threads`.
+- **Known gaps.** The `capital` brain and helm (T16) give no orders and do not turn the ship to bring fixed guns or broadsides
+  to bear, so a bow-on Omega fires few guns; mounts on a rotating piece would aim from the piece at rest; no muzzle flash or
+  sound per shot; the far tier's own fire (`tier_fire`, the stand-ins) stays until T45; renegade capitals show the red X marks
+  but not yet red engines (capitals are not on the livery shader).

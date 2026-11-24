@@ -6,10 +6,11 @@ extends RefCounted
 ##
 ## - A **turret** (traverse all round) covers a cone round its base's `up` down to its lowest elevation (the usual 200 deg: 10
 ##   below the base); its barrel rests on the base toward the bow.
-## - A **fixed gun** (a mount whose traverse is under 90 deg: the Hyperion's bow guns) covers a cone round its `forward` as wide as
-##   its gimbal, and rests on that axis; its azimuth turns freely so only the elevation rate holds it back.
+## - A **fixed gun** (a mount whose traverse is under 90 deg: the Hyperion's bow guns, the Nova's pulse cannons, Q71) aims within
+##   its gimbal round its `forward` and rests on that axis; its azimuth turns freely so only the elevation rate holds it back. It
+##   holds targets in a wider cone (`FIXED_PICK_MARGIN_DEG` more) and fires when its ship's helm brings one onto its line.
 ## - A **launcher** covers a cone round its cells' `forward`: the mount's own `arc_deg`, else half its weapon's, else a
-##   hemisphere for a missile and a fore 45 deg for a torpedo.
+##   120 deg for a missile and a fore 45 deg for a torpedo.
 
 ## Numbers `ScsCapitalGuns.add_mount` takes for a weapon.
 const SPEC_LEN: int = 18
@@ -17,14 +18,17 @@ const SPEC_LEN: int = 18
 const FIXED_TRAVERSE_DEG: float = 90.0
 ## A fixed gun's azimuth round its axis turns this fast (it barely moves the barrel near the axis), deg/s.
 const FIXED_AZIMUTH_DEG_S: float = 360.0
-const MISSILE_ARC_HALF_DEG: float = 90.0
+## How much wider than its gimbal a fixed gun holds a target, so the helm can bring it onto the line, deg.
+const FIXED_PICK_MARGIN_DEG: float = 25.0
+## A missile cell covers everything above its base and 30 deg below: its rounds climb out and turn onto the target, deg.
+const MISSILE_ARC_HALF_DEG: float = 120.0
 const TORPEDO_ARC_HALF_DEG: float = 45.0
 const ROLES: Array[StringName] = [&"af", &"dual", &"ac"]
 const KINDS: Array[String] = ["turret", "missile"]
 
 
 ## Every gun and launcher mount of `hardpoints` (a capital's `hardpoints.json`) for hull `type_id`, in the file's order:
-## dictionaries `{name, weapon, section, kind, position, axis, zero, half_deg, on_axis, barrel_m, spec, packed}` (body frame
+## dictionaries `{name, weapon, section, kind, position, axis, zero, half_deg, pick_half_deg, on_axis, barrel_m, spec, packed}` (body frame
 ## with the rotating pieces at rest). A mount whose weapon has no spec is left out with a warning.
 static func of_hardpoints(hardpoints: Dictionary, type_id: StringName) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
@@ -52,19 +56,22 @@ static func of_hardpoints(hardpoints: Dictionary, type_id: StringName) -> Array[
 		elif float(entry.get("traverse_deg", 180.0)) < FIXED_TRAVERSE_DEG:
 			var elevations: Array = entry.get("elevation_deg", [-3.0, 3.0])
 			var gimbal: float = maxf(float(entry.get("traverse_deg", 0.0)), maxf(absf(float(elevations[0])), absf(float(elevations[1]))))
-			m.merge({"axis": forward, "zero": up, "half_deg": gimbal, "on_axis": true, "barrel_m": float(entry.get("barrel_m", 0.0))})
+			m.merge({"axis": forward, "zero": up, "half_deg": gimbal, "pick_half_deg": gimbal + FIXED_PICK_MARGIN_DEG, "on_axis": true,
+					"barrel_m": float(entry.get("barrel_m", 0.0))})
 			traverse = FIXED_AZIMUTH_DEG_S
 		else:
 			var lowest: float = float((entry.get("elevation_deg", [-10.0, 90.0]) as Array)[0])
 			m.merge({"axis": up, "zero": forward, "half_deg": 90.0 - lowest, "on_axis": false,
 					"barrel_m": float(entry.get("barrel_m", 0.0))})
+		if not m.has("pick_half_deg"):
+			m["pick_half_deg"] = m["half_deg"]
 		m["packed"] = packed(spec, BeamMounts.damage_scale(type_id, spec), traverse)
 		out.append(m)
 	return out
 
 
 ## A launcher's arc, half angle in degrees: the mount's own `arc_deg` (a half angle), else half its weapon's (a full arc), else a
-## hemisphere for a missile and 45 deg for a torpedo.
+## 120 deg for a missile (`MISSILE_ARC_HALF_DEG`) and 45 deg for a torpedo.
 static func launcher_half_deg(entry: Dictionary, weapon: String, spec: WeaponSpec) -> float:
 	if entry.has("arc_deg"):
 		return float(entry["arc_deg"])

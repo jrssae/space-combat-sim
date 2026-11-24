@@ -16,8 +16,7 @@
   "fighter_gun"
  ],
  "traits": [
-  "kinetic",
-  "push"
+  "kinetic"
  ],
  "classes": [
   "fighter",
@@ -366,18 +365,18 @@
    "damage": 300,
    "cycle_s": 0.0
   },
-  "brakiri_graviton_beam": {
-   "kind": "beam_sustained",
+  "brakiri_pulse_laser_heavy": {
+   "kind": "bolt_heavy",
    "faction": "brakiri",
    "role": "ac",
-   "damage": 0,
-   "cycle_s": 15.0,
-   "beam_dps": 37,
-   "beam_on_s": 5.0,
-   "range_m": 7000,
-   "trait": "push"
+   "damage": 41,
+   "cycle_s": 10.0,
+   "burst": 3,
+   "speed_mps": 2000,
+   "range_m": 6000,
+   "arc_deg": 90
   },
-  "brakiri_graviton_pulsar": {
+  "brakiri_pulse_laser": {
    "kind": "bolt_medium",
    "faction": "brakiri",
    "role": "dual",
@@ -385,6 +384,15 @@
    "cycle_s": 0.6,
    "speed_mps": 2200,
    "range_m": 3500
+  },
+  "brakiri_interceptor": {
+   "kind": "interceptor",
+   "faction": "brakiri",
+   "role": "pd",
+   "damage": 0,
+   "cycle_s": 0.25,
+   "barrels": 4,
+   "range_m": 1500
   },
   "brakiri_mine": {
    "kind": "mine_prox",
@@ -813,10 +821,12 @@
    "hull": 19000,
    "jump": "own",
    "weapons": {
-    "brakiri_graviton_beam": 4,
-    "brakiri_graviton_pulsar": 6
+    "brakiri_pulse_laser_heavy": 4,
+    "brakiri_pulse_laser": 6
    },
-   "interceptors": {},
+   "interceptors": {
+    "brakiri_interceptor": 4
+   },
    "launches": {},
    "lays_mines": null
   },

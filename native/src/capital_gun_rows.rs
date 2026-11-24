@@ -86,8 +86,9 @@ impl ScsCapitalGuns {
     }
 
     /// One mount of ship `owner` (`add_owner` first): where it sits in the ship's frame, the cone it covers (`half_deg` round
-    /// `axis`, azimuth 0 toward `zero`), whether its barrel rests on the axis (a fixed gun, a launcher), its barrel's length,
-    /// and its weapon (`SPEC_LEN` numbers and its bolts' colour). Its index, or -1 when refused.
+    /// `axis`, azimuth 0 toward `zero`) and the wider one it picks targets in (`pick_half_deg`), whether its barrel rests on
+    /// the axis (a fixed gun, a launcher), its barrel's length, and its weapon (`SPEC_LEN` numbers and its bolts' colour). Its
+    /// index, or -1 when refused.
     #[func]
     #[allow(clippy::too_many_arguments)]
     fn add_mount(
@@ -97,6 +98,7 @@ impl ScsCapitalGuns {
         axis: Vector3,
         zero: Vector3,
         half_deg: f64,
+        pick_half_deg: f64,
         rest_on_axis: bool,
         barrel_m: f64,
         spec: PackedFloat64Array,
@@ -128,7 +130,11 @@ impl ScsCapitalGuns {
             elevation_rad_s: s[13].max(0.0).to_radians(),
             nav_gain: s[14],
             turn_rad_s: s[15].max(0.0),
-            warhead: (s[16] as i64).clamp(0, i64::from(ck::WARHEAD_TORPEDO)) as u8,
+            warhead: match s[16] as i64 {
+                1 => ck::WARHEAD_MISSILE,
+                2 => ck::WARHEAD_TORPEDO,
+                _ => ck::WARHEAD_NONE,
+            },
             color: [color.r, color.g, color.b, color.a],
             look: (s[17] as i64).clamp(0, 255) as u8,
         };
@@ -143,7 +149,8 @@ impl ScsCapitalGuns {
             rest_on_axis,
             barrel_m,
             made,
-        );
+        )
+        .with_pick_cone(pick_half_deg.max(half_deg).to_radians());
         mount.pick_wait = (self.mounts.len() as u32) % ck::PICK_EVERY;
         self.mounts.push(mount);
         self.owner_of.push(o as u32);
@@ -238,11 +245,12 @@ impl ScsCapitalGuns {
         out
     }
 
-    /// `[bolts fired, missiles launched, shots the own hull blocked, picks that found a target]` so far (readouts).
+    /// `[bolts fired, missiles launched, shots the own hull blocked, picks that found a target, candidates the own hull hid]` so
+    /// far (readouts).
     #[func]
     fn readouts(&self) -> PackedInt64Array {
         PackedInt64Array::from(
-            &[self.bolts_total, self.missiles_total, self.tally.blocked, self.tally.picks][..],
+            &[self.bolts_total, self.missiles_total, self.tally.blocked, self.tally.picks, self.tally.hidden][..],
         )
     }
 
@@ -273,6 +281,9 @@ impl ScsCapitalGuns {
             word(m.azimuth.to_bits());
             word(m.elevation.to_bits());
             word(row(m.target) as u64);
+            for c in [m.aim_local.x, m.aim_local.y, m.aim_local.z] {
+                word(u64::from(c.to_bits()));
+            }
             word(m.ready_at.to_bits());
             word(m.shots as u64);
         }
@@ -285,7 +296,7 @@ impl ScsCapitalGuns {
 
     /// One tick at sim time `now_s` (from `SimCore.step_now`, after the sync and before the bolts move): the missiles in
     /// flight steered, then every mount's aim and shots, each shot an owned bolt row (a missile's of the missile kind).
-    /// Returns `[shots' mounts, their starts, their bolt ids, whether each is a missile (bytes)]`.
+    /// Returns `[shots' mounts, their starts, their bolt ids, whether each is a missile (bytes), the body each was fired at]`.
     #[func]
     fn step(&mut self, now_s: f64, delta: f64) -> VarArray {
         let started = std::time::Instant::now();
@@ -348,6 +359,7 @@ impl ScsCapitalGuns {
         let mut starts = Vec::with_capacity(n);
         let mut ids = Vec::with_capacity(n);
         let mut missile = Vec::with_capacity(n);
+        let mut targets = Vec::with_capacity(n);
         for (k, s) in self.shots.iter().enumerate() {
             let m = &self.mounts[s.mount as usize];
             let spec = m.spec;
@@ -380,13 +392,16 @@ impl ScsCapitalGuns {
             starts.push(s.start);
             ids.push(id);
             missile.push(u8::from(spec.launcher));
+            targets.push(s.target);
         }
         drop(c);
         out.push(&PackedInt32Array::from(mounts.as_slice()).to_variant());
         out.push(&PackedVector3Array::from(starts.as_slice()).to_variant());
         out.push(&PackedInt64Array::from(ids.as_slice()).to_variant());
         out.push(&PackedByteArray::from(missile.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(targets.as_slice()).to_variant());
         self.last_us = started.elapsed().as_secs_f64() * 1e6;
         out
     }
 }
+

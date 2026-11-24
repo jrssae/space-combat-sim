@@ -986,7 +986,7 @@ example Omega launches), this section wins.
 | `torpedo` | 150 + blast | reload 20 s | 250 | 10 000 | 0.15 rad/s, 40 s | capitals only; toughness 3 |
 | `interceptor` | 0 | 4 pulses/s (4 barrels, 1 s recharge) | 2 000 | 1 500 reach | 0.22 deg, 360 deg/s | the grid battery (§20.3) |
 
-**Traits:** `kinetic` (an interceptor needs 2 pulses to stop it) and `push` (a small shove on the target). **Toughness**
+**Traits:** `kinetic` (an interceptor needs 2 pulses to stop it); `push` was dropped with the push beams (Q56). **Toughness**
 is how many interceptor pulses stop a shot: 1 for fighter and medium bolts and for missiles; 2 for heavy, fixed and
 kinetic bolts; 3 for torpedoes and Narn energy mines. Interceptors never stop beams, blasts or rams.
 
@@ -1001,7 +1001,7 @@ The numbers are in `loadouts.json` under `weapons`.
 | Centauri | `centauri_plasma_accelerator` (bolt_fixed, 2 barrels), `centauri_battle_laser` (Primus heavy X-ray laser; beam_sustained 67 dps, 3 s on, 10 s), `centauri_ion_cannon` (bolt_medium 2 x 8 / 1.8 s; not kinetic), `centauri_light_particle` (bolt_light 2 x 6), `centauri_missile`, `centauri_guided_mine`, `centauri_mine` |
 | Minbari | `minbari_neutron_cannon` (beam_pulsed 150, 9 km), `minbari_fusion_cannon` (bolt_medium 8 / 1.4 s, 2 500 m/s, 40 deg/s), `minbari_em_pulse` (beam_pulsed 50, mounts only; T04 may change it) |
 | Drazi | `drazi_particle_beam` (beam_pulsed 80, nose +/-15 deg), `drazi_plasma_medium` (13), `drazi_heavy_particle` (2 x 35 / 8 s), `drazi_solar_cannon` (beam_sustained 150 dps, 3 s on, 25 s, bow +/-5 deg), `drazi_missile`, `drazi_interceptor` (half rate), `drazi_mine` |
-| Brakiri | `brakiri_graviton_beam` (beam_sustained 37 dps, 5 s on, 15 s, push), `brakiri_graviton_pulsar` (bolt_medium 4 / 0.6 s), `brakiri_mine` |
+| Brakiri | Pulse lasers and interceptor lasers only (Q56, no push beams): `brakiri_pulse_laser_heavy` (bolt_heavy 3 x 41 / 10 s, fore 90 deg; takes the graviton beams' 49 dps), `brakiri_pulse_laser` (bolt_medium 4 / 0.6 s; was the graviton pulsar), `brakiri_interceptor`, `brakiri_mine` |
 | Vree | `vree_antimatter` (bolt_heavy single 30 / 4 s, 3 km, belly hemisphere) |
 | ISA | `isa_neutron_laser` (the White Star's main gun; beam_pulsed 200 / 6 s, bow), `isa_neutron_cannon` (67 / 5 s, 120 deg), `isa_fusion_cannon` (2 x 8 / 1 s), `isa_fusion_beam` (Victory; beam_sustained 250 dps, 5 s on, 45 s, fore +/-15 deg), `isa_array`, `isa_pulse_light`, `isa_interceptor` |
 | Drakh | `drakh_pulse` (8 / 1.8 s), `drakh_beam` (beam_pulsed 100), `drakh_light` |
@@ -1026,7 +1026,7 @@ excluding interceptors.
 | Sunhawk T29 | cruiser | 4 000 | 1 particle_beam X; 4 plasma_medium F; 2 missile | | | | 43 |
 | Firehawk T59 | cruiser | 4 500 | 1 solar_cannon X; 2 twin heavy_particle F | | | | 36 |
 | Stormfalcon T30 | capital | 16 000 | 2 solar_cannon X; 6 heavy_particle T; 4 plasma_medium T | 4 (half rate) | 13 Sky Serpents (1 + 12 for the Star Snakes) | | 114 |
-| Avioki T31 | capital | 19 000 | 4 graviton_beam F; 6 graviton_pulsar T | | | | 89 |
+| Avioki T31 | capital | 19 000 | 4 pulse_laser_heavy F; 6 pulse_laser T (Q56) | 4 | | | 89 |
 | Xill T32 | cruiser | 6 000 | 15 antimatter V (strafing) | | | | 112 |
 | White Star T33 | cruiser | 8 000 | 1 neutron_laser X; 2 neutron_cannon F; 2 fusion_cannon T | | 4 Nial | | 92 |
 | Victory T34 | dreadnought | 75 000 | 2 fusion_beam F; 12 array T; 16 pulse_light T | 10 | 12 Starfuries (Thunderbolts after M11), 2 Kestrel | | 240 |

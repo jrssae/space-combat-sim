@@ -655,6 +655,13 @@ const BEAM_KERNEL_FILE: String = "res://native/src/beam_kernels.rs"
 const BEAM_KERNEL_USER: String = "res://native/src/beam_rows.rs"
 const BEAM_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::rows::", "use crate::surface::",
 		"use crate::v3::"]
+## The capital guns and launchers (M10-T14): the mounts' pick, aim and fire and the missiles' guidance, held to the kernels'
+## rules; they import the row tables, the surfaces' and the brains' maths, the turret kernels' aim and the stand-ins' missile
+## steering only. The shell (`capital_gun_rows.rs`) is what GDScript reaches.
+const CAPITAL_GUN_KERNEL_FILE: String = "res://native/src/capital_gun_kernels.rs"
+const CAPITAL_GUN_KERNEL_USER: String = "res://native/src/capital_gun_rows.rs"
+const CAPITAL_GUN_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::brain_maths::",
+		"use crate::rows::", "use crate::surface::", "use crate::turret_kernels::", "use crate::v3::", "use crate::weapon_kernels::"]
 ## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
 ## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
@@ -728,6 +735,10 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(BEAM_KERNEL_FILE, KERNEL_FORBIDDEN, BEAM_KERNEL_USE_ALLOWED))
 	assert_true(FileAccess.get_file_as_string(BEAM_KERNEL_USER).contains("use crate::beam_kernels"), "the shell reads the beam kernel")
 	assert_false(FileAccess.get_file_as_string(BEAM_KERNEL_FILE).contains("static mut"), "no shared state in the beam kernel")
+	violations.append_array(_engine_free_violations(CAPITAL_GUN_KERNEL_FILE, KERNEL_FORBIDDEN, CAPITAL_GUN_KERNEL_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_USER).contains("use crate::capital_gun_kernels"),
+			"the shell reads the capital gun kernel")
+	assert_false(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_FILE).contains("static mut"), "no shared state in the capital gun kernel")
 	assert_false(FileAccess.get_file_as_string(DOCK_KERNEL_FILE).contains("static mut"), "no shared state in the docking kernel")
 	assert_true(FileAccess.get_file_as_string(RAM_TRACKER_USER).contains("use crate::ram_tracker::"), "the shell reads the ram tracker")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_FILE).contains("pub fn ships_near("), "the voice kernel holds ships_near")

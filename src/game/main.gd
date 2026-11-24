@@ -560,6 +560,7 @@ func _setup_perf() -> void:
 	TierDirector.attach(world, ships, standins)  # the low-attention tier (M4-T21): far ships as core rows
 	CapitalFlight.attach(world)  # capital ships fly here, and its `capital` console is in every flight scene (M10-T07)
 	CapitalBeams.attach(world)  # their beams fire here, and its `beam` console is in every flight scene (M10-T12)
+	CapitalGuns.attach(world)  # their guns and launchers fire here, and its `gun` console is in every flight scene (M10-T14)
 	_spawn_scenario_capitals()
 	perf_probe = PerfProbe.new()
 	perf_probe.name = "PerfProbe"

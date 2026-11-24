@@ -35,7 +35,7 @@ func test_every_capital_beam_in_the_loadouts_has_a_spec_with_its_numbers() -> vo
 		assert_eq(spec.weapon_trait, StringName(str(row.get("trait", ""))), id)
 		assert_eq(spec.turret_traverse_deg_s, 3.0 if sustained else 4.0, "%s turns at its kind's rate" % id)
 		assert_gt(spec.beam_charge_s, 0.0, id)
-	assert_eq(count, 19, "every capital beam kind of every faction (the Nova has none, Q71)")
+	assert_eq(count, 18, "every capital beam kind of every faction (the Nova has none, Q71; the Brakiri none, Q56)")
 
 
 func test_beam_specs_warm_no_impact_flash() -> void:

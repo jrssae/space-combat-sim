@@ -44,13 +44,13 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.failure("beam: no capital ship with beams (capital spawn ea_omega)")
 	match StringName(args[&"action"]):
 		&"fire":
-			var target: Node3D = _target(str(args[&"target"]) if args[&"target"] != null else "selection")
+			var target: Node3D = target_named(beams.get_parent(), str(args[&"target"]) if args[&"target"] != null else "selection")
 			if target == null:
 				return ConsoleResult.failure("beam fire [player|selection|<capital name>]: no such target")
 			beams.set_order(ship, target)
 			var n: int = beams.ready_now(ship)
 			return ConsoleResult.line("%s: %d emitters ordered onto %s (they fire when it is hostile, in range and in arc)" % [
-					ship.targetable.display_name, n, _name_of(target)])
+					ship.targetable.display_name, n, name_of(target)])
 		&"clear":
 			beams.set_order(ship, null)
 			return ConsoleResult.line("%s: its beams pick their own targets" % ship.targetable.display_name)
@@ -64,8 +64,8 @@ func _focused() -> CapitalShip:
 	return ship if ship != null and beams.ships().has(ship) else (beams.ships().back() if not beams.ships().is_empty() else null)
 
 
-# The body `name` names: the player's ship, its selection, or a capital by its name.
-func _target(name: String) -> Node3D:
+## The body `name` names in `world`: the player's ship, its selection, or a capital by its name (the `gun` command's too).
+static func target_named(world: Node, name: String) -> Node3D:
 	var player: Combatant = AiPilotDriver.player
 	var own: Ship = player.ship if player != null and is_instance_valid(player.ship) else null
 	if name == "player":
@@ -75,7 +75,7 @@ func _target(name: String) -> Node3D:
 		var picked := instance_from_id(id) as Node if id > 0 and is_instance_id_valid(id) else null
 		var targetable := picked as Targetable
 		return (targetable.get_parent() if targetable != null else picked) as Node3D
-	var flight: CapitalFlight = CapitalFlight.of(beams.get_parent())
+	var flight: CapitalFlight = CapitalFlight.of(world)
 	for ship: CapitalShip in flight.ships() if flight != null else []:
 		if ship.targetable.display_name == name or String(ship.name) == name:
 			return ship
@@ -91,11 +91,12 @@ func _describe(ship: CapitalShip) -> PackedStringArray:
 		var m: Dictionary = s["mount"]
 		var target: Object = instance_from_id(int(s["target"])) if int(s["target"]) > 0 and is_instance_id_valid(int(s["target"])) else null
 		lines.append("%s %s: %s %.1f s, target %s%s" % [m["name"], m["weapon"], PHASES[clampi(int(s["phase"]), 0, 3)],
-				float(s["timer"]), _name_of(target as Node), "" if bool(s["works"]) else ", lost"])
+				float(s["timer"]), name_of(target as Node), "" if bool(s["works"]) else ", lost"])
 	return lines
 
 
-static func _name_of(node: Node) -> String:
+## A body's display name (its `Targetable`'s, else its node name), "none" for null.
+static func name_of(node: Node) -> String:
 	if node == null:
 		return "none"
 	var targetable: Targetable = Targetable.of(node)

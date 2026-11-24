@@ -48,7 +48,7 @@ extends Resource
 
 @export_group("Capital")
 ## M10-T12 to T16 (D12.9): the weapon's `loadouts.json` id and role (`ac` anti-capital: the hull's `damage_scale` multiplies
-## it, Q54; `af` anti-fighter; `dual`; `fighter`) and its one trait (`kinetic`, `push`, or none).
+## it, Q54; `af` anti-fighter; `dual`; `fighter`) and its one trait (`kinetic` or none; Q56 dropped `push`).
 @export var weapon_id: StringName = &""
 @export var role: StringName = &""
 @export var weapon_trait: StringName = &""

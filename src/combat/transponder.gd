@@ -30,6 +30,18 @@ static func note_shot(shooter: Targetable) -> void:
 		shooter.reveal()
 
 
+## Body `shooter_id` fired at body `target_id` (a capital's gun or launcher, M10-T14): the same test on the body it aimed at.
+static func note_shot_at(shooter_id: int, target_id: int) -> void:
+	if not SimCore.is_disguised(shooter_id) or not is_instance_id_valid(shooter_id) or target_id <= 0 \
+			or not is_instance_id_valid(target_id):
+		return
+	var shooter: Targetable = Targetable.of(instance_from_id(shooter_id) as Node)
+	var body := instance_from_id(target_id) as Node
+	var victim: Targetable = Targetable.of(body)
+	if shooter != null and victim != null and is_hostile_act(shooter.transponder, victim.faction, _is_player(body)):
+		shooter.reveal()
+
+
 ## A bolt of body `shooter_id` hit `victim`: the same test, on what it actually hit.
 static func note_hit(shooter_id: int, victim: Damageable) -> void:
 	if not SimCore.is_disguised(shooter_id) or not is_instance_id_valid(shooter_id) or victim == null:

@@ -167,6 +167,9 @@ func test_an_omega_leaves_a_disguised_renegade_alone_until_its_beam_gives_it_awa
 	assert_true(renegade.targetable.is_disguised())
 	var on_renegade: Array = _log_beams(renegade)
 	var on_omega: Array = _log_beams(omega)
+	# Only beams here: neither ship's guns fire (M10-T14), so the renegade's beam is what gives it away.
+	for ship: CapitalShip in [omega, renegade]:
+		CapitalGuns.of(main.world).hold(ship, true)
 	# The renegade holds its fire first: the Omega takes it for a friend.
 	_beams().hold(renegade, true)
 	await _fly(4.0)

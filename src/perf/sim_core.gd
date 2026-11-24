@@ -143,6 +143,8 @@ var selection_clears_last_tick: int = 0
 var _bolt_mesh: BoltMesh = null
 ## The defensive turrets on the core (M5-T21).
 var turrets: TurretRows = null
+## The capital turrets and launchers (M10-T14), stepped with the turrets; set by `CapitalGuns` when its rows are made.
+var capital_guns: CapitalGuns = null
 
 
 ## Runs `sync_out` last in every physics tick (an internal child, so World's children stay its world objects).
@@ -439,6 +441,8 @@ func step_now(delta: float) -> void:
 		if cannon != null:
 			cannon.on_kernel_fired(int(shots[k * 3 + 1]), positions[k])
 	turrets.step(now_s, delta)
+	if capital_guns != null and is_instance_valid(capital_guns):
+		capital_guns.step_now(self, now_s, delta)
 	var fired: int = Time.get_ticks_usec()
 	cannon_us = fired - started
 	expired_last_tick = int(core.step_bolts(now_s, delta))

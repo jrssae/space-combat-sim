@@ -16,6 +16,9 @@ extends CapitalBody
 ##   and `damage.fire_rate()` are what its weapons and launches read (T12 to T17).
 ## - **Beams** (M10-T12, D12.9): its beam mounts are emitters on the native beam rows (`CapitalBeams`), from its `_ready` until
 ##   it leaves the tree; a lost mount or section, a disabled or destroyed ship stops them.
+## - **Guns and launchers** (M10-T14, D12.9): its turret, fixed gun and missile mounts are rows of `CapitalGuns`, the same way.
+## - **Disguise** (M10-T02, Q55): a faction that broadcasts another's transponder (the renegades) does so from its capitals too,
+##   until a hostile shot or hit gives the ship away.
 ## - **Disabled** (M10-T10, D12.7), it winds down in stages (`hulk_stages`): power first (weapons, bays; its lights die,
 ##   `CapitalHulkLights`), then control (the helm stops steering), then thrust (the mains' last setting winds down to cold), and
 ##   then it drifts on its last motion with no force, still a target whose sections can be hit and blow. In the tier it is a
@@ -137,6 +140,7 @@ func _ready() -> void:
 	if _world_signals != null:
 		CapitalFlight.attach(_world_signals).join(self)
 		CapitalBeams.attach(_world_signals).join(self)  # its beam emitters on the native rows (M10-T12)
+		CapitalGuns.attach(_world_signals).join(self)  # its guns and launchers on the native rows (M10-T14)
 	var destruction: DestructionDirector = DestructionDirector.current()
 	if destruction != null:
 		destruction.watch_capital(self)  # its death is drawn and takes it out of play (M10-T21)
@@ -153,6 +157,9 @@ func _exit_tree() -> void:
 		var beams: CapitalBeams = CapitalBeams.of(_world_signals)
 		if beams != null:
 			beams.leave(self)
+		var guns: CapitalGuns = CapitalGuns.of(_world_signals)
+		if guns != null:
+			guns.leave(self)
 	_world_signals = null
 	if _core != null and is_instance_valid(_core):
 		_core.clear_surface(get_instance_id())
@@ -184,6 +191,8 @@ func set_faction(p_faction: StringName) -> void:
 	for rotor: CapitalRotor in rotors:
 		rotor.hull.faction = p_faction
 	_show_marks_for_faction()
+	if targetable != null:
+		targetable.disguise_as(Factions.table().transponder(p_faction))
 
 
 ## Sets the helm: the bow toward `heading` (World; zero holds the bow where it is) and `velocity` to hold (World frame). A
@@ -396,6 +405,7 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	targetable.kind = Targetable.Kind.CAPITAL
 	targetable.broadcast_range_m = CapitalData.broadcast_range_m(capital_class)
 	add_child(targetable)
+	targetable.disguise_as(Factions.table().transponder(faction))  # capitals broadcast it too (Q55)
 	damageable = Damageable.new()
 	damageable.name = "Damageable"
 	damageable.ram_safe_dv_mps = spec.ram_safe_dv_mps
