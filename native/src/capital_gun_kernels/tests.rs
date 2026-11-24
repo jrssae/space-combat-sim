@@ -508,3 +508,37 @@ fn a_fixed_guns_pod_round_its_barrel_does_not_hide_the_target() {
     let (shots, _) = run.first_shots(10).expect("it fires past its pod");
     assert!(shots[0].start.z < -230.0, "from its muzzle: {:?}", shots[0].start);
 }
+
+// A fixed gun whose line meets only a big hull's rotating section fires: the sweep lands bolts there as on the hull.
+#[test]
+fn a_fixed_gun_fires_when_its_line_meets_the_targets_rotating_section() {
+    let spec = gun(ROLE_AC);
+    let mount = Mount::new(1, 1, v(0.0, 0.0, -200.0), v(0.0, 0.0, -1.0), v(0.0, 1.0, 0.0), 0.0, true, 10.0, spec)
+        .with_pick_cone(30f64.to_radians());
+    // The hull 3 km ahead, 300 m off the line; its drum (body 3) lies on the line.
+    let bodies = [
+        (1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE),
+        (2, v(300.0, 0.0, -3000.0), 320.0, 1, 1, LIVE),
+        (3, v(0.0, 0.0, -3000.0), 40.0, 1, 1, LIVE),
+    ];
+    let mut rows = rows_of(&bodies, None);
+    rows.roles[1] = ROLE_SURFACE;
+    rows.roles[2] = ROLE_SURFACE;
+    rows.ids[2] = rows.body_ids[2]; // no marker of its own: not a target in itself
+    let box_of = |half: f64| from_packed(&[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, half, 20.0, 20.0], 0.0);
+    let mut drum = box_of(30.0);
+    drum.named_by = 2;
+    let mut map = HashMap::new();
+    map.insert(2_i64, Arc::new(box_of(100.0)));
+    map.insert(3_i64, Arc::new(drum));
+    rows.surfaces = Some(Arc::new(map));
+    let mut run = Run::with(rows.clone(), mount.clone());
+    let (shots, _) = run.first_shots(5).expect("the drum is on its line");
+    assert_eq!(shots[0].target, 2, "fired at the hull the drum belongs to");
+    // Without the drum the line meets nothing: held.
+    if let Some(map) = rows.surfaces.as_mut() {
+        Arc::make_mut(map).remove(&3);
+    }
+    let mut bare = Run::with(rows, mount);
+    assert!(bare.first_shots(5).is_none());
+}

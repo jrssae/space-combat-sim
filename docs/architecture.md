@@ -7342,8 +7342,9 @@ src/capital/native_hostility.gd     the hostility table by the core's faction in
   hidden waits 60 ticks. A launcher is never hidden.
 - **Fire.** A gun leads its aim point (the turret kernels' `aim`, `gate`, `spread`, `shot`) and fires when its miss is within the
   target's radius (a capital: a tenth of it, at least 20 m); a fixed gun fires when its barrel's line, against the target's
-  motion over the flight, meets the target's surface (its sphere for a small hull). The line from the trunnion to the lead point
-  (a fixed gun's barrel line) must clear its own hull, else it drops the target and picks again. A launcher fires a salvo of its
+  motion over the flight, meets the target's surface or one of its rotating sections (its sphere for a small hull). The line
+  from the trunnion to the lead point (a fixed gun's barrel line, from its muzzle, so the pod round the barrel never hides the
+  target) must clear its own hull, else it drops the target and picks again. A launcher fires a salvo of its
   barrels between its cells' axis and the target's lead, guided by proportional navigation at its gain and turn rate until its
   bolt is spent. Every shot is an owned bolt row (a missile's of the missile kind): the hit sweep lands it like any bolt, a
   capital's by the section its volume names (T08); a missile's or torpedo's warhead blasts there too (`BlastTable` rows `missile`
@@ -7356,12 +7357,13 @@ src/capital/native_hostility.gd     the hostility table by the core's faction in
   rows of the tick's sync, in mount order, the spread from a hash of the mount and the tick: 1 and 6 threads fire and land the
   same byte for byte (`test_capital_gun_threads`). The parity recordings are untouched.
 - **Cost** (release library, debug Godot): about 0.6 us per mount holding a target a tick (its lead and slew), well under that
-  idle; 8 Omegas (144 mounts) firing broadside, 70 to 100 us a tick (p99 about 300 us, on pick ticks with hulls hidden), the same
-  with 1 and 6 threads; held, 5 to 10 us.
+  idle; 8 Omegas (144 mounts) firing broadside 3 km apart, median 41 to 55 us a tick, mean 58 to 70 (p99 about 280 to 300 us, on
+  pick ticks with hulls hidden), alike with 1 and 6 threads; held, 5 to 10 us.
 - **Console.** `gun [info|fire [player|selection|<capital name>]|clear|hold|free]` on the `capital` command's focus; provider
   `capital_guns` (`info.md`).
 - **Tests.** Rust `capital_gun_kernels::tests` (lead and cycle, friends and range, arcs, roles, orders, lost mounts and half rate,
-  the disguise, its own hull, a hidden centre aimed past, fixed guns on their line and across a big hull, bursts, barrels,
+  the disguise, its own hull, a hidden centre aimed past, fixed guns on their line, across a big hull, on its rotating section
+  and past their own pods, bursts, barrels,
   salvos, torpedoes, guidance, determinism); GUT `test_capital_gun_mounts` (every gun and launcher spec against the loadouts, no
   `push`, the Brakiri's pulse lasers, the Omega's, Nova's and Hyperion's mounts), `test_capital_guns` (the main scene: Omegas
   side by side hit by section and the missiles blast; a lost mount and a disabled ship; the renegade's disguise; the Nova's fixed

@@ -933,7 +933,8 @@ parity green.
   `capital_gun_rows.rs`), stepped from `SimCore.step_now` after the station turrets, before the bolts move; shots are the core's own
   bolts, landed by the hit sweep by section (T08), a missile's or torpedo's warhead blasting where it strikes (`missile`, `torpedo`
   blast rows). Turrets lead and slew in their cone; fixed guns (the Hyperion's heavies, the Nova's 14 pulse cannons, Q71: 10 ahead,
-  4 astern) fire when their barrel's line meets the target, holding it in a cone 25 deg wider for the helm (T16); launchers fire
+  4 astern) fire when their barrel's line meets the target or its rotating section (the own-hull test from the muzzle, so the pod
+  round a barrel never hides it), holding it in a cone 25 deg wider for the helm (T16); launchers fire
   salvos guided by proportional navigation (120 deg arc, a torpedo tube 45). Picks by role and what the ship perceives, so a
   disguised renegade is passed by, launchers included (Q55); the stand-ins' near strike and gun picks too (`weapon_kernels`). A
   gun's own hull must not hide its target: it aims at the centre, else at a big hull's highest-lying visible volume. Renegade
@@ -943,9 +944,19 @@ parity green.
   gone and the pulsar renamed: `brakiri_pulse_laser_heavy` (bolt_heavy 3 x 41 / 10 s, fore 90 deg, the beams' 49 dps),
   `brakiri_pulse_laser` (4 / 0.6 s) and `brakiri_interceptor` x4 on the Avioki (`loadouts.json`, `factions.json`,
   `docs/assets-capital.md`). Console `gun [info|fire|clear|hold|free]`, provider `capital_guns` (`info.md`). Tests (staged copy):
-  RESULTS_PLACEHOLDER. Cost (release library, debug Godot): about 0.6 us a tick per mount holding a target; 4 Omegas against 4
-  raider Omegas broadside (144 mounts), the step 70 to 100 us a tick (p99 about 300 us), held 5 to 10 us, alike with 1 and 6
-  threads. **Open:** the brain and helm (T16) do not turn a ship to bring fixed guns or broadsides to bear, so a bow-on Omega fires
+  cargo 313 (`capital_gun` 20), `clippy --release --all-targets` with no errors (one pre-existing deny in `surface/tests.rs`
+  fixed); GUT 212 of 212 in 34 files: `test_capital_gun_mounts` 6, `test_capital_guns` 5 (two Omegas hit by section, 16 missile
+  blasts in a console fight; a lost mount, a disabled ship; the renegade; the Nova; the console), `test_capital_gun_threads` 1 (1
+  vs 6 threads byte for byte among the seeded battle's 106 rows: 42 shots, 4 missiles, 22 hits, 13 on fighters), with the sim
+  core guard, parity fixture, flight parity fight, brain think parity, weapon rows battle, station grid threads, turret kernel,
+  console list, beam, hit resolver, weapon spec, transponder, blast and every `test_capital_*` file; Python loadouts, factions,
+  Omega, Nova, Hyperion OK; compile check 1 114 scripts clean. Parity recordings untouched (no re-record). Cost (release library):
+  about 0.6 us a tick per mount holding a target; 4 Omegas broadside to 4 raider Omegas 3 km off (144 mounts, 693 shots and 14
+  missiles in 20 s), median 41 us a tick with 1 thread and 55 with 6, mean 58 and 70, p99 278 and 297 us (pick ticks with hulls
+  hidden); held 5 to 10 us. GPU (RX 6950 XT, Forward+): two Omegas exchanging fire, 145 fps at 960x540; shots
+  `references/screenshots/M10-T14 capital guns/` (`exchange_a.png`; judging the look is (H)). **Open:** the Nova's two hangar
+  pulse cannons (`pulse_hangar_l/r`) never fire ahead: their line meets the Nova's own bow hull about 200 m on (T67's placement
+  or the bow's collision hull); the anti-capital heavies take a fighter when no capital shows and seldom fire at it; the brain and helm (T16) do not turn a ship to bring fixed guns or broadsides to bear, so a bow-on Omega fires
   few guns; no muzzle flash or sound per shot; mounts on a rotating piece aim from the piece at rest; the interceptor count on the
   Avioki (4) is my call; renegade capitals do not yet show red engines (capitals are not on the livery shader; the X marks are
   T21's); the far tier's fire stays until T45.

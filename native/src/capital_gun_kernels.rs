@@ -8,7 +8,7 @@
 use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::solve;
-use crate::rows::{Bolts, FLAG_HULK, FLAG_HULL_ACTIVE, FLAG_SHELTERED, FLAG_TIER, Rows};
+use crate::rows::{Bolts, FLAG_HULK, FLAG_HULL_ACTIVE, FLAG_SHELTERED, FLAG_TIER, Rows, Surface};
 use crate::surface::{enters_from_outside, into_body};
 use crate::turret_kernels::{self as tk, Gun, LINE_LIFT_M};
 use crate::v3::{add, cross, dist_sq, dot, length, normalized, scale, sub, xform, xform_inv};
@@ -480,10 +480,24 @@ fn fixed_gate<F: Fn(i64) -> Option<usize>>(
     let flight = gun.lifetime_s.min(gun.range_m / gun.muzzle_speed.max(1.0));
     let from = add(pivot, scale(a.axis, m.barrel_m as f32));
     let to = add(from, scale(relative, flight as f32));
-    let (basis, origin) = (&rows.bases[j], rows.positions[j]);
+    let crosses = |k: usize, s: &Surface| {
+        let (basis, origin) = (&rows.bases[k], rows.positions[k]);
+        enters_from_outside(s, into_body(basis, origin, from), into_body(basis, origin, to))
+    };
     match rows.surface(j) {
-        Some(s) => enters_from_outside(s, into_body(basis, origin, from), into_body(basis, origin, to)),
-        None => segment_distance(from, to, origin) <= rows.radii[j] + gun.hit_radius,
+        // Its rotating sections count too: the sweep lands a bolt on them as on the hull.
+        Some(s) => {
+            crosses(j, s)
+                || rows.surfaces.as_ref().is_some_and(|all| {
+                    let hull = rows.body_ids[j];
+                    all.iter().any(|(&body, piece)| {
+                        piece.named_by == hull
+                            && body != hull
+                            && (world.row_of)(body).is_some_and(|k| rows.surface(k).is_some() && crosses(k, piece))
+                    })
+                })
+        }
+        None => segment_distance(from, to, rows.positions[j]) <= rows.radii[j] + gun.hit_radius,
     }
 }
 
