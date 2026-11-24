@@ -11,7 +11,7 @@ extends Node
 ## An option is read from `<asset>_options/<option>/<asset>/`, as the hull sheets'. An asset of `-` is a shot of the empty
 ## scene, whose video memory is the baseline for the model's.
 
-const VIEWS: PackedStringArray = ["three_quarter", "rear_quarter", "top", "bottom", "side", "front"]
+const VIEWS: PackedStringArray = ["three_quarter", "rear_quarter", "top", "bottom", "side", "starboard", "front"]
 const YAW_DEG: float = 38.0
 const PITCH_DEG: float = 16.0
 const FIELDS: int = 8
@@ -193,6 +193,8 @@ func _basis(camera: Camera3D, view: String) -> Basis:
 			return Basis.looking_at(to_camera, cam.y).orthonormalized()
 		"side":
 			return Basis.looking_at(-cam.x, cam.y).orthonormalized()
+		"starboard":
+			return Basis.looking_at(cam.x, cam.y).orthonormalized()
 		"rear_quarter":
 			return Basis.looking_at(to_camera, cam.y).rotated(cam.y, deg_to_rad(180.0 - YAW_DEG)).rotated(cam.x, deg_to_rad(-PITCH_DEG)).orthonormalized()
 	return Basis.looking_at(to_camera, cam.y).rotated(cam.y, deg_to_rad(YAW_DEG)).rotated(cam.x, deg_to_rad(-PITCH_DEG)).orthonormalized()
@@ -207,5 +209,6 @@ func _on_frame() -> void:
 	var shot: PackedStringArray = shots[_index]
 	var path: String = "%s/%s.png" % [options["out"], shot[0]]
 	get_viewport().get_texture().get_image().save_png(path)
-	print("[model sheet] %s: video memory %.0f MB -> %s" % [shot[0], Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0, path])
+	print("[model sheet] %s: video memory %.0f MB, fov %.2f -> %s" % [shot[0], Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0,
+			get_viewport().get_camera_3d().fov, path])
 	_next()
