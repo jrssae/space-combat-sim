@@ -488,3 +488,23 @@ fn a_gun_aims_at_the_part_of_a_big_hull_its_own_hull_does_not_hide() {
     assert!(tally.hidden > 0);
     assert_eq!(low.mounts[0].pick_wait, HIDDEN_WAIT - 1);
 }
+
+// A fixed gun's own pod, lying in front of its pivot round the barrel, never hides its target: its line starts at the muzzle.
+#[test]
+fn a_fixed_guns_pod_round_its_barrel_does_not_hide_the_target() {
+    let spec = gun(ROLE_DUAL);
+    // The hull, and a fairing 10 to 30 m ahead of the gun's pivot; the 40 m barrel reaches past it.
+    let hull_and_pod = from_packed(
+        &[
+            0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 20.0, 10.0, 200.0, //
+            0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 30.0, 0.0, -215.0, 5.0, 5.0, 10.0,
+        ],
+        0.0,
+    );
+    let mount = Mount::new(1, 1, v(30.0, 0.0, -195.0), v(0.0, 0.0, -1.0), v(1.0, 0.0, 0.0), 0.0, true, 40.0, spec)
+        .with_pick_cone(30f64.to_radians());
+    let bodies = [(1, v(0.0, 0.0, 0.0), 210.0, 1, 0, LIVE), (2, v(30.0, 0.0, -3000.0), 8.0, 0, 1, LIVE)];
+    let mut run = Run::with(rows_of(&bodies, Some(hull_and_pod)), mount);
+    let (shots, _) = run.first_shots(10).expect("it fires past its pod");
+    assert!(shots[0].start.z < -230.0, "from its muzzle: {:?}", shots[0].start);
+}

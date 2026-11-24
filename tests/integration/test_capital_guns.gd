@@ -178,7 +178,8 @@ func test_a_renegade_capital_is_left_alone_until_its_own_shot_gives_it_away() ->
 	_guns().hold(renegade, false)
 	await _fly(10.0, func() -> bool: return not renegade.targetable.is_disguised())
 	assert_false(renegade.targetable.is_disguised(), "its first shot at Earth Alliance gives it away")
-	await _fly(15.0, func() -> bool: return not on_renegade.is_empty())
+	# Both first salvos take a few seconds to cross the 3 km.
+	await _fly(15.0, func() -> bool: return not on_renegade.is_empty() and not on_omega.is_empty())
 	assert_false(on_renegade.is_empty(), "now the Omega fires back")
 	assert_false(on_omega.is_empty(), "the renegade's shots land")
 

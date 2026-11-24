@@ -351,7 +351,7 @@ fn fire_gun<F: Fn(i64) -> Option<usize>>(
     if !open {
         return;
     }
-    let from = add(pivot, scale(frame.up, LINE_LIFT_M as f32));
+    let from = line_from(m, pivot, frame.up);
     // A fixed gun's bolt flies down its barrel's line, wherever its aim point lies.
     let to = if m.fixed { add(pivot, scale(a.axis, a.range_m as f32)) } else { a.lead_point };
     if own_hull_blocks(world, owner, from, to) {
@@ -564,6 +564,13 @@ fn live_hull(rows: &Rows, j: usize) -> bool {
     flags & FLAG_HULL_ACTIVE != 0 && flags & FLAG_TIER == 0 && !rows.is_mine[j]
 }
 
+// Where a mount's line of fire starts for the own-hull test: a turret's just over its base, a fixed gun's at its muzzle (its
+// bolt starts there, so the pod around its barrel never hides the target). `up` is the mount's axis in World.
+fn line_from(m: &Mount, pivot: Vector3, up: Vector3) -> Vector3 {
+    let lift = if m.fixed { m.barrel_m } else { LINE_LIFT_M };
+    add(pivot, scale(up, lift as f32))
+}
+
 // Whether the line from `from` to `to` enters one of the ship's own hulls (its hull and rotating sections) from outside.
 fn own_hull_blocks<F: Fn(i64) -> Option<usize>>(world: &GunWorld<'_, F>, owner: &Owner, from: Vector3, to: Vector3) -> bool {
     owner.bodies.iter().any(|&b| {
@@ -657,7 +664,7 @@ fn choose<F: Fn(i64) -> Option<usize>>(
     pivot: Vector3,
     tally: &mut Tally,
 ) -> (i64, Vector3) {
-    let from = add(pivot, scale(normalized(xform(basis, m.axis)), LINE_LIFT_M as f32));
+    let from = line_from(m, pivot, normalized(xform(basis, m.axis)));
     if m.pick_wait > 0 {
         m.pick_wait -= 1;
         return (0, Vector3::ZERO);

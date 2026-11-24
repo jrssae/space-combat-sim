@@ -479,7 +479,7 @@ fn among_the_cobra_arms_a_ship_is_pushed_out_past_their_tips_never_in_toward_the
     use crate::kernels::pilot::avoid;
     use crate::v3::dot;
     let rows = row_with(waist(), Vector3::ZERO, Basis::IDENTITY);
-    let radial = Vector3::new(0.7071, 0.7071, 0.0);
+    let radial = Vector3::new(std::f32::consts::FRAC_1_SQRT_2, std::f32::consts::FRAC_1_SQRT_2, 0.0);
     // Between two arms at every depth of their ring (nearer its floor than its tips too), and in the 6.5 m between the core
     // and the arms' floor where no ship fits: wanting in, at rest or along the axis, the way given is out.
     for r in [193.0_f32, 200.0, 215.0, 235.0] {
