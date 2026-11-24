@@ -104,7 +104,7 @@ def running_lights() -> list[cp.Module]:
 
 def bow_lamp() -> cp.Module:
     """The soft red lamp on the bow's face, a little light of its own round it."""
-    return fittings.lamp("light_bow", "beacon", BEACON_RED, 40.0, 1.6).mounted(BOW_LAMP_AT, (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)).in_section("bridge").on_side(cp.LONE)
+    return fittings.lamp("light_bow", "beacon", BEACON_RED, 60.0, 2.4).mounted(BOW_LAMP_AT, (0.0, 0.0, -1.0), (0.0, 1.0, 0.0)).in_section("bridge").on_side(cp.LONE)
 
 
 def _flood(name: str, target_y: float, z: float, below: float, outer: float, inner: float, range_m: float) -> Flood:

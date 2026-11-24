@@ -620,7 +620,7 @@ keel mast's and the sensor boom's tips; and a darker grey band 4.5 m wide, 0.5 m
 hangar block's roof and keel, the collars and the housing (`parts/capital_paint.py`, a placed `Marking.paint`, 0.36 of the hull's
 albedo; for the Omega in T68). Along the spine: rows of small red-lit fittings on the shelves' edges beside the gun-deck bays (430
 to 520, 780 to 850, 940 to 1 000 m) and red running lights every 18 m along the fins' tips, glowing paint with no light of their
-own; and a soft red lamp (`light_bow`, 40 m) on the starboard lower deck's face beside the bay, the stills' bow lamp. The soft finish's grey is re-read from the stills (`ea_capital.SOFT_PAINT`: hull `#7D807C`, panels `#6B6E6A`, dark
+own; and a soft red lamp (`light_bow`, 2.4 m, its light reaching 60 m) on the starboard lower deck's face beside the bay, the stills' bow lamp. The soft finish's grey is re-read from the stills (`ea_capital.SOFT_PAINT`: hull `#7D807C`, panels `#6B6E6A`, dark
 `#3A3C3A`, from look A's `#8C9199`, `#747A84`, `#3F434B`), its patches in two shades (`SOFT_PATCH_TIERS`: three quarters 12 %
 darker, a quarter 40 %, on 35 % of the plates). The seams are the Hyperion's (5e083eb9: 0.22 of the groove's depth, 0.6 of the
 line's width, line darkness 0.89, groove 3 mm).
