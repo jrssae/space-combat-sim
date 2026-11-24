@@ -316,6 +316,40 @@ fn a_fixed_gun_holds_its_gimbal_and_a_burst_fires_its_shots_then_waits() {
 }
 
 #[test]
+fn a_burst_cut_short_by_a_lost_target_recharges_from_its_start() {
+    // Q76's pulse cannon: three shots half a second apart, the next burst 3 s after one began.
+    let mut spec = gun(ROLE_DUAL);
+    spec.burst_shots = 3;
+    spec.burst_spacing_s = 0.5;
+    spec.cycle_s = 3.0;
+    let near = v(0.0, 400.0, -2000.0);
+    let rows = rows_of(&[(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, near, 8.0, 0, 1, LIVE)], None);
+    let mut run = Run::new(rows, spec);
+    let (_, first) = run.first_shots(60).expect("it opens fire");
+    // Out of reach before the second shot: the burst ends.
+    run.rows.positions[1] = v(0.0, 400.0, -9000.0);
+    for _ in 0..20 {
+        assert!(run.tick().0.is_empty());
+    }
+    assert_eq!(run.mounts[0].burst_fired, 0, "the burst is over");
+    run.rows.positions[1] = near;
+    let (_, next) = run.first_shots(400).expect("it fires again once recharged");
+    let _ = first;
+    let gap = (21 + next) as f64 * DT;
+    assert!((gap - 3.0).abs() < 0.05, "the next burst a cycle after the cut one began, not its second shot: {gap}");
+    // A whole burst on a target that stays: three shots, then the recharge.
+    let mut times = vec![0usize];
+    for t in 1..400 {
+        if !run.tick().0.is_empty() {
+            times.push(t);
+        }
+    }
+    let s = |k: usize| (times[k] - times[0]) as f64 * DT;
+    assert!(times.len() >= 4, "{times:?}");
+    assert!((s(1) - 0.5).abs() < 0.03 && (s(2) - 1.0).abs() < 0.03 && (s(3) - 3.0).abs() < 0.03, "{times:?}");
+}
+
+#[test]
 fn twin_barrels_fire_together_with_their_own_spread() {
     let mut spec = gun(ROLE_DUAL);
     spec.barrels = 2;

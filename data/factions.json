@@ -2,11 +2,11 @@
   "factions": [
     {"id": "earth_alliance", "name": "Earth Alliance",
      "style": "earthforce", "fighters": ["starfury_aurora", "ea_thunderbolt"],
-     "weapons": ["ea_pulse_light", "ea_pulse_medium", "ea_plasma_medium", "ea_pulse_cannon_fixed", "ea_pulse_cannon_swivel", "ea_plasma_heavy", "ea_railgun", "ea_sweep_beam", "ea_particle_cannon", "ea_particle_cannon_heavy", "ea_particle_array", "ea_missile", "ea_torpedo", "ea_interceptor", "ea_interceptor_pod", "pulse_cannon_ef", "thunderbolt_pod"],
+     "weapons": ["ea_pulse_light", "ea_pulse_medium", "ea_pulse_advanced", "ea_pulse_explorer", "ea_plasma_medium", "ea_pulse_cannon_fixed", "ea_pulse_cannon_swivel", "ea_plasma_heavy", "ea_railgun", "ea_sweep_beam", "ea_particle_cannon", "ea_particle_cannon_heavy", "ea_particle_array", "ea_missile", "ea_torpedo", "ea_interceptor", "ea_interceptor_pod", "pulse_cannon_ef", "thunderbolt_pod"],
      "mine": "ea_mine", "battle_mine": "", "marking": ""},
     {"id": "renegades", "name": "Earthforce Renegades",
      "style": "earthforce", "fighters": ["starfury_aurora", "ea_thunderbolt"],
-     "weapons": ["ea_pulse_light", "ea_pulse_medium", "ea_plasma_medium", "ea_pulse_cannon_fixed", "ea_pulse_cannon_swivel", "ea_plasma_heavy", "ea_railgun", "ea_sweep_beam", "ea_particle_cannon", "ea_particle_cannon_heavy", "ea_particle_array", "ea_missile", "ea_torpedo", "ea_interceptor", "ea_interceptor_pod", "pulse_cannon_ef", "thunderbolt_pod"],
+     "weapons": ["ea_pulse_light", "ea_pulse_medium", "ea_pulse_advanced", "ea_pulse_explorer", "ea_plasma_medium", "ea_pulse_cannon_fixed", "ea_pulse_cannon_swivel", "ea_plasma_heavy", "ea_railgun", "ea_sweep_beam", "ea_particle_cannon", "ea_particle_cannon_heavy", "ea_particle_array", "ea_missile", "ea_torpedo", "ea_interceptor", "ea_interceptor_pod", "pulse_cannon_ef", "thunderbolt_pod"],
      "mine": "ea_mine", "battle_mine": "", "marking": "renegades", "engine_glow": [1.9, 0.3, 0.2],
      "transponder": "earth_alliance"},
     {"id": "raiders", "name": "Raiders",

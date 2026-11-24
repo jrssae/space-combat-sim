@@ -50,7 +50,10 @@
   }
  },
  "mount_hit_points": {
-  "_doc": "M10-T08 (Q53, docs/assets-capital.md 'Sections, mounts and blasts'): a mount's own hit points, by its weapon's kind (data/capitals/loadouts.json), else by the hardpoint's kind.",
+  "_doc": "M10-T08 (Q53, docs/assets-capital.md 'Sections, mounts and blasts'): a mount's own hit points: by its weapon (by_weapon: the Nova's swivel pulse pods share the fixed pods' housing, M10-T14 follow-up), else by its weapon's kind (data/capitals/loadouts.json), else by the hardpoint's kind.",
+  "by_weapon": {
+   "ea_pulse_cannon_swivel": 2000.0
+  },
   "by_weapon_kind": {
    "bolt_light": 300.0,
    "bolt_medium": 800.0,

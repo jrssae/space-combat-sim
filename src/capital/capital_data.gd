@@ -77,11 +77,15 @@ static func section_rule(key: String) -> float:
 	return float(value) if value is float or value is int else float(SECTION_DEFAULTS.get(key, 0.0))
 
 
-## A mount's own hit points: by its weapon's kind when `weapon` names one in the loadouts, else by the hardpoint's `mount_kind`.
+## A mount's own hit points: by its weapon when the table names it, else by its weapon's kind when `weapon` names one in the
+## loadouts, else by the hardpoint's `mount_kind`.
 static func mount_hit_points(weapon: String, mount_kind: String) -> float:
 	var table: Variant = _read().get("mount_hit_points")
 	if not (table is Dictionary):
 		return DEFAULT_MOUNT_HP
+	var own: Variant = (table as Dictionary).get("by_weapon")
+	if own is Dictionary and (own as Dictionary).has(weapon):
+		return float((own as Dictionary)[weapon])
 	var by_weapon: Variant = (table as Dictionary).get("by_weapon_kind")
 	var kind: String = weapon_kind(weapon)
 	if by_weapon is Dictionary and (by_weapon as Dictionary).has(kind):

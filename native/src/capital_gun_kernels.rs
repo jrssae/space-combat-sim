@@ -287,6 +287,7 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
         };
         if !m.works || m.rate <= 0.0 {
             m.target = 0;
+            m.burst_fired = 0;
             continue;
         }
         let basis = world.rows.bases[r];
@@ -302,6 +303,7 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
             m.aim_local = aim_local;
             tally.picks += 1;
         }
+        end_stalled_burst(m, now_s);
         let Some(j) = (m.target != 0).then(|| (world.row_of)(m.target)).flatten() else {
             continue;
         };
@@ -311,6 +313,20 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
             fire_gun(m, i, owner, world, r, &basis, pivot, j, now_s, dt, tick, shots, tally);
         }
     }
+}
+
+/// A burst its gun cannot carry on ends there and recharges from its start (Q76): its target lost, or its next shot held a
+/// whole spacing past due (the target out of its arc or its line).
+pub fn end_stalled_burst(m: &mut Mount, now_s: f64) {
+    if m.burst_fired == 0 {
+        return;
+    }
+    if m.target != 0 && now_s <= m.ready_at + m.spec.burst_spacing_s + 1e-6 {
+        return;
+    }
+    m.burst_fired = 0;
+    let next = m.burst_started_s + m.spec.cycle_s;
+    m.ready_at = m.ready_at.max(now_s + (next - now_s).max(0.0) / m.rate.max(1e-6));
 }
 
 // A gun's tick at its target (row `j`): the lead and the slew, then its gate, its own hull, and the shot of every barrel.

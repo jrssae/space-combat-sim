@@ -6,8 +6,8 @@
 [resource]
 script = ExtResource("1_weapon_spec")
 muzzle_speed_mps = 1800.0
-shot_interval_s = 2.0
-damage = 12.0
+shot_interval_s = 3.0
+damage = 30.0
 lifetime_s = 2.556
 hit_radius_m = 0.8
 bolt_material = ExtResource("2_bolt")
@@ -19,6 +19,8 @@ turret_range_m = 4000.0
 turret_spread_deg = 0.2
 turret_traverse_deg_s = 25.0
 turret_elevation_deg_s = 20.0
+burst_shots = 3
+burst_spacing_s = 0.5
 weapon_id = &"ea_pulse_medium"
 role = &"dual"
 toughness = 1

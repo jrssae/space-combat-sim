@@ -1,0 +1,235 @@
+{
+ "scenario_id": "capital_balance",
+ "description": "M10 balance fight B10 (Q53, Q76): twelve allied Starfuries against a lone hostile Omega the test spawns.",
+ "system_id": "local",
+ "anchor": {
+  "place": "babylon5",
+  "at": [
+   5500,
+   -1200,
+   -6000
+  ]
+ },
+ "epoch": 7482671,
+ "player": {
+  "position": [
+   0,
+   0,
+   0
+  ],
+  "forward": [
+   0,
+   0,
+   -1
+  ]
+ },
+ "pools": {
+  "starfury_ally": 12
+ },
+ "wings": [
+  {
+   "name": "ZETA",
+   "faction": "earth_alliance",
+   "leader": "ZETA 1",
+   "order": "engage",
+   "formation": "wedge",
+   "members": [
+    {
+     "type": "starfury_ally",
+     "name": "ZETA 1",
+     "anchor": "origin",
+     "offset": [
+      -660.0,
+      0,
+      -5960
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    },
+    {
+     "type": "starfury_ally",
+     "name": "ZETA 2",
+     "anchor": "origin",
+     "offset": [
+      -600.0,
+      0,
+      -6000
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    },
+    {
+     "type": "starfury_ally",
+     "name": "ZETA 3",
+     "anchor": "origin",
+     "offset": [
+      -540.0,
+      0,
+      -5960
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    }
+   ]
+  },
+  {
+   "name": "DELTA",
+   "faction": "earth_alliance",
+   "leader": "DELTA 1",
+   "order": "engage",
+   "formation": "wedge",
+   "members": [
+    {
+     "type": "starfury_ally",
+     "name": "DELTA 1",
+     "anchor": "origin",
+     "offset": [
+      -260.0,
+      0,
+      -5960
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    },
+    {
+     "type": "starfury_ally",
+     "name": "DELTA 2",
+     "anchor": "origin",
+     "offset": [
+      -200.0,
+      0,
+      -6000
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    },
+    {
+     "type": "starfury_ally",
+     "name": "DELTA 3",
+     "anchor": "origin",
+     "offset": [
+      -140.0,
+      0,
+      -5960
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    }
+   ]
+  },
+  {
+   "name": "BETA",
+   "faction": "earth_alliance",
+   "leader": "BETA 1",
+   "order": "engage",
+   "formation": "wedge",
+   "members": [
+    {
+     "type": "starfury_ally",
+     "name": "BETA 1",
+     "anchor": "origin",
+     "offset": [
+      140.0,
+      0,
+      -5960
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    },
+    {
+     "type": "starfury_ally",
+     "name": "BETA 2",
+     "anchor": "origin",
+     "offset": [
+      200.0,
+      0,
+      -6000
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    },
+    {
+     "type": "starfury_ally",
+     "name": "BETA 3",
+     "anchor": "origin",
+     "offset": [
+      260.0,
+      0,
+      -5960
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    }
+   ]
+  },
+  {
+   "name": "GAMMA",
+   "faction": "earth_alliance",
+   "leader": "GAMMA 1",
+   "order": "engage",
+   "formation": "wedge",
+   "members": [
+    {
+     "type": "starfury_ally",
+     "name": "GAMMA 1",
+     "anchor": "origin",
+     "offset": [
+      540.0,
+      0,
+      -5960
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    },
+    {
+     "type": "starfury_ally",
+     "name": "GAMMA 2",
+     "anchor": "origin",
+     "offset": [
+      600.0,
+      0,
+      -6000
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    },
+    {
+     "type": "starfury_ally",
+     "name": "GAMMA 3",
+     "anchor": "origin",
+     "offset": [
+      660.0,
+      0,
+      -5960
+     ],
+     "behaviour": {
+      "type": "ai",
+      "profile": "ally_starfury"
+     }
+    }
+   ]
+  }
+ ]
+}
