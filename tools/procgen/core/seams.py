@@ -8,6 +8,10 @@ as crisp as the atlas allows on any hull size.
 
 Features have a ``level``: 1 the major structural breaks, 2 the references' full seam density with hatches and ribs, 3 the plating
 texture (plate to plate tone, grime at plate edges). A layout is baked up to a level.
+
+The baker draws each groove at its style's share of the full depth and width (``Style.seam_depth``, ``seam_width``: the Hyperion's
+by default, Q69; :meth:`SeamLayout.softened`), so a layout is drawn at full size. :class:`PatchPlates` is the default plating's
+patches of darker plates (``styles/capital.PanelMosaic``).
 """
 
 from __future__ import annotations
@@ -19,7 +23,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from ..styles import _hash01
+from ..styles import LEGACY_SEAMS, SEAM_DEPTH_SHARE, SEAM_LINE_DARKNESS, SEAM_WIDTH_SHARE, _hash01
 
 Vec3 = tuple[float, float, float]
 _INF = float("inf")
@@ -362,6 +366,35 @@ class Plates(Feature):
 
 
 @dataclass(frozen=True)
+class PatchPlates(Plates):
+    """Scattered plates painted darker than the hull, flush with it (Q69, the Hyperion's): the paint's own colour down to
+    ``darkest`` of its value, or one of a few ``tiers`` of shade."""
+
+    darkest: float = 0.5
+    tiers: tuple[tuple[float, float], ...] = ()  # (share of the patches, how much darker): a few shades instead of a spread
+
+    def _paint_all(self, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out: Relief, ok: np.ndarray) -> None:
+        key, u0, u1, v0, v1, u, v = self.cells(p, n)
+        chosen = ok & (self._hash(key, 503) < self.scatter) & (np.minimum(u1 - u0, v1 - v0) > 2.5 * self.inset_m)
+        inside = np.minimum(np.minimum(u - u0, u1 - u), np.minimum(v - v0, v1 - v)) > self.inset_m
+        out.tint *= 1.0 - self._shade(key) * (chosen & inside)
+
+    def _shade(self, key: np.ndarray) -> np.ndarray:
+        """How much darker each patch is: anywhere up to ``darkest``, or one of the ``tiers`` when there are any."""
+        r = self._hash(key, 401)
+        if not self.tiers:
+            return self.darkest * r
+        shade, edge = np.zeros_like(r), 0.0
+        for share, dark in self.tiers:
+            shade = np.where((r >= edge) & (r < edge + share), dark, shade)
+            edge += share
+        return shade
+
+    def _hash(self, key: np.ndarray, salt: int) -> np.ndarray:
+        return _keyed_hash(key, self.seed + salt)
+
+
+@dataclass(frozen=True)
 class Hexes(Feature):
     """A hexagonal grid (M10 Q45: the Minbari's and the Interstellar Alliance's skins): seams on the edges of regular hexagons
     ``cell_m`` across their flats, laid per point on the two axes its normal faces least (as ``Plates``' ``"sides"``), every cell
@@ -442,6 +475,13 @@ class SeamLayout:
     def features(self) -> list[Feature]:
         return [f for _, _, fs in self.groups for f in fs]
 
+    def softened(self, depth: float, width: float) -> SeamLayout:
+        """The layout as a style wears it (Q69): every groove ``depth`` of its depth and ``width`` of its width; ribs and plates
+        drawn in paint alone keep theirs."""
+        if depth == 1.0 and width == 1.0:
+            return self
+        return SeamLayout(tuple((m, o, tuple(softened(f, depth, width) for f in fs)) for m, o, fs in self.groups))
+
     def evaluate(self, positions: np.ndarray, normals: np.ndarray, line_m: float, depth_m: float) -> Relief:
         """The layout's relief, lines and plate tones at surface points given in the part's current frame."""
         out = Relief.flat(len(positions))
@@ -481,5 +521,10 @@ def retuned(feature: Feature, **kw: object) -> Feature:
     return dataclasses.replace(feature, **kw)
 
 
-__all__ = ["Cut", "EMPTY", "Feature", "Hatch", "Hexes", "FULL", "Hoop", "MAJOR", "PLATING", "Path", "Plates", "Relief", "SeamLayout", "Spoke", "every", "retuned", "rings",
-           "spokes"]
+def softened(feature: Feature, depth: float, width: float) -> Feature:
+    """A groove made ``depth`` as deep and ``width`` as wide; anything else as it was."""
+    return dataclasses.replace(feature, depth=feature.depth * depth, width=feature.width * width) if feature.depth > 0.0 else feature
+
+
+__all__ = ["Cut", "EMPTY", "Feature", "Hatch", "Hexes", "FULL", "Hoop", "LEGACY_SEAMS", "MAJOR", "PLATING", "Path", "PatchPlates", "Plates", "Relief",
+           "SEAM_DEPTH_SHARE", "SEAM_LINE_DARKNESS", "SEAM_WIDTH_SHARE", "SeamLayout", "Spoke", "every", "retuned", "rings", "softened", "spokes"]

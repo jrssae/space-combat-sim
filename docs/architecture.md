@@ -5057,6 +5057,11 @@ manifest mesh.surfaces[].detail.low = { albedo, normal, orm }      settings.text
   keeps the frame it was drawn in and is transformed with the part, so placed, turned and mirrored copies need no second
   description. The baker asks it per texel for relief (into the normal map), seam cover (darker paint, rougher), and each
   plate's tone and roughness shift. A seam is 2.2 texels wide (`SEAM_TEXELS`), so it is as thin as each hull's atlas allows.
+- **The finish (M10 Q69, T73).** A layout is drawn at full size; the bake wears it at the style's shares
+  (`Style.seam_depth`, `seam_width`, `textures.worn_seams`): every groove that share as deep and as wide, ribs and paint-only
+  plating as drawn, and the generic grid's grooves, hatches and lines alike. A new style takes the Hyperion's finish by default
+  (`styles.SEAM_DEPTH_SHARE` 0.22, `SEAM_WIDTH_SHARE` 0.6, line darkness `SEAM_LINE_DARKNESS` 0.89); the hulls built before Q69
+  pin full shares (`styles.LEGACY_SEAMS`, and `LEGACY_LINE_DARKNESS` 0.55 where a style relied on the old default) until T74.
 - **Plating.** `Plates` cuts fields into rectangles by rounds of uneven splits (never under `min_m`), hashed from the seed:
   mixed sizes, no rows, no stagger. A plate's tone is a share of the paint's own value, so base colours stay T39's. Plating
   mirrors across the part's centre plane. `scatter` draws only a share of the plates, standing proud (hatches).

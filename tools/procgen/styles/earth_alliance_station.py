@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from ..core.color import capture_albedo, srgb_to_linear
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 PREFIX = "eas"
 
@@ -138,6 +138,7 @@ EARTH_ALLIANCE_STATION = Style(
            # Roughness steps from panel to panel (40 m cells) and drifts within them; dirt is rougher and duller.
            "metal_finish": {"panel_m": 40.0, "panel_rough": 0.08, "noise_m": 30.0, "noise_rough": 0.05, "dirt_rough": 0.28,
                             "dirt_metal": 0.5, "grime_dirt": 0.6}},
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )
 
 __all__ = ["BAY_RED", "BAY_TUNNEL", "BAY_TUNNEL_STRENGTH", "EARTH_ALLIANCE_STATION", "LAMP_GLOW", "SCHEME", "WINDOW_GLOW", "WINDOW_STRENGTH", "colour", "lin"]

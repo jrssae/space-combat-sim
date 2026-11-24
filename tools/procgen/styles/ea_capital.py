@@ -22,7 +22,7 @@ from dataclasses import dataclass
 from ..core.color import capture_albedo
 from ..core.geometry import Material
 from . import Style
-from .capital import CapitalStyle, PanelMosaic
+from .capital import LEGACY_SKIN, CapitalStyle, PanelMosaic, pinned
 from .ea_civilian import lin
 from .earth_alliance_station import BAY_RED, BAY_TUNNEL, BAY_TUNNEL_STRENGTH, LAMP_GLOW, LAMP_STRENGTH
 
@@ -83,8 +83,10 @@ DEFAULT_LOOK = "a"
 
 
 FINISHES = ("fleet", "soft")
-# The soft finish (Q64): the Hyperion's plating, its plates' tone wander and grime kept as small as the Hyperion's, its seam lines as faint.
-SOFT_TONE, SOFT_GRIME, SOFT_LINE_DARKNESS, SOFT_GROOVE_M = 0.04, 0.05, 0.89, 0.003
+# The fleet finish (the Omega's until T68) is the fleet's look before Q69: full seams, lines this dark, no patches; pinned until T74.
+FLEET_LINE_DARKNESS = 0.6
+# The soft finish (Q64): the Hyperion's plating (the default seams, Q69), its plates' tone wander and grime kept as small as the Hyperion's.
+SOFT_TONE, SOFT_GRIME = 0.04, 0.05
 # The soft finish's grey re-read from the Nova's and the Omega's stills (M10-T67): a neutral, slightly green mid grey, darker than
 # look A's blue-grey; a look without an entry keeps its own paint.
 SOFT_PAINT: dict[str, dict[str, int]] = {"a": {"hull": 0x7D807C, "hull_panel": 0x6B6E6A, "hull_dark": 0x3A3C3A}}
@@ -95,28 +97,26 @@ SOFT_PATCHES, SOFT_PATCH_TIERS = 0.35, ((0.75, 0.12), (0.25, 0.4))
 def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None, finish: str = "fleet") -> CapitalStyle:
     """The fleet's capital style in one of the looks, any role repainted by ``livery`` (the renegades' marking, M10-T02).
     ``finish="soft"`` (Q64; the Nova's, the Omega's from T68) wears the look's colours in the Hyperion's skin, shallow narrow seams
-    with small patches of darker plates (``ea_hyperion.HyperionMosaic``), and lines its bays in Babylon 5's grey bay metal."""
+    with small patches of darker plates (the default ``PanelMosaic``, Q69), and lines its bays in Babylon 5's grey bay metal."""
     if look not in LOOKS:
         raise ValueError(f"ea_capital has no look {look!r}; it has {sorted(LOOKS)}")
     if finish not in FINISHES:
         raise ValueError(f"ea_capital has no finish {finish!r}; it has {list(FINISHES)}")
     chosen = LOOKS[look]
     if finish == "fleet":
-        return capital_style(chosen, f"ea_capital_{look}", PREFIX, fleet_mosaic(chosen), livery)
-    from .ea_hyperion import HyperionMosaic  # noqa: PLC0415 - ea_hyperion builds on this module
-
-    skin = HyperionMosaic(plate_m=(18.0, 9.0), splits=2, tone=SOFT_TONE, grime=SOFT_GRIME, frames_m=30.0, major_every=4, patches=SOFT_PATCHES,
-                          patch_tiers=SOFT_PATCH_TIERS)
+        return pinned(capital_style(chosen, f"ea_capital_{look}", PREFIX, fleet_mosaic(chosen), livery), FLEET_LINE_DARKNESS)
+    skin = PanelMosaic(plate_m=(18.0, 9.0), splits=2, tone=SOFT_TONE, grime=SOFT_GRIME, frames_m=30.0, major_every=4, patches=SOFT_PATCHES,
+                       patch_tiers=SOFT_PATCH_TIERS)
     chosen = dataclasses.replace(chosen, paint={**chosen.paint, **SOFT_PAINT.get(look, {})})
     style = capital_style(chosen, f"ea_capital_{look}_soft", PREFIX, skin, livery)
     materials = {**style.style.materials, **bay_metal_materials(style.style.materials["hull"].name.removesuffix("_hull"))}
-    return dataclasses.replace(style, style=dataclasses.replace(style.style, materials=materials, panel_line_darkness=SOFT_LINE_DARKNESS,
-                                                                groove_depth_m=SOFT_GROOVE_M))
+    return dataclasses.replace(style, style=dataclasses.replace(style.style, materials=materials))
 
 
 def fleet_mosaic(chosen: Look) -> PanelMosaic:
-    """The Earth Alliance fleet's standard plate mosaic (the Omega's; the Hyperion wears it too), in a look's tone and grime."""
-    return PanelMosaic(plate_m=(18.0, 9.0), splits=2, tone=chosen.plate_tone, grime=chosen.plate_grime, frames_m=30.0, major_every=4)
+    """The Earth Alliance fleet's standard plate mosaic as the fleet finish wears it (the Omega's), in a look's tone and grime: the
+    full tile, no patches (pinned until T74)."""
+    return PanelMosaic(plate_m=(18.0, 9.0), splits=2, tone=chosen.plate_tone, grime=chosen.plate_grime, frames_m=30.0, major_every=4, **LEGACY_SKIN)
 
 
 def capital_style(chosen: Look, name: str, prefix: str, skin: PanelMosaic, livery: Mapping[str, int] | None = None) -> CapitalStyle:
@@ -141,7 +141,6 @@ def capital_style(chosen: Look, name: str, prefix: str, skin: PanelMosaic, liver
         materials=materials,
         panel_size_m=0.5,
         panel_line_width_m=0.035,
-        panel_line_darkness=0.6,
         panel_tint_jitter=0.06,
         edge_wear=chosen.edge_wear,
         streaks=chosen.streaks,
@@ -170,4 +169,4 @@ def bay_metal_materials(tag: str) -> dict[str, Material]:
                                   emissive_strength=BAY_TUNNEL_STRENGTH)}
 
 
-__all__ = ["DEFAULT_LOOK", "FINISHES", "FIXED", "LOOKS", "ROLES", "SOFT_PAINT", "SOFT_PATCH_TIERS", "SOFT_PATCHES", "Look", "bay_light_materials", "bay_metal_materials", "capital_style", "ea_capital", "fleet_mosaic"]
+__all__ = ["DEFAULT_LOOK", "FINISHES", "FIXED", "FLEET_LINE_DARKNESS", "LOOKS", "ROLES", "SOFT_PAINT", "SOFT_PATCH_TIERS", "SOFT_PATCHES", "Look", "bay_light_materials", "bay_metal_materials", "capital_style", "ea_capital", "fleet_mosaic"]

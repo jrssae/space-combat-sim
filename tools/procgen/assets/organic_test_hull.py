@@ -29,6 +29,7 @@ from ..parts import organic as po
 from ..parts import organic_petal as petals
 from ..styles import Style
 from ..styles import organic as looks
+from ..styles.capital import pinned
 
 ASSET_ID = "organic_test_hull"
 GENERATOR_VERSION = 2  # 2: the chosen sheens (stage 2)
@@ -118,7 +119,7 @@ def modules(style: Style, seed: int = 0, cell_m: float = CELL_M, body_triangles:
 
 
 def spec(ctx: BuildContext) -> cap.CapitalSpec:
-    style = looks.organic(str(ctx.option("look", DEFAULT_LOOK)), bool(ctx.option("variant", False)))
+    style = pinned(looks.organic(str(ctx.option("look", DEFAULT_LOOK)), bool(ctx.option("variant", False))))  # pre-Q69 seams until T74
     return cap.CapitalSpec(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,

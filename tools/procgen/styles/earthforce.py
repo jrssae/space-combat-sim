@@ -12,7 +12,7 @@ from __future__ import annotations
 from dataclasses import replace
 
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 EARTHFORCE = Style(
     name="earthforce",
@@ -62,6 +62,7 @@ EARTHFORCE = Style(
     edge_wear=0.5,
     extra={"bare_metal": 0.0, "smudge": 0.38, "smudge_scale_m": 0.45, "speckle": 0.07, "paint_roughness": 0.86,
            "streak_length_m": 0.32},
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )
 
 # The Starfury's finish (M7-T17, the maintainer: "metallic, not plastic"): the same colours as EARTHFORCE, but the plating reads

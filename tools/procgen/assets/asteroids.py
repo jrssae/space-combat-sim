@@ -27,7 +27,7 @@ from ..core.geometry import Material, Mesh
 from ..core.manifest import build_manifest, write_manifest
 from ..core.textured_mesh import TexturedPart, write_textured_mesh
 from ..core.textures import value_noise
-from ..styles import REQUIRED_ROLES, Style
+from ..styles import LEGACY_LINE_DARKNESS, LEGACY_SEAMS, REQUIRED_ROLES, Style
 
 ASSET_ID = "asteroids"
 GENERATOR_VERSION = 3  # 3: a deeper peanut waist; 2: twelve kinds of rock (fragments, peanuts, shards ...); 1: lumpy potatoes only
@@ -239,7 +239,8 @@ def rock_materials(spec: RockSpec) -> tuple[Material, Material, Material]:
 def rock_style(materials: tuple[Material, Material, Material]) -> Style:
     """A style that paints the rock as it is: no plating, rivets, streaks or worn metal; only a low-frequency grime."""
     return Style(name="rock", materials={role: materials[0] for role in REQUIRED_ROLES}, groove_depth_m=0.0, hatch_fraction=0.0,
-                 edge_wear=0.0, streaks=0.0, grime=0.2, grime_scale_m=1.1, extra={"bare_metal": 0.0, "rivets": 0.0})
+                 edge_wear=0.0, streaks=0.0, grime=0.2, grime_scale_m=1.1, extra={"bare_metal": 0.0, "rivets": 0.0},
+                 panel_line_darkness=LEGACY_LINE_DARKNESS, **LEGACY_SEAMS)  # the seams before Q69, pinned until T74
 
 
 def collision_spheres(vertices: np.ndarray) -> list[tuple[np.ndarray, float]]:

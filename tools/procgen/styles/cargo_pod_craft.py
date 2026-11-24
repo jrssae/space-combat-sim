@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from ..core.color import capture_albedo
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 PREFIX = "cpc"
 
@@ -67,4 +67,5 @@ CARGO_POD_CRAFT = Style(
     extra={"bare_metal": 0.0, "smudge": 0.18, "smudge_scale_m": 0.3, "speckle": 0.04, "streak_length_m": 0.2,
            "metal_finish": {"panel_m": 0.45, "panel_rough": 0.08, "noise_m": 0.5, "noise_rough": 0.05, "dirt_rough": 0.25,
                             "dirt_metal": 0.5, "grime_dirt": 0.6, "chip_dirt": 1.0, "seam_dirt": 0.5, "dirt_on_paint_only": 1.0}},
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )

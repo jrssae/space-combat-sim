@@ -386,7 +386,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T70 | E | Clearance: the resized EA craft through B5's main docking bay (crew shuttle, Kestrel, tender) | T69 | Sonnet | done |
 | T71 | F | Re-size the Panama (Q66): `ea_panama` scaled uniformly to 20 m tall (about 124 x 31 x 20 m, scale 0.69), as T69 did for the small craft: the 90 % rule at the new size, ShipSpec (mass, thrust, hull points), hardpoints, collision and chunks, its docks and routes (B5's bay, civilian traffic), the line-up, docs and the catalogue page | T69 | Opus | not started |
 | T72 | A | Interior layer for the built hulls (Q68): as B5's (`InteriorZones` and the interior faces flagged by the generator; see docs/assets-station.md), for every built ship with an open interior: Hyperion (Starfury bays, shuttle bay), Omega and Nova (forward bay), raider strike carrier, and any civilian with an open hold or bay; sunlight kept out, the interiors lit only by their own lights; closed doors still show nothing; tests and before/after shots with the sun shining into an open bay | T22 | Opus | not started |
-| T73 | A | Seam and plating defaults (Q69): the Hyperion's final seam depth, width and darkness and its patch scheme (`PatchPlates`: each ship's main colour, some panels slightly darker, a few several shades darker, shades from that ship's own palette) become the shared defaults in tools/procgen (core/seams.py and the styles), so every NEW hull gets them; every EXISTING hull pins its current values so its build stays byte-identical until T74; tests, a sample new-default hull sheet | T22 | Opus | not started |
+| T73 | A | Seam and plating defaults (Q69): the Hyperion's final seam depth, width and darkness and its patch scheme (`PatchPlates`: each ship's main colour, some panels slightly darker, a few several shades darker, shades from that ship's own palette) become the shared defaults in tools/procgen (core/seams.py and the styles), so every NEW hull gets them; every EXISTING hull pins its current values so its build stays byte-identical until T74; tests, a sample new-default hull sheet | T22 | Opus | in progress |
 | T74 | A | Apply the new seam and plating defaults to the existing hulls (Q69): remove T73's pins hull by hull (fighters, raiders, civilians, capitals, B5 and the other stations), rebuild, before/after sheets at 30 m and 150 m for the maintainer, tests, CI asset time unchanged | T73 | Opus | not started |
 | T75 | D | Beam hit landing in Rust (Q70): the per-tick beam hits (damage by section, mounts, subsystems, reveal of a disguised shooter) applied in a native batch instead of one GDScript call per hit; events (destroyed sections, kills) still raised to GDScript once each; measured before/after with 32 sustained beams | T12, T08 | Opus | not started |
 | T76 | C | Blast landing in Rust (Q70): a blast's reach, falloff damage, push and section hits applied natively in one batch (fighters, capitals by section, stations, mines), including chain reactions (a blast setting off mines and other death blasts) resolved in the core in order; GDScript gets the resulting events once each; measured before/after with a capital dying beside a minefield and a fighter group | T09, T15 | Opus | not started |
@@ -953,6 +953,9 @@ Not needed here: moved to M11 (the maintainer, 2026-11-18), which plans it.
 - A look sheet to `references/screenshots/M10-Txx <hull>/` in the main checkout; judging the look is (H).
 - Every open interior (bays, halls, hangars, docks) on the interior layer (Q68, T72): no sunlight inside, lit only by the
   interior's own lights, nothing visible through closed doors.
+- The seam and plating defaults (Q69, T73): the hull's style and skin keep `Style`'s and `PanelMosaic`'s defaults (the
+  Hyperion's seams, its near tile and its patches); a seam value is set only to differ on purpose. A new hull on an older,
+  pinned style (`LEGACY_SEAMS`, `LEGACY_SKIN`, `styles/capital.pinned`) takes it at the default shares, never the pin.
 - **Done when:** AC6 for the task's hulls and the maintainer has seen the look sheet.
 - Once the hull is finalized (look approved, committed), it joins the ship line-up (T64): parked in its faction's row beside
   Babylon 5 in the ship comparison mission, set not to move, so the player can fly past it for scale and look.
@@ -1131,6 +1134,26 @@ On top of it:
 ### M10-T70 Clearance of the resized EA craft in B5's main docking bay
 
 - **T70 done (2026-11-23).** Each hull's collision shapes swept down the mouth (73.2 x 16.7 m band, 45.5 x 30.0 m core, outline clear to the doors) all fit, level and centred: crew shuttle 9.5 m, Kestrel 5.3 m (the wingtip under the band's ceiling), tender 12.8 m; off by 2 m and 2 degrees of roll 7.4, 2.4 and 10.7 m. Test: `tools/procgen/tests/test_ea_craft_bay_clearance.py`.
+
+### M10-T73 Seam and plating defaults (Q69)
+
+- **T73 (2026-11-24).** The Hyperion's finish is the default. `Style` adds `seam_depth` 0.22 and `seam_width` 0.6
+  (`styles.SEAM_DEPTH_SHARE`, `SEAM_WIDTH_SHARE`); line darkness defaults to 0.89 (`SEAM_LINE_DARKNESS`). The bake applies the
+  shares (`textures.worn_seams`, `SeamLayout.softened`) to every groove of the drawn layouts, and to the grid's grooves,
+  hatches and lines. The softening the Hyperion's skin used to do itself now happens in the bake. `PanelMosaic` adds
+  `tile_width` 0.6, `tile_soft` 0.5 and patches (`patches` 0.2, `darkest` 0.5, `patch_tiers`; `PatchPlates` moved to
+  `core/seams.py`). `HexGrid` softens its tile the same way. `HyperionMosaic` is gone: the Hyperion and the Nova's soft finish
+  use the plain defaults.
+  **Pins until T74:** `**LEGACY_SEAMS` in the styles `BRAKIRI`, `BRAKIRI_POD`, `CARGO_POD_CRAFT`, `CENTAURI`, `COBRA_BAY`,
+  `ea_civilian()` (Saturn family, Skylark, shuttles, Panama, tender), `EARTH_ALLIANCE_STATION` (B5, grid guns), `EARTHFORCE`
+  (Starfury, nav buoy, Thunderbolt), `MAINTENANCE_BOT`, `NARN`, `RAIDER`, `raider_capital`, `JUMPGATE`, `capital_hulls` and
+  `rock_style` (rock also `LEGACY_LINE_DARKNESS`). `styles/capital.pinned` (full seams, `LEGACY_SKIN`) covers the Omega's fleet
+  finish (line darkness `FLEET_LINE_DARKNESS` 0.6), the Hyperion's looks B and C, `FRAMEWORK_GREY` and the organic test hull.
+  The B5 station's own near tiles (`core/station_tiles.py`) are unchanged.
+  **Byte-identical:** `build all` from HEAD and from the change, 38 assets and 1 537 files, every SHA-256 equal (the Hyperion and
+  Nova included). Tests: `tools/procgen/tests/test_seam_defaults.py`; the Hyperion's, Nova's and paint tests follow the move.
+  Sheet: `references/screenshots/M10-T73 seam defaults/seam_defaults_sheet.png`, the test cruiser at 30 and 150 m and the
+  Starfury at 5 and 20 m, pinned beside the defaults. Judging the look is (H).
 
 ### M10-T43 to T47 Mechanics, sounds, bench, scenarios and performance
 

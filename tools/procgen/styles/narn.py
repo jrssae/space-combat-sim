@@ -16,7 +16,7 @@ import numpy as np
 
 from ..core.color import capture_albedo, srgb_to_linear
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 
 def _lin(hex_rgb: int) -> tuple[float, float, float]:
@@ -54,4 +54,5 @@ NARN = Style(
     streaks=0.22,
     grime=0.11,
     extra={"bare_metal": 0.25, "smudge": 0.22, "speckle": 0.05, "paint_roughness": 0.8, "streak_length_m": 0.35, "rivets": 0.6},
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )

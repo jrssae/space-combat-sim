@@ -10,6 +10,7 @@ fine mesh's own shape; occlusion is a disk-to-point estimate against surface sam
 
 from __future__ import annotations
 
+import dataclasses
 import math
 import weakref
 import zlib
@@ -724,11 +725,23 @@ def metal_finish(finish: dict[str, float], pos: np.ndarray, painted: np.ndarray,
     return roughness, metallic
 
 
+def worn_seams(style: Style, atlas: Atlas) -> tuple[Style, Atlas]:
+    """The style and the atlas with the seams as the style wears them (Q69): the grid's grooves, hatches and lines and the drawn
+    layouts' grooves at its shares of their full depth and width. A style at full shares (the hulls pinned until T74) bakes as before."""
+    depth, width = style.seam_depth, style.seam_width
+    if depth == 1.0 and width == 1.0:
+        return style, atlas
+    worn = dataclasses.replace(style, panel_line_width_m=style.panel_line_width_m * width, groove_depth_m=style.groove_depth_m * depth,
+                               hatch_depth_m=style.hatch_depth_m * depth, seam_depth=1.0, seam_width=1.0)
+    return worn, dataclasses.replace(atlas, part_seams=tuple(layout.softened(depth, width) for layout in atlas.part_seams))
+
+
 def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, paintable: Sequence[str] = (),
               normal_scale: int = NORMAL_SCALE) -> dict[str, np.ndarray]:
     """The four maps as 8-bit RGB arrays: ``albedo`` (sRGB), ``normal`` (tangent space, +Y up, ``normal_scale`` times the atlas),
     ``orm`` and ``emissive`` (sRGB). With ``paintable`` material names the albedo is RGBA, its alpha where a livery may paint (M4-T30b):
     those materials, less the chipped edges and the markings."""
+    style, atlas = worn_seams(style, atlas)
     b = atlas.buffers
     size = b.size
     filled = b.filled

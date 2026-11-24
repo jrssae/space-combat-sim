@@ -20,7 +20,7 @@ import numpy as np
 
 from ..core.color import capture_albedo, srgb_to_linear
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 PREFIX = "eac"
 
@@ -85,6 +85,7 @@ def ea_civilian(overrides: Mapping[str, int] | None = None, engine_glow: int = E
         panel_size_m=3.6,
         panel_line_width_m=0.4,
         **TEXTURE_PACK,
+        **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
     )
 
 

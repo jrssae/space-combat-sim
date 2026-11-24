@@ -18,7 +18,7 @@ import numpy as np
 
 from ..core.color import capture_albedo, srgb_to_linear
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 GLOW_SRGB = 0xFFF0B0  # engine glow, yellow-white: the domes' glow and a ShipSpec tint for T16
 BOLT_SRGB = 0x7CFF4F  # the turrets' bright green pulse (Q22, the maintainer chose the value): T21 and T16
@@ -74,6 +74,7 @@ BRAKIRI = Style(
     panel_size_m=2.4,
     panel_line_width_m=0.25,
     **TEXTURE_PACK,
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )
 
 # The pods' own style over the same roles and pack, a little finer plating.
@@ -83,4 +84,5 @@ BRAKIRI_POD = Style(
     panel_size_m=2.0,
     panel_line_width_m=0.25,
     **TEXTURE_PACK,
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )

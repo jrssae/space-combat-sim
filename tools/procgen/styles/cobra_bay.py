@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from ..core.color import capture_albedo
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 from .earth_alliance_station import BAY_GLOW, LAMP_GLOW, lin
 
 PREFIX = "cb"
@@ -97,6 +97,7 @@ COBRA_BAY = Style(
            # Roughness steps from plate to plate and drifts within a plate; dirt is rougher and duller.
            "metal_finish": {"panel_m": 4.8, "panel_rough": 0.08, "noise_m": 1.5, "noise_rough": 0.05, "dirt_rough": 0.25,
                             "dirt_metal": 0.45, "grime_dirt": 0.5}},
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )
 
 __all__ = ["COBRA_BAY", "PANEL_GLOW", "SCHEME", "WORK_GLOW", "colour"]

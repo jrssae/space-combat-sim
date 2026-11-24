@@ -37,7 +37,7 @@ from ..core.obj import write_obj
 from ..core.silhouette import far_section
 from ..core.textured_mesh import TexturedPart, phase_steps, write_textured_mesh
 from ..parts import Collision
-from ..styles import Style
+from ..styles import LEGACY_SEAMS, Style
 
 ASSET_ID = "jumpgate"
 GENERATOR_VERSION = 5  # 4: the far view's silhouette table (M6-T15); 5: the flatter mouth (T19 round 4)
@@ -146,6 +146,7 @@ JUMPGATE = Style(
     grime=0.08,
     extra={"wear_scale": 60.0, "rivets": 0.0, "bare_metal": 0.0, "smudge": 0.2, "speckle": 0.04, "paint_roughness": 0.75,
            "streak_length_m": 0.25},
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )
 LAMP = Material("jg_lamp", (0.05, 0.035, 0.015), roughness=0.2, emissive=(1.0, 0.66, 0.26), emissive_strength=4.0)
 EMITTER = Material("jg_emitter", _lin(0x2A2230), roughness=0.15, metallic=0.6, emissive=(1.0, 0.55, 0.85), emissive_strength=0.4)

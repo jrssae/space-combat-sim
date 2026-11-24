@@ -95,6 +95,14 @@ tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part,
   `core/seams.Hexes` on the atlas and a hexagonal tile); `Seamless` for the Shadows and Vorlons (Q46: no seams, no tile).
   `CapitalStyle.surface` adds keys to every opaque surface entry: the sheen layer's numbers go there ("Sheen layer" below). `manifest.skin`
   names the skin.
+- **Seam finish** (Q69, T73): every new hull wears the Hyperion's. Its style's grooves are baked 0.22 as deep and 0.6 as wide
+  as drawn, its seam lines 0.89 dark (`Style.seam_depth`, `seam_width`, `panel_line_darkness`, the defaults); its skin's
+  near-field tile has lines 0.6 as wide and grooves and line darkness half the full tile's (`tile_width`, `tile_soft`), and a
+  fifth of its plates are painted in the hull's own colour up to half as dark (`patches`, `darkest`; `patch_tiers` for a few
+  fixed shades instead: `core/seams.PatchPlates`). `HexGrid` softens its tile alike, without patches. A style sets its own
+  values only on purpose. The hulls built before Q69 pin their finish until T74 (`styles.LEGACY_SEAMS`,
+  `styles/capital.LEGACY_SKIN`, `styles/capital.pinned`): the Omega's fleet finish, the Hyperion's option looks B and C, the
+  test cruiser, the organic test hull, and every fighter, civilian, station and raider style.
 - **Hardpoints** (`hardpoints.json`, body frame, rotating pieces at rest): the ships' contract (`pods` filled from the
   engines, `nav_lights` from the lamps, `turrets` left empty: D61's civilian turrets are not these), plus, each entry with
   its `name`, `section` and `position`:
@@ -524,8 +532,8 @@ keeps a lit bay's red inside the hall; `launch_bay(metal=True)` lines it as Baby
 maintainer's look round): grey `bay_metal` (the station's `bay_tunnel`: #A8AAAE, metallic 0.7, roughness 0.32, faint red 0.04;
 `ea_capital.bay_metal_materials`), small red lamps along the roof, no strips, the `bay` light mid-hall; the game lights it red
 only while the door is open (`BayDoorNode`'s `LightEmitter`, energy 3.5 times how far it is open, the light's `range_m`, in the
-`LightRig`'s omni-slot competition). The Hyperion's seams are subtler than the fleet's (`HyperionMosaic`: 0.22 of the depth, 0.6
-of the width; line darkness 0.89). `launch_bay(door=True)` builds a roll housing over the mouth and guide rails, and leaves a
+`LightRig`'s omni-slot competition). The Hyperion's seams are subtler than the fleet's (0.22 of the depth, 0.6
+of the width; line darkness 0.89), the defaults for every new hull since Q69 ("Seam finish" above). `launch_bay(door=True)` builds a roll housing over the mouth and guide rails, and leaves a
 `door` hardpoint (`hardpoints.doors[]`: the shut shutter's centre, `forward`, `up`, `size_m`, `slats`), with rails and a sill that
 close the gap round it. `CapitalShip` draws each door as slats on a dark backing plate, so a shut door shows no light
 (`BayDoorNode`, rules in `BayDoors`), shut by default; `set_bay_door(bay, open)` winds it up into the housing (T17's hook; the
@@ -546,7 +554,7 @@ with `scripts/model_sheet.sh`; `option_sheet.png` and `section_compare.png` from
 `tools/procgen/assets/ea_nova.py` on `parts/ea_nova.py` (the structure, measured off the reference), in the Omega's parts and
 look (the maintainer: the Nova reuses them): its slab armour, girder spine, octagonal collars, nacelles, lit bays, turrets,
 beams, interceptors, lamps and `styles/ea_capital.py` look A, worn since T67 in the **soft finish** (`ea_capital(look,
-finish="soft")`, Q64): the Hyperion's skin (`ea_hyperion.HyperionMosaic`: shallow narrow seams, small patches of darker plates,
+finish="soft")`, Q64): the Hyperion's skin (the default finish since Q69: shallow narrow seams, small patches of darker plates,
 little tone wander, faint seam lines) in the Omega's colours, its bays lined in grey metal; the Omega keeps the fleet finish
 until T68. The shape is described in `docs/design-references.md`, "EA
 Nova-class dreadnought". Earth Alliance and the renegades (their red X marks, as the Omega's).

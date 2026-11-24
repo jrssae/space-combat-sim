@@ -18,7 +18,7 @@ import numpy as np
 
 from ..core.color import srgb_to_linear
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 
 def _lin(hex_rgb: int) -> tuple[float, float, float]:
@@ -80,4 +80,5 @@ RAIDER = Style(
     extra={"bare_metal": 0.8, "smudge": 0.3, "smudge_scale_m": 0.6, "speckle": 0.08, "streak_length_m": 0.4,
            "metal_finish": {"panel_m": 0.9, "panel_rough": 0.12, "noise_m": 0.35, "noise_rough": 0.06, "dirt_rough": 0.3,
                             "dirt_metal": 0.5, "grime_dirt": 0.5}},
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )

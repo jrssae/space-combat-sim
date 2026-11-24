@@ -17,7 +17,7 @@ import numpy as np
 
 from ..core.color import srgb_to_linear
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 
 def _lin(hex_rgb: int) -> tuple[float, float, float]:
@@ -72,6 +72,7 @@ def _style(name: str, hull: int, deck: int, dark: int, pad: int, clamp: int, sla
         panel_line_width_m=0.035,
         extra=wear,
         **kw,
+        **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
     )
 
 

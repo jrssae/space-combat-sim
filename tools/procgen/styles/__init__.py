@@ -4,12 +4,17 @@ A :class:`Style` names materials by *role* (``hull``, ``stripe``, ``canopy_glass
 never hard-code a colour, and carries the surface-detail parameters (panel grid, line width,
 per-panel tint jitter) that ``shade_panels`` bakes into the albedo of ``paneled`` materials, plus
 the wear, groove and hatch parameters the texture maps use (M4-T30a, ``core/textures.py``).
+
+The seams' finish (M10 Q69, T73): a new style wears the Hyperion's subtle seams by default (:data:`SEAM_DEPTH_SHARE`,
+:data:`SEAM_WIDTH_SHARE`, :data:`SEAM_LINE_DARKNESS`). The hulls built before Q69 pin their old finish (:data:`LEGACY_SEAMS`,
+:data:`LEGACY_LINE_DARKNESS`) so their builds stay the same until T74 moves them onto it.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 
 import numpy as np
 
@@ -32,6 +37,16 @@ REQUIRED_ROLES: tuple[str, ...] = (
     "rcs",
 )
 
+# The Hyperion's seams (Q69, commit 5e083eb9), every hull's from then on: each groove this share of its full depth, each line this
+# share of its full width, and a line this dark (an albedo multiplier: barely darker than the plate).
+SEAM_DEPTH_SHARE = 0.22
+SEAM_WIDTH_SHARE = 0.6
+SEAM_LINE_DARKNESS = 0.89
+# The finish of the hulls built before Q69: full grooves and lines. Pinned until T74, as is the old default line darkness where a
+# style relied on it.
+LEGACY_SEAMS: Mapping[str, float] = MappingProxyType({"seam_depth": 1.0, "seam_width": 1.0})
+LEGACY_LINE_DARKNESS = 0.55
+
 
 def _hash01(*ints: np.ndarray) -> np.ndarray:
     """Deterministic per-cell pseudo-random number in [0, 1) from integer coordinates."""
@@ -50,7 +65,7 @@ class Style:
     materials: Mapping[str, Material]
     panel_size_m: float = 0.6
     panel_line_width_m: float = 0.03
-    panel_line_darkness: float = 0.55  # albedo multiplier on a panel line
+    panel_line_darkness: float = SEAM_LINE_DARKNESS  # albedo multiplier on a panel line or a drawn seam
     panel_tint_jitter: float = 0.05  # +- relative albedo per panel
     stripe_fraction: float = 0.68  # along a pod, 0 = front, 1 = rear
     stripe_width_m: float = 0.3
@@ -64,6 +79,10 @@ class Style:
     grime: float = 0.04  # +- relative albedo of the low-frequency grime
     grime_scale_m: float = 0.9
     soot: float = 0.85  # how black the soot behind a nozzle gets, 0..1
+    # How much of each seam the hull wears (Q69), baked into the grid's grooves, hatches and lines and every groove of the drawn
+    # layouts: a share of the full depth and of the full width.
+    seam_depth: float = SEAM_DEPTH_SHARE
+    seam_width: float = SEAM_WIDTH_SHARE
     extra: Mapping[str, float] = field(default_factory=dict)
 
     def __post_init__(self) -> None:

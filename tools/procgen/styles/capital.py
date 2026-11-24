@@ -4,7 +4,8 @@ A :class:`CapitalStyle` is what a capital generator hands the framework (``core/
 (materials by role, wear) and a skin. The skin is the hook the factions differ by:
 
 * :class:`PanelMosaic`, the default: frame lines and plating of mixed sizes as the Earth Alliance, Narn and Centauri hulls
-  wear, with ``core/detail_layer.py``'s fine mosaic as the shared near-field tile;
+  wear, small patches of darker plates in the hull's own paint (Q69, the Hyperion's), with ``core/detail_layer.py``'s fine mosaic
+  as the shared near-field tile, its seams softened as the hull's;
 * :class:`HexGrid` (Q45): a hexagonal grid for the Minbari and the Interstellar Alliance, with a hexagonal near-field tile;
 * :class:`Seamless` (Q46): no seams and no tile, for the Shadows' and the Vorlons' organic hulls (M10-T06 lays its sheen
   over it through ``CapitalStyle.surface``).
@@ -14,14 +15,17 @@ A skin draws two layouts, each in the module's own frame inside its box: ``hull_
 one (``core/seams.py``). ``detail_tile`` gives the shared tile's maps (``albedo`` RGBA and ``normal``), or ``None`` for none.
 
 A hull task adds ``styles/<faction>_capital.py`` with its own ``CapitalStyle``; ``FRAMEWORK_GREY`` is the framework's
-neutral one, for the test hull.
+neutral one, for the test hull. A new skin takes the Hyperion's finish by default (Q69); the hulls built before it pin theirs
+(:data:`LEGACY_SKIN`, :func:`pinned`) until T74.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from types import MappingProxyType
 from typing import Any, Protocol
 
 import numpy as np
@@ -29,10 +33,17 @@ import numpy as np
 from ..core import detail_layer
 from ..core.color import linear_to_srgb
 from ..core.geometry import Material
-from ..core.seams import EMPTY, Cut, Feature, Hexes, Plates, SeamLayout
-from . import Style
+from ..core.seams import EMPTY, Cut, Feature, Hexes, PatchPlates, Plates, SeamLayout
+from . import LEGACY_SEAMS, SEAM_WIDTH_SHARE, Style
 
 Vec3 = tuple[float, float, float]
+# The Hyperion's near-field tile and patches (Q69), every new skin's: the tile's grooves and line darkness half the full tile's,
+# a fifth of the plates painted up to half as dark.
+TILE_SOFT = 0.5
+PATCH_SHARE = 0.2
+PATCH_DARKEST = 0.5
+# The skins of the hulls built before Q69: the full tile, no patches. Pinned until T74.
+LEGACY_SKIN: Mapping[str, float] = MappingProxyType({"tile_width": 1.0, "tile_soft": 1.0, "patches": 0.0})
 
 
 class Skin(Protocol):
@@ -58,7 +69,9 @@ def _frames(lo: Vec3, hi: Vec3, pitch_m: float, major_every: int) -> list[Featur
 
 @dataclass(frozen=True)
 class PanelMosaic:
-    """Plating of mixed sizes cut from ``plate_m`` fields ``splits`` times, frame lines every ``frames_m``, a few proud hatches."""
+    """Plating of mixed sizes cut from ``plate_m`` fields ``splits`` times, frame lines every ``frames_m``, a few proud hatches,
+    and ``patches`` (a share of the plates) painted darker: up to ``darkest`` of the paint's value, or in ``patch_tiers`` of shade.
+    Its near-field tile's lines are ``tile_width`` of the full tile's width, its grooves and their darkness ``tile_soft`` of theirs."""
 
     name: str = "panel_mosaic"
     plate_m: tuple[float, float] = (9.0, 6.0)
@@ -70,13 +83,23 @@ class PanelMosaic:
     frames_m: float = 7.5
     major_every: int = 4
     tile_m: float = detail_layer.DEFAULT_TILE_M
+    tile_width: float = SEAM_WIDTH_SHARE
+    tile_soft: float = TILE_SOFT
+    patches: float = PATCH_SHARE
+    darkest: float = PATCH_DARKEST
+    patch_tiers: tuple[tuple[float, float], ...] = ()
 
     def _plating(self, cell: tuple[float, float], seed: int) -> list[Feature]:
         base = dict(wrap="sides", long_axis=2, cell=cell, splits=self.splits, min_m=1.2, keep=0.3, seed=seed)
-        return [Plates(level=2, tone=0.0, sheen=0.0, **base),
-                Plates(level=3, tone=self.tone, sheen=self.sheen, grime=self.grime, grime_m=0.5, depth=0.0, dark=0.0, **base),
-                Plates(level=3, wrap="sides", long_axis=2, cell=(2.4, 1.5), splits=1, min_m=0.5, scatter=self.hatches, inset_m=0.24,
-                       tone=0.05, dark=0.7, depth=0.7, seed=seed + 2)]
+        out: list[Feature] = [
+            Plates(level=2, tone=0.0, sheen=0.0, **base),
+            Plates(level=3, tone=self.tone, sheen=self.sheen, grime=self.grime, grime_m=0.5, depth=0.0, dark=0.0, **base),
+            Plates(level=3, wrap="sides", long_axis=2, cell=(2.4, 1.5), splits=1, min_m=0.5, scatter=self.hatches, inset_m=0.24,
+                   tone=0.05, dark=0.7, depth=0.7, seed=seed + 2)]
+        if self.patches > 0.0:
+            out.append(PatchPlates(level=3, scatter=self.patches, inset_m=0.1, darkest=self.darkest, tiers=self.patch_tiers, dark=0.0,
+                                   depth=0.0, **base))
+        return out
 
     def hull_layout(self, lo: Vec3, hi: Vec3, seed: int) -> SeamLayout:
         return SeamLayout.of([*_frames(lo, hi, self.frames_m, self.major_every), *self._plating(self.plate_m, seed)])
@@ -87,7 +110,10 @@ class PanelMosaic:
         return SeamLayout.of(self._plating(cell, seed))
 
     def detail_tile(self, px: int, seed: int) -> dict[str, np.ndarray] | None:
-        return detail_layer.detail_tile(px, self.tile_m, seed)
+        """The fleet's near-field mosaic, its seams as soft as the skin asks."""
+        dark = 1.0 - (1.0 - detail_layer.LINE_DARK) * self.tile_soft
+        return detail_layer.detail_tile(px, self.tile_m, seed, line_m=detail_layer.LINE_M * self.tile_width,
+                                        groove_m=detail_layer.GROOVE_M * self.tile_soft, line_dark=dark)
 
 
 # The hexagonal tile wraps with 7 cells across and 4 double rows up: 7 against 4 * sqrt(3) = 6.93, so its cells are squeezed 1 %.
@@ -96,7 +122,8 @@ HEX_TILE_CELLS = (7, 4)
 
 @dataclass(frozen=True)
 class HexGrid:
-    """A hexagonal grid (Q45): cells ``cell_m`` across their flats on the hull, ``tile_m / 7`` in the near-field tile."""
+    """A hexagonal grid (Q45): cells ``cell_m`` across their flats on the hull, ``tile_m / 7`` in the near-field tile, whose lines
+    are ``tile_width`` of ``line_m`` wide and whose grooves and their darkness ``tile_soft`` of the full (Q69)."""
 
     name: str = "hex_grid"
     cell_m: float = 6.0
@@ -106,6 +133,8 @@ class HexGrid:
     tile_m: float = detail_layer.DEFAULT_TILE_M
     line_m: float = 0.07
     groove_m: float = 0.02
+    tile_width: float = SEAM_WIDTH_SHARE
+    tile_soft: float = TILE_SOFT
 
     def hull_layout(self, lo: Vec3, hi: Vec3, seed: int) -> SeamLayout:
         return SeamLayout.of([*_frames(lo, hi, self.frames_m, 1),
@@ -126,11 +155,11 @@ class HexGrid:
         u, v = np.meshgrid(centres, centres)
         _, edge = grid.cells(u.reshape(-1), v.reshape(-1))
         edge = edge.reshape(px, px)
-        line = np.clip(1.0 - edge / (0.5 * self.line_m), 0.0, 1.0)
+        line = np.clip(1.0 - edge / (0.5 * (self.line_m * self.tile_width)), 0.0, 1.0)
         line = line * line * (3.0 - 2.0 * line)
-        height = -self.groove_m * line
+        height = -(self.groove_m * self.tile_soft) * line
         alpha = np.maximum(detail_layer.FACE_ALPHA, line)
-        factor = 1.0 - (1.0 - detail_layer.LINE_DARK) * line
+        factor = 1.0 - (1.0 - detail_layer.LINE_DARK) * self.tile_soft * line
         rgb = np.clip(linear_to_srgb(np.clip(factor, 0.0, 1.0)), 0.0, 1.0)
         albedo = np.concatenate([np.repeat(rgb[..., None], 3, axis=-1), alpha[..., None]], axis=-1)
         dhdu = (np.roll(height, -1, axis=1) - np.roll(height, 1, axis=1)) / (2.0 * texel)
@@ -201,6 +230,15 @@ def _grey() -> Style:
     )
 
 
-FRAMEWORK_GREY = CapitalStyle("framework_grey", _grey())
+def pinned(style: CapitalStyle, line_darkness: float | None = None) -> CapitalStyle:
+    """A style kept as it was before Q69 until T74: full seams, and a skin with the full tile and no patches; ``line_darkness``
+    restores the line darkness it had when it relied on the old default."""
+    skin = dataclasses.replace(style.skin, **{k: v for k, v in LEGACY_SKIN.items() if hasattr(style.skin, k)})
+    paint = dataclasses.replace(style.style, **LEGACY_SEAMS, **({} if line_darkness is None else {"panel_line_darkness": line_darkness}))
+    return dataclasses.replace(style, style=paint, skin=skin)
 
-__all__ = ["FRAMEWORK_GREY", "HEX_TILE_CELLS", "CapitalStyle", "HexGrid", "PanelMosaic", "Seamless", "Skin"]
+
+FRAMEWORK_GREY = pinned(CapitalStyle("framework_grey", _grey()))  # the test hull's, pinned until T74
+
+__all__ = ["FRAMEWORK_GREY", "HEX_TILE_CELLS", "LEGACY_SKIN", "PATCH_DARKEST", "PATCH_SHARE", "TILE_SOFT", "CapitalStyle", "HexGrid", "PanelMosaic",
+           "Seamless", "Skin", "pinned"]

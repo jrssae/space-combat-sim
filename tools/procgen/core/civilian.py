@@ -229,12 +229,13 @@ def moved_marking(marking: Marking, by: Sequence[float]) -> Marking:
 
 def at_texel(style: Style, texel_m: float) -> Style:
     """The style's texture pack scaled to a hull texelled at ``texel_m``: its wear, noise, grooves and rivets are sized for a
-    fighter at a centimetre a texel, so a bigger texel scales them up; a seam stays at least ``LINE_TEXELS`` texels wide."""
+    fighter at a centimetre a texel, so a bigger texel scales them up; a seam stays at least ``LINE_TEXELS`` texels wide as the style
+    wears it (``seam_width``)."""
     k = max(1.0, float(texel_m) / DEFAULT_TEXEL_M)
     base = float(style.extra.get("wear_scale", 1.0))
     return dataclasses.replace(
         style,
-        panel_line_width_m=max(style.panel_line_width_m, LINE_TEXELS * texel_m),
+        panel_line_width_m=max(style.panel_line_width_m, LINE_TEXELS * texel_m / style.seam_width),
         groove_depth_m=style.groove_depth_m * k,
         hatch_depth_m=style.hatch_depth_m * k,
         edge_wear_width_m=style.edge_wear_width_m * k,

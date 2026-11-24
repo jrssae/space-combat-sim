@@ -220,14 +220,13 @@ class NovaSpecTests(unittest.TestCase):
     def test_the_soft_finish_and_the_metal_bay(self) -> None:
         """Q64: the Hyperion's skin in the Omega's colours, the bay lined in grey metal lit red, no glowing rim and no door."""
         from tools.procgen.styles.ea_capital import ea_capital  # noqa: PLC0415
-        from tools.procgen.styles.ea_hyperion import HyperionMosaic  # noqa: PLC0415
 
         from tools.procgen.core.color import capture_albedo  # noqa: PLC0415
         from tools.procgen.styles.ea_capital import SOFT_PAINT, SOFT_PATCH_TIERS  # noqa: PLC0415
 
         nova, omega = en.style(), ea_capital()
-        self.assertIsInstance(nova.skin, HyperionMosaic)
-        self.assertNotIsInstance(omega.skin, HyperionMosaic, "the Omega keeps the fleet's finish until T68")
+        self.assertEqual((nova.style.seam_depth, nova.style.seam_width, nova.skin.tile_soft), (0.22, 0.6, 0.5), "the Hyperion's seams")
+        self.assertEqual((omega.style.seam_depth, omega.skin.patches), (1.0, 0.0), "the Omega keeps the fleet's finish until T68")
         self.assertEqual(nova.style.materials["hull"].albedo, capture_albedo(SOFT_PAINT["a"]["hull"]), "the stills' grey (M10-T67)")
         self.assertNotEqual(nova.style.materials["hull"].albedo, omega.style.materials["hull"].albedo, "the Omega's paint is T68's")
         self.assertEqual(nova.skin.patch_tiers, SOFT_PATCH_TIERS)

@@ -9,6 +9,7 @@ import numpy as np
 
 from tools.procgen.core.civilian import moved_marking
 from tools.procgen.core.coplanar import SET_BACK_M, coplanar_overlaps, flush_planes, set_back
+from tools.procgen.core.seams import PatchPlates
 from tools.procgen.core.textures import Marking
 from tools.procgen.parts import capital as cp
 from tools.procgen.parts import capital_solids as cs
@@ -16,7 +17,6 @@ from tools.procgen.parts.capital_flush import set_back_flush_parts
 from tools.procgen.parts.capital_paint import EdgeBand, edge_band, flat_faces
 from tools.procgen.parts.ea_omega import PLAIN
 from tools.procgen.styles.ea_capital import ea_capital
-from tools.procgen.styles.ea_hyperion import PatchPlates
 
 STYLE = ea_capital(finish="soft").style
 UP = np.array([[0.0, 1.0, 0.0]])

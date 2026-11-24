@@ -17,7 +17,7 @@ import numpy as np
 
 from ..core.color import capture_albedo, srgb_to_linear
 from ..core.geometry import Material
-from . import Style
+from . import LEGACY_SEAMS, Style
 
 GLOW_SRGB = 0xFFB8E0  # engine and fin-tip glow, pink-white: the throats' glow and a ShipSpec tint for T16
 
@@ -60,4 +60,5 @@ CENTAURI = Style(
     streaks=0.04,
     grime=0.03,
     extra={"bare_metal": 0.0, "smudge": 0.04, "speckle": 0.02, "paint_roughness": 0.42, "rivets": 0.0},
+    **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
 )

@@ -18,7 +18,7 @@ from ..core.manifest import build_manifest, write_manifest
 from ..core.pieces import PieceTexture, write_piece
 from ..core.textured_mesh import TexturedPart, phase_steps
 from ..core.textures import Marking
-from ..styles import Style
+from ..styles import LEGACY_SEAMS, Style
 
 ASSET_ID = "capital_hulls"
 GENERATOR_VERSION = 3  # 3: the textured boxes only (M4-T31); 2: the textured boxes with window rows (M4-T30d)
@@ -63,6 +63,7 @@ def _style(unit: float) -> Style:
         streaks=0.25,
         grime=0.1,
         extra={"wear_scale": k, "rivets": 0.0, "bare_metal": 0.0, "smudge": 0.25, "speckle": 0.05, "paint_roughness": 0.8},
+        **LEGACY_SEAMS,  # the seams before Q69, pinned until T74
     )
 
 

@@ -234,10 +234,11 @@ class HyperionBuildTests(unittest.TestCase):
 
     def test_its_seams_are_subtler_than_the_fleets(self) -> None:
         skin, style = hyperion_mosaic(LOOKS[DEFAULT_LOOK]), ea_hyperion(DEFAULT_LOOK).style
-        self.assertLessEqual(skin.seam_depth, 0.25)
-        self.assertLessEqual(skin.seam_width, 0.6)
+        self.assertLessEqual(style.seam_depth, 0.25)
+        self.assertLessEqual(style.seam_width, 0.6)
         self.assertGreaterEqual(style.panel_line_darkness, 0.85, "the lines barely darker than the plates")
-        lines = [f for f in skin.hull_layout((-10.0, -10.0, 0.0), (10.0, 10.0, 200.0), 1).features() if f.depth > 0.0]
+        layout = skin.hull_layout((-10.0, -10.0, 0.0), (10.0, 10.0, 200.0), 1).softened(style.seam_depth, style.seam_width)  # as baked
+        lines = [f for f in layout.features() if f.depth > 0.0]
         self.assertTrue(lines and all(f.width <= 0.6 and f.depth <= 0.25 for f in lines))
         fleet, own = detail_layer.detail_tile(64, skin.tile_m, 3), skin.detail_tile(64, 3)
         self.assertGreater(float(own["albedo"][..., :3].astype(float).mean()), float(fleet["albedo"][..., :3].astype(float).mean()),
