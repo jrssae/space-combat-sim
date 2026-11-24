@@ -35,6 +35,12 @@ func test_make_capacitor_takes_the_spec_numbers() -> void:
 	assert_eq(cap.charge_at(0.0), 50.0, "starts full")
 
 
+## Q76's two cannons: the Starfury fires both together, twice the bolts the M1 defaults give, its capacitor twice as big and
+## as quick; everything else is still the default.
+const Q76_STARFURY: Dictionary = {"shot_interval_s": 0.125, "capacitor_capacity": 200.0, "capacitor_recharge_per_s": 50.0,
+		"fire_linked": true}
+
+
 func test_the_shipped_pulse_cannon_reproduces_the_defaults() -> void:
 	var shipped := load(PULSE_CANNON_PATH) as WeaponSpec
 	assert_not_null(shipped)
@@ -43,5 +49,6 @@ func test_the_shipped_pulse_cannon_reproduces_the_defaults() -> void:
 		var usage: int = property["usage"]
 		var key: String = property["name"]
 		if (usage & PROPERTY_USAGE_SCRIPT_VARIABLE) != 0 and key != "bolt_material":
-			assert_eq(shipped.get(key), defaults.get(key), "resource agrees with the code default for %s" % key)
+			var want: Variant = Q76_STARFURY.get(key, defaults.get(key))
+			assert_eq(shipped.get(key), want, "resource agrees with the code default (or Q76's) for %s" % key)
 	assert_not_null(shipped.bolt_material, "the Starfury's bolt keeps the pulse bolt material")

@@ -47,7 +47,7 @@ func test_every_capital_gun_and_launcher_in_the_loadouts_has_a_spec_with_its_num
 		assert_eq(spec.warhead, warhead, "%s's warhead" % id)
 		if warhead != WeaponSpec.WARHEAD_NONE:
 			assert_eq(spec.toughness, int(row.get("toughness", 1)), id)
-	assert_eq(count, 27, "every capital gun and launcher kind of every faction")
+	assert_eq(count, 29, "every capital gun and launcher kind of every faction")
 
 
 func test_no_push_trait_and_the_brakiri_carry_pulse_lasers_and_interceptors_only() -> void:

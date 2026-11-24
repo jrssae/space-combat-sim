@@ -9,7 +9,8 @@ extends GutTest
 ##   for bit on that step (checked when it was recorded). On the threaded step a command reaches its ship one tick later
 ##   (Q53), which the maintainer accepted with new reference outcomes: the behaviour mix stays within Q16's 5 points, the hits
 ##   within 20 % (16 % measured at worst), and the twins drift apart by hundreds of metres by 10 s, so they are printed, not
-##   gated.
+##   gated. Since M10-T14's follow-up (Q76) the Starfury fires both cannons, twice the bolts the GDScript fight flew, and that
+##   fight cannot be flown again, so its hits are printed, not gated; the mix and the bit-for-bit native gate stay.
 ## - `native`: the native fight on the delayed step (the threaded step's bit-for-bit reference), which the threaded fight
 ##   must give exactly: the same hits, the same mix and every ship at the same place at 10 s.
 
@@ -19,8 +20,6 @@ const SEEDS: Array[int] = [1, 2, 3]
 const TICKS: int = 1800
 const COMPARE_AT_TICK: int = 600
 const SAMPLE_EVERY: int = 5
-## Hits against the GDScript reference on the threaded step: Q16's 10 % widened for the one-tick handover (Q53).
-const HITS_TOLERANCE: float = 0.20
 const MIX_TOLERANCE: float = 0.05
 const FIXTURE: String = "brain_tolerance"
 const SETTINGS: Array[StringName] = [&"sim_step", &"friendly_fire"]
@@ -88,7 +87,7 @@ func test_native_brains_stay_within_q16s_tolerance_on_every_seed() -> void:
 				farthest = maxf(farthest, twins[i].distance_to(Vector3(at_g[i][0], at_g[i][1], at_g[i][2])))
 			gut.p("%s: hits native %d against the GDScript %d; mix native %s against %s (worst %s %.3f); farthest twin at 10 s %.2f m; %d native thinks" % [
 					label, hits_n, hits_g, mix_n, mix_g, worst_id, worst_mix, farthest, int(native["native_thinks"])])
-			assert_lte(absf(float(hits_n - hits_g)), HITS_TOLERANCE * float(maxi(hits_g, 1)), "%s: hits within 20 %% of the GDScript fight (%d against %d)" % [label, hits_n, hits_g])
+			gut.p("%s: hits %.0f %% of the GDScript fight's (Q76's two cannons; printed, not gated)" % [label, 100.0 * hits_n / maxf(hits_g, 1.0)])
 			assert_lte(worst_mix, MIX_TOLERANCE, "%s: the behaviour mix within 5 points (%s differs by %.3f)" % [label, worst_id, worst_mix])
 			assert_eq(twins.size(), SHIPS, "%s: every ship compared" % label)
 

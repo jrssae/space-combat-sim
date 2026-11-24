@@ -1,7 +1,8 @@
 extends GutTest
 ## Q16 for the native flight step (M4-T10): a seeded fight (`bench furball 25 <s> seed=1` on the combat sandbox, then the
 ## `ai`, `combat` and `flight` providers) with the flight batch against the same fight on the ships' own GDScript models must
-## give hits within 10 %, a behaviour mix within 5 points (printed only since M7-T16, below), and no ship more than 50 m from
+## give hits within 10 % (printed only since M10-T14's follow-up, below), a behaviour mix within 5 points (printed only since
+## M7-T16, below), and no ship more than 50 m from
 ## its twin at 10 s. Each fight runs in
 ## its own process (this Godot launched again, headless), because a second fight in one process is never the same fight: the
 ## absolute sim clock, the pooled nodes and the statics differ from the first.
@@ -18,8 +19,6 @@ extends GutTest
 const SHIPS: int = 25
 const TWIN_AT_S: int = 10
 const FIGHT_S: int = 30
-## Hits against the GDScript reference on the threaded step: Q16's 10 % widened for the one-tick handover (Q53).
-const HIT_TOL: float = 0.20
 ## The bench warms up 5 s before measuring, so a measured window of this many seconds ends 10 s into the fight.
 const TWIN_MEASURE_S: int = TWIN_AT_S - 5
 const FIGHT_MEASURE_S: int = FIGHT_S - 5
@@ -116,7 +115,9 @@ func test_the_seeded_fight_matches_its_recordings() -> void:
 	gut.p("Q16 against the GDScript fight: worst twin at %d s %.3f m over %d ships; hits over %d s %d against %d; mix %s against %s (%.1f points)" % [
 			TWIN_AT_S, worst_m, on_pos.size(), FIGHT_S, hits_on, hits_off, mix_on, mix_off, worst_points])
 	assert_gt(hits_off, 0, "the reference fight landed hits")
-	assert_lte(absf(float(hits_on - hits_off)), HIT_TOL * float(maxi(hits_off, 1)), "hits within 20 % of the GDScript fight")
+	# Printed, no longer gated (M10-T14 follow-up): since Q76 the Starfury fires both cannons, twice the bolts the GDScript
+	# fight flew, and that fight cannot be flown again. The bit-for-bit gate above holds the native step.
+	gut.p("hits %.0f %% of the GDScript fight's (Q76's two cannons; printed, not gated)" % [100.0 * hits_on / maxf(hits_off, 1.0)])
 	# The mix is printed, no longer gated (M7-T16): the GDScript fight flew the raider as it was until M7-T16, and with the
 	# GDScript flight path gone (M4-T37) it cannot be flown again on the raider's new hull, whose fights mix differently
 	# (12 points on this seed). The hits stay gated; the bit-for-bit gate above holds the native step.

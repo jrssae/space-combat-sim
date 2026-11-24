@@ -1,0 +1,28 @@
+{
+ "scenario_id": "capital_duel",
+ "description": "M10 balance fight B1 (Q53, Q76): two Omegas the test spawns, the player a bystander out of their reach.",
+ "system_id": "local",
+ "anchor": {
+  "place": "babylon5",
+  "at": [
+   5500,
+   -1200,
+   -6000
+  ]
+ },
+ "epoch": 7482671,
+ "player": {
+  "position": [
+   0,
+   0,
+   0
+  ],
+  "forward": [
+   0,
+   0,
+   -1
+  ]
+ },
+ "pools": {},
+ "wings": []
+}

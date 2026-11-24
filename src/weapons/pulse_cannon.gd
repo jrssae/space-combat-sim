@@ -132,6 +132,8 @@ func setup(body: RigidBody3D, muzzles: Array[Node3D], projectiles_parent: Node3D
 	weapon = weapon_spec if weapon_spec != null else WeaponSpec.new()
 	muzzle_speed_mps = weapon.muzzle_speed_mps
 	gate.configure(muzzles.size(), weapon.shot_interval_s)
+	if weapon.fire_linked:
+		gate.mode = PulseCannonGate.Mode.LINKED
 	gate.capacitor = weapon.make_capacitor()
 	for flash: MuzzleFlash in _flashes:
 		if is_instance_valid(flash):
@@ -168,6 +170,8 @@ func setup_transforms(body: RigidBody3D, muzzle_transforms: Array[Transform3D], 
 	weapon = weapon_spec if weapon_spec != null else WeaponSpec.new()
 	muzzle_speed_mps = weapon.muzzle_speed_mps
 	gate.configure(muzzle_transforms.size(), weapon.shot_interval_s)
+	if weapon.fire_linked:
+		gate.mode = PulseCannonGate.Mode.LINKED
 	gate.capacitor = weapon.make_capacitor()
 	for flash: MuzzleFlash in _flashes:
 		if is_instance_valid(flash):

@@ -1,5 +1,5 @@
 {
- "_doc": "M10-T03 (Q53; damage_scale per hull from Q54 multiplies every anti-capital weapon of that hull): weapon kinds and numbers, and each hull's loadout, class, hull points, interceptors, launches and in-battle mines. Hull tasks build their manifests' weapon mounts to these counts; T12 to T16 read the numbers (each weapon becomes a WeaponSpec .tres in assets/weapons/). Numbers are T03's starting points; T16 tunes damage and hull points against the balance fights (docs/assets-capital.md, 'Weapons and loadouts (T03)'). damage: per bolt, shot or warhead (hull points); cycle_s: s from one shot's or burst's start to the next; burst: shots a burst (Q76: the EA pulse cannons fire 3 over about 1 s, then recharge 2 s) (a sustained beam's whole cycle); beams: beam_dps while on for beam_on_s; barrels fire together each cycle. launches: catalogue ids (starfury_ally stands in for the Thunderbolt until M11).",
+ "_doc": "M10-T03 (Q53; damage_scale per hull from Q54 multiplies every anti-capital weapon of that hull): weapon kinds and numbers, and each hull's loadout, class, hull points, interceptors, launches and in-battle mines. Hull tasks build their manifests' weapon mounts to these counts; T12 to T16 read the numbers (each weapon becomes a WeaponSpec .tres in assets/weapons/). Numbers are T03's starting points; T16 tunes damage and hull points against the balance fights (docs/assets-capital.md, 'Weapons and loadouts (T03)'). damage: per bolt, shot or warhead (hull points); cycle_s: s from one shot's or burst's start to the next (a sustained beam's whole cycle); burst: shots a burst (Q76: the EA pulse cannons fire 3 over about 1 s, then recharge 2 s); beams: beam_dps while on for beam_on_s; barrels fire together each cycle. launches: catalogue ids (starfury_ally stands in for the Thunderbolt until M11).",
  "kinds": [
   "bolt_light",
   "bolt_medium",
@@ -59,8 +59,9 @@
    "kind": "bolt_medium",
    "faction": "earth_alliance",
    "role": "dual",
-   "damage": 12,
-   "cycle_s": 2.0,
+   "damage": 6,
+   "cycle_s": 3.0,
+   "burst": 3,
    "speed_mps": 1800,
    "range_m": 4000
   },
@@ -581,6 +582,7 @@
    "role": "fighter",
    "damage": 10,
    "cycle_s": 0.25,
+   "barrels": 2,
    "tres": "res://assets/weapons/pulse_cannon_ef.tres"
   },
   "raider_plasma": {
