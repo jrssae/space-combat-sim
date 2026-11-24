@@ -960,6 +960,32 @@ parity green.
   few guns; no muzzle flash or sound per shot; mounts on a rotating piece aim from the piece at rest; the interceptor count on the
   Avioki (4) is my call; renegade capitals do not yet show red engines (capitals are not on the livery shader; the X marks are
   T21's); the far tier's fire stays until T45.
+- **T14 review round (2026-11-24, in progress until the maintainer closes it).** Fixes: a held target is weighed again on the
+  mount's pick beat (`capital_gun_kernels::rank`: own class, then the other class, then a disabled hull) and traded only for
+  the ship's order or a better rank; a disabled ship is `FLAG_DISABLED` on its row (`SimCore.set_disabled` from `CapitalShip`
+  on `CapitalDamage.disabled`, the one source for T65's hulk rules too), engaged only by mounts with nothing live in reach, and
+  the beams take it last and leave a held one for a live hull before each shot; launchers fire only within 0.9 of their
+  round's flight (`GunSpec::reach_m`; the torpedo's 10 000 m range was its whole 40 s at 250 m/s); a ship's own bolts and
+  missiles pass through its own rotating sections (`Rows::is_part_of` in the sweep; an Omega's bolt across its drum hit
+  `hangar_r` before); `remove_owner` (now the kernel's) leaves a gone ship's missiles naming no mount, every other on its own;
+  picks reuse scratch buffers. **Q71 update:** the Nova's hangar pods (`pulse_hangar_r/l`) swivel on a ring over the block's
+  flank (traverse 180, elevation 0 to 90, as the interceptor pods) as `ea_pulse_cannon_swivel` (bolt_medium, 2 x 11.25 / 2 s,
+  75 % of the fixed cannon; 25/20 deg/s, an 86 m barrel to the muzzles): 12 fixed + 2 swivel pulse cannons + 4 interceptor
+  pods; 48 272 triangles, the STL checks in `test_ea_nova.py` pass; sheet `references/screenshots/M10-T14 Nova
+  cannons/swivel_ring_sheet.png` (judging the look is (H)). The swivel pods are mounts of a `bolt_medium` weapon, so they take
+  that kind's 800 mount hit points (the fixed pods 2 000). Tests (staged copy): cargo 321 (`capital_gun` 26, the beams' disabled
+  test, the rows' own drum), clippy with no errors; GUT 177 of 177 in 30 files (`test_capital_guns` 9: the swivel pods abeam,
+  two renegades with only the one that fired revealed and engaged (Q55), a disabled capital, a ship's own bolt through its
+  drum), parity recordings untouched (no re-record); compile check 1 114 scripts; Python loadouts, factions, Nova OK. A 240 s
+  combat-sandbox battle (EA Omega, Nova, Hyperion against a raider Omega, a Narn and a Brakiri Hyperion, a Centauri Omega, a
+  disguised renegade Omega, the sandbox's fighter waves; headless, `--fixed-fps 60`): 1 and 6 threads fire and land the same
+  (878 shots, 112 missiles); capitals' hits on the disabled raider Omega 2 285 before, 836 after (the rest from ships with no
+  live hostile in reach); gun step median 8.5 to 9.1 us, p99 57 to 60, max 217 to 133 (1 thread; held targets now re-weighed,
+  so more picks); whole tick median 1.03 ms, p99 2.1, max 4.3 (6.4 before the round, 5.7 before T14). The reported 0.46 s frame
+  spikes did not show in this battle before T14, at T14 or after, headless or windowed on the GPU (60 fps; the one long frame is
+  the 1.2 s first frame), with the hostile line crossing the tier's edge either: not T14's. **Open:** a real capital that is a tier
+  row (beyond `tier_radius_m`) fires nothing: the far capitals' group rolls (`ScsWeaponRows`, `tier_fire`) serve the stand-ins
+  only, so real hulls need their mounts fed into them before T45 removes the stand-ins.
 - **T16 and T17 (AI):** D12.10: the `capital` brain and fighters' attacks on capitals (tests on its choices and T03's
   balance fights); carriers launching by faction (tests on the launch poses and rates). Done when AC10.
   The Nova (Q71) launches and recovers its 24 Starfuries through its one forward bay on a hidden elevator: the bay hardpoint
