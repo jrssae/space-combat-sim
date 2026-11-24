@@ -4,7 +4,8 @@ extends GutTest
 ## (`SeededBattle`), their turrets and missiles taking its fighters and each other, fire the same shots and land the same hits
 ## byte for byte with one thread and six. Reports the guns' cost there.
 
-const TICKS: int = 600
+## 20 s: Q76's slower turrets (10 deg/s) and 3 s bursts take that long to land a fair sample.
+const TICKS: int = 1200
 const TYPE: StringName = &"ea_omega"
 const GAP_M: float = 1600.0
 
