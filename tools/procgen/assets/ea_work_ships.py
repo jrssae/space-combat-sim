@@ -1,13 +1,14 @@
 """``ea_panama`` and ``ea_construction_tender``: the Earth Alliance's two working ships (M10-T51 and M10-T55;
 docs/assets-civilian.md and docs/design-references.md, "EA Panama-class transport" and "EA construction tender").
 
-Composition only: the pieces of ``parts/ea_panama.py`` (180 m, a lopsided wedge-section cargo hull) and
+Composition only: the pieces of ``parts/ea_panama.py`` (modelled at 180 m and built 20 m tall, about 122 m long, Q66; a lopsided
+wedge-section cargo hull) and
 ``parts/ea_construction_tender.py`` (modelled at 50 m and built at 8 m, Q65; a hexagonal work body with claws, a boom and two thruster pods), each in a
 look from ``styles/ea_work_ships.py``, through the shuttles' shared build (``assets/ea_shuttles.py``, ``build_craft``) on
 the civilian pipeline (``core/civilian.py``). Neither carries a weapon.
 
 Classes by the budgets (M10 Q38; docs/assets-capital.md, "Class budgets"): the Panama is a **cruiser** (one 4 096 px atlas:
-it flies into Babylon 5's bay, so it is seen from a few metres at 180 m long), the tender a **small craft** (one
+it flies into Babylon 5's bay, so it is seen from a few metres), the tender a **small craft** (one
 2 048 px atlas). Both write the low texture set a mip level down.
 """
 
@@ -30,6 +31,8 @@ from .ea_shuttles import NAV_CLEARANCE_M, Craft, Port, build_craft
 PANAMA_ID = "ea_panama"
 TENDER_ID = "ea_construction_tender"
 TENDER_LENGTH_M = 8.0  # the maintainer's length (M10 Q65): the parts are modelled at 50 m, then shrunk
+PANAMA_HEIGHT_M = 20.0  # the maintainer's height (M10 Q66, T71): the parts are modelled at 180 m long, then shrunk
+PANAMA_MODELLED_HEIGHT_M = 29.6066  # the authored hull's height, aerials included
 INF = float("inf")
 X_AXIS, Y_AXIS, Z_AXIS = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, 0.0, 1.0)
 Marks = dict[str, tuple[Marking, ...]]
@@ -189,7 +192,7 @@ def no_docks(by_name: dict[str, Part]) -> list[tuple[str, np.ndarray, np.ndarray
 PANAMA = Craft(PANAMA_ID, 1.5, ("bow", "hold_fore", "hold_aft", "stern"), PANAMA_LOOK, pp.assemble, dress_panama, pp.AXIS_Y,
                (("l", "left", "engine_l", pp.ENGINE_THROAT[1]), ("r", "right", "engine_r", pp.ENGINE_THROAT[1])), 0.0,
                (4.0, pp.AXIS_Y, pp.FORE_Z[0], 1.0), panama_ports, panama_lights, panama_joints, panama_docks,
-               ship_class="cruiser", atlas_px=4096)  # fmt: skip
+               ship_class="cruiser", atlas_px=4096, scale=PANAMA_HEIGHT_M / PANAMA_MODELLED_HEIGHT_M)  # fmt: skip
 TENDER = Craft(TENDER_ID, 0.4, ("body", "stern", "boom_l", "boom_r", "claws_l", "claws_r"), TENDER_LOOK, tp.assemble, dress_tender, tp.POD_AT[1],
                (("l", "left", "pod_l", 1.4), ("r", "right", "pod_r", 1.4)), 0.0, (tp.POD_AT[0], tp.POD_AT[1], tp.POD_Z[0] + 1.3, 1.4),
                tender_ports, tender_lights, tender_joints, no_docks, scale=TENDER_LENGTH_M / tp.LENGTH_M)  # fmt: skip

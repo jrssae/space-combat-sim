@@ -1,4 +1,4 @@
-"""The resized EA craft through Babylon 5's main docking bay (M10-T70): each hull's real collision boxes, swept along the
+"""The resized EA craft through Babylon 5's main docking bay (M10-T70, the Panama T71): each hull's real collision boxes, swept along the
 mouth's axis (the same x, y silhouette all the way), must stay clear of the mouth's outline with a margin to spare."""
 from __future__ import annotations
 
@@ -13,7 +13,8 @@ from tools.procgen.parts import station_detail as sd
 
 ROOT = Path(__file__).resolve().parents[3] / "assets" / "generated"
 # Craft id -> least clearance (m) wanted when flown level and centred, and when off by the offsets below.
-CRAFT = {"ea_shuttle": (9.0, 7.0), "ea_atmo_shuttle": (5.0, 2.0), "ea_construction_tender": (12.0, 10.0)}
+CRAFT = {"ea_shuttle": (9.0, 7.0), "ea_atmo_shuttle": (5.0, 2.0), "ea_construction_tender": (12.0, 10.0),
+         "ea_panama": (6.0, 3.5)}  # the Panama at 20 m tall (M10-T71)
 OFFSETS = [(dx, dy) for dx in (-2.0, 0.0, 2.0) for dy in (-2.0, 0.0, 2.0)]
 ROLLS_DEG = (-2.0, 0.0, 2.0)
 

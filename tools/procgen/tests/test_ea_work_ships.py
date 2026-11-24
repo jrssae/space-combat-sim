@@ -288,11 +288,12 @@ class WorkShipChecks:
 class EaPanamaTests(WorkShipChecks, unittest.TestCase):
     CRAFT = ws.PANAMA
     BUILD = staticmethod(ws.build_panama)
-    LENGTH, SPAN, HEIGHT = 180.0, 44.86, 29.44  # Q49's length and the reference's box at it
+    K = 20.0 / 29.607  # Q66's height over the modelled hull's (Q49's 180 m)
+    LENGTH, SPAN, HEIGHT = 180.0 * K, 44.86 * K, 20.0  # Q66's height and the reference's box at it
     SHIP_CLASS, ATLAS_PX, TEXEL_MAX_M = "cruiser", 4096, 0.06
     CHUNKS = ("bow", "hold_fore", "hold_aft", "stern")
-    THRUST_Y = -0.175  # the height the section is mirrored about
-    HULL_POINTS = 600
+    THRUST_Y = -0.175 * K  # the height the section is mirrored about
+    HULL_POINTS = 185  # Q74: T51's 600 by the volume left
     PAINT_SRGB = 0x8A7F72  # the maintainer's choice (2026-11-21): brown-grey patchwork, pale roof, dark tanks
     NO_HIT_VOLUME = ("aerials",)
 
@@ -306,9 +307,9 @@ class EaPanamaTests(WorkShipChecks, unittest.TestCase):
 
     def test_only_the_bells_throats_are_lit_not_their_insides(self) -> None:
         glow = glowing_points(self.dir_a, self.manifest["mesh"]) + self.offset
-        stern = glow[glow[:, 2] > 150.0]
+        stern = glow[glow[:, 2] > 150.0 * self.K]
         self.assertGreater(len(stern), 0)
-        self.assertLess(float(stern[:, 2].max()), 176.5, "the glow stays deep in each bell, a collar round its throat")
+        self.assertLess(float(stern[:, 2].max()), 176.5 * self.K, "the glow stays deep in each bell, a collar round its throat")
 
     def test_every_piece_is_authored_where_it_sits(self) -> None:
         self.assertEqual({p.side for p in self.pieces}, {cv.LONE}, "a lopsided hull: nothing mirrored, nothing symmetrised")
@@ -317,12 +318,12 @@ class EaPanamaTests(WorkShipChecks, unittest.TestCase):
     def test_the_hull_is_lopsided_as_the_reference(self) -> None:
         by_name = {p.name: p.part.mesh.vertices for p in self.pieces}
         spine = by_name["bow_spine"]
-        self.assertLess(float(spine[:, 0].max()), -10.0, "the bow spine stands on the port side")
+        self.assertLess(float(spine[:, 0].max()), -10.0 * self.K, "the bow spine stands on the port side")
         self.assertAlmostEqual(float(spine[:, 2].min()), 0.0, places=6, msg="and leads the ship")
         hold = by_name["hold_fore"]
-        port, starboard = hold[hold[:, 0] < -17.0], hold[hold[:, 0] > 17.0]
-        self.assertGreater(float(np.ptp(port[:, 1])), 25.0, "tall to port")
-        self.assertLess(float(np.ptp(starboard[:, 1])), 8.0, "a thin edge to starboard")
+        port, starboard = hold[hold[:, 0] < -17.0 * self.K], hold[hold[:, 0] > 17.0 * self.K]
+        self.assertGreater(float(np.ptp(port[:, 1])), 25.0 * self.K, "tall to port")
+        self.assertLess(float(np.ptp(starboard[:, 1])), 8.0 * self.K, "a thin edge to starboard")
 
     def test_the_section_fits_babylon_5s_bay_core(self) -> None:
         hull = np.concatenate([p.part.mesh.vertices for p in self.pieces if not p.name.startswith("aerials")])
@@ -331,23 +332,23 @@ class EaPanamaTests(WorkShipChecks, unittest.TestCase):
 
     def test_two_engines_either_side_of_the_core(self) -> None:
         mains = {pod["name"]: self.authored(pod["main"]["position"]) for pod in self.hp["pods"]}
-        self.assertAlmostEqual(mains["l"][0], -11.7, places=3)
-        self.assertAlmostEqual(mains["r"][0], 11.5, places=3)
+        self.assertAlmostEqual(mains["l"][0], -11.7 * self.K, places=3)
+        self.assertAlmostEqual(mains["r"][0], 11.5 * self.K, places=3)
         com = self.authored(self.hp["center_of_mass"])
-        self.assertLess(abs(com[0] - 0.5 * (mains["l"][0] + mains["r"][0])), 0.2, "between the engines: no yaw torque to speak of")
+        self.assertLess(abs(com[0] - 0.5 * (mains["l"][0] + mains["r"][0])), 0.2 * self.K, "between the engines: no yaw torque to speak of")
 
     def test_the_port_face_and_the_bow_carry_lit_ports(self) -> None:
         glow = glowing_points(self.dir_a, self.manifest["mesh"]) + self.offset
-        face = glow[(glow[:, 0] < -20.0) & (glow[:, 2] > 55.0) & (glow[:, 2] < 131.0)]
+        face = glow[(glow[:, 0] < -20.0 * self.K) & (glow[:, 2] > 55.0 * self.K) & (glow[:, 2] < 131.0 * self.K)]
         self.assertGreater(len(face), 0, "rows of ports along the port face")
-        self.assertGreater(len(glow[glow[:, 2] < 21.0]), 0, "and on the bow spine")
+        self.assertGreater(len(glow[glow[:, 2] < 21.0 * self.K]), 0, "and on the bow spine")
 
     def test_the_cargo_lock_is_on_the_port_side_aft(self) -> None:
         (port,) = self.hp["docking_ports"]
         self.assertEqual((port["name"], port["out"]), ("port_lock", [-1.0, 0.0, 0.0]))
         at = self.authored(port["position"])
-        self.assertLess(at[0], -22.0)
-        self.assertTrue(131.0 < at[2] < 154.5)
+        self.assertLess(at[0], -22.0 * self.K)
+        self.assertTrue(131.0 * self.K < at[2] < 154.5 * self.K)
 
 
 class EaConstructionTenderTests(WorkShipChecks, unittest.TestCase):

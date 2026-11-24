@@ -6,7 +6,7 @@ extends TestSteps
 
 const TYPES: Array[StringName] = [&"ea_panama", &"ea_construction_tender"]
 ## The hull points of T03's loadouts (`data/capitals/loadouts.json`, Q53).
-const HULL_POINTS: Dictionary[StringName, float] = {&"ea_panama": 600.0, &"ea_construction_tender": 50.0}
+const HULL_POINTS: Dictionary[StringName, float] = {&"ea_panama": 185.0, &"ea_construction_tender": 50.0}
 ## Where each is placed off the player: near enough that its death is drawn in full, chunks and all (the 8 m tender's
 ## fireball would be a far flash at the Panama's distance, M10-T69).
 const SPAWN_AT: Dictionary[StringName, Vector3] = {&"ea_panama": Vector3(900.0, 0.0, -1200.0), &"ea_construction_tender": Vector3(120.0, 0.0, -150.0)}

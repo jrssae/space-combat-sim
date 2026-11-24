@@ -1005,7 +1005,7 @@
   "ea_panama": {
    "task": "T51",
    "class": "cruiser",
-   "hull": 600,
+   "hull": 185,
    "jump": "gate",
    "weapons": {},
    "interceptors": {},

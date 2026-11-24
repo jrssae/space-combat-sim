@@ -387,7 +387,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T68 | A | Omega rebuilt on the new 4-part kit (Q63): assemble the kit into one reference, sheet to the maintainer, re-measure (silhouettes, sections, T66 sweeps and bow depth map), open-frame bow and octagonal bay (Q62), the drum in the kit's pose | T66 | Fable | not started |
 | T69 | F | Re-size the small EA craft (Q65): `ea_construction_tender` to 8 m, `ea_atmo_shuttle` (Kestrel) to 29 m, `ea_shuttle` (crew shuttle) to 38 m; check each STL's proportions still hold (90 % rule at the new length), ShipSpecs (mass, thrust, hull points by size), hardpoints, collision, the docks and bays that hold them, the ship line-up spacing, docs/assets-capital.md and the catalogue page | T55, T57 | Sonnet | done |
 | T70 | E | Clearance: the resized EA craft through B5's main docking bay (crew shuttle, Kestrel, tender) | T69 | Sonnet | done |
-| T71 | F | Re-size the Panama (Q66): `ea_panama` scaled uniformly to 20 m tall (about 124 x 31 x 20 m, scale 0.69), as T69 did for the small craft: the 90 % rule at the new size, ShipSpec (mass, thrust, hull points), hardpoints, collision and chunks, its docks and routes (B5's bay, civilian traffic), the line-up, docs and the catalogue page | T69 | Opus | not started |
+| T71 | F | Re-size the Panama (Q66): `ea_panama` scaled uniformly to 20 m tall (about 124 x 31 x 20 m, scale 0.69), as T69 did for the small craft: the 90 % rule at the new size, ShipSpec (mass, thrust, hull points), hardpoints, collision and chunks, its docks and routes (B5's bay, civilian traffic), the line-up, docs and the catalogue page | T69 | Opus | in progress |
 | T72 | A | Interior layer for the built hulls (Q68): as B5's (`InteriorZones` and the interior faces flagged by the generator; see docs/assets-station.md), for every built ship with an open interior: Hyperion (Starfury bays, shuttle bay), Omega and Nova (forward bay), raider strike carrier, and any civilian with an open hold or bay; sunlight kept out, the interiors lit only by their own lights; closed doors still show nothing; tests and before/after shots with the sun shining into an open bay | T22 | Opus | not started |
 | T73 | A | Seam and plating defaults (Q69): the Hyperion's final seam depth, width and darkness and its patch scheme (`PatchPlates`: each ship's main colour, some panels slightly darker, a few several shades darker, shades from that ship's own palette) become the shared defaults in tools/procgen (core/seams.py and the styles), so every NEW hull gets them; every EXISTING hull pins its current values so its build stays byte-identical until T74; tests, a sample new-default hull sheet | T22 | Opus | done |
 | T74 | A | Apply the new seam and plating defaults to the existing hulls (Q69): remove T73's pins hull by hull (fighters, raiders, civilians, capitals, B5 and the other stations), rebuild, before/after sheets at 30 m and 150 m for the maintainer, tests, CI asset time unchanged | T73 | Opus | not started |
@@ -1141,6 +1141,23 @@ On top of it:
 ### M10-T70 Clearance of the resized EA craft in B5's main docking bay
 
 - **T70 done (2026-11-23).** Each hull's collision shapes swept down the mouth (73.2 x 16.7 m band, 45.5 x 30.0 m core, outline clear to the doors) all fit, level and centred: crew shuttle 9.5 m, Kestrel 5.3 m (the wingtip under the band's ceiling), tender 12.8 m; off by 2 m and 2 degrees of roll 7.4, 2.4 and 10.7 m. Test: `tools/procgen/tests/test_ea_craft_bay_clearance.py`.
+
+### M10-T71 Re-size the Panama (Q66, Q74)
+
+- **T71 done (2026-11-24).** `ea_panama` built 20 m tall: **121.59 x 30.28 x 20.00 m** (was 180.00 x 44.83 x 29.61; scale
+  0.6755, a little under Q66's "about 124 x 31", which took the height as 29 m). As T69: `Craft.scale` from `PANAMA_HEIGHT_M`
+  over the modelled height (`assets/ea_work_ships.py`) grows pieces, seams, paint, collision, chunks and hardpoints by one
+  factor. The 90 % compare at 121.6 m gives T51's scores (0.982, 0.983, 0.972; sizes within 0.6 %). Texel 3.5 cm on its 4 096 px
+  atlas (still a cruiser by budget); the port rows of windows and the plating shrink with it and still read at 35 m.
+  ShipSpec by Q74, not T69's length-squared rule: mass, hull points, fuel and RCS force by the volume left (x 0.308):
+  4 930 t, 185 hull points (`loadouts.json` with it), 154 t of fuel; thrust 2.465 MN a pod, so 1.0 m/s² as before; inertia
+  and RCS torque by the scale's fifth power, so the turn rates (1.1/1.5/3 deg/s) and angular accelerations hold.
+  B5's main bay: the old hull's collision touched the mouth (-0.1 m); the new clears it by 6.1 m level and centred, 3.7 m off
+  by 2 m and 2 degrees of roll (`test_ea_craft_bay_clearance.py` now holds it). The bay is 72 m deep to its inner doors, so
+  the Panama noses in but does not fit whole. It has no docking class and no route (missions place it), so no traffic data
+  changed; the line-up keeps its places. Docs: `docs/assets-civilian.md`, `docs/assets-capital.md`,
+  `docs/design-references.md`, `docs/catalogue/ships.md`. Size sheet (before and after beside a Starfury at 260 m, the bay
+  mouth fit, close-ups): `references/screenshots/M10-T71 Panama/size_sheet.png`; judging the look is (H).
 
 ### M10-T73 Seam and plating defaults (Q69)
 

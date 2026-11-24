@@ -1541,8 +1541,8 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
 
 ### EA Panama-class transport (`ea_panama`, T51)
 
-- **Reference.** `EA Panama class.STL` (6 100 triangles), mapping `--right=-x --up=+z --aft=+y`, **180 m** (Q49, an
-  estimate that fits B5's main bay core). Box 45 m wide, 29 m tall. Show: `ea_panama/` (seven images; TBP's "White Star"
+- **Reference.** `EA Panama class.STL` (6 100 triangles), mapping `--right=-x --up=+z --aft=+y`, **20 m tall, 121.6 m long**
+  (Q66, T71; Q49's first estimate was 180 m). Box 30 m wide, 20 m tall (45 x 29.6 at 180 m). Show: `ea_panama/` (seven images; TBP's "White Star"
   type commercial transport). Civilian pipeline (Q49).
 - **Shape.** A long **cargo box** (10 to 88 %, about 40 m wide and 25 m tall) with flat sides and a stepped roof; a narrow
   **bow spine** with a sensor spike forward of it (0 to 10 %); four cylindrical **tanks** along the box's lower corners

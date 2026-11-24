@@ -30,7 +30,7 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `ea_hyperion` | earth_alliance | capital (destroyer) | 1069.2 x 254.4 x 319.5 | 17000 | none | yes | no |
 | `ea_shuttle` | earth_alliance | civilian | 38.0 x 18.8 x 10.7 | 400 | none | no | no |
 | `ea_atmo_shuttle` | earth_alliance | civilian | 29.0 x 51.6 x 9.6 | 300 | none | no | no |
-| `ea_panama` | earth_alliance | civilian | 180.0 x 44.8 x 29.6 | 600 | none | no | no |
+| `ea_panama` | earth_alliance | civilian | 121.6 x 30.3 x 20.0 | 185 | none | no | no |
 | `ea_construction_tender` | earth_alliance | civilian | 8.0 x 11.2 x 3.8 | 50 | none | no | no |
 | `starfury_renegade` | renegades | fighter | 9.8 x 15.4 x 7.5 | 300 | fixed `pulse_cannon_ef` | no | no |
 | `ea_thunderbolt` | earth_alliance | fighter | 16.2 x 12.0 x 6.3 | 300 | fixed `pulse_cannon_ef` | no | no |

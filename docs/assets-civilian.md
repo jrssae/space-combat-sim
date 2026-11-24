@@ -281,7 +281,7 @@ within a pixel; the splat column is gone with the splats.
 | `skylark_transport` | whole ship (no shift) | 0.979 | 0.980 | 0.956 | 1.001 | 1.000 | 0.998 | 2026-11-07 |
 | `ea_shuttle` | whole craft at 38 m (no shift; M10-T57, re-run at T69's size) | 0.984 | 0.984 | 0.971 | 1.000 | 0.999 | 0.998 | 2026-11-23 |
 | `ea_atmo_shuttle` | whole craft at 29 m (best shift x +0.07 m, the model's vanes sit 0.15 m to starboard; unshifted 0.979, 0.974, 0.917; M10-T57, re-run at T69's size) | 0.973 | 0.974 | 0.932 | 1.000 | 0.999 | 0.988 | 2026-11-23 |
-| `ea_panama` | whole hull (no shift; M10-T51) | 0.982 | 0.983 | 0.972 | 1.000 | 0.999 | 1.006 | 2026-11-21 |
+| `ea_panama` | whole hull at 20 m tall, 121.6 m (no shift; M10-T51, re-run at T71's size) | 0.982 | 0.983 | 0.972 | 1.000 | 0.999 | 1.006 | 2026-11-24 |
 | `ea_construction_tender` | whole craft at 8 m (no shift; M10-T55, re-run at T69's size) | 0.934 | 0.959 | 0.926 | 1.000 | 1.000 | 1.000 | 2026-11-23 |
 
 **The generator sections below** record each task as it was built on splats (T12 to T22). Their geometry, hardpoints and
@@ -673,22 +673,22 @@ by type. Callsigns `SHUTTLE` and `KESTREL` (TBP's class name for the atmospheric
 (`CENTRE`) nor mirrored (`RIGHT`). Every piece of the Panama is `LONE`; on the tender the claws, the shoulder blocks and
 the landing gear are. The body origin stays on the reference box's centre plane (x = 0).
 
-**Classes (Q38).** The Panama is a **cruiser**: one 4 096 px atlas. It is a civilian, but 180 m long and it flies into
-Babylon 5's docking bay, so it is seen from a few metres; a 2 048 px atlas would put a texel at 10 cm. The tender is a
+**Classes (Q38).** The Panama is a **cruiser**: one 4 096 px atlas. It is a civilian, but 122 m long (T71, Q66: 20 m tall) and it flies into
+Babylon 5's docking bay, so it is seen from a few metres; a 2 048 px atlas would put a texel at 7 cm. The tender is a
 **small craft**: one 2 048 px atlas. Both write the low texture set a mip level down.
 
 **As built (2026-11-21, seed 42).**
 
 | | `ea_panama` | `ea_construction_tender` |
 |---|---|---|
-| Size (L x W x H) | 180.00 x 44.83 x 29.61 m (41.7 x 26.3 m without the aerials) | 8.00 x 11.15 x 3.84 m (T69, Q65; authored 50.00 x 69.70 x 24.01, its part numbers below are the authored ones, times 0.16 as built) |
+| Size (L x W x H) | 121.59 x 30.28 x 20.00 m (T71, Q66; authored 180.00 x 44.83 x 29.61, 41.7 x 26.3 without the aerials; its part and hardpoint numbers below are the authored ones, times 0.6755 as built) | 8.00 x 11.15 x 3.84 m (T69, Q65; authored 50.00 x 69.70 x 24.01, its part numbers below are the authored ones, times 0.16 as built) |
 | Triangles (budget) | 3 862 (60 000) | 11 712 (30 000) |
-| Texel, atlas fill | 5.2 cm, 0.72 | 1.0 cm (a fighter's), 0.66 |
+| Texel, atlas fill | 3.5 cm (5.2 cm at 180 m), 0.72 | 1.0 cm (a fighter's), 0.66 |
 | Texture memory, high / low set (budget) | 53.3 / 13.3 MB (56.0 / 16.0) | 13.3 / 3.3 MB (16.0 / 6.0) |
 | Video memory on the GPU, high / low set (RX 6950 XT, read off the sheet runs) | about 53 / 13 MB | about 14 / 4 MB |
 | Chunks | `bow`, `hold_fore`, `hold_aft`, `stern` | `body`, `stern`, `boom_l`, `boom_r`, `claws_l`, `claws_r` |
 | Collision primitives | 49 | 92 |
-| Sample spacing | 1.5 m | 0.064 m (authored 0.4 m) |
+| Sample spacing | 1.01 m (authored 1.5 m) | 0.064 m (authored 0.4 m) |
 
 | Craft | Parts (authored frame: x to starboard, y up, z aft from the bow, x and y on the reference's box centre) |
 |---|---|
@@ -730,8 +730,9 @@ Saturn 8 bell (the look sheet's last row). On the tender only the pods' after be
 Every visible surface sample lies inside a primitive grown by one sample spacing, and no primitive reaches more than
 0.5 m past the hull's box (`test_ea_work_ships.py`); the Panama's aerials are left out of it.
 
-**In the game.** `assets/ships/ea_panama.tres` (16 000 t, two engines of 8 MN: 1.0 m/s², 1.1/1.5/3 deg/s, 600 hull
-points) and `assets/ships/ea_construction_tender.tres` (10 t, two pods of 10 kN: 2.0 m/s², braking at half that,
+**In the game.** `assets/ships/ea_panama.tres` (4 930 t, two engines of 2.465 MN: 1.0 m/s², 1.1/1.5/3 deg/s, 185 hull
+points; T71 took T51's 16 000 t, 600 points, fuel and RCS force by the volume left, x 0.308 (Q74), and its inertia and RCS torque
+by the fifth power of the scale, so every acceleration and turn rate holds) and `assets/ships/ea_construction_tender.tres` (10 t, two pods of 10 kN: 2.0 m/s², braking at half that,
 30/30/45 deg/s, 50 hull points; T69 scaled T55's 50 m numbers to 8 m as the shuttles'); first numbers, to be tuned when a mission flies them. Hull points and "unarmed" are
 T03's (`data/capitals/loadouts.json`, where the Panama's class is now `cruiser`, as its budget). Both are catalogue
 civilians of `earth_alliance` with `random_pool: false` and no docking class: random traffic, encounters and station
@@ -739,7 +740,7 @@ traffic do not draw them, so older scenarios' seeded picks stay as they were; a 
 `PANAMA` and `TENDER`.
 
 ```
-.venv/bin/python3 -I tools/refview/compare.py "references/EA Panama class.STL" ea_panama --length 180 --right=-x --up=+z --aft=+y
+.venv/bin/python3 -I tools/refview/compare.py "references/EA Panama class.STL" ea_panama --length 121.6 --right=-x --up=+z --aft=+y
 .venv/bin/python3 -I tools/refview/compare.py references/EA_construction_tender.stl ea_construction_tender --length 8 --right=-x --up=+z --aft=+y
 ```
 
