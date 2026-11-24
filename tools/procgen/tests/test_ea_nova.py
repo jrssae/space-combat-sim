@@ -34,7 +34,7 @@ STL = ROOT / "references" / fid.REFERENCE
 TEST_OPTIONS = {"atlas_px": 1024, "detail_px": 128}  # the default sample spacing: the coverage check needs it; the open bow's charts need 1 024 px
 LENGTH, SPAN, HEIGHT = 1502.1, 383.0, 443.7  # T01's length; the wing guns' masts across, the roof masts to the keel mast
 SECTIONS = ("bow", "bridge", "fuel", "spine_fore", "hangar", "spine_mid", "spine_aft", "reactor", "engine_r", "engine_l")
-MOUNTS = {"turret": 18, "beam": 6, "interceptor": 6}
+MOUNTS = {"turret": 14, "interceptor": 4}  # Q71: 14 fixed pulse cannons and the middle lug's 4 pods as interceptors; no beams
 BAYS, STARFURIES = 1, 24
 MOUTH_LO, MOUTH_HI = (-45.0, -25.0, 175.0), (45.0, 25.0, 235.0)  # round the bay's mouth: the frame, the hall's front, the fins and plates
 
@@ -88,9 +88,6 @@ class NovaBuildTests(unittest.TestCase):
         for w in self.hp["weapons"]:
             kinds[w["kind"]] = kinds.get(w["kind"], 0) + 1
         self.assertEqual(kinds, MOUNTS)
-        self.assertEqual({w["weapon"] for w in self.hp["weapons"] if w["kind"] == "beam"}, {"ea_sweep_beam_nova"}, "the Omega's beams at 80 %")
-        beams = [self.authored(w["position"])[2] for w in self.hp["weapons"] if w["kind"] == "beam"]
-        self.assertEqual((sum(z < 700.0 for z in beams), sum(z > 700.0 for z in beams)), (2, 4), "two fore, four aft")
         self.assertEqual(len(self.hp["bays"]), BAYS)
         self.assertEqual(sum(b["capacity"] for b in self.hp["bays"]), STARFURIES)
         # The one bay faces the bow from the bridge tube's front, above the retro thrusters (the maintainer, 2026-11-21).
@@ -105,19 +102,40 @@ class NovaBuildTests(unittest.TestCase):
         self.assertEqual(len(retros), 2, "two oval retro thrusters")
         retro_top = max(float(m.part.mesh.bounds()[1][1]) for m in retros)
         self.assertGreater(en.nv.BAY_Y - 0.5 * en.nv.BAY_MOUTH[1], retro_top, "the mouth above the retro thrusters")
+        # Q71: all 24 launch and land through this bay on a hidden lift in its floor, for T17.
+        self.assertTrue(bay["recovers"])
+        lift = self.authored(bay["elevator"])
+        np.testing.assert_allclose(lift, [0.0, en.nv.BAY_Y - 0.5 * en.nv.BAY_MOUTH[1], en.nv.ELEVATOR_Z], atol=1e-3, err_msg="in the bay's floor")
+        self.assertTrue(en.nv.BAY_MOUTH_Z < lift[2] < en.nv.BAY_BACK_Z, "inside the bay")
+        self.assertGreater(bay["elevator_travel_m"], 0.0)
 
     def test_the_guns_are_the_references_pods(self) -> None:
-        """M10-T67: the 18 twin cannon pods of the reference with guns, each a two-barrel turret with the medium plasma gun: two on
-        each flank (beside the command block, on the wing's tip) and one on each of the hangar block's, four on each ring lug,
-        the aft lug's four facing the stern."""
-        guns = [w for w in self.hp["weapons"] if w["kind"] == "turret"]
-        self.assertEqual(len(guns), MOUNTS["turret"])
-        self.assertEqual({(w["weapon"], w["barrels"]) for w in guns}, {("ea_plasma_medium", 2)})
-        ups = [np.round(w["up"], 3).tolist() for w in guns]
-        self.assertEqual((sum(abs(u[0]) == 1.0 for u in ups), sum(abs(u[1]) == 1.0 for u in ups)), (6, 12), "six on the flanks, twelve on the lugs")
-        self.assertEqual(sum(w["forward"][2] > 0.5 for w in guns), 4, "the aft lug's four face the stern")
-        for w in guns:
+        """M10-T67, Q71: the 18 twin pods of the reference with guns: two on each flank (beside the command block, on the wing's
+        tip), one on each of the hangar block's and four on each ring lug, the aft lug's four facing the stern. Fourteen are
+        fixed pulse cannons; the middle lug's four, their fire ahead blocked by the fore lug's pods, swivel as interceptors."""
+        pods = [w for w in self.hp["weapons"] if w["kind"] in MOUNTS]
+        self.assertEqual(len(pods), 18)
+        self.assertTrue(all(w["barrels"] == 2 for w in pods))
+        fixed = [w for w in pods if w["kind"] == "turret"]
+        self.assertEqual({w["weapon"] for w in fixed}, {"ea_pulse_cannon_fixed"})
+        for w in fixed:
+            self.assertEqual((w["traverse_deg"], w["elevation_deg"]), (0.0, [0.0, 0.0]), f"{w['name']} is fixed")
+        ups = [np.round(w["up"], 3).tolist() for w in fixed]
+        self.assertEqual((sum(abs(u[0]) == 1.0 for u in ups), sum(abs(u[1]) == 1.0 for u in ups)), (6, 8), "six on the flanks, eight on the lugs")
+        self.assertEqual(sum(w["forward"][2] > 0.5 for w in fixed), 4, "the aft lug's four face the stern")
+        guards = [w for w in pods if w["kind"] == "interceptor"]
+        self.assertEqual({w["weapon"] for w in guards}, {"ea_interceptor_pod"})
+        self.assertEqual(sorted(w["name"] for w in guards), ["interceptor_mid_low_l", "interceptor_mid_low_r", "interceptor_mid_top_l", "interceptor_mid_top_r"])
+        for w in guards:
+            self.assertEqual(w["section"], "spine_mid")
+            self.assertEqual((w["traverse_deg"], w["elevation_deg"]), (180.0, [0.0, 90.0]), "the half sphere over its plate")
+            self.assertAlmostEqual(abs(w["up"][1]), 1.0, places=6, msg="facing out from the lug")
+            self.assertGreater(self.authored(w["position"])[1] * w["up"][1], 0.0, "away from the girder")
+        for w in pods:
             self.assertGreater(abs(self.authored(w["position"])[0]), 70.0, f"{w['name']} stands out on its pod")
+        # Each interceptor's pod sits right behind a fore lug pod, so a fixed gun there would fire into it.
+        fore = {(round(w["position"][0], 1), round(w["position"][1], 1)) for w in fixed if w["name"].startswith("pulse_fore_")}
+        self.assertEqual({(round(w["position"][0], 1), round(w["position"][1], 1)) for w in guards}, fore)
 
     def test_engines_and_lights(self) -> None:
         self.assertEqual(len(self.hp["engines"]), 4)

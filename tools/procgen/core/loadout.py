@@ -1,5 +1,6 @@
 """A capital hull's built mounts against its loadout (M10-T03's ``data/capitals/loadouts.json``): each hull task checks that
-its manifest carries the weapons, interceptors and launch bays its loadout row names, on mounts of the right kind.
+its manifest carries the weapons, interceptors and launch bays its loadout row names, on mounts of the right kind (a fixed
+gun's mount kept within its row's arc).
 
 Pure: it reads the two JSON documents as dicts, so a hull's Python test and any later tool share one rule.
 """
@@ -46,6 +47,9 @@ def problems(hardpoints: Mapping[str, Any], loadouts: Mapping[str, Any], hull_id
             out.append(f"mount {mount['name']!r}: unknown weapon {wid!r}")
         elif MOUNT_FOR_KIND.get(weapons[wid]["kind"]) != mount["kind"]:
             out.append(f"mount {mount['name']!r} is a {mount['kind']}, {wid!r} needs a {MOUNT_FOR_KIND.get(weapons[wid]['kind'])}")
+        elif weapons[wid]["kind"] == "bolt_fixed" and float(mount.get("traverse_deg", 0.0)) > 0.5 * float(weapons[wid].get("arc_deg", 0.0)):
+            # A fixed gun is aimed by the hull: its mount turns no further than the row's arc allows (Q71).
+            out.append(f"mount {mount['name']!r} traverses {mount['traverse_deg']} deg, the fixed {wid!r} allows {0.5 * float(weapons[wid].get('arc_deg', 0.0))}")
     if built != wanted:
         out.append(f"weapons built {dict(sorted(built.items()))}, the loadout has {dict(sorted(wanted.items()))}")
     launched: Counter[str] = Counter()

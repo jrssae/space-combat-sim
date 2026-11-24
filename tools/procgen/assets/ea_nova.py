@@ -6,12 +6,10 @@ The structure is ``parts/ea_nova.py`` (measured off the reference model); this f
 it and names the damage sections. The loadout is ``data/capitals/loadouts.json``, ``ea_nova`` (M10-T03, Q53): each mount's
 ``weapon`` names the weapon that stands on it and each bay's ``craft`` and ``capacity`` what it launches.
 
-* 18 twin plasma cannon pods (``parts/ea_nova_guns.py``, the reference with guns, M10-T67): one beside the command block and
-  one on the flank wing's tip each side, one on each flank of the hangar block, and four on each ring lug's outriggers (the
-  aft lug's facing the stern);
-* 6 sweeping beams at 80 % (the Omega's): one on each flank of the command block covering the fore hemisphere, four on the
-  engine housing's corners covering the aft;
-* 6 interceptors along the flanks;
+* 18 twin gun pods (``parts/ea_nova_guns.py``, the reference with guns, M10-T67): one beside the command block and one on
+  the flank wing's tip each side, one on each flank of the hangar block, and four on each ring lug's outriggers (the aft
+  lug's facing the stern). No beams and no separate interceptors (Q71): 14 are fixed pulse cannons, the middle lug's 4
+  interceptors on swivel rings;
 * 1 launch bay facing the bow from the bridge tube's front, above the retro thrusters (the Omega's lit bay; the maintainer,
   2026-11-21), in the bow section: all 24 Starfuries.
 
@@ -36,13 +34,12 @@ from ..parts import capital as cp
 from ..parts import capital_fittings as fittings
 from ..parts.capital_flush import set_back_flush_parts
 from ..parts import capital_solids as cs
-from ..parts import capital_weapons as weapons
 from ..parts import ea_nova as nv
 from ..parts import ea_nova_guns
 from ..parts import ea_nova_marks as marks
 from ..styles import Style
 from ..styles.ea_capital import DEFAULT_LOOK, ea_capital
-from .ea_omega import HEMISPHERE_DEG, RUNNING_RED
+from .ea_omega import RUNNING_RED
 
 ASSET_ID = "ea_nova"
 GENERATOR_VERSION = 1
@@ -69,34 +66,14 @@ PIECES = (cap.PieceSpec(cap.HULL_PIECE, ATLAS_PX),)
 # (M10-T67): the gun pods' masts and fins are thin, so the cheapest join would be with a twin across the girder.
 COLLISION = col.Budget(max_shapes=64, max_excess_m=2.5)
 
-BEAM, INTERCEPTOR = "ea_sweep_beam_nova", "ea_interceptor"
 UP, DOWN, RIGHT = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0), (1.0, 0.0, 0.0)
 FLANK_FROM_Z = 373.0  # the fore spine's waist and shelves start behind the open bow (the reference's)
 MID_END_Z = 903.0  # where the mid spine (the first aft bay's gun deck) gives way to the aft spine
 
 
 def weapon_modules(s: Style) -> list[cp.Module]:
-    """Every weapon mount in its place and section (centre mounts and the starboard one of each pair)."""
-    out: list[cp.Module] = []
-
-    def add(section: str, m: cp.Module, side: str = cp.CENTRE) -> None:
-        out.append(m.in_section(section).on_side(side))
-
-    out += ea_nova_guns.guns(s)
-
-    # The beams: fore on the command block's flanks, aft on the housing's corners at its stern edge.
-    fore = weapons.beam_emitter("beam_fore_r", 30.0, s, arc_deg=HEMISPHERE_DEG).mounted((nv.PLATE_X, 32.0, 236.0), RIGHT)
-    add("bow", fore.with_params(weapon=BEAM), cp.RIGHT)
-    for tag, sign in (("top", 1.0), ("low", -1.0)):
-        normal = (0.39, 0.92 * sign, 0.0)
-        aft = weapons.beam_emitter(f"beam_aft_{tag}_r", 28.0, s, arc_deg=HEMISPHERE_DEG).mounted((76.0, 87.0 * sign, 1218.0), normal, (0.0, 0.0, 1.0))
-        add("reactor", aft.with_params(weapon=BEAM), cp.RIGHT)
-
-    for name, section, at, up in (("interceptor_bow_r", "bow", (nv.PLATE_X, -30.0, 340.0), RIGHT),
-                                  ("interceptor_hangar_r", "hangar", (nv.HANGAR_W, 30.0, 740.0 - 12.0), RIGHT),
-                                  ("interceptor_stern_r", "reactor", (88.0, 40.0, 1190.0), RIGHT)):
-        add(section, weapons.interceptor_dome(name, 4.5, s).mounted(at, up).with_params(weapon=INTERCEPTOR), cp.RIGHT)
-    return out
+    """Every weapon mount in its place and section: the gun pods, the only weapons the Nova carries (Q71)."""
+    return ea_nova_guns.guns(s)
 
 
 def light_modules() -> list[cp.Module]:

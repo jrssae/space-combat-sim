@@ -42,8 +42,8 @@ WEAPON_KINDS = (TURRET, BEAM, INTERCEPTOR, MISSILE, MINE)
 LAUNCH_KINDS = (BAY, TUBE)
 HARDPOINT_KINDS = (*WEAPON_KINDS, *LAUNCH_KINDS, ENGINE, LIGHT, MARK, DOOR)
 
-# Hardpoint parameters that are points in the module's frame: they move with it (a bay's mouth).
-POINT_PARAMS = ("exit",)
+# Hardpoint parameters that are points in the module's frame: they move with it (a bay's mouth, its lift).
+POINT_PARAMS = ("exit", "elevator")
 
 SKIN_HULL, SKIN_FITTING, SKIN_NONE = "hull", "fitting", "none"
 SKINS = (SKIN_HULL, SKIN_FITTING, SKIN_NONE)

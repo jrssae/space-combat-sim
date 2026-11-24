@@ -159,3 +159,14 @@ func test_the_omega_struggles_to_turn_and_the_nova_does_not_out_turn_it_in_accel
 	var omega_acc: float = omega.rcs_torque_max.x / omega.inertia.x
 	var nova_acc: float = nova.rcs_torque_max.x / nova.inertia.x
 	assert_lt(omega_acc, nova_acc * 0.6, "and it is slow to start a turn")
+
+
+func test_the_nova_turns_about_three_times_as_well_as_the_omega() -> void:
+	# Q71: about three times the Omega's rates and angular acceleration on every axis, still slow for its mass.
+	var omega: ShipSpec = load("res://assets/ships/ea_omega.tres")
+	var nova: ShipSpec = load("res://assets/ships/ea_nova.tres")
+	for axis: int in 3:
+		assert_almost_eq(nova.rate_max[axis], 3.0 * omega.rate_max[axis], 0.01, "rate, axis %d" % axis)
+		var ratio: float = (nova.rcs_torque_max[axis] / nova.inertia[axis]) / (omega.rcs_torque_max[axis] / omega.inertia[axis])
+		assert_almost_eq(ratio, 3.0, 0.15, "angular acceleration, axis %d" % axis)
+	assert_lt(nova.rate_max.x, 5.0, "still a slow turner")

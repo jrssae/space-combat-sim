@@ -1,8 +1,11 @@
-"""The Nova's eighteen twin plasma cannons (M10-T67), as the reference with guns has them
+"""The Nova's eighteen twin gun pods (M10-T67), as the reference with guns has them
 (``references/EA_Nova_Dreadnought_(with_guns).stl``, thing:6820713): one pod shape, a faceted housing round two long barrels
 with a mast through it, stood on the hull in four ways. A pod beside the command block and one on each flank wing's tip, one on
 each flank of the hangar block, and four on each ring lug's outrigger plates (above and below, either side): the fore and
 middle lugs' face the bow, the aft lug's face the stern.
+
+Q71 (the maintainer, 2026-11-24): fourteen are fixed pulse cannons firing along the pod; the middle lug's four, whose fire
+ahead the fore lug's pods block, are interceptors swivelling on a turret ring through the half sphere over their plate.
 
 A pod is built in its own frame (x across, y out from the hull, z aft from the barrels' muzzles, the barrels' axis on
 y = 0) and stood with :meth:`capital.Module.mounted`. Numbers are the reference's at 1 502.1 m.
@@ -34,14 +37,16 @@ MAST_R, MAST_IN = 1.6, -3.0  # the mast's radius and where it starts, out from t
 ARM_Z, ARM_X, ARM_Y, BRACE_X = (65.0, 102.0), (56.5, 113.5), (56.0, 53.5), (48.0, 85.0)
 # The brace's y at its root and its tip: the upper one deepens to its root, the lower one sits lower (the reference's are not mirrored).
 BRACE_Y = {1.0: ((33.0, 38.5), (36.5, 38.5)), -1.0: ((42.5, 44.5), (42.5, 44.5))}
-TURRET_ARC = (-10.0, 90.0)  # as the Omega's turrets: a 200 degree cone round the mount's up
-PLASMA = "ea_plasma_medium"
+PULSE, INTERCEPTOR = "ea_pulse_cannon_fixed", "ea_interceptor_pod"  # Q71: data/capitals/loadouts.json
+HALF_SPHERE = (0.0, 90.0)  # an interceptor pod's elevation over its plate, all the way round
+RING_R, RING_SIDES = (18.0, 15.5), 16  # the swivel ring under an interceptor pod: its base's radius and its race's
+RING_Z = 86.0  # the ring's centre behind the muzzles, under the housing's middle
 
 
 class Gun(NamedTuple):
     """One starboard pod: its name and section, the barrels' axis at the muzzles (x, y, z), its outward normal, which way it
-    faces along the ship (-1 the bow, +1 the stern), its bracket's reach in to the hull and its mast (distance behind the
-    muzzles, length out from the axis)."""
+    faces along the ship (-1 the bow, +1 the stern), its bracket's reach in to the hull, its mast (distance behind the
+    muzzles, length out from the axis) and whether it is an interceptor (Q71) rather than a fixed pulse cannon."""
 
     name: str
     section: str
@@ -50,19 +55,20 @@ class Gun(NamedTuple):
     faces: float
     bracket: float
     mast: tuple[float, float]
+    interceptor: bool = False
 
 
 RIGHT, UP, DOWN = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)
 GUNS = (
-    Gun("plasma_bow_r", "bridge", (77.5, 0.8, 179.2), RIGHT, -1.0, 20.0, (102.5, 12.6)),
-    Gun("plasma_wing_r", "bow", (105.5, 0.8, 286.6), RIGHT, -1.0, 17.5, (102.5, 85.5)),
-    Gun("plasma_fore_top_r", "spine_fore", (95.0, 75.5, 380.0), UP, -1.0, 24.5, (102.5, 86.0)),
-    Gun("plasma_fore_low_r", "spine_fore", (95.0, -75.5, 380.0), DOWN, -1.0, 24.5, (102.5, 86.0)),
-    Gun("plasma_hangar_r", "hangar", (91.5, 0.8, 540.1), RIGHT, -1.0, 24.5, (102.5, 85.5)),
-    Gun("plasma_mid_top_r", "spine_mid", (95.0, 75.5, 745.7), UP, -1.0, 24.5, (102.5, 86.0)),
-    Gun("plasma_mid_low_r", "spine_mid", (95.0, -75.5, 745.7), DOWN, -1.0, 24.5, (102.5, 86.0)),
-    Gun("plasma_aft_top_r", "spine_aft", (95.0, 75.5, 1041.7), UP, 1.0, 24.5, (108.0, 86.0)),
-    Gun("plasma_aft_low_r", "spine_aft", (95.0, -75.5, 1041.7), DOWN, 1.0, 24.5, (108.0, 86.0)),
+    Gun("pulse_bow_r", "bridge", (77.5, 0.8, 179.2), RIGHT, -1.0, 20.0, (102.5, 12.6)),
+    Gun("pulse_wing_r", "bow", (105.5, 0.8, 286.6), RIGHT, -1.0, 17.5, (102.5, 85.5)),
+    Gun("pulse_fore_top_r", "spine_fore", (95.0, 75.5, 380.0), UP, -1.0, 24.5, (102.5, 86.0)),
+    Gun("pulse_fore_low_r", "spine_fore", (95.0, -75.5, 380.0), DOWN, -1.0, 24.5, (102.5, 86.0)),
+    Gun("pulse_hangar_r", "hangar", (91.5, 0.8, 540.1), RIGHT, -1.0, 24.5, (102.5, 85.5)),
+    Gun("interceptor_mid_top_r", "spine_mid", (95.0, 75.5, 745.7), UP, -1.0, 24.5, (102.5, 86.0), True),
+    Gun("interceptor_mid_low_r", "spine_mid", (95.0, -75.5, 745.7), DOWN, -1.0, 24.5, (102.5, 86.0), True),
+    Gun("pulse_aft_top_r", "spine_aft", (95.0, 75.5, 1041.7), UP, 1.0, 24.5, (108.0, 86.0)),
+    Gun("pulse_aft_low_r", "spine_aft", (95.0, -75.5, 1041.7), DOWN, 1.0, 24.5, (108.0, 86.0)),
 )
 
 
@@ -106,18 +112,40 @@ def _tail(name: str, s: Style) -> cp.Module:
     return cs.compound(name, [tail, fin])
 
 
+def _ring(name: str, plate: float, s: Style) -> cp.Module:
+    """The swivel ring an interceptor pod turns on: a base on the outrigger plate and a narrower race up to the housing."""
+    top = HOUSING_IN - 0.5
+    mid = plate + 0.4 * (top - plate)
+
+    def disc(r: float, y0: float, y1: float) -> list[tuple[float, float, float]]:
+        return [(r * np.cos(a), y, RING_Z + r * np.sin(a)) for a in np.linspace(0.0, 2.0 * np.pi, RING_SIDES, endpoint=False) for y in (y0, y1)]
+
+    base = cs.convex(f"{name}_base", disc(RING_R[0], plate - 0.5, mid), s, PANEL, skin=cp.SKIN_FITTING)
+    race = cs.convex(f"{name}_race", disc(RING_R[1], mid - 0.5, top), s, DARK, skin=cp.SKIN_FITTING)
+    return cs.compound(name, [base, race])
+
+
 def pod(gun: Gun, s: Style) -> cp.Module:
-    """One twin cannon pod in the ship's frame, with its turret hardpoint at the barrels' roots in the housing's nose."""
+    """One twin gun pod in the ship's frame. A pulse cannon's fixed hardpoint sits at the barrels' roots in the housing's nose,
+    firing along the pod; an interceptor's sits at its swivel ring's centre, covering the half sphere over the plate."""
     n = gun.name
     parts = [_barrel(f"{n}_barrel_1", -BARREL_X, s), _barrel(f"{n}_barrel_2", BARREL_X, s), _housing(f"{n}_housing", s), _tail(f"{n}_tail", s),
              cs.box(f"{n}_bracket", (-11.0, -gun.bracket, 72.0), (11.0, HOUSING_IN + 1.0, 100.0), s, DARK, skin=cp.SKIN_FITTING),
              cs.rod(f"{n}_mast", (0.0, MAST_IN, gun.mast[0]), (0.0, gun.mast[1], gun.mast[0]), MAST_R, s)]
-    root = HOUSING_Z[0][0]
-    point = cp.Hardpoint(n, cp.TURRET, np.array([0.0, 0.0, root]), np.array([0.0, 0.0, -1.0]), np.array([0.0, 1.0, 0.0]),
-                         {"traverse_deg": 180.0, "elevation_deg": list(TURRET_ARC), "barrel_m": root, "barrels": 2})
+    forward, up = np.array([0.0, 0.0, -1.0]), np.array([0.0, 1.0, 0.0])
+    if gun.interceptor:
+        parts.append(_ring(f"{n}_ring", ARM_Y[0] - abs(gun.muzzle[1]), s))
+        point = cp.Hardpoint(n, cp.INTERCEPTOR, np.array([0.0, 0.0, RING_Z]), forward, up,
+                             {"traverse_deg": 180.0, "elevation_deg": list(HALF_SPHERE), "barrels": 2})
+        weapon = INTERCEPTOR
+    else:
+        root = HOUSING_Z[0][0]
+        point = cp.Hardpoint(n, cp.TURRET, np.array([0.0, 0.0, root]), forward, up,
+                             {"traverse_deg": 0.0, "elevation_deg": [0.0, 0.0], "barrel_m": root, "barrels": 2})
+        weapon = PULSE
     body = dataclasses.replace(cs.compound(n, parts), hardpoints=(point,))
     # Built facing the bow (-z); a stern pod is turned end for end, its muzzles then the pod's aft end.
-    return body.mounted(gun.muzzle, gun.out, (0.0, 0.0, gun.faces)).with_params(weapon=PLASMA)
+    return body.mounted(gun.muzzle, gun.out, (0.0, 0.0, gun.faces)).with_params(weapon=weapon)
 
 
 def arm(gun: Gun, s: Style) -> cp.Module:
@@ -127,7 +155,7 @@ def arm(gun: Gun, s: Style) -> cp.Module:
     z0, z1 = (gun.muzzle[2] + a, gun.muzzle[2] + b) if gun.faces < 0.0 else (gun.muzzle[2] - b, gun.muzzle[2] - a)
     parts = [cs.box(f"{gun.name}_plate", (ARM_X[0], sign * ARM_Y[0], z0), (ARM_X[1], sign * ARM_Y[1], z1), s, PANEL),
              cs.convex(f"{gun.name}_brace", [(x, sign * y, z) for x, ys in zip(BRACE_X, BRACE_Y[sign], strict=True) for y in ys for z in (z0 + 4.0, z1 - 4.0)], s, DARK)]
-    return cs.compound(gun.name.replace("plasma_", "gun_arm_"), parts)
+    return cs.compound("gun_arm_" + gun.name.split("_", 1)[1], parts)
 
 
 def guns(s: Style) -> list[cp.Module]:
@@ -136,4 +164,4 @@ def guns(s: Style) -> list[cp.Module]:
     return out + [arm(g, s).in_section(g.section).on_side(cp.RIGHT) for g in GUNS if g.out != RIGHT]
 
 
-__all__ = ["GUNS", "PLASMA", "Gun", "arm", "guns", "pod"]
+__all__ = ["GUNS", "INTERCEPTOR", "PULSE", "Gun", "arm", "guns", "pod"]

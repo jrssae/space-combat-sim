@@ -54,6 +54,16 @@
    "speed_mps": 1800,
    "range_m": 4000
   },
+  "ea_pulse_cannon_fixed": {
+   "kind": "bolt_fixed",
+   "faction": "earth_alliance",
+   "role": "dual",
+   "damage": 15,
+   "cycle_s": 2.0,
+   "barrels": 2,
+   "speed_mps": 1800,
+   "range_m": 4000
+  },
   "ea_plasma_heavy": {
    "kind": "bolt_heavy",
    "faction": "earth_alliance",
@@ -81,16 +91,6 @@
    "damage": 0,
    "cycle_s": 12.0,
    "beam_dps": 40,
-   "beam_on_s": 3.0,
-   "range_m": 7000
-  },
-  "ea_sweep_beam_nova": {
-   "kind": "beam_sustained",
-   "faction": "earth_alliance",
-   "role": "ac",
-   "damage": 0,
-   "cycle_s": 12.0,
-   "beam_dps": 32,
    "beam_on_s": 3.0,
    "range_m": 7000
   },
@@ -147,6 +147,15 @@
    "damage": 0,
    "cycle_s": 0.25,
    "barrels": 4,
+   "range_m": 1500
+  },
+  "ea_interceptor_pod": {
+   "kind": "interceptor",
+   "faction": "earth_alliance",
+   "role": "pd",
+   "damage": 0,
+   "cycle_s": 0.25,
+   "barrels": 2,
    "range_m": 1500
   },
   "ea_mine": {
@@ -658,11 +667,10 @@
    "hull": 36000,
    "jump": "own",
    "weapons": {
-    "ea_plasma_medium": 18,
-    "ea_sweep_beam_nova": 6
+    "ea_pulse_cannon_fixed": 14
    },
    "interceptors": {
-    "ea_interceptor": 6
+    "ea_interceptor_pod": 4
    },
    "launches": {
     "starfury_ally": 24

@@ -74,6 +74,8 @@ BAY_MOUTH_Z, BAY_Y, BAY_BACK_Z = bow.BAY_MOUTH_Z, bow.BAY_Y, bow.BAY_BACK_Z
 ROOF_TOP_Y = 85.0  # the roof block's top, between its humps
 TUBE_OUTLINE = [(36.0, -13.0), (36.0, 14.0), (32.0, 18.0), (-32.0, 18.0), (-36.0, 14.0), (-36.0, -13.0), (-32.0, -17.0), (32.0, -17.0)]
 STARFURIES = 24
+# Q71: the Starfuries launch and land through the bay on a hidden lift in its floor near the back, from a hangar deck below.
+ELEVATOR_Z, ELEVATOR_TRAVEL_M = BAY_BACK_Z - 20.0, 30.0
 # The flank's wing behind the armour: (x, its y from and to, its z from and to) at its root, its middle and its tip.
 WING = ((40.0, (-21.0, 25.0), (359.0, 401.0)), (75.0, (-19.0, 23.0), (360.0, 399.0)), (88.5, (-11.8, 16.8), (365.2, 393.8)))
 # The fore spine's flank plates (name, low corner, high corner, roles), each mirrored below the axis.
@@ -139,7 +141,8 @@ def command_block(s: Style) -> list[cp.Module]:
     tube = around_hole("bridge_tube_fore", TUBE_OUTLINE, hw, (BAY_Y - hh, BAY_Y + hh), (bow.FRAME_BACK_Z, BAY_BACK_Z), s, DECKED, "bridge")
     back = cs.prism("bridge_tube", TUBE_OUTLINE, BAY_BACK_Z - 0.5, SPINE_Z[0] + 5.0, s, DECKED)
     hall, *bay = bow.bay(s)
-    hall = hall.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES)
+    lift = (0.0, BAY_Y - 0.5 * BAY_MOUTH[1], ELEVATOR_Z)
+    hall = hall.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES, recovers=True, elevator=lift, elevator_travel_m=ELEVATOR_TRAVEL_M)
     decks = bow.decks(s)
     cross = fittings.hull_mark("mark_x_roof", (0.0, ROOF_TOP_Y, 260.0), (0.0, 1.0, 0.0), (0.0, 0.0, -1.0), X_HEIGHT_M, colour=RENEGADE_RED, text="X",
                                only_faction="renegades")
@@ -370,7 +373,7 @@ def engine_frame(s: Style, section: str) -> list[cp.Module]:
     return out + [_put("engine_r", m, cp.RIGHT) for m in (blade, lug)]
 
 
-__all__ = ["BAY_BACK_Z", "BAY_DEPTH", "BAY_MOUTH", "BAY_MOUTH_Z", "BAY_Y", "COLLARS_Z", "CORE_H", "ENGINE_MOUTH_Z", "ENGINE_START_Z", "ENGINE_XY",
-           "HANGAR_W", "HANGAR_Z", "HOUSING_Z", "LENGTH_M", "MARK_HEIGHT_M", "PLATE_X", "PLATE_Z", "RINGS_Z", "SPINE_Z", "STARFURIES", "aerials",
-           "armour", "collar", "command_block", "engine", "engine_frame", "flank_fittings", "flank_strake", "fore_plates", "hangar_block", "housing", "ring", "spine",
-           "tankage"]
+__all__ = ["BAY_BACK_Z", "BAY_DEPTH", "BAY_MOUTH", "BAY_MOUTH_Z", "BAY_Y", "COLLARS_Z", "CORE_H", "ELEVATOR_TRAVEL_M", "ELEVATOR_Z", "ENGINE_MOUTH_Z",
+           "ENGINE_START_Z", "ENGINE_XY", "HANGAR_W", "HANGAR_Z", "HOUSING_Z", "LENGTH_M", "MARK_HEIGHT_M", "PLATE_X", "PLATE_Z", "RINGS_Z", "SPINE_Z",
+           "STARFURIES", "aerials", "armour", "collar", "command_block", "engine", "engine_frame", "flank_fittings", "flank_strake", "fore_plates",
+           "hangar_block", "housing", "ring", "spine", "tankage"]

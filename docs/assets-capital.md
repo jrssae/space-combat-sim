@@ -570,9 +570,13 @@ probes and fins, the open front's decks and the roof; T67 moved them here so nei
 `reactor` (the engine housing and the engine frame), `engine_r` and `engine_l`; blast energies on the fuel and the reactor.
 Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 
-- 18 `ea_plasma_medium` twin cannon pods (T67, `parts/ea_nova_guns.py`, the reference with guns): a faceted housing round two
-  long barrels, a mast through it, the turret hardpoint at the barrels' roots in the housing's nose (two barrels, 180 degrees of
-  traverse, -10 to 90 of elevation). One beside the command block (`bridge`) and one on the flank wing's tip (`bow`) each side, one on each
+- 18 twin gun pods (T67, `parts/ea_nova_guns.py`, the reference with guns), the Nova's only weapons (Q71: no beams, no
+  separate interceptor domes): a faceted housing round two long barrels and a mast through it. **14 fixed pulse cannons**
+  (`ea_pulse_cannon_fixed`, `bolt_fixed`, `pulse_*`): a turret hardpoint at the barrels' roots in the housing's nose with no
+  traverse (two barrels, traverse 0, elevation 0), aimed by the hull. **4 interceptors** (`ea_interceptor_pod`,
+  `interceptor_mid_top_r`, `_low_r` and their port twins): the middle lug's pods (x ±95, y ±75.5, z 745.7 m), whose fire ahead
+  the fore lug's pods block, stand on a swivel ring (an 18 m base and a 15.5 m race between the plate and the housing) and cover
+  the half sphere over their plate (traverse 180, elevation 0 to 90), the hardpoint at the ring's centre. One beside the command block (`bridge`) and one on the flank wing's tip (`bow`) each side, one on each
   flank of the hangar block (`hangar`), and four on each ring lug's outriggers, above and below either side (`spine_fore`,
   `spine_mid`, `spine_aft`; the aft lug's face the stern), each on an outrigger plate out to 113.5 m with a brace under it. The
   loadout's count is the reference's; T67 moved the mounts from the waist and the roof's channel (the older STL had no guns);
@@ -583,13 +587,11 @@ Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
   shapes whose hull stands out of the parts it covers by more, so a thin mast or fin is never joined to its twin across the
   girder (T67: without it a top and a low pod's masts became one wall through the ship). The pods beside the command block are in
   `bridge` so the `bow` section can merge to 64 within that limit;
-- 6 `ea_sweep_beam_nova` emitters (the Omega's beams at 80 %): one on each flank of the command block covering the fore
-  hemisphere, four on the engine housing's corners the aft;
-- 6 `ea_interceptor` domes along the flanks;
 - one launch bay facing the bow (the maintainer, 2026-11-21; rebuilt in T67, `parts/ea_nova_bow.py`): the reference's octagonal
   hall, a 62 by 27 m mouth at 190 m in a proud octagonal frame (a flat lip at 182.6 m bevelled back to the mouth and to the
   frame's outer edge at 189.5 m, its back at 196 m, four thin probes forward from the lip's corners to 136.5 m) with a thin
-  wedge fin each side above and below the axis, the hall 139 m deep back to the reference's wall at 329 m, in the `bow` section; `craft` `starfury_ally`, `capacity` 24. The hall is Babylon 5's grey bay
+  wedge fin each side above and below the axis, the hall 139 m deep back to the reference's wall at 329 m, in the `bow` section; `craft` `starfury_ally`, `capacity` 24, launched and recovered (`recovers`) on a hidden elevator in the floor 20 m before
+  the back wall (`elevator`, a point; `elevator_travel_m` 30 down to the hangar deck; Q71, for T17). The hall is Babylon 5's grey bay
   metal (`launch_bay(metal=True)`: #A8AAAE, metallic 0.7, roughness 0.32, faint red 0.04) lit by small red lamps and the bay's red
   light hardpoint; no glowing rim and no door (Q64). Nothing of the hull stands ahead of the mouth but the frame's probes
   (`test_the_launch_path_ahead_of_the_bay_is_clear`), so T17's launches leave straight ahead;
@@ -675,9 +677,10 @@ block now stand in the z cuts' window).
 `assets/ships/ea_nova.tres`, catalogue `ea_nova`, capital class `dreadnought` (heard 1 000 km out, Q51; a 120 s jump
 recharge, `data/capitals/capitals.json`): 6.8e8 kg (680 kt from the skin's area at 260 kg/m2, the Omega's rule), its inertia
 a solid box of that mass over its length, span and height (as the Omega's), 1.0 m/s2 on its four mains with stand-in retros
-at half a main (reaction, no flip), turns at 1.5 degrees a second (1.2 in roll), 36 000 hull points (T03), opens its own jump
-points. `CapitalShip` builds it (no rotating section); destroyed, it leaves play through the destruction director. Its guns,
-beams and interceptors fire when T12 to T14 put capital weapons on the native rows. `capital spawn ea_nova` names it from the
+at half a main (reaction, no flip), turns at 3 degrees a second (2.4 in roll) with 3x the Omega's angular acceleration (Q71; torque 7.5e11, 7.0e11,
+7.3e10 N m; to be tuned later), 36 000 hull points (T03), opens its own jump
+points. `CapitalShip` builds it (no rotating section); destroyed, it leaves play through the destruction director. Its pulse
+cannons and interceptor pods fire when T13 and T14 put capital weapons on the native rows. `capital spawn ea_nova` names it from the
 list (`EAS Schwarzkopf`, `EAS Nimitz`, ...) and each wears its own name's first letter (`HullMarks`, as the Omega's).
 
 Look sheet (gitignored): `references/screenshots/M10-T23 Nova/look_sheet_v2.png`, its shots in `look_sheet_v2/` (from 50 m in
@@ -977,7 +980,7 @@ The numbers are in `loadouts.json` under `weapons`.
 
 | Faction | Ids (kind): show name |
 |---|---|
-| EA | `ea_sweep_beam` (beam_sustained): the Omega's particle beams (TBP: laser batteries), sweeping. `ea_sweep_beam_nova` the same at 80 % (32 dps while on): the Nova's particle beams, the Omega's arcs. `ea_particle_cannon` (beam_pulsed): phased particle cannon; `_heavy` 150 dmg, bow +/-10 deg (the Warlock's particle beam cannons). `ea_particle_array` (2 x 50): the Explorer's twin particle beam arrays. `ea_plasma_heavy` (bolt_heavy): heavy plasma pulse cannon. `ea_plasma_medium` (bolt_medium, 18): medium plasma or twin plasma cannon. `ea_pulse_medium` (bolt_medium): pulse cannon. `ea_pulse_light` (bolt_light): pulse discharge cannon. `ea_railgun` (bolt_medium 20, 3 s, 4 000 m/s, kinetic). `ea_missile`, `ea_torpedo` (tubes and silos), `ea_interceptor`, `ea_mine` (scenario only) |
+| EA | `ea_sweep_beam` (beam_sustained): the Omega's particle beams (TBP: laser batteries), sweeping. `ea_particle_cannon` (beam_pulsed): phased particle cannon; `_heavy` 150 dmg, bow +/-10 deg (the Warlock's particle beam cannons). `ea_particle_array` (2 x 50): the Explorer's twin particle beam arrays. `ea_plasma_heavy` (bolt_heavy): heavy plasma pulse cannon. `ea_plasma_medium` (bolt_medium, 18): medium plasma or twin plasma cannon. `ea_pulse_cannon_fixed` (bolt_fixed, 2 x 15 / 2 s, no traverse): the Nova's fixed pulse cannon pods (Q71). `ea_pulse_medium` (bolt_medium): pulse cannon. `ea_pulse_light` (bolt_light): pulse discharge cannon. `ea_railgun` (bolt_medium 20, 3 s, 4 000 m/s, kinetic). `ea_missile`, `ea_torpedo` (tubes and silos), `ea_interceptor`, `ea_interceptor_pod` (2 barrels: the Nova's swivelling pods, Q71), `ea_mine` (scenario only) |
 | Narn | `narn_heavy_laser` (beam_sustained 117 dps, 4 s on, 12 s, fore arc), `narn_twin_particle` (bolt_medium 2 x 8), `narn_light_pulse`, `narn_energy_mine`, `narn_mine` |
 | Centauri | `centauri_plasma_accelerator` (bolt_fixed, 2 barrels), `centauri_battle_laser` (Primus heavy X-ray laser; beam_sustained 67 dps, 3 s on, 10 s), `centauri_ion_cannon` (bolt_medium 2 x 8 / 1.8 s; not kinetic), `centauri_light_particle` (bolt_light 2 x 6), `centauri_missile`, `centauri_guided_mine`, `centauri_mine` |
 | Minbari | `minbari_neutron_cannon` (beam_pulsed 150, 9 km), `minbari_fusion_cannon` (bolt_medium 8 / 1.4 s, 2 500 m/s, 40 deg/s), `minbari_em_pulse` (beam_pulsed 50, mounts only; T04 may change it) |
@@ -998,7 +1001,7 @@ excluding interceptors.
 |---|---|---|---|---|---|---|---|
 | Omega T21 | capital | 30 000 | 4 plasma_heavy T; 6 sweep_beam (2 F, 4 A hemispheres); 12 pulse_medium T; 2 missile | 8 | 32 Starfuries | scenario only | 187 |
 | Hyperion T22 | capital | 17 000 | 2 plasma_heavy X; 2 plasma_medium T; 2 particle_cannon F/B; 4 pulse_light T; 2 torpedo F | 4 | 6 Starfuries, 2 shuttles | | 92 |
-| Nova T23 | dreadnought | 36 000 | 18 twin plasma_medium T; 6 sweep_beam_nova (2 F, 4 A, the Omega's arcs) | 6 | 24 Starfuries | | 210 |
+| Nova T23 | dreadnought | 36 000 | 14 pulse_cannon_fixed (10 F, 4 A; Q71, no beams) | 4 pods | 24 Starfuries | | 210 |
 | Warlock T24 | dreadnought | 45 000 | 2 particle_cannon_heavy X; 12 torpedo silos (salvos of 4); 8 plasma_medium T; 6 railgun T; 6 pulse_light T | 8 | 12 Starfuries (Thunderbolts after M11) | | 254 |
 | G'Quan T25 | capital | 30 000 | 2 heavy_laser F; 2 twin_particle T; 6 light_pulse T; 2 energy_mine F | | 12 Frazi | energy | 134 |
 | Vorchan T26 | cruiser | 7 000 | 2 plasma_accelerator X; 4 light_particle T; 2 missile; 1 guided_mine | | | guided | 108 |

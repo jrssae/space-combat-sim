@@ -64,7 +64,11 @@ class LoadoutTests(unittest.TestCase):
         self.assertEqual(h["ea_omega"]["launches"]["starfury_ally"], 32)
         self.assertEqual(h["ea_nova"]["class"], "dreadnought")
         self.assertEqual(h["ea_nova"]["launches"]["starfury_ally"], 24)
-        self.assertEqual(h["ea_nova"]["weapons"]["ea_sweep_beam_nova"], h["ea_omega"]["weapons"]["ea_sweep_beam"])
+        # Q71: no beams on the Nova; 14 fixed pulse cannons and the 4 blocked midship pods as interceptors.
+        self.assertEqual(h["ea_nova"]["weapons"], {"ea_pulse_cannon_fixed": 14})
+        self.assertEqual(h["ea_nova"]["interceptors"], {"ea_interceptor_pod": 4})
+        self.assertNotIn("ea_sweep_beam_nova", self.weapons)
+        self.assertEqual(self.weapons["ea_pulse_cannon_fixed"]["kind"], "bolt_fixed")
         self.assertEqual(h["ea_panama"]["weapons"], {})
         self.assertEqual({k for k, v in h.items() if v["lays_mines"]}, {"narn_gquan", "centauri_vorchan"})
         self.assertNotIn("pierce", self.data["traits"])
@@ -100,6 +104,14 @@ class ManifestCheckTests(unittest.TestCase):
         self.assertIn("mount 'x' names no weapon", loadout.problems(unnamed, self.LOADOUTS, "ship"))
         small = self.built(bays=[{"name": "bay", "craft": "starfury_ally", "capacity": 2}])
         self.assertIn("bays launch", loadout.problems(small, self.LOADOUTS, "ship")[0])
+
+    def test_a_fixed_gun_turns_no_further_than_its_arc(self) -> None:
+        data = {"weapons": {"bow": {"kind": "bolt_fixed"}, "gimbal": {"kind": "bolt_fixed", "arc_deg": 16}},
+                "hulls": {"ship": {"weapons": {"bow": 1, "gimbal": 1}, "interceptors": {}, "launches": {}}}}
+        mounts = [{"name": "f", "kind": "turret", "weapon": "bow", "traverse_deg": 0.0}, {"name": "g", "kind": "turret", "weapon": "gimbal", "traverse_deg": 8.0}]
+        self.assertEqual(loadout.problems({"weapons": mounts}, data, "ship"), [])
+        turning = [{**mounts[0], "traverse_deg": 180.0}, mounts[1]]
+        self.assertTrue(any("traverses 180.0 deg" in p for p in loadout.problems({"weapons": turning}, data, "ship")))
 
     def test_every_loadout_weapon_kind_has_a_mount(self) -> None:
         data = loadout.read()

@@ -97,6 +97,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q68 | Interior layer for every hull (2026-11-23) | The Hyperion is complete (T22 closed). Every ship with an open interior (bays, halls, hangars, docks) gets an **interior layer** like B5's, so sunlight never falls into the halls and only the interior's own lights (red bay lights, lamps) light them: T72 adds it to the hulls already built; from now on it is part of the hull checklist for every ship in progress and every ship still to be built |
 | Q69 | Seam defaults (2026-11-23) | The Hyperion's final seam depth and width (commit 5e083eb9: grooves 0.22 of the old fleet depth, lines 0.6 as wide, line darkness 0.89, the softer fine panel grid) become the **defaults for every ship**: all hull generators and styles that draw seams use them unless a style overrides them on purpose. So does the Hyperion's **patch scheme**: each ship's own main colour, with some mosaic panels a little darker and a few a few shades darker (`PatchPlates`), the shades taken from that ship's colours. T73 makes them the defaults for new hulls; T74 applies them to the existing ones |
 | Q70 | Hot paths to Rust (2026-11-23) | Three GDScript costs move to native Rust: the **capital helm** (T16), **beam hit landing** (T75; 6-9 µs per hit, a sustained beam lands every tick) and **blast landing** (T76; 170-220 µs per blast, almost all GDScript) — no fleet measurement needed first: big capitals blowing up beside groups of mines and fighters make blast chains common. 1 and 6 threads identical, parity green |
+| Q71 | Nova weapons, hangar and handling (2026-11-24) | The reference with guns has 18 twin gun pods and nothing else, so the Nova carries **no beam weapons** (replaces Q53's "the Omega's six particle beams at 80 %"; `ea_sweep_beam_nova` is gone) and **no separate interceptor domes**. Of the 18 pods, the **4 midship pods** on the middle ring lug (above and below the outriggers each side, x ±95, y ±75.5, z 745.7 m), whose fire ahead the fore lug's pods block, are **interceptors** (`ea_interceptor_pod`) that swivel on a turret ring through the half sphere over their plate; the other **14 are fixed forward-firing pulse cannons** (`ea_pulse_cannon_fixed`, `bolt_fixed`, no traverse; the aft lug's 4 fire astern). **Hangar:** 24 Starfuries, launched and recovered through the forward bay on a **hidden elevator** in its floor (bay hardpoint data for T17; no animation yet). **Handling:** about 3x the Omega's: rates 3/3/2.4 deg/s and 3x its angular acceleration (about 0.0054 rad/s²), linear thrust and braking unchanged; to be tuned later. Applied in T67 |
 
 ## The hulls
 
@@ -590,6 +591,15 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   `bridge`. Scores: silhouettes 0.933 / 0.945 / 0.927, sizes within 0.5 %; 54 sections, lowest 0.903; bow face z 73 of 76 (mean
   0.951), x by face depth 21 of 29 (0.912), y by outline 51 of 55 (0.952; by face depth 0.866, reported only); depth map 59 %
   within 2 m, 8.0 m mean. 45 744 triangles (22 872 in the hull, as many in its chunks; 50 928 with 16-sided barrels). Details: `docs/assets-capital.md`, "ea_nova".
+- **Weapons, hangar and handling (Q71, 2026-11-24).** The gun review found the STL's 18 pods and no beams or domes: the 6 beam
+  emitters and 6 interceptor domes are gone. The middle lug's 4 pods (`interceptor_mid_top_r`, `_low_r` and their port twins;
+  x ±95, y ±75.5, z 745.7 m, right behind the fore lug's pods) are `ea_interceptor_pod` interceptors on a swivel ring (half
+  sphere over the plate); the other 14 are fixed `ea_pulse_cannon_fixed` turrets (traverse 0), `pulse_*`. Loadout row
+  `ea_plasma_medium` 18 + `ea_sweep_beam_nova` 6 + `ea_interceptor` 6 became `ea_pulse_cannon_fixed` 14 + `ea_interceptor_pod` 4
+  (2 x 15 per 2 s a pod keeps the old anti-capital dps; T16 tunes); `core/loadout.py` keeps a fixed gun's mount within its row's
+  arc. The bay carries the hidden elevator for T17. Handling 3/3/2.4 deg/s, torque 7.5e11/7.0e11/7.3e10 N m (3x the Omega's
+  angular acceleration). Scores hold: silhouettes 0.935 / 0.945 / 0.929, every section >= 0.90; 47 792 triangles
+  (the rings). Sheet: `references/screenshots/M10-T67 Nova/weapons.png`.
 
 ### M10-T68 Omega on the new kit (Q63)
 
@@ -908,6 +918,9 @@ parity green.
   wait for T04; the far stand-ins' beam rolls stay until T45.
 - **T16 and T17 (AI):** D12.10: the `capital` brain and fighters' attacks on capitals (tests on its choices and T03's
   balance fights); carriers launching by faction (tests on the launch poses and rates). Done when AC10.
+  The Nova (Q71) launches and recovers its 24 Starfuries through its one forward bay on a hidden elevator: the bay hardpoint
+  (`ea_nova`'s `hardpoints.json`, `bay_fore`) carries `recovers: true`, `elevator` (the lift's place in the bay floor, body frame)
+  and `elevator_travel_m` (its drop to the hangar deck below); T17 brings craft up the lift and out of the mouth (no animation yet).
 - **T18 (HUD):** Q17, on the radial framework; the M5 menu tests pass. Done when AC12.
 - **T18 done (2026-11-21).** A capital's subsystems are targets (Q17, `docs/architecture.md` §18.19 "Subsystems"). Picking an
   identified capital on a ship ring opens a ring of WHOLE SHIP, BRIDGE, REACTOR, ENGINES, LAUNCH BAYS, TURRETS, BEAM EMITTERS and
