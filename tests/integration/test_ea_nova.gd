@@ -70,11 +70,20 @@ func _fly(seconds: float, done: Callable = Callable()) -> void:
 	Engine.max_physics_steps_per_frame = _steps_backup
 
 
-# The painted letters on `cap`'s armour (or, with `faction_marks`, the faction-only marks).
+# The name letters on `cap`'s lower plates (or, with `faction_marks`, the faction-only marks).
 func _letters(cap: CapitalShip, faction_marks: bool = false) -> Array[HullMarkNode]:
 	var out: Array[HullMarkNode] = []
+	for node: HullMarkNode in _marks(cap, "Initial" if not faction_marks else ""):
+		if node.only_faction.is_empty() != faction_marks:
+			out.append(node)
+	return out
+
+
+# The painted marks on `cap`'s hull whose node names hold `part` (every one for an empty `part`).
+func _marks(cap: CapitalShip, part: String) -> Array[HullMarkNode]:
+	var out: Array[HullMarkNode] = []
 	for node: Node in cap.hull_piece.get_children():
-		if node is HullMarkNode and (node as HullMarkNode).only_faction.is_empty() != faction_marks:
+		if node is HullMarkNode and (part.is_empty() or String(node.name).contains(part)):
 			out.append(node)
 	return out
 
@@ -120,6 +129,19 @@ func test_it_spawns_named_and_two_novas_wear_their_own_letters() -> void:
 	if letters.size() == 2:
 		assert_lt(letters[0].position.x * letters[1].position.x, 0.0, "one to each side")
 		assert_lt(letters[0].position.y, -50.0, "low on the command block")
+
+
+func test_its_name_and_emblem_are_painted_on_each_vertical_plate() -> void:
+	var cap: CapitalShip = CapitalShip.create(TYPE, Factions.EARTH_ALLIANCE, "EAS Schwarzkopf", main.world.rest_velocity())
+	assert_not_null(cap)
+	if cap == null:
+		return
+	main.world.spawn(cap, main.world.to_universe(main.ship.global_position + Vector3(0.0, 0.0, -9000.0)), Basis.IDENTITY)
+	assert_eq(_marks(cap, "MarkName").size(), 2 * "SCHWARZKOPF".length(), "the whole name on each plate (M10-T67)")
+	var emblems: Array[HullMarkNode] = _marks(cap, "MarkEmblem")
+	assert_eq(emblems.size(), 2, "an emblem on each plate")
+	if emblems.size() == 2:
+		assert_lt(emblems[0].position.x * emblems[1].position.x, 0.0, "one to each side")
 
 
 func test_the_red_x_marks_show_on_a_renegade_nova_only() -> void:

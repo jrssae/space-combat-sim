@@ -36,6 +36,7 @@ LENGTH, SPAN, HEIGHT = 1502.1, 383.0, 443.7  # T01's length; the wing guns' mast
 SECTIONS = ("bow", "bridge", "fuel", "spine_fore", "hangar", "spine_mid", "spine_aft", "reactor", "engine_r", "engine_l")
 MOUNTS = {"turret": 18, "beam": 6, "interceptor": 6}
 BAYS, STARFURIES = 1, 24
+MOUTH_LO, MOUTH_HI = (-45.0, -25.0, 175.0), (45.0, 25.0, 235.0)  # round the bay's mouth: the frame, the hall's front, the fins and plates
 
 
 class NovaBuildTests(unittest.TestCase):
@@ -124,13 +125,15 @@ class NovaBuildTests(unittest.TestCase):
         for e in self.hp["engines"]:
             self.assertAlmostEqual(self.authored(e["position"])[2], en.nv.ENGINE_MOUTH_Z, places=3)
         roles = sorted(light["role"] for light in self.hp["lights"])
-        self.assertEqual(roles, ["bay"] * BAYS + ["beacon", "beacon", "port", "starboard", "top"], "and one red light in each bay")
+        self.assertEqual(roles, ["bay"] * BAYS + ["beacon"] * 5 + ["flood"] * 4 + ["port", "starboard", "top"],
+                         "one red light in each bay, the beacons at the tips, a flood under each name and emblem")
         port = next(light for light in self.hp["lights"] if light["role"] == "port")
         self.assertLess(port["position"][0], 0.0, "red to port")
 
     def test_the_name_letter_and_the_renegades_red_x(self) -> None:
         marks = {m["name"]: m for m in self.hp["marks"]}
-        self.assertEqual(sorted(marks), ["mark_initial_l", "mark_initial_r", "mark_x_l", "mark_x_r", "mark_x_roof"])
+        self.assertEqual(sorted(marks), ["mark_emblem_l", "mark_emblem_r", "mark_initial_l", "mark_initial_r", "mark_name_l", "mark_name_r", "mark_x_l",
+                                         "mark_x_r", "mark_x_roof"])
         right, left = marks["mark_initial_r"], marks["mark_initial_l"]
         self.assertEqual((right["text"], right["section"]), ("initial", "bow"))
         self.assertNotIn("only_faction", right, "the name letter is for everyone")
@@ -138,10 +141,25 @@ class NovaBuildTests(unittest.TestCase):
         self.assertLess(right["normal"][1], -0.2, "the lower plate leans in towards the keel")
         self.assertAlmostEqual(left["position"][0], -right["position"][0], places=3)
         self.assertAlmostEqual(float(np.dot(right["normal"], right["up"])), 0.0, places=3)
-        xs = [m for m in self.hp["marks"] if m["text"] == "X"]
+        xs = [m for m in self.hp["marks"] if m.get("text") == "X"]
         self.assertEqual(len(xs), 3, "one on each vertical plate and one on the roof")
         for m in xs:
             self.assertEqual(m["only_faction"], "renegades")
+
+    def test_the_name_and_the_emblem_on_each_vertical_plate(self) -> None:
+        """M10-T67: the name high on the plate above the pod, the emblem low under it, both lit by a flood; mirrored to port."""
+        marks = {m["name"]: m for m in self.hp["marks"]}
+        name, emblem = marks["mark_name_r"], marks["mark_emblem_r"]
+        self.assertEqual((name["text"], name["section"], name.get("outline")), ("name", "bow", True))
+        self.assertTrue(emblem["image"].endswith("ea_emblem.png"), "the Earth Alliance emblem")
+        self.assertIn("glow", emblem, "lit by the flood under it")
+        for m in (name, emblem):
+            at = self.authored(m["position"])
+            self.assertAlmostEqual(at[0], en.nv.PLATE_X + 0.05, places=2)
+            self.assertTrue(en.nv.PLATE_Z[0] < at[2] < en.nv.PLATE_Z[1])
+            self.assertAlmostEqual(marks[m["name"][:-1] + "l"]["position"][0], -m["position"][0], places=3)
+        self.assertGreater(self.authored(name["position"])[1], 30.0, "above the gun pod")
+        self.assertLess(self.authored(emblem["position"])[1], -30.0, "under the gun pod")
 
     def test_the_hull_is_inside_the_capital_budget(self) -> None:
         budget = self.manifest["budget"]
@@ -168,10 +186,15 @@ class NovaSpecTests(unittest.TestCase):
         from tools.procgen.styles.ea_capital import ea_capital  # noqa: PLC0415
         from tools.procgen.styles.ea_hyperion import HyperionMosaic  # noqa: PLC0415
 
+        from tools.procgen.core.color import capture_albedo  # noqa: PLC0415
+        from tools.procgen.styles.ea_capital import SOFT_PAINT, SOFT_PATCH_TIERS  # noqa: PLC0415
+
         nova, omega = en.style(), ea_capital()
         self.assertIsInstance(nova.skin, HyperionMosaic)
         self.assertNotIsInstance(omega.skin, HyperionMosaic, "the Omega keeps the fleet's finish until T68")
-        self.assertEqual(nova.style.materials["hull"].albedo, omega.style.materials["hull"].albedo, "the Omega's colours")
+        self.assertEqual(nova.style.materials["hull"].albedo, capture_albedo(SOFT_PAINT["a"]["hull"]), "the stills' grey (M10-T67)")
+        self.assertNotEqual(nova.style.materials["hull"].albedo, omega.style.materials["hull"].albedo, "the Omega's paint is T68's")
+        self.assertEqual(nova.skin.patch_tiers, SOFT_PATCH_TIERS)
         self.assertNotIn("bay_metal", omega.style.materials)
         metal = nova.style.materials["bay_metal"]
         self.assertEqual((metal.metallic, metal.roughness), (0.7, 0.32))
@@ -180,6 +203,21 @@ class NovaSpecTests(unittest.TestCase):
         self.assertIn(metal.name, used, "the hall is grey metal")
         self.assertNotIn(nova.style.materials["bay_light"].name, used, "no glowing band round the mouth")
         self.assertFalse(any(h.kind == cp.DOOR for m in en.modules() for h in m.hardpoints), "no doors")
+
+    def test_the_bay_mouth_has_no_flickering_faces(self) -> None:
+        """M10-T67: no two parts round the bay's mouth share a plane facing the same way (the frame's inner faces lay on the hall's
+        walls and flickered)."""
+        from tools.procgen.core.coplanar import coplanar_overlaps  # noqa: PLC0415
+
+        parts = [(m.name, m.part.mesh) for m in cp.with_twins(en.modules())]
+        self.assertEqual(coplanar_overlaps(parts, MOUTH_LO, MOUTH_HI), {})
+
+    def test_the_big_plates_wear_the_edge_band(self) -> None:
+        """M10-T67: the band is painted round the armour's, the hangar block's, the collars' and the housing's plates, both sides."""
+        bands = {name for name, m in en.markings() if m.kind == "paint"}
+        for base in ("armour_side", "armour_upper", "armour_lower"):
+            self.assertTrue({f"{base}_r", f"{base}_l"} <= bands, base)
+        self.assertTrue({"hangar_roof", "hangar_keel", "collar_fore", "collar_aft", "housing_fore", "housing_aft"} <= bands)
 
     def test_the_open_bow_marks_its_interior_for_t72(self) -> None:
         """Q68: the hall and the decks behind the open frame are named for the interior layer T72 adds."""

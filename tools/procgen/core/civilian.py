@@ -221,7 +221,7 @@ def hull_parts(sampled: Sequence[Sampled], offset: np.ndarray, markings: dict[st
 def moved_marking(marking: Marking, by: Sequence[float]) -> Marking:
     """A marking moved with its part: every point it is placed by shifts, its directions stay."""
     params = dict(marking.params)
-    for key in ("centre", "exit"):
+    for key in ("centre", "exit", "origin"):
         if key in params:
             params[key] = tuple(float(a) + float(b) for a, b in zip(params[key], by, strict=True))
     return dataclasses.replace(marking, params=params)

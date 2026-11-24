@@ -128,7 +128,7 @@ def command_block(s: Style) -> list[cp.Module]:
     """Inside the armour: the bridge tube (the spine's way forward) round the launch bay's hall, the deck over it, and the open
     front's decks, bay, struts and keel (``parts/ea_nova_bow.py``), the renegades' X on the roof block."""
     hw, hh = 0.5 * BAY_MOUTH[0] + BAY_WALL, 0.5 * BAY_MOUTH[1] + BAY_WALL
-    tube = around_hole("bridge_tube_fore", TUBE_OUTLINE, hw, (BAY_Y - hh, BAY_Y + hh), (bow.FRAME_BACK_Z - 0.5, BAY_BACK_Z), s, DECKED, "bridge")
+    tube = around_hole("bridge_tube_fore", TUBE_OUTLINE, hw, (BAY_Y - hh, BAY_Y + hh), (bow.FRAME_BACK_Z, BAY_BACK_Z), s, DECKED, "bridge")
     back = cs.prism("bridge_tube", TUBE_OUTLINE, BAY_BACK_Z - 0.5, SPINE_Z[0] + 5.0, s, DECKED)
     hall, *bay = bow.bay(s)
     hall = hall.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES)

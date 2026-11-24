@@ -43,12 +43,24 @@ class PatchPlates(Plates):
     medium and dark panels on the Hyperion's light grey."""
 
     darkest: float = 0.5
+    tiers: tuple[tuple[float, float], ...] = ()  # (share of the patches, how much darker): a few shades instead of a spread
 
     def _paint_all(self, p: np.ndarray, n: np.ndarray, line_m: float, depth_m: float, out, ok: np.ndarray) -> None:  # noqa: ANN001
         key, u0, u1, v0, v1, u, v = self.cells(p, n)
         chosen = ok & (self._hash(key, 503) < self.scatter) & (np.minimum(u1 - u0, v1 - v0) > 2.5 * self.inset_m)
         inside = np.minimum(np.minimum(u - u0, u1 - u), np.minimum(v - v0, v1 - v)) > self.inset_m
-        out.tint *= 1.0 - self.darkest * self._hash(key, 401) * (chosen & inside)
+        out.tint *= 1.0 - self._shade(key) * (chosen & inside)
+
+    def _shade(self, key: np.ndarray) -> np.ndarray:
+        """How much darker each patch is: anywhere up to ``darkest``, or one of the ``tiers`` when there are any."""
+        r = self._hash(key, 401)
+        if not self.tiers:
+            return self.darkest * r
+        shade, edge = np.zeros_like(r), 0.0
+        for share, dark in self.tiers:
+            shade = np.where((r >= edge) & (r < edge + share), dark, shade)
+            edge += share
+        return shade
 
     def _hash(self, key: np.ndarray, salt: int) -> np.ndarray:
         return _keyed_hash(key, self.seed + salt)
@@ -65,6 +77,7 @@ class HyperionMosaic(PanelMosaic):
     tile_soft: float = 0.5
     patches: float = 0.2
     darkest: float = 0.5
+    patch_tiers: tuple[tuple[float, float], ...] = ()
 
     def _soft(self, features: list[Feature]) -> list[Feature]:
         return [dataclasses.replace(f, depth=f.depth * self.seam_depth, width=f.width * self.seam_width) if f.depth > 0.0 else f
@@ -73,7 +86,7 @@ class HyperionMosaic(PanelMosaic):
     def _plating(self, cell: tuple[float, float], seed: int) -> list[Feature]:
         base = dict(wrap="sides", long_axis=2, cell=cell, splits=self.splits, min_m=1.2, keep=0.3, seed=seed)
         return [*self._soft(super()._plating(cell, seed)),
-                PatchPlates(level=3, scatter=self.patches, inset_m=0.1, darkest=self.darkest, dark=0.0, depth=0.0, **base)]
+                PatchPlates(level=3, scatter=self.patches, inset_m=0.1, darkest=self.darkest, tiers=self.patch_tiers, dark=0.0, depth=0.0, **base)]
 
     def hull_layout(self, lo, hi, seed: int) -> SeamLayout:  # noqa: ANN001
         return SeamLayout.of([*self._soft(_frames(lo, hi, self.frames_m, self.major_every)), *self._plating(self.plate_m, seed)])

@@ -15,6 +15,9 @@ it and names the damage sections. The loadout is ``data/capitals/loadouts.json``
 * 1 launch bay facing the bow from the bridge tube's front, above the retro thrusters (the Omega's lit bay; the maintainer,
   2026-11-21), in the bow section: all 24 Starfuries.
 
+Its paint and lamps (M10-T67, ``parts/ea_nova_marks.py``): the name, the emblem and their floods on each vertical plate, red
+beacons at the masts' and the boom's tips, and a darker band round the big plates' edges.
+
 Sections: bow (the armour, aerials and launch bay), bridge, fuel (the tankage), the fore spine, the hangar block, the mid spine, the aft
 spine (the jump engine's place), the reactor (the engine housing) and an engine pair each side.
 
@@ -22,6 +25,8 @@ Options: ``look`` (``styles/ea_capital.LOOKS``), and ``spacing``, ``atlas_px``, 
 """
 
 from __future__ import annotations
+
+import dataclasses
 
 from ..core import capital as cap
 from ..core import collision as col
@@ -32,6 +37,7 @@ from ..parts import capital_solids as cs
 from ..parts import capital_weapons as weapons
 from ..parts import ea_nova as nv
 from ..parts import ea_nova_guns
+from ..parts import ea_nova_marks as marks
 from ..styles import Style
 from ..styles.ea_capital import DEFAULT_LOOK, ea_capital
 from .ea_omega import HEMISPHERE_DEG, RUNNING_RED
@@ -113,7 +119,7 @@ def modules(look: str = DEFAULT_LOOK) -> list[cp.Module]:
     """Every module in its place and section (centre modules and the starboard one of each pair)."""
     s = style(look).style
     (c0, c1), (r0, r1, r2) = nv.COLLARS_Z, nv.RINGS_Z
-    return [
+    return [_with_marks(m) for m in [
         *nv.armour(s), *nv.command_block(s), *nv.flank_strake(s), *nv.fore_plates(s), *nv.tankage(s), *nv.aerials(s),
         *nv.spine(s, "spine_fore", "spine_fore", (nv.SPINE_Z[0], c0[0]), shelf_x=62.0, shelf_from=FLANK_FROM_Z), *nv.ring(s, "ring_fore", "spine_fore", r0),
         *nv.flank_fittings(s, "spine_fore", "spine_fore", waists=((FLANK_FROM_Z, 402.0),), decks=((402.0, 481.0),), strips=((456.0, 519.0),),
@@ -128,8 +134,20 @@ def modules(look: str = DEFAULT_LOOK) -> list[cp.Module]:
                            strips=((936.0, 998.0), (1045.0, 1056.0)), pods=((944.8, 967.2),)),
         *nv.channel_fill(s), *nv.housing(s, "reactor"),
         nv.engine(s, "engine_top_r", "engine_r", 1.0), nv.engine(s, "engine_low_r", "engine_r", -1.0), *nv.engine_frame(s, "reactor"),
-        *weapon_modules(s), *light_modules(),
-    ]  # fmt: skip
+        *weapon_modules(s), *light_modules(), *marks.lamps(), *marks.brackets(s),
+    ]]  # fmt: skip
+
+
+def _with_marks(m: cp.Module) -> cp.Module:
+    """The starboard vertical plate with the name and the emblem painted on it (``parts/ea_nova_marks.py``)."""
+    if m.name != "armour_side_r":
+        return m
+    return dataclasses.replace(m, hardpoints=(*m.hardpoints, marks.name_mark(), marks.emblem_mark()))
+
+
+def markings(look: str = DEFAULT_LOOK) -> tuple:
+    """What the hull's maps bake beyond the plating: the floods' pools and the plates' edge band."""
+    return (*marks.flood_pools(), *marks.edge_bands(modules(look), style(look).style.materials["hull"].albedo))
 
 
 def spec(look: str = DEFAULT_LOOK) -> cap.CapitalSpec:
@@ -144,7 +162,10 @@ def spec(look: str = DEFAULT_LOOK) -> cap.CapitalSpec:
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=1500.0, mouth_radius_m=400.0),
         collision=COLLISION,
-        notes=("the renegades' red X marks (M10-T02) are `mark` hardpoints with `only_faction`: the game draws them on a renegade ship",),
+        notes=("the renegades' red X marks (M10-T02) are `mark` hardpoints with `only_faction`: the game draws them on a renegade ship",
+               "the floods' pools of light and the plates' darker edge band are baked into the hull's maps; the name and the Earth Alliance "
+               "emblem on each vertical plate are marks the game draws sharp (M10-T67)"),
+        markings=markings(look),
     )
 
 

@@ -611,6 +611,21 @@ fifth of the way up from its keel edge (`ea_omega.MARK_AT`), mid-length (`mark_i
 vertical plate and on the roof (`only_faction` `renegades`). **Names**: `data/ships/names.json`, twenty generals and admirals,
 the show's Schwarzkopf first.
 
+**Paint and lamps** (T67, `parts/ea_nova_marks.py`, from the show's stills and the Omega's): the ship's name (`mark_name_r`, `_l`,
+10 m, light outlined in black like the Hyperion's) high on each vertical plate above the gun pod; the Earth Alliance emblem
+(`mark_emblem_r`, `_l`, 56 m wide, `core/hull_decals.py`) low on it under the pod; a flood lamp on a bracket under each, shining
+up the plate, its pool baked into the plate's maps (the emblem's glow passed to its decal); red beacons beside the top mast's, the
+keel mast's and the sensor boom's tips; and a darker grey band 4.5 m wide, 0.5 m in from the edges of the armour plates, the
+hangar block's roof and keel, the collars and the housing (`parts/capital_paint.py`, a placed `Marking.paint`; for the Omega in
+T68). The soft finish's grey is re-read from the stills (`ea_capital.SOFT_PAINT`: hull `#7D807C`, panels `#6B6E6A`, dark
+`#3A3C3A`, from look A's `#8C9199`, `#747A84`, `#3F434B`), its patches in two shades (`SOFT_PATCH_TIERS`: three quarters 12 %
+darker, a quarter 40 %, on 35 % of the plates). The seams are the Hyperion's (5e083eb9: 0.22 of the groove's depth, 0.6 of the
+line's width, line darkness 0.89, groove 3 mm).
+
+**Bay mouth** (T67): the frame's inner faces lay on the hall's walls and the fillets from 190 to 196 m and flickered; the frame's
+back now slants out from the mouth's edge, and the tube starts at the frame's back (`test_the_bay_mouth_has_no_flickering_faces`,
+`core/coplanar.py`).
+
 ### Fidelity (Q10)
 
 ```

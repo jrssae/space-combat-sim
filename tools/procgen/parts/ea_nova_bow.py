@@ -127,7 +127,8 @@ def bay(s: Style) -> list[cp.Module]:
         a, b = (k, (k + 1) % 8)
         pts = [(*p, z) for p, z in ((inner[a], BAY_MOUTH_Z), (inner[b], BAY_MOUTH_Z), (lip_in[a], LIP_Z), (lip_in[b], LIP_Z), (lip_out[a], LIP_Z),
                                     (lip_out[b], LIP_Z), (outer[a], FRAME_BEVEL_Z), (outer[b], FRAME_BEVEL_Z))]
-        pts += [(*p, FRAME_BACK_Z) for p in (outer[a], outer[b], inner[a], inner[b])]
+        # The frame's back slants out from the mouth's edge, so the hall's walls alone line the mouth (no faces shared, no flicker).
+        pts += [(*p, FRAME_BACK_Z) for p in (outer[a], outer[b])]
         ring.append(cs.convex(f"frame_{k}", pts, s, PANEL))
     out.append(_put("bridge", cs.compound("bay_fore_frame", ring)))
     for tag, y in zip(("top", "low"), PROBE_YS, strict=True):

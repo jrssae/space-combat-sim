@@ -180,10 +180,11 @@ class Marking:
                                                       "strength": float(strength), "reach_m": float(range_m)})
 
     @staticmethod
-    def paint(part: str, colour: Vec3, cover: Callable[[np.ndarray, np.ndarray], np.ndarray]) -> Marking:
+    def paint(part: str, colour: Vec3, cover: Callable[[np.ndarray, np.ndarray], np.ndarray], placed: bool = False) -> Marking:
         """A base coat of ``colour`` wherever ``cover(points, normals)`` (0..1 per point, in the part's frame) says, laid before the
-        seams and the wear so they show through it (M7-T04: the station's blue panel blocks, too irregular for bands and decals)."""
-        return Marking("paint", part, tuple(colour), {"cover": cover})
+        seams and the wear so they show through it (M7-T04: the station's blue panel blocks, too irregular for bands and decals).
+        ``placed`` keeps ``cover`` in the frame it was authored in when the part is moved (a capital's edge bands, M10-T67)."""
+        return Marking("paint", part, tuple(colour), {"cover": cover, **({"origin": (0.0, 0.0, 0.0)} if placed else {})})
 
     @staticmethod
     def soot(part: str, exit_point: Sequence[float], direction: Sequence[float], radius_m: float, length_m: float, strength: float = 1.0) -> Marking:
@@ -753,7 +754,8 @@ def bake_maps(atlas: Atlas, style: Style, seed: int, occlusion: bool = True, pai
         sel = (np.ones(n, dtype=bool) if not marking.part else part == names.index(marking.part)) & ~glass
         if sel.any():
             cover = _kept(memo, ("paint", id(marking)),
-                          lambda m=marking, sel=sel: np.clip(np.asarray(m.params["cover"](pos[sel], nrm[sel]), dtype=float), 0.0, 1.0))
+                          lambda m=marking, sel=sel: np.clip(np.asarray(m.params["cover"](pos[sel] - np.asarray(m.params.get("origin", (0.0, 0.0, 0.0))),
+                                                                                       nrm[sel]), dtype=float), 0.0, 1.0))
             albedo[sel] = albedo[sel] * (1.0 - cover)[:, None] + np.asarray(marking.colour, dtype=float) * cover[:, None]
 
     # The paint: each part's plating (panel lines and tint) with the part's own phase.

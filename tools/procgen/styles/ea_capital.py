@@ -85,6 +85,11 @@ DEFAULT_LOOK = "a"
 FINISHES = ("fleet", "soft")
 # The soft finish (Q64): the Hyperion's plating, its plates' tone wander and grime kept as small as the Hyperion's, its seam lines as faint.
 SOFT_TONE, SOFT_GRIME, SOFT_LINE_DARKNESS, SOFT_GROOVE_M = 0.04, 0.05, 0.89, 0.003
+# The soft finish's grey re-read from the Nova's and the Omega's stills (M10-T67): a neutral, slightly green mid grey, darker than
+# look A's blue-grey; a look without an entry keeps its own paint.
+SOFT_PAINT: dict[str, dict[str, int]] = {"a": {"hull": 0x7D807C, "hull_panel": 0x6B6E6A, "hull_dark": 0x3A3C3A}}
+# The patches: most a shade darker, a few several shades (M10-T67, the stills' plating).
+SOFT_PATCHES, SOFT_PATCH_TIERS = 0.35, ((0.75, 0.12), (0.25, 0.4))
 
 
 def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None, finish: str = "fleet") -> CapitalStyle:
@@ -100,7 +105,9 @@ def ea_capital(look: str = DEFAULT_LOOK, livery: Mapping[str, int] | None = None
         return capital_style(chosen, f"ea_capital_{look}", PREFIX, fleet_mosaic(chosen), livery)
     from .ea_hyperion import HyperionMosaic  # noqa: PLC0415 - ea_hyperion builds on this module
 
-    skin = HyperionMosaic(plate_m=(18.0, 9.0), splits=2, tone=SOFT_TONE, grime=SOFT_GRIME, frames_m=30.0, major_every=4)
+    skin = HyperionMosaic(plate_m=(18.0, 9.0), splits=2, tone=SOFT_TONE, grime=SOFT_GRIME, frames_m=30.0, major_every=4, patches=SOFT_PATCHES,
+                          patch_tiers=SOFT_PATCH_TIERS)
+    chosen = dataclasses.replace(chosen, paint={**chosen.paint, **SOFT_PAINT.get(look, {})})
     style = capital_style(chosen, f"ea_capital_{look}_soft", PREFIX, skin, livery)
     materials = {**style.style.materials, **bay_metal_materials(style.style.materials["hull"].name.removesuffix("_hull"))}
     return dataclasses.replace(style, style=dataclasses.replace(style.style, materials=materials, panel_line_darkness=SOFT_LINE_DARKNESS,
@@ -163,4 +170,4 @@ def bay_metal_materials(tag: str) -> dict[str, Material]:
                                   emissive_strength=BAY_TUNNEL_STRENGTH)}
 
 
-__all__ = ["DEFAULT_LOOK", "FINISHES", "FIXED", "LOOKS", "ROLES", "Look", "bay_light_materials", "bay_metal_materials", "capital_style", "ea_capital", "fleet_mosaic"]
+__all__ = ["DEFAULT_LOOK", "FINISHES", "FIXED", "LOOKS", "ROLES", "SOFT_PAINT", "SOFT_PATCH_TIERS", "SOFT_PATCHES", "Look", "bay_light_materials", "bay_metal_materials", "capital_style", "ea_capital", "fleet_mosaic"]
