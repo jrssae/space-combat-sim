@@ -35,7 +35,7 @@ STL = ROOT / "references" / fid.REFERENCE
 TEST_OPTIONS = {"atlas_px": 1024, "detail_px": 128}  # the default sample spacing: the coverage check needs it; the open bow's charts need 1 024 px
 LENGTH, SPAN, HEIGHT = 1502.1, 383.0, 443.7  # T01's length; the wing guns' masts across, the roof masts to the keel mast
 SECTIONS = ("bow", "bridge", "fuel", "spine_fore", "hangar", "spine_mid", "spine_aft", "reactor", "engine_r", "engine_l")
-MOUNTS = {"turret": 14, "interceptor": 4}  # Q71: 14 fixed pulse cannons and the middle lug's 4 pods as interceptors; no beams
+MOUNTS = {"turret": 14, "interceptor": 4}  # Q71: 12 fixed and 2 swivel pulse cannons, the middle lug's 4 pods interceptors; no beams
 BAYS, STARFURIES = 1, 24
 MOUTH_LO, MOUTH_HI = (-45.0, -25.0, 175.0), (45.0, 25.0, 235.0)  # round the bay's mouth: the frame, the hall's front, the fins and plates
 
@@ -116,17 +116,27 @@ class NovaBuildTests(unittest.TestCase):
 
     def test_the_guns_are_the_references_pods(self) -> None:
         """M10-T67, Q71: the 18 twin pods of the reference with guns: two on each flank (beside the command block, on the wing's
-        tip), one on each of the hangar block's and four on each ring lug, the aft lug's four facing the stern. Fourteen are
-        fixed pulse cannons; the middle lug's four, their fire ahead blocked by the fore lug's pods, swivel as interceptors."""
+        tip), one on each of the hangar block's and four on each ring lug, the aft lug's four facing the stern. Twelve are
+        fixed pulse cannons; the middle lug's four, their fire ahead blocked by the fore lug's pods, swivel as interceptors; the
+        hangar block's two, their fire ahead blocked by the wing pods, swivel the same way as pulse cannons (M10-T14 review)."""
         pods = [w for w in self.hp["weapons"] if w["kind"] in MOUNTS]
         self.assertEqual(len(pods), 18)
         self.assertTrue(all(w["barrels"] == 2 for w in pods))
-        fixed = [w for w in pods if w["kind"] == "turret"]
-        self.assertEqual({w["weapon"] for w in fixed}, {"ea_pulse_cannon_fixed"})
+        fixed = [w for w in pods if w["weapon"] == "ea_pulse_cannon_fixed"]
+        self.assertEqual(len(fixed), 12)
         for w in fixed:
+            self.assertEqual(w["kind"], "turret")
             self.assertEqual((w["traverse_deg"], w["elevation_deg"]), (0.0, [0.0, 0.0]), f"{w['name']} is fixed")
         ups = [np.round(w["up"], 3).tolist() for w in fixed]
-        self.assertEqual((sum(abs(u[0]) == 1.0 for u in ups), sum(abs(u[1]) == 1.0 for u in ups)), (6, 8), "six on the flanks, eight on the lugs")
+        self.assertEqual((sum(abs(u[0]) == 1.0 for u in ups), sum(abs(u[1]) == 1.0 for u in ups)), (4, 8), "four on the flanks, eight on the lugs")
+        swivels = [w for w in pods if w["weapon"] == "ea_pulse_cannon_swivel"]
+        self.assertEqual(sorted(w["name"] for w in swivels), ["pulse_hangar_l", "pulse_hangar_r"])
+        for w in swivels:
+            self.assertEqual((w["kind"], w["section"]), ("turret", "hangar"))
+            self.assertEqual((w["traverse_deg"], w["elevation_deg"]), (180.0, [0.0, 90.0]), "the half sphere over the block's flank")
+            self.assertAlmostEqual(abs(w["up"][0]), 1.0, places=6, msg="facing out from the flank")
+            self.assertGreater(self.authored(w["position"])[0] * w["up"][0], 0.0, "away from the block")
+            self.assertGreater(w["barrel_m"], 80.0, "its bolts leave from the muzzles")
         self.assertEqual(sum(w["forward"][2] > 0.5 for w in fixed), 4, "the aft lug's four face the stern")
         guards = [w for w in pods if w["kind"] == "interceptor"]
         self.assertEqual({w["weapon"] for w in guards}, {"ea_interceptor_pod"})

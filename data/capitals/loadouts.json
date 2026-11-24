@@ -63,6 +63,16 @@
    "speed_mps": 1800,
    "range_m": 4000
   },
+  "ea_pulse_cannon_swivel": {
+   "kind": "bolt_medium",
+   "faction": "earth_alliance",
+   "role": "dual",
+   "damage": 11.25,
+   "cycle_s": 2.0,
+   "barrels": 2,
+   "speed_mps": 1800,
+   "range_m": 4000
+  },
   "ea_plasma_heavy": {
    "kind": "bolt_heavy",
    "faction": "earth_alliance",
@@ -675,7 +685,8 @@
    "hull": 36000,
    "jump": "own",
    "weapons": {
-    "ea_pulse_cannon_fixed": 14
+    "ea_pulse_cannon_fixed": 12,
+    "ea_pulse_cannon_swivel": 2
    },
    "interceptors": {
     "ea_interceptor_pod": 4

@@ -4,8 +4,10 @@ with a mast through it, stood on the hull in four ways. A pod beside the command
 each flank of the hangar block, and four on each ring lug's outrigger plates (above and below, either side): the fore and
 middle lugs' face the bow, the aft lug's face the stern.
 
-Q71 (the maintainer, 2026-11-24): fourteen are fixed pulse cannons firing along the pod; the middle lug's four, whose fire
-ahead the fore lug's pods block, are interceptors swivelling on a turret ring through the half sphere over their plate.
+Q71 (the maintainer, 2026-11-24): twelve are fixed pulse cannons firing along the pod; the middle lug's four, whose fire
+ahead the fore lug's pods block, are interceptors swivelling on a turret ring through the half sphere over their plate. The
+hangar block's two, whose fire ahead the wing pods block (as in the reference), swivel the same way on a ring on the block's
+flank but stay pulse cannons, at three quarters of the fixed ones' power (M10-T14 review).
 
 A pod is built in its own frame (x across, y out from the hull, z aft from the barrels' muzzles, the barrels' axis on
 y = 0) and stood with :meth:`capital.Module.mounted`. Numbers are the reference's at 1 502.1 m.
@@ -38,15 +40,18 @@ ARM_Z, ARM_X, ARM_Y, BRACE_X = (65.0, 102.0), (56.5, 113.5), (56.0, 53.5), (48.0
 # The brace's y at its root and its tip: the upper one deepens to its root, the lower one sits lower (the reference's are not mirrored).
 BRACE_Y = {1.0: ((33.0, 38.5), (36.5, 38.5)), -1.0: ((42.5, 44.5), (42.5, 44.5))}
 PULSE, INTERCEPTOR = "ea_pulse_cannon_fixed", "ea_interceptor_pod"  # Q71: data/capitals/loadouts.json
-HALF_SPHERE = (0.0, 90.0)  # an interceptor pod's elevation over its plate, all the way round
-RING_R, RING_SIDES = (18.0, 15.5), 16  # the swivel ring under an interceptor pod: its base's radius and its race's
+SWIVEL = "ea_pulse_cannon_swivel"  # the hangar pods' (M10-T14 review)
+FIXED_POD, INTERCEPTOR_POD, SWIVEL_POD = "fixed", "interceptor", "swivel"  # how a pod is mounted
+HALF_SPHERE = (0.0, 90.0)  # a swivelling pod's elevation over its plate, all the way round
+RING_R, RING_SIDES = (18.0, 15.5), 16  # the swivel ring under a swivelling pod: its base's radius and its race's
 RING_Z = 86.0  # the ring's centre behind the muzzles, under the housing's middle
 
 
 class Gun(NamedTuple):
     """One starboard pod: its name and section, the barrels' axis at the muzzles (x, y, z), its outward normal, which way it
     faces along the ship (-1 the bow, +1 the stern), its bracket's reach in to the hull, its mast (distance behind the
-    muzzles, length out from the axis) and whether it is an interceptor (Q71) rather than a fixed pulse cannon."""
+    muzzles, length out from the axis) and how it is mounted: a fixed pulse cannon, an interceptor (Q71) or a swivelling pulse
+    cannon, both on a swivel ring."""
 
     name: str
     section: str
@@ -55,7 +60,7 @@ class Gun(NamedTuple):
     faces: float
     bracket: float
     mast: tuple[float, float]
-    interceptor: bool = False
+    mount: str = FIXED_POD
 
 
 RIGHT, UP, DOWN = (1.0, 0.0, 0.0), (0.0, 1.0, 0.0), (0.0, -1.0, 0.0)
@@ -64,9 +69,9 @@ GUNS = (
     Gun("pulse_wing_r", "bow", (105.5, 0.8, 286.6), RIGHT, -1.0, 17.5, (102.5, 85.5)),
     Gun("pulse_fore_top_r", "spine_fore", (95.0, 75.5, 380.0), UP, -1.0, 24.5, (102.5, 86.0)),
     Gun("pulse_fore_low_r", "spine_fore", (95.0, -75.5, 380.0), DOWN, -1.0, 24.5, (102.5, 86.0)),
-    Gun("pulse_hangar_r", "hangar", (91.5, 0.8, 540.1), RIGHT, -1.0, 24.5, (102.5, 85.5)),
-    Gun("interceptor_mid_top_r", "spine_mid", (95.0, 75.5, 745.7), UP, -1.0, 24.5, (102.5, 86.0), True),
-    Gun("interceptor_mid_low_r", "spine_mid", (95.0, -75.5, 745.7), DOWN, -1.0, 24.5, (102.5, 86.0), True),
+    Gun("pulse_hangar_r", "hangar", (91.5, 0.8, 540.1), RIGHT, -1.0, 24.5, (102.5, 85.5), SWIVEL_POD),
+    Gun("interceptor_mid_top_r", "spine_mid", (95.0, 75.5, 745.7), UP, -1.0, 24.5, (102.5, 86.0), INTERCEPTOR_POD),
+    Gun("interceptor_mid_low_r", "spine_mid", (95.0, -75.5, 745.7), DOWN, -1.0, 24.5, (102.5, 86.0), INTERCEPTOR_POD),
     Gun("pulse_aft_top_r", "spine_aft", (95.0, 75.5, 1041.7), UP, 1.0, 24.5, (108.0, 86.0)),
     Gun("pulse_aft_low_r", "spine_aft", (95.0, -75.5, 1041.7), DOWN, 1.0, 24.5, (108.0, 86.0)),
 )
@@ -113,7 +118,8 @@ def _tail(name: str, s: Style) -> cp.Module:
 
 
 def _ring(name: str, plate: float, s: Style) -> cp.Module:
-    """The swivel ring an interceptor pod turns on: a base on the outrigger plate and a narrower race up to the housing."""
+    """The swivel ring a pod turns on: a base on what carries it (an outrigger plate, the hangar block's flank) and a narrower
+    race up to the housing."""
     top = HOUSING_IN - 0.5
     mid = plate + 0.4 * (top - plate)
 
@@ -126,18 +132,24 @@ def _ring(name: str, plate: float, s: Style) -> cp.Module:
 
 
 def pod(gun: Gun, s: Style) -> cp.Module:
-    """One twin gun pod in the ship's frame. A pulse cannon's fixed hardpoint sits at the barrels' roots in the housing's nose,
-    firing along the pod; an interceptor's sits at its swivel ring's centre, covering the half sphere over the plate."""
+    """One twin gun pod in the ship's frame. A fixed pulse cannon's hardpoint sits at the barrels' roots in the housing's nose,
+    firing along the pod; a swivelling pod's (an interceptor's or a swivel pulse cannon's) at its ring's centre, covering the
+    half sphere over what carries it."""
     n = gun.name
     parts = [_barrel(f"{n}_barrel_1", -BARREL_X, s), _barrel(f"{n}_barrel_2", BARREL_X, s), _housing(f"{n}_housing", s), _tail(f"{n}_tail", s),
              cs.box(f"{n}_bracket", (-11.0, -gun.bracket, 72.0), (11.0, HOUSING_IN + 1.0, 100.0), s, DARK, skin=cp.SKIN_FITTING),
              cs.rod(f"{n}_mast", (0.0, MAST_IN, gun.mast[0]), (0.0, gun.mast[1], gun.mast[0]), MAST_R, s)]
     forward, up = np.array([0.0, 0.0, -1.0]), np.array([0.0, 1.0, 0.0])
-    if gun.interceptor:
-        parts.append(_ring(f"{n}_ring", ARM_Y[0] - abs(gun.muzzle[1]), s))
-        point = cp.Hardpoint(n, cp.INTERCEPTOR, np.array([0.0, 0.0, RING_Z]), forward, up,
-                             {"traverse_deg": 180.0, "elevation_deg": list(HALF_SPHERE), "barrels": 2})
-        weapon = INTERCEPTOR
+    if gun.mount != FIXED_POD:
+        # On a lug the ring stands on the outrigger plate; on the hangar block, on its flank where the bracket meets it.
+        plate = ARM_Y[0] - abs(gun.muzzle[1]) if gun.out != RIGHT else -gun.bracket
+        parts.append(_ring(f"{n}_ring", plate, s))
+        swivel = gun.mount == SWIVEL_POD
+        params = {"traverse_deg": 180.0, "elevation_deg": list(HALF_SPHERE), "barrels": 2}
+        if swivel:
+            params["barrel_m"] = RING_Z  # its bolts leave from the muzzles, ahead of the ring however it turns
+        point = cp.Hardpoint(n, cp.TURRET if swivel else cp.INTERCEPTOR, np.array([0.0, 0.0, RING_Z]), forward, up, params)
+        weapon = SWIVEL if swivel else INTERCEPTOR
     else:
         root = HOUSING_Z[0][0]
         point = cp.Hardpoint(n, cp.TURRET, np.array([0.0, 0.0, root]), forward, up,
@@ -164,4 +176,4 @@ def guns(s: Style) -> list[cp.Module]:
     return out + [arm(g, s).in_section(g.section).on_side(cp.RIGHT) for g in GUNS if g.out != RIGHT]
 
 
-__all__ = ["GUNS", "INTERCEPTOR", "PULSE", "Gun", "arm", "guns", "pod"]
+__all__ = ["FIXED_POD", "GUNS", "INTERCEPTOR", "INTERCEPTOR_POD", "PULSE", "SWIVEL", "SWIVEL_POD", "Gun", "arm", "guns", "pod"]

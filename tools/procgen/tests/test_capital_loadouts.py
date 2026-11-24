@@ -64,8 +64,13 @@ class LoadoutTests(unittest.TestCase):
         self.assertEqual(h["ea_omega"]["launches"]["starfury_ally"], 32)
         self.assertEqual(h["ea_nova"]["class"], "dreadnought")
         self.assertEqual(h["ea_nova"]["launches"]["starfury_ally"], 24)
-        # Q71: no beams on the Nova; 14 fixed pulse cannons and the 4 blocked midship pods as interceptors.
-        self.assertEqual(h["ea_nova"]["weapons"], {"ea_pulse_cannon_fixed": 14})
+        # Q71: no beams on the Nova; 12 fixed pulse cannons, the 4 blocked midship pods as interceptors and (M10-T14 review) the
+        # hangar block's 2 swivelling pulse cannons at three quarters of a fixed one's damage.
+        self.assertEqual(h["ea_nova"]["weapons"], {"ea_pulse_cannon_fixed": 12, "ea_pulse_cannon_swivel": 2})
+        swivel, fixed = self.weapons["ea_pulse_cannon_swivel"], self.weapons["ea_pulse_cannon_fixed"]
+        self.assertEqual(swivel["damage"], 0.75 * fixed["damage"])
+        self.assertEqual({k: swivel[k] for k in ("role", "cycle_s", "barrels", "speed_mps", "range_m")},
+                         {k: fixed[k] for k in ("role", "cycle_s", "barrels", "speed_mps", "range_m")})
         self.assertEqual(h["ea_nova"]["interceptors"], {"ea_interceptor_pod": 4})
         self.assertNotIn("ea_sweep_beam_nova", self.weapons)
         self.assertEqual(self.weapons["ea_pulse_cannon_fixed"]["kind"], "bolt_fixed")

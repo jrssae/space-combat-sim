@@ -2,8 +2,10 @@ extends GutTest
 ## Capital guns and launchers on the native rows in the real main scene (M10-T14, D12.9, AC9's turret and missile clause): two
 ## hostile Omegas side by side hit each other section by section with their turrets, and the Omega's missiles strike and blast;
 ## a lost mount holds its fire and a disabled ship falls silent; a renegade capital broadcasts Earth Alliance from its spawn
-## (Q55), so an Omega's guns and launchers leave it alone until its own shot gives it away; the Nova's fixed pulse cannons
-## (Q71) fire only along their line, the four aft ones astern; the console's `gun` command and `capital_guns` provider.
+## (Q55), so an Omega's guns and launchers leave it alone until its own shot gives it away, and only the one that fired is
+## revealed; the Nova's fixed pulse cannons (Q71) fire only along their line, the four aft ones astern, and its hangar pods swivel
+## to fire abeam; a disabled capital is engaged only when nothing live is in reach; a ship's own bolts pass through its own drum;
+## the console's `gun` command and `capital_guns` provider.
 
 const SPEED_UP: float = 4.0
 const RENEGADES: StringName = &"renegades"
@@ -193,9 +195,9 @@ func test_the_novas_fixed_pulse_cannons_fire_only_along_their_line() -> void:
 	raider.damageable.invulnerable = true
 	var on_raider: Array = _log_hits(raider, nova)
 	await wait_physics_frames(2)
-	assert_eq(_guns().mounts_of(nova).size(), 14, "the 14 fixed pulse cannons (the 4 pods are interceptors, T13)")
+	assert_eq(_guns().mounts_of(nova).size(), 14, "12 fixed and 2 swivel pulse cannons (the 4 pods are interceptors, T13)")
 	await _fly(10.0)
-	var shots: Dictionary = _shots(nova)
+	var shots: Dictionary = _fixed_only(_shots(nova))
 	var aft: PackedStringArray = PackedStringArray()
 	var fore: PackedStringArray = PackedStringArray()
 	for name: String in _fired(shots):
@@ -207,13 +209,117 @@ func test_the_novas_fixed_pulse_cannons_fire_only_along_their_line() -> void:
 	raider.global_position = nova.global_position + (nova.global_basis * Vector3(0.0, 0.0, -3000.0)).rotated(nova.global_basis.y, deg_to_rad(20.0))
 	SimCore.touch_moved(raider)
 	await _fly(1.0)
-	var held: Dictionary = _shots(nova)
+	var held: Dictionary = _fixed_only(_shots(nova))
 	await _fly(6.0)
-	assert_eq(_shots(nova), held, "off its line a fixed gun holds its fire")
+	assert_eq(_fixed_only(_shots(nova)), held, "off its line a fixed gun holds its fire")
 	var holding: int = 0
 	for k: int in _guns().mounts_of(nova):
 		holding += 1 if int(_guns().state(k)["target"]) == raider.get_instance_id() else 0
 	assert_gt(holding, 0, "the fore guns hold it in their wider cone for the helm")
+
+
+# `shots` without the Nova's two swivelling hangar pods.
+func _fixed_only(shots: Dictionary) -> Dictionary:
+	var out: Dictionary = shots.duplicate()
+	for name: String in ["pulse_hangar_r", "pulse_hangar_l"]:
+		out.erase(name)
+	return out
+
+
+# M10-T14 review: the hangar pods swivel over the block's flank (their fire ahead is blocked by the wing pods) and fire abeam
+# at three quarters of the fixed cannons' power; the fixed cannons leave a target abeam alone.
+func test_the_novas_hangar_pods_swivel_to_fire_abeam_at_three_quarters_power() -> void:
+	var nova: CapitalShip = _spawn(&"ea_nova", "EAS Nova", Factions.EARTH_ALLIANCE, 3000.0)
+	var raider: CapitalShip = _spawn(&"ea_omega", "Raider Omega", Factions.RAIDERS, 3000.0, 2500.0)
+	if nova == null or raider == null:
+		return
+	raider.damageable.invulnerable = true
+	_guns().hold(raider, true)
+	await wait_physics_frames(2)
+	var swivel: WeaponSpec = WeaponSpec.of_weapon(&"ea_pulse_cannon_swivel")
+	assert_almost_eq(swivel.damage, 0.75 * WeaponSpec.of_weapon(&"ea_pulse_cannon_fixed").damage, 1e-6)
+	await _fly(12.0, func() -> bool: return int(_shots(nova).get("pulse_hangar_r", 0)) > 0)
+	var shots: Dictionary = _shots(nova)
+	assert_gt(int(shots.get("pulse_hangar_r", 0)), 0, "the starboard hangar pod turns abeam and fires: %s" % [shots])
+	assert_eq(int(shots.get("pulse_hangar_l", 0)), 0, "the port one cannot see over the block")
+	assert_eq(_fired(_fixed_only(shots)).size(), 0, "no fixed cannon fires abeam: %s" % [shots])
+
+
+# Q55, revealed per ship: of two renegade capitals broadcasting Earth Alliance, only the one that fires gives itself away, and
+# only it is engaged.
+func test_only_the_renegade_that_fires_is_revealed_and_engaged() -> void:
+	var omega: CapitalShip = _spawn(&"ea_omega", "EAS Agamemnon", Factions.EARTH_ALLIANCE, 3000.0)
+	var loud: CapitalShip = _spawn(&"ea_omega", "Renegade A", RENEGADES, 3000.0, 3000.0)
+	var quiet: CapitalShip = _spawn(&"ea_omega", "Renegade B", RENEGADES, 3000.0, -3000.0)
+	if omega == null or loud == null or quiet == null:
+		return
+	for cap: CapitalShip in [omega, loud, quiet]:
+		cap.damageable.invulnerable = true
+	_guns().hold(quiet, true)
+	var on_quiet: Array = _log_hits(quiet, omega)
+	await _fly(15.0, func() -> bool: return not loud.targetable.is_disguised())
+	assert_false(loud.targetable.is_disguised(), "the renegade that fires gives itself away")
+	assert_true(quiet.targetable.is_disguised(), "the one holding its fire still broadcasts Earth Alliance")
+	var on_loud: Array = _log_hits(loud, omega)
+	await _fly(15.0)
+	assert_false(on_loud.is_empty(), "the Omega engages the one revealed")
+	assert_eq(on_quiet.size(), 0, "and never the one still disguised")
+	for k: int in _guns().mounts_of(omega):
+		assert_ne(int(_guns().state(k)["target"]), quiet.get_instance_id(), "no mount holds it, the port side's included")
+
+
+# M10-T14 review: a disabled capital draws fire only from mounts with nothing live in reach (it still blasts when it dies).
+func test_a_disabled_capital_is_engaged_only_when_nothing_live_is_in_reach() -> void:
+	var omega: CapitalShip = _spawn(&"ea_omega", "EAS Agamemnon", Factions.EARTH_ALLIANCE, 3000.0)
+	var live: CapitalShip = _spawn(&"ea_omega", "Raider A", Factions.RAIDERS, 3000.0, 3000.0)
+	var hulk: CapitalShip = _spawn(&"ea_omega", "Raider B", Factions.RAIDERS, 5600.0, 3000.0)
+	if omega == null or live == null or hulk == null:
+		return
+	_guns().hold(live, true)
+	assert_true(_run("capital focus %s" % String(hulk.name)).ok)
+	assert_true(_run("capital disable").ok)
+	for cap: CapitalShip in [omega, live, hulk]:
+		cap.damageable.invulnerable = true  # after the disable, which lands as hits
+	await wait_physics_frames(2)
+	assert_eq(int(SimCore.current().core.disabled_count()), 1, "the rows know it is disabled")
+	var on_live: Array = _log_hits(live, omega)
+	var on_hulk: Array = _log_hits(hulk, omega)
+	await _fly(15.0)
+	assert_false(on_live.is_empty(), "the live raider is engaged")
+	for k: int in _guns().mounts_of(omega):
+		var s: Dictionary = _guns().state(k)
+		if int(s["target"]) == hulk.get_instance_id():
+			assert_true(false, "%s holds the hulk with a live raider beside it" % (s["mount"] as Dictionary)["name"])
+	gut.p("hits on the live raider %d, on the hulk %d" % [on_live.size(), on_hulk.size()])
+	live.queue_free()
+	await _fly(15.0, func() -> bool: return not on_hulk.is_empty())
+	assert_false(on_hulk.is_empty(), "with nothing live left, the hulk is fair game")
+
+
+# M10-T14 review: a capital's own bolts and missiles pass through its own rotating section (a separate body), as through its hull.
+func test_a_ships_own_bolt_passes_through_its_drum() -> void:
+	var omega: CapitalShip = _spawn(&"ea_omega", "EAS Agamemnon", Factions.EARTH_ALLIANCE, 3000.0)
+	if omega == null:
+		return
+	omega.damageable.invulnerable = true
+	_guns().hold(omega, true)
+	await wait_physics_frames(2)
+	assert_false(omega.rotors.is_empty(), "the Omega has its drum")
+	var drum: Node3D = omega.rotors[0]
+	var sim: SimCore = SimCore.current()
+	var spec: WeaponSpec = WeaponSpec.of_weapon(&"ea_pulse_medium")
+	var across: Vector3 = omega.global_basis.x
+	var hits: Array = []
+	omega.section_hit.connect(func(section: String, info: HitInfo) -> void: hits.append([info.shooter_id, section]))
+	var shoot: Callable = func(shooter_id: int, faction: StringName) -> void:
+		var at: Vector3 = drum.global_position + across * 700.0
+		sim.add_bolt(at, main.world.rest_velocity() - across * 1800.0, faction, shooter_id, spec, SimClock.now())
+	shoot.call(omega.get_instance_id(), Factions.EARTH_ALLIANCE)
+	await _fly(1.0)
+	assert_eq(hits.size(), 0, "its own bolt crosses its drum and hull untouched: %s" % [hits])
+	shoot.call(0, Factions.RAIDERS)
+	await _fly(1.0, func() -> bool: return not hits.is_empty())
+	assert_false(hits.is_empty(), "a stranger's bolt on the same line lands")
 
 
 func test_the_console_lists_mounts_holds_and_fires_a_test_shot() -> void:

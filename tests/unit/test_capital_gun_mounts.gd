@@ -47,7 +47,7 @@ func test_every_capital_gun_and_launcher_in_the_loadouts_has_a_spec_with_its_num
 		assert_eq(spec.warhead, warhead, "%s's warhead" % id)
 		if warhead != WeaponSpec.WARHEAD_NONE:
 			assert_eq(spec.toughness, int(row.get("toughness", 1)), id)
-	assert_eq(count, 26, "every capital gun and launcher kind of every faction")
+	assert_eq(count, 27, "every capital gun and launcher kind of every faction")
 
 
 func test_no_push_trait_and_the_brakiri_carry_pulse_lasers_and_interceptors_only() -> void:
@@ -89,7 +89,7 @@ func test_the_omegas_turrets_and_launchers() -> void:
 			assert_gt(float(m["barrel_m"]), 0.0)
 
 
-func test_the_novas_fourteen_pulse_cannons_are_fixed_ten_ahead_and_four_astern() -> void:
+func test_the_novas_twelve_fixed_pulse_cannons_fire_eight_ahead_and_four_astern_and_two_swivel() -> void:
 	var hp: Dictionary = _hardpoints("ea_nova")
 	if hp.is_empty():
 		pending("the Nova is not generated (scripts/gen_assets.sh)")
@@ -98,7 +98,17 @@ func test_the_novas_fourteen_pulse_cannons_are_fixed_ten_ahead_and_four_astern()
 	assert_eq(mounts.size(), 14, "the 4 interceptor pods are not guns (T13)")
 	var ahead: int = 0
 	var astern: int = 0
+	var swivels: Array[String] = []
 	for m: Dictionary in mounts:
+		if m["weapon"] == "ea_pulse_cannon_swivel":
+			# M10-T14 review: the hangar block's pods turn through the half sphere over its flank, as the interceptor pods do.
+			swivels.append(str(m["name"]))
+			assert_false(m["on_axis"], "a turret")
+			assert_eq(m["half_deg"], 90.0, "the half sphere over the flank")
+			assert_almost_eq(absf((m["axis"] as Vector3).x), 1.0, 1e-5, "its base faces out from the block")
+			assert_gt(float(m["barrel_m"]), 80.0, "its bolts leave from the muzzles")
+			assert_eq((m["packed"] as PackedFloat64Array)[2], 0.75 * WeaponSpec.of_weapon(&"ea_pulse_cannon_fixed").damage, "75 % power")
+			continue
 		assert_eq(m["weapon"], "ea_pulse_cannon_fixed")
 		assert_true(m["on_axis"], "fixed to the hull's axis")
 		assert_eq(m["half_deg"], 0.0, "no traverse (Q71)")
@@ -109,7 +119,9 @@ func test_the_novas_fourteen_pulse_cannons_are_fixed_ten_ahead_and_four_astern()
 		elif axis.is_equal_approx(Vector3.BACK):
 			astern += 1
 		assert_eq((m["packed"] as PackedFloat64Array)[3], 2.0, "twin barrels")
-	assert_eq([ahead, astern], [10, 4])
+	assert_eq([ahead, astern], [8, 4])
+	swivels.sort()
+	assert_eq(swivels, ["pulse_hangar_l", "pulse_hangar_r"])
 
 
 func test_the_hyperions_heavies_are_fixed_and_its_damage_scale_takes_its_anti_capital_weapons() -> void:

@@ -178,6 +178,14 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
         }
         if b.phase == READY && b.target == 0 {
             b.target = choose(b, owner, world, r, &basis, from);
+        } else if b.phase == READY && holds_disabled(world, b.target) {
+            // A disabled hull it holds gives way to anything live before each shot (M10-T14 review): a ready emitter charges
+            // at once, so this looks every time, not on the pick beat.
+            b.pick_wait = 0;
+            let better = choose(b, owner, world, r, &basis, from);
+            if better != 0 {
+                b.target = better;
+            }
         }
         // A sustained beam that lost its target holds its line for the rest of its time on; an idle emitter rests forward.
         let rest = if b.phase == FIRING {
@@ -472,6 +480,11 @@ fn choose<F: Fn(i64) -> Option<usize>>(
         }
     }
     best.map_or(0, |(_, _, j)| rows.body_ids[j])
+}
+
+// Whether body `target` is a disabled hull (`FLAG_DISABLED`).
+fn holds_disabled<F: Fn(i64) -> Option<usize>>(world: &BeamWorld<'_, F>, target: i64) -> bool {
+    target != 0 && (world.row_of)(target).is_some_and(|j| world.rows.flags[j] & FLAG_DISABLED != 0)
 }
 
 // The way to body `target` from `from`, in the ship's frame (unit), or none.

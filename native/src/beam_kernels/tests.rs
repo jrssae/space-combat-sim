@@ -5,7 +5,7 @@ use std::sync::Arc;
 use godot::builtin::Basis;
 
 use super::*;
-use crate::rows::{FLAG_DISGUISE_SHIFT, FLAG_RIGID, ROLE_COMBAT, ROLE_SURFACE, Surface};
+use crate::rows::{FLAG_DISABLED, FLAG_DISGUISE_SHIFT, FLAG_RIGID, ROLE_COMBAT, ROLE_SURFACE, Surface};
 use crate::surface::from_packed;
 
 const LIVE: u32 = FLAG_RIGID | FLAG_HULL_ACTIVE;
@@ -411,4 +411,23 @@ fn the_same_rows_give_the_same_beams_every_run() {
         run.steps(60 * 20)
     };
     assert_eq!(make(), make());
+}
+
+// M10-T14 review: a disabled capital is taken last, and one held gives way to a live one on the next pick beat.
+#[test]
+fn a_disabled_capital_comes_after_every_live_hull_and_gives_way_to_one() {
+    let bodies = [
+        SHOOTER,
+        (2, v(0.0, 0.0, -2000.0), 300.0, 1, 1, LIVE | FLAG_DISABLED),
+        (3, v(300.0, 0.0, -3000.0), 8.0, 0, 1, LIVE),
+    ];
+    let mut run = Run::new(rows_of(&bodies, None), pulsed());
+    run.steps(1);
+    assert_eq!(run.beams[0].target, 3, "a live fighter before a disabled capital");
+    let mut held = Run::new(rows_of(&bodies[..2], None), pulsed());
+    held.steps(1);
+    assert_eq!(held.beams[0].target, 2, "nothing live: the disabled hull");
+    held.rows = rows_of(&bodies, None);
+    held.steps(600); // past its charge and 8 s cycle, ready again
+    assert_eq!(held.beams[0].target, 3, "a live hull in reach takes its place");
 }
