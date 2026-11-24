@@ -26,6 +26,7 @@ from tools.procgen.core.geometry import Mesh
 from tools.procgen.parts import capital as cp
 from tools.procgen.parts import ea_nova_fidelity as fid
 from tools.procgen.styles.ea_capital import LOOKS
+from tools.procgen.tests import bay_interiors
 from tools.procgen.tests.budget_table import read_budgets
 from tools.refview.sections import PASS_IOU, section_score
 
@@ -68,6 +69,10 @@ class NovaBuildTests(unittest.TestCase):
         # M10-T67: the capital standard of 64 shapes a section, the gun pods' masts kept apart by the merge's excess limit.
         self.assertEqual(en.COLLISION.max_shapes, 64)
         self.assertTrue(all(len(p["shapes"]) <= 64 for p in self.manifest["collision"]["pieces"]))
+
+    def test_the_bays_are_on_the_interior_layer(self) -> None:
+        """M10-T72 (Q68): its forward bay's hall out of the sun's light."""
+        bay_interiors.check(self, self.dir, self.manifest, self.hp, 1)
 
     def test_size(self) -> None:
         dims = self.manifest["dimensions_m"]

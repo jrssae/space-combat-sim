@@ -35,7 +35,12 @@ func test_every_piece_loads_as_a_textured_mesh_with_the_detail_tile() -> void:
 		assert_not_null(mesh, "%s: %s" % [piece_name, GEN_ASSETS_HINT])
 		if mesh == null:
 			continue
-		assert_eq(_triangles(mesh), int(pieces[piece_name]["mesh"]["triangles"]), piece_name)
+		var drawn: int = _triangles(mesh)
+		var inside: MeshInstance3D = piece.interior_node(RenderPiece.WHOLE)
+		if inside != null:
+			drawn += _triangles(inside.mesh)  # its bay's hall, drawn apart on the interior layer (M10-T72)
+		assert_eq(inside != null, pieces[piece_name]["mesh"].has("interior_file"), piece_name)
+		assert_eq(drawn, int(pieces[piece_name]["mesh"]["triangles"]), piece_name)
 		var material := mesh.surface_get_material(0) as StandardMaterial3D
 		assert_not_null(material, "%s: a textured material" % piece_name)
 		assert_not_null(material.albedo_texture, "%s: its own atlas" % piece_name)

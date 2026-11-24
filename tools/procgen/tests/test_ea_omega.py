@@ -26,6 +26,7 @@ from tools.procgen.core.geometry import Mesh
 from tools.procgen.parts import capital as cp
 from tools.procgen.parts import ea_omega_fidelity as fid
 from tools.procgen.styles.ea_capital import DEFAULT_LOOK, LOOKS, ea_capital
+from tools.procgen.tests import bay_interiors
 from tools.procgen.tests.budget_table import read_budgets
 from tools.refview.sections import PASS_IOU, section_score
 
@@ -66,6 +67,10 @@ class OmegaBuildTests(unittest.TestCase):
         manifest_io.validate_manifest(self.manifest)
         cover = self.manifest["collision"]["coverage"]
         self.assertEqual((cover["covered"], cover["within_reach"]), (1.0, 1.0))
+
+    def test_the_bays_are_on_the_interior_layer(self) -> None:
+        """M10-T72 (Q68): its forward bay's hall out of the sun's light."""
+        bay_interiors.check(self, self.dir, self.manifest, self.hp, 1)
 
     def test_size(self) -> None:
         dims = self.manifest["dimensions_m"]

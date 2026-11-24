@@ -6,7 +6,11 @@ extends Node3D
 ##
 ## A piece whose mesh lists sections (M7-T19, `PieceSections`) is drawn as one child mesh per section instead of one mesh, so the
 ## part near the camera draws full detail and the far end coarse, and its near-only props as instanced meshes under their
-## sections. The sections are rigid children: a turning piece turns them as one.
+## sections. The sections are rigid children: a turning piece turns them as one. A piece drawn whole with an `interior_file` (a
+## capital's bay halls, M10-T72) draws those faces as a child of its mesh on `LightRig.INTERIOR_LAYER`, out of the sun's light.
+
+## The interior node's key for a piece drawn whole (a capital's bays, M10-T72).
+const WHOLE: String = ""
 
 ## The piece's bounding radius about its own origin, m.
 var radius_m: float = 0.0
@@ -35,6 +39,7 @@ func build(dir: String, entry: Dictionary) -> void:
 		_mesh_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_mesh_node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 		add_child(_mesh_node)
+		_add_whole_interior(dir, mesh_entry)
 	var lo: Array = entry.get("aabb_min", [0.0, 0.0, 0.0])
 	var hi: Array = entry.get("aabb_max", [0.0, 0.0, 0.0])
 	for corner: Vector3 in [Vector3(lo[0], lo[1], lo[2]), Vector3(hi[0], hi[1], hi[2])]:
@@ -45,6 +50,8 @@ func build(dir: String, entry: Dictionary) -> void:
 func set_skin_variant(variant: float) -> void:
 	if _mesh_node != null:
 		HullSheenMaterial.set_variant(_mesh_node, variant)
+	if _interior_nodes.has(WHOLE):
+		HullSheenMaterial.set_variant(_interior_nodes[WHOLE] as MeshInstance3D, variant)
 	for node: MeshInstance3D in _section_nodes.values():
 		HullSheenMaterial.set_variant(node, variant)
 
@@ -83,7 +90,7 @@ func section_node(name: String) -> MeshInstance3D:
 	return _section_nodes.get(name) as MeshInstance3D
 
 
-## The mesh node of a section's interior faces (on `LightRig.INTERIOR_LAYER`), or null.
+## The mesh node of a section's interior faces (on `LightRig.INTERIOR_LAYER`), or null; `WHOLE` for a piece drawn whole.
 func interior_node(name: String) -> MeshInstance3D:
 	return _interior_nodes.get(name) as MeshInstance3D
 
@@ -123,6 +130,15 @@ func _add_interior(dir: String, mesh_entry: Dictionary, section: MeshInstance3D,
 	node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
 	section.add_child(node)
 	_interior_nodes[String(s["name"])] = node
+
+
+# A whole hull's bays: their halls drawn on the layer the sun's light leaves out, with the hull's own materials.
+func _add_whole_interior(dir: String, mesh_entry: Dictionary) -> void:
+	var node: MeshInstance3D = MeshAssets.interior_node(dir, mesh_entry, _mesh_node.mesh)
+	if node == null:
+		return
+	_mesh_node.add_child(node)
+	_interior_nodes[WHOLE] = node
 
 
 # One group of props as an instanced mesh under its section, shown only near.

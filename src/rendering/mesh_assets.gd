@@ -105,6 +105,44 @@ static func section_mesh(dir: String, entry: Dictionary, file: String) -> Mesh:
 	return mesh
 
 
+## A whole hull's interior faces (`interior_file`, M10-T72), drawn with the materials of `hull` (its loaded mesh): both meshes
+## start with the opaque surface, so the halls change texture set with the hull.
+static func interior_mesh(dir: String, entry: Dictionary, hull: Mesh) -> Mesh:
+	var path: String = dir.path_join(String(entry.get("interior_file", "")))
+	if _cache.has(path):
+		return _cache[path]
+	var mesh: Mesh = _imported_mesh(path)
+	if mesh == null:
+		push_warning("MeshAssets: %s is missing or not imported (run scripts/gen_assets.sh, then import)" % path)
+		return null
+	for i: int in mini(mesh.get_surface_count(), hull.get_surface_count() if hull != null else 0):
+		mesh.surface_set_material(i, hull.surface_get_material(i))
+	_cache[path] = mesh
+	return mesh
+
+
+## A whole hull's interior faces as a node to put under its mesh node, on the layer the sun's light leaves out (M10-T72); null
+## when its `mesh` entry has none. `hull` is the hull's loaded mesh, whose materials it shares.
+static func interior_node(dir: String, entry: Dictionary, hull: Mesh) -> MeshInstance3D:
+	if String(entry.get("interior_file", "")).is_empty():
+		return null
+	var mesh: Mesh = interior_mesh(dir, entry, hull)
+	if mesh == null:
+		return null
+	var node := MeshInstance3D.new()
+	node.name = "Interior"
+	node.mesh = mesh
+	node.layers = LightRig.INTERIOR_LAYER
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.gi_mode = GeometryInstance3D.GI_MODE_DISABLED
+	return node
+
+
+## `interior_node` for an asset's hull as `for_asset` loads it.
+static func interior_for_asset(asset_id: String, hull: Mesh, asset_root: String = ShipSpec.ASSET_ROOT) -> MeshInstance3D:
+	return interior_node(asset_root.path_join(asset_id), read_manifest(asset_id, asset_root).get("mesh", {}), hull)
+
+
 ## A big piece's materials by surface name, made once from its `mesh` entry (paint with the hull sheen, glass without).
 static func piece_materials(dir: String, entry: Dictionary) -> Dictionary:
 	var key: String = dir.path_join(String(entry.get("file", ""))) + "#materials"

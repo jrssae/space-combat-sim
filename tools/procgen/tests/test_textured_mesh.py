@@ -108,6 +108,32 @@ class WriterTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 manifest_io.validate_manifest(broken)
 
+    def test_a_whole_hulls_interior_faces_go_to_a_glb_of_their_own(self) -> None:
+        """M10-T72: with no sections, the faces flagged inside (a bay's hall) leave the hull's glb for ``<id>_interior.glb``, on
+        the hull's opaque material; glass stays with the hull."""
+        hull = g.box((2.0, 1.0, 3.0), GREY)
+        hall = g.box((1.0, 0.5, 1.0), GREY, center=(0.0, 0.0, 5.0))
+        pane = g.box((0.5, 0.3, 0.05), GLASS, center=(0.0, 0.0, 5.0))
+        parts = [TexturedPart(hull, (0, 0, 0), name="hull"), TexturedPart(hall, (1, 1, 1), name="hall"), TexturedPart(pane, (2, 2, 2), name="pane")]
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            paths, section = write_textured_mesh(out, "thing", parts, EARTHFORCE, atlas_px=256, texel_m=0.02, seed=3, occlusion=False,
+                                                 interior=lambda p, _n: p[:, 2] > 4.0)
+            self.assertIn(out / "thing_interior.glb", paths)
+            self.assertEqual(section["interior_file"], "thing_interior.glb")
+            self.assertEqual(section["interior_triangles"], hall.face_count)
+            self.assertEqual(section["triangles"], hull.face_count + hall.face_count + pane.face_count, "the hull's count is all of it")
+            inner = read_glb(out / "thing_interior.glb")
+            self.assertEqual([p.material for p in inner.primitives], ["hull"])
+            self.assertEqual(len(inner.primitives[0].indices) // 3, hall.face_count)
+            self.assertTrue(np.all(inner.primitives[0].positions[:, 2] > 4.0))
+            whole = read_glb(out / "thing.glb")
+            self.assertEqual(len(whole.primitives[0].indices) // 3, hull.face_count, "the halls left the hull")
+            self.assertEqual(len(whole.primitives[1].indices) // 3, pane.face_count, "glass stays")
+            _, none = write_textured_mesh(out, "bare", parts, EARTHFORCE, atlas_px=256, texel_m=0.02, seed=3, occlusion=False,
+                                          interior=lambda p, _n: p[:, 2] > 100.0)
+            self.assertNotIn("interior_file", none, "nothing inside, nothing written")
+
     def test_one_seed_gives_identical_bytes(self) -> None:
         hull = g.lathe([(0.0, 0.0), (0.5, 0.4), (1.5, 0.4), (2.0, 0.0)], 16, GREY)
         parts = [TexturedPart(hull, (2, 3, 4), name="pod")]

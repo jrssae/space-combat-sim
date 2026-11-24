@@ -27,6 +27,7 @@ from tools.procgen.core.context import BuildContext
 from tools.procgen.core.glb import read_glb
 from tools.procgen.core.image import read_png
 from tools.procgen.core.obj import read_obj
+from tools.procgen.tests import bay_interiors
 from tools.procgen.tests.budget_table import read_budgets
 from tools.procgen.tests.mesh_checks import MAP_KEYS, assert_mirror_symmetric, assert_model_mesh, glb_triangles
 
@@ -153,8 +154,10 @@ class CapitalTestCruiserTests(unittest.TestCase):
         self.assertEqual([c["name"] for c in self.hp["chunks"]], [s for p in self.pieces.values() for s in p["sections"]])
         self.assertEqual(self.manifest["chunks"], [c["name"] for c in self.hp["chunks"]])
         for piece_name, piece in self.pieces.items():
-            parent = read_glb(self.dir_a / piece["mesh"]["file"])
-            uvs = {(round(float(u), 5), round(float(w), 5)) for p in parent.primitives for u, w in p.uv}
+            parent = read_glb(self.dir_a / piece["mesh"]["file"]).primitives
+            if "interior_file" in piece["mesh"]:
+                parent += read_glb(self.dir_a / piece["mesh"]["interior_file"]).primitives  # its bay's hall (M10-T72)
+            uvs = {(round(float(u), 5), round(float(w), 5)) for p in parent for u, w in p.uv}
             total = 0
             for name in piece["sections"]:
                 chunk = next(c for c in self.hp["chunks"] if c["name"] == name)
@@ -233,6 +236,10 @@ class CapitalTestCruiserTests(unittest.TestCase):
             r, l = np.array(by_name[right]["position"]), np.array(by_name[left]["position"])
             np.testing.assert_allclose(l, r * (-1.0, 1.0, 1.0), atol=1e-5, err_msg=right)
             self.assertGreater(r[0], 0.0, right)
+
+    def test_the_bays_are_on_the_interior_layer(self) -> None:
+        """M10-T72 (Q68): its bay's hall (the tubes are bores, not halls) out of the sun's light."""
+        bay_interiors.check(self, self.dir_a, self.manifest, self.hp, 1)
 
     def test_the_bay_and_the_tubes_give_a_start_pose_and_a_way_out(self) -> None:
         self.assertEqual([(b["name"], b["kind"]) for b in self.hp["bays"]], [("bay", "bay"), ("tube_r", "tube"), ("tube_l", "tube")])

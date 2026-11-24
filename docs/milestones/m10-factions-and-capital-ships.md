@@ -388,7 +388,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T69 | F | Re-size the small EA craft (Q65): `ea_construction_tender` to 8 m, `ea_atmo_shuttle` (Kestrel) to 29 m, `ea_shuttle` (crew shuttle) to 38 m; check each STL's proportions still hold (90 % rule at the new length), ShipSpecs (mass, thrust, hull points by size), hardpoints, collision, the docks and bays that hold them, the ship line-up spacing, docs/assets-capital.md and the catalogue page | T55, T57 | Sonnet | done |
 | T70 | E | Clearance: the resized EA craft through B5's main docking bay (crew shuttle, Kestrel, tender) | T69 | Sonnet | done |
 | T71 | F | Re-size the Panama (Q66): `ea_panama` scaled uniformly to 20 m tall (about 124 x 31 x 20 m, scale 0.69), as T69 did for the small craft: the 90 % rule at the new size, ShipSpec (mass, thrust, hull points), hardpoints, collision and chunks, its docks and routes (B5's bay, civilian traffic), the line-up, docs and the catalogue page | T69 | Opus | in progress |
-| T72 | A | Interior layer for the built hulls (Q68): as B5's (`InteriorZones` and the interior faces flagged by the generator; see docs/assets-station.md), for every built ship with an open interior: Hyperion (Starfury bays, shuttle bay), Omega and Nova (forward bay), raider strike carrier, and any civilian with an open hold or bay; sunlight kept out, the interiors lit only by their own lights; closed doors still show nothing; tests and before/after shots with the sun shining into an open bay | T22 | Opus | not started |
+| T72 | A | Interior layer for the built hulls (Q68): as B5's (`InteriorZones` and the interior faces flagged by the generator; see docs/assets-station.md), for every built ship with an open interior: Hyperion (Starfury bays, shuttle bay), Omega and Nova (forward bay), raider strike carrier, and any civilian with an open hold or bay; sunlight kept out, the interiors lit only by their own lights; closed doors still show nothing; tests and before/after shots with the sun shining into an open bay | T22 | Opus | in progress |
 | T73 | A | Seam and plating defaults (Q69): the Hyperion's final seam depth, width and darkness and its patch scheme (`PatchPlates`: each ship's main colour, some panels slightly darker, a few several shades darker, shades from that ship's own palette) become the shared defaults in tools/procgen (core/seams.py and the styles), so every NEW hull gets them; every EXISTING hull pins its current values so its build stays byte-identical until T74; tests, a sample new-default hull sheet | T22 | Opus | done |
 | T74 | A | Apply the new seam and plating defaults to the existing hulls (Q69): remove T73's pins hull by hull (fighters, raiders, civilians, capitals, B5 and the other stations), rebuild, before/after sheets at 30 m and 150 m for the maintainer, tests, CI asset time unchanged | T73 | Opus | not started |
 | T75 | D | Beam hit landing in Rust (Q70): the per-tick beam hits (damage by section, mounts, subsystems, reveal of a disguised shooter) applied in a native batch instead of one GDScript call per hit; events (destroyed sections, kills) still raised to GDScript once each; measured before/after with 32 sustained beams | T12, T08 | Opus | not started |
@@ -1178,6 +1178,29 @@ On top of it:
   Nova included). Tests: `tools/procgen/tests/test_seam_defaults.py`; the Hyperion's, Nova's and paint tests follow the move.
   Sheet: `references/screenshots/M10-T73 seam defaults/seam_defaults_sheet.png`, the test cruiser at 30 and 150 m and the
   Starfury at 5 and 20 m, pinned beside the defaults. Judging the look is (H).
+
+### M10-T72 Interior layer for the built hulls (Q68)
+
+- **T72 done (2026-11-24).** B5's mechanism, from the bays' hardpoints: `capital_bays.hall_of` makes each `bay`'s hall a box
+  (`mouth_m` by `depth_m` behind the mouth), and `core/capital.build` takes every face inside it (walls, deck, back, strips, lamps,
+  the mouths' fillets) out of the hull's glb into `<id>_interior.glb` (`mesh.interior_file`, `interior_triangles`; chunks keep
+  them). `RenderPiece` draws it under the hull's mesh on `LightRig.INTERIOR_LAYER` with the hull's materials, so it flies and
+  turns with the ship. Halls: Hyperion 7 (six Starfury bays, the shuttle bay; 168 faces), Omega 1 (62), Nova 1 (57), test cruiser 1
+  (12). A ship in a hall goes on the layer too: `InteriorZones.for_bays` is one `Area3D` per capital with a box per hall, from 8 m
+  inside the mouth, a child of the ship, masking fighters and the player only. The open bays (Omega, Nova) get their `bay` light
+  lit (`CapitalBayLamps`, dimmed with a hulk's glow). Every capital bay lamp, the doors' included, lights the interior layer
+  alone (`LightEmitter.interior_only`, the slot's cull mask), so no lamp shines through a hull. Shut doors are unchanged and
+  still show nothing. The look and model sheets and the stand-in draw the halls too (`MeshAssets.interior_node`).
+  **Not covered, by design:** the raider strike carrier has no open interior (its hangar mouth is a painted dark panel on the
+  drum's face, its cradles are open pads outside the hull); no civilian has an open hold (the Panama's stern recess is 4.4 m
+  deep and filled by its engines' wall); launch tubes are bores.
+  **Cost a capital:** one more mesh instance (one draw call while on screen) and one trigger area that moves with the ship. The
+  engine reports crossings, so nothing runs per tick. A doorless bay adds an emitter to the rig's competition.
+  **Limit:** a lamp still lights the interior layer of another ship within its range (178 to 216 m), since the layer is shared.
+  Tests: `test_capital_parts.py`, `test_textured_mesh.py`, the Hyperion's, Omega's, Nova's and test cruiser's
+  (`tests/bay_interiors.py`); `tests/unit/test_capital_bay_interiors.gd`, `tests/integration/test_capital_bay_interiors.gd`.
+  Before and after (sun into each bay, one shut door): `references/screenshots/M10-T72 interior layer/before_after_sheet.png`;
+  judging the look is (H).
 
 ### M10-T43 to T47 Mechanics, sounds, bench, scenarios and performance
 

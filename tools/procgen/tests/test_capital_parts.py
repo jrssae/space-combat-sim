@@ -146,6 +146,23 @@ class CapitalPartsTests(unittest.TestCase):
         self.assertTrue(np.array_equal(bays.launch_bay("bay", (18.0, 10.0), 20.0, ea, 1.0, metal=True).part.mesh.vertices,
                                        bays.launch_bay("bay", (18.0, 10.0), 20.0, ea, 1.0).part.mesh.vertices), "metal needs lit")
 
+    def test_a_bays_hall_is_told_apart_from_its_frame_and_housing_wherever_it_is_turned(self) -> None:
+        """M10-T72: the faces inside a hall (its walls, deck, back, strips and lamps) are its interior; the frame round the mouth,
+        the housing's outside, the door's housing and the rim lamps are not."""
+        ea = ea_hyperion().style
+        for rotation, at in ((np.eye(3), (0.0, 0.0, 0.0)), (rotation_y(0.5 * math.pi), (40.0, 7.0, -12.0))):
+            for kw in ({"lit": True}, {"lit": True, "rim": False, "door": True, "metal": True}, {}):
+                bay = bays.launch_bay("bay", (18.0, 10.0), 24.0, ea, 1.5, **kw).transformed(rotation, at)
+                mesh = bay.part.mesh
+                halls = bays.halls_of([bay])
+                self.assertEqual([h.name for _, h in halls], ["bay"])
+                inside = bays.inside_halls([h for _, h in halls], mesh.face_centroids())
+                local = (mesh.face_centroids() - np.asarray(at)) @ rotation  # back in the bay's own frame
+                expect = (np.abs(local[:, 0]) < 9.0 + 0.05) & (np.abs(local[:, 1]) < 5.0 + 0.05) & (local[:, 2] > 0.05) & (local[:, 2] < 24.05)
+                np.testing.assert_array_equal(inside, expect, err_msg=str(kw))
+                self.assertGreaterEqual(int(inside.sum()), 12, "walls, roof, deck and back")
+                self.assertGreater(int((~inside).sum()), 0, "the frame and the housing stay outside")
+
     def test_a_bay_door_and_an_unlit_rim_are_off_unless_asked_for(self) -> None:
         ea = ea_capital().style
         lit = bays.launch_bay("bay", (18.0, 10.0), 10.5, ea, 1.0, lit=True)

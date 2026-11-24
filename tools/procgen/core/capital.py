@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -33,6 +33,7 @@ from typing import Any
 import numpy as np
 
 from ..parts import capital as cp
+from ..parts import capital_bays as bays
 from ..parts import mass_centroid, total_mass
 from ..styles.capital import CapitalStyle
 from . import civilian as cv
@@ -310,6 +311,13 @@ def _joint(section: Section, shapes: Sequence[col.Shape], centre: np.ndarray) ->
     return np.clip(centre, lo, hi)
 
 
+def _hall_faces(halls: Sequence[bays.Hall], frame: np.ndarray) -> Callable[[np.ndarray, np.ndarray], np.ndarray] | None:
+    """Which of a piece's faces (its own frame) lie in its bays' halls, kept out of the sun's light (M10-T72); None with no bays."""
+    if not halls:
+        return None
+    return lambda points, _normals: bays.inside_halls(halls, points + frame)
+
+
 def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
     """Generate the capital hull into ``ctx.out_dir``. Options: ``spacing`` (m, the surface samples'), ``atlas_px`` (every
     piece's atlas, for small test builds), ``detail_px`` (the shared tile)."""
@@ -342,6 +350,7 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
     marks: dict[str, tuple[Marking, ...]] = {}
     for module_name, marking in spec.markings:
         marks[module_name] = (*marks.get(module_name, ()), marking)
+    halls = bays.halls_of(modules)
     for p in spec.pieces:
         hull_piece = p.name == HULL_PIECE
         piece = _Piece(p, spec.asset_id if hull_piece else f"{spec.asset_id}_{p.name}", offset if hull_piece else np.asarray(p.pivot, dtype=float),
@@ -349,7 +358,7 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
         mine = [s for s in sampled if by_name[s.piece.group].piece == p.name]
         piece_ctx = dataclasses.replace(ctx, options={"atlas_px": p.atlas_px, **ctx.options})
         piece.hull = cv.write_hull(out_dir, piece.stem, cv.hull_parts(mine, piece.frame, marks), piece.sections, spec.style.style, piece_ctx, comments,
-                                   low_shrink=LOW_SHRINK)
+                                   low_shrink=LOW_SHRINK, interior=_hall_faces([h for section, h in halls if by_name[section].piece == p.name], piece.frame))
         files += piece.hull.files
         for surface in piece.hull.mesh_section["surfaces"]:
             if not surface["blend"]:

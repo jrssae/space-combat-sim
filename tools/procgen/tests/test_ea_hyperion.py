@@ -31,6 +31,7 @@ from tools.procgen.parts import ea_hyperion as hy
 from tools.procgen.parts import ea_hyperion_fidelity as fid
 from tools.procgen.styles.ea_capital import LOOKS as OMEGA_LOOKS
 from tools.procgen.styles.ea_hyperion import DEFAULT_LOOK, LOOKS, PLATING, ea_hyperion, hyperion_mosaic
+from tools.procgen.tests import bay_interiors
 from tools.procgen.tests.budget_table import read_budgets
 from tools.refview.sections import PASS_IOU, section_score
 
@@ -75,6 +76,10 @@ class HyperionBuildTests(unittest.TestCase):
         self.assertAlmostEqual(dims["length"], LENGTH + hy.ARRAY_SHIFT, places=2, msg="the hull and the antenna array ahead of its bow")
         self.assertAlmostEqual(dims["span"], SPAN, delta=0.01 * SPAN)
         self.assertAlmostEqual(dims["height"], HEIGHT, delta=0.01 * HEIGHT)
+
+    def test_the_bays_are_on_the_interior_layer(self) -> None:
+        """M10-T72 (Q68): the six Starfury bays' and the shuttle bay's halls out of the sun's light."""
+        bay_interiors.check(self, self.dir, self.manifest, self.hp, 7)
 
     def test_the_sections(self) -> None:
         self.assertEqual(tuple(self.sections), SECTIONS)

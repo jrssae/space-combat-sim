@@ -230,6 +230,9 @@ func _build_hull(display_name: String, spec_path: String) -> bool:
 	hull_mesh.name = "HullMesh"
 	hull_mesh.mesh = mesh
 	add_child(hull_mesh)
+	var interior: MeshInstance3D = MeshAssets.interior_for_asset(loaded.asset_id, mesh)
+	if interior != null:
+		hull_mesh.add_child(interior)  # its bays' halls, out of the sun's light (M10-T72)
 	_hull_mesh = hull_mesh
 	targetable = Targetable.new()
 	targetable.name = "Targetable"

@@ -17,6 +17,8 @@ const GROUP: StringName = &"light_rig"
 const INTERIOR_LAYER: int = 1 << 1
 ## The render layer of what casts the key star's shadow, beside its own layer: a station's sections and props.
 const SHADOW_CASTER_LAYER: int = 1 << 2
+## What an omni slot lights: every layer but the casters' (a caster is lit through its own layer, as the star lights it).
+const SLOT_CULL_MASK: int = 0xFFFFF & ~SHADOW_CASTER_LAYER
 ## How far from the camera the star's shadows are drawn, m, in four cascades: a station fills the view from 20 km in.
 const STAR_SHADOW_M: float = 20000.0
 ## The four cascades' atlas, px a side: about 1 m a texel in the nearest cascade at this reach.
@@ -56,7 +58,7 @@ func _ready() -> void:
 		slot.name = "Slot%d" % (i + 1)
 		slot.light_energy = 0.0
 		slot.shadow_enabled = false
-		slot.light_cull_mask &= ~SHADOW_CASTER_LAYER  # a caster is lit through its own layer, as the star lights it
+		slot.light_cull_mask = SLOT_CULL_MASK
 		slot.top_level = true  # placed in World coordinates, whatever this node's parent does
 		slot.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF  # moved once per frame, from drawn poses
 		add_child(slot)
@@ -137,6 +139,9 @@ static func _fill(slot: OmniLight3D, emitter: LightEmitter) -> void:
 	slot.light_energy = emitter.energy
 	slot.omni_range = emitter.omni_range
 	slot.omni_attenuation = emitter.attenuation
+	var mask: int = LightRig.INTERIOR_LAYER if emitter.interior_only else SLOT_CULL_MASK
+	if slot.light_cull_mask != mask:
+		slot.light_cull_mask = mask
 
 
 func _picked_labels() -> PackedStringArray:

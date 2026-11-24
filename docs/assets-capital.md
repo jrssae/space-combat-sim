@@ -125,6 +125,14 @@ tools/procgen/assets/capital_test_cruiser.py   the test hull: one of every part,
 - **Collision** (above): one entry of `collision.pieces` per section, named for it, with `piece` (the body that carries
   it); 64 shapes a section and 32 points a hull by default; `coverage` over the whole skin. A bay's hall and a rotating
   collar's bore stay open (four walls and a back; ring sectors).
+- **The interior layer** (M10-T72, Q68, as Babylon 5's halls: docs/assets-station.md): every `bay`'s hall, a box from its
+  hardpoint (`capital_bays.hall_of`: the mouth `exit` plus a sixth of its height, `mouth_m` across, `depth_m` back), takes the
+  faces inside it (walls, deck, back, strips, lamps, fillets; not the frame on the mouth's plane) out of the piece's glb into
+  `<id>_interior.glb` (`mesh.interior_file`, `interior_triangles`; the chunks keep them). The game draws it under the hull's
+  mesh on `LightRig.INTERIOR_LAYER` with the hull's materials, so the sun never lights a hall; a ship in a hall goes on that
+  layer too (`InteriorZones.for_bays`: one trigger volume of the halls, a child of the ship, from 8 m inside the mouth); a
+  doorless bay's `bay` light is lit (`CapitalBayLamps`) and every bay lamp lights the interior layer alone
+  (`LightEmitter.interior_only`), so none shows through the hull. Launch tubes are bores, not halls.
 - **Also written:** `far` (M6's D70: the bounding sphere and silhouette areas), `budget` (`class`, `triangles`,
   `texture_mb` and `texture_mb_low` of this build), `dimensions_m`, and `notes` (what is not final).
 - **The checks** (`capital.problems`, run by `build`): unknown kinds, shares that do not add up, an explosive section

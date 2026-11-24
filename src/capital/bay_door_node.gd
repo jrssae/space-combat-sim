@@ -46,6 +46,7 @@ static func create(door: Dictionary, light: Dictionary = {}) -> BayDoorNode:
 				0.0, float(light.get("range_m", 50.0)), BayDoors.LIGHT_ATTENUATION)
 		node.emitter.anchor = node
 		node.emitter.offset = BayDoors.light_offset(door, light)
+		node.emitter.interior_only = true  # the hall's lamp, not the hull's (M10-T72)
 	node._draw()
 	node.set_process(false)
 	return node

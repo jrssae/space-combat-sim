@@ -24,6 +24,8 @@ launches or docks, when it winds up into the housing.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
+from dataclasses import dataclass
 
 import numpy as np
 
@@ -197,4 +199,46 @@ def launch_tube(name: str, radius_m: float, length_m: float, style: Style, sides
     return module(name, mesh, shapes, [point], skin=SKIN_FITTING)
 
 
-__all__ = ["BAY_LIGHT_ROLE", "BAY_LIGHT_ROLES", "EXIT", "launch_bay", "launch_tube"]
+# --- inside or outside (M10-T72, Q68) ------------------------------------------------------------------------------------
+# No light casts shadows, so the sun would light a bay's hall as it does the hull round it. The faces inside a hall are told apart
+# here, from the bays' hardpoints alone, and drawn out of the sun's light (the game's interior layer), as the station's halls are.
+INSIDE_EPS_M = 0.05
+
+
+@dataclass(frozen=True)
+class Hall:
+    """A bay's hall as a box: its centre, its axes (across, up, out of the mouth, as rows) and its half sizes along them."""
+
+    name: str
+    centre: np.ndarray
+    axes: np.ndarray
+    half: np.ndarray
+
+
+def hall_of(point: Hardpoint) -> Hall:
+    """The hall behind a bay's hardpoint (``launch_bay``'s): the mouth's centre is ``exit`` raised by a sixth of its height."""
+    w, h = (float(v) for v in point.params["mouth_m"])
+    depth = float(point.params["depth_m"])
+    out, up = np.asarray(point.forward, dtype=float), np.asarray(point.up, dtype=float)
+    centre = np.asarray(point.params[EXIT], dtype=float) + up * (h / 6.0) - out * (0.5 * depth)
+    return Hall(point.name, centre, np.array([np.cross(up, out), up, out]), np.array([0.5 * w, 0.5 * h, 0.5 * depth]))
+
+
+def halls_of(modules: Sequence[Module]) -> list[tuple[str, Hall]]:
+    """Every bay's hall, with the section its module stands in."""
+    return [(m.section, hall_of(p)) for m in modules for p in m.hardpoints if p.kind == BAY and "mouth_m" in p.params]
+
+
+def inside_halls(halls: Sequence[Hall], points: np.ndarray) -> np.ndarray:
+    """Which points (face centroids) lie inside any of the halls: on or within its walls, deck, roof and back, short of the mouth's
+    plane (the frame round the mouth faces the sky)."""
+    pts = np.asarray(points, dtype=float).reshape(-1, 3)
+    inside = np.zeros(len(pts), dtype=bool)
+    e = INSIDE_EPS_M
+    for hall in halls:
+        local = (pts - hall.centre) @ hall.axes.T
+        inside |= np.all(np.abs(local) < hall.half + e, axis=1) & (local[:, 2] < hall.half[2] - e)
+    return inside
+
+
+__all__ = ["BAY_LIGHT_ROLE", "BAY_LIGHT_ROLES", "EXIT", "INSIDE_EPS_M", "Hall", "hall_of", "halls_of", "inside_halls", "launch_bay", "launch_tube"]

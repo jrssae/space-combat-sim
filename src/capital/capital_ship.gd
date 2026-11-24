@@ -56,6 +56,9 @@ var rotors: Array[CapitalRotor] = []
 var hull_piece: RenderPiece = null
 ## The bays' roll-up doors (M10-T22), by bay name; shut until a launch or a docking opens one.
 var bay_doors: Dictionary = {}
+## Its bays' halls as trigger volumes (a ship inside is lit as the hall is) and its open bays' lamps; null without (M10-T72).
+var bay_zones: InteriorZones = null
+var bay_lamps: CapitalBayLamps = null
 ## 1 when this ship wears its style's second colouring (M10-T06: about a fifth of the Vorlons are red-based), else 0: drawn from
 ## the ship's own name, the same in every run. Its break-up chunks take the same value (`HullSheenMaterial.set_variant`).
 var skin_variant: float = 0.0
@@ -164,6 +167,8 @@ func _process(_delta: float) -> void:
 		rotor.visual_pivot.transform = Transform3D(Basis(rotor.axis, rotor.visual_angle(fraction)), rotor.pivot)
 	if _lights != null and hulk_stages.lights_fading():
 		_lights.apply(hulk_stages.lights_level())
+		if bay_lamps != null:
+			bay_lamps.set_level(hulk_stages.lights_level())
 
 
 func half_extents() -> Vector3:
@@ -383,6 +388,7 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	add_child(hull_piece)
 	_add_marks(display_name)
 	_add_doors()
+	_add_bay_interiors()
 	targetable = Targetable.new()
 	targetable.name = "Targetable"
 	targetable.display_name = display_name
@@ -429,6 +435,17 @@ func _add_doors() -> void:
 		var node: BayDoorNode = BayDoorNode.create(door, BayDoors.light_of(_hardpoints, BayDoors.bay_of(str(door.get("name", "")))))
 		bay_doors[node.bay] = node
 		hull_piece.add_child(node)
+
+
+## The bays' halls, out of the sun's light (Q68): a ship flying into one goes into the interior light, and an open bay's lamp
+## lights it. The halls' own faces are on the interior layer already (`RenderPiece`).
+func _add_bay_interiors() -> void:
+	bay_zones = InteriorZones.for_bays(_hardpoints)
+	if bay_zones != null:
+		add_child(bay_zones)
+	bay_lamps = CapitalBayLamps.make(self, _hardpoints)
+	if bay_lamps != null:
+		add_child(bay_lamps)
 
 
 ## The painted lettering the hull carries (an Omega's name letter on each shield), chosen by the name it spawns under. A type with
@@ -598,6 +615,8 @@ func _on_restored() -> void:
 	if _lights != null:
 		_lights.release()
 		_lights = null
+	if bay_lamps != null:
+		bay_lamps.set_level(1.0)
 	_refit_drive()
 	if was_hulk and is_tier_parked() and TierDirector.current() != null:
 		TierDirector.current().mark_hulk(self, false)

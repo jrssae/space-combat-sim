@@ -106,6 +106,9 @@ func _park(shot: PackedStringArray) -> String:
 	_model = MeshInstance3D.new()
 	_model.mesh = mesh
 	main.world.add_child(_model)
+	var interior: MeshInstance3D = MeshAssets.interior_for_asset(asset_id, mesh, root)
+	if interior != null:
+		_model.add_child(interior)  # its bays' halls, as the game draws them (M10-T72)
 	_add_rotors(asset_id, root)
 	var section: Dictionary = MeshAssets.livery_section(asset_id, root)
 	if not section.is_empty():

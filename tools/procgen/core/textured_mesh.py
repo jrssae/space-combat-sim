@@ -221,6 +221,11 @@ def manifest_section(asset_id: str, parts: Sequence[TexturedPart], packed: Packe
     }
 
 
+def interior_mesh_name(asset_id: str) -> str:
+    """The glb of a whole-drawn hull's interior faces (its bays' halls)."""
+    return f"{asset_id}_interior.glb"
+
+
 def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPart], style: Style, atlas_px: int = DEFAULT_ATLAS_PX,
                         texel_m: float = DEFAULT_TEXEL_M, seed: int = 0, occlusion: bool = True,
                         paintable: Sequence[str] = (), fine_mesh: Mesh | None = None, normal_scale: int = NORMAL_SCALE,
@@ -241,7 +246,8 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     the game picks a set by ``settings.texture_detail``; the maps without a suffix are the full layouts. ``sections`` (M7-T19) cut
     the mesh across z into ``<asset_id>_sec_<name>.glb`` on the same maps, listed in the section's ``sections``; ``interior``
     (face centroids, face normals -> a flag per face) says which faces lie inside a hall or a bay, written apart in each section
-    so the game keeps the sun off them (no light casts shadows). ``surface_suffix`` follows the surfaces' names, so the tiers of one
+    (or, with no sections, taken out of ``<asset_id>.glb`` into ``interior_file``, M10-T72) so the game keeps the sun off them (no
+    light casts shadows). ``surface_suffix`` follows the surfaces' names, so the tiers of one
     big piece (M7-T24, each its own atlas) draw with their own materials; ``detail_shrink`` writes a detail set's maps that many
     times smaller (a lighter set; above 1 the set names a glow map of its own, shrunk too); ``high_quality_keys`` are the maps imported with the better compression. With ``joints`` (M7-T33)
     the hull's glb is skinned, each part following its ``joint``, so the game can move parts without another draw call; chunks and
@@ -259,8 +265,20 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     maps = bake_maps(atlas, style, seed, occlusion, paintable, normal_scale)
     if any(not 0 <= p.joint < max(len(joints), 1) for p in parts):
         raise ValueError(f"{asset_id}: a part names a joint the skin does not have")
-    opaque, glass = _primitives(parts, packed, zones=bool(paintable), suffix=surface_suffix, skinned=bool(joints))
+    inside = None if interior is None else np.asarray(interior(mesh.face_centroids(), mesh.face_normals()), dtype=bool)
+    # A hull drawn whole (no sections) keeps its interior faces out of its own glb, in one of their own (M10-T72).
+    whole_inside = None
+    if inside is not None and not sections:
+        glass_face = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material] > 0.0
+        whole_inside = inside & ~glass_face
+        if not whole_inside.any():
+            whole_inside = None
+    opaque, glass = _primitives(parts, packed, zones=bool(paintable), suffix=surface_suffix, skinned=bool(joints),
+                                face_mask=None if whole_inside is None else ~whole_inside)
     paths = [write_glb(out_dir / f"{asset_id}.glb", [opaque, glass], asset_id, joints)]
+    if whole_inside is not None:
+        inner, _ = _primitives(parts, packed, zones=bool(paintable), face_mask=whole_inside, suffix=surface_suffix, skinned=bool(joints))
+        paths.append(write_glb(out_dir / interior_mesh_name(asset_id), [inner], f"{asset_id}_interior", joints))
     names = [p.name for p in parts if p.mesh.face_count > 0]
     for cut in chunks:
         unknown = [name for name in cut.parts if name not in names]
@@ -279,12 +297,15 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
         sidecar.write_text(import_sidecar(key, key in high_quality_keys), encoding="utf-8", newline="\n")
         paths.append(sidecar)
     section = manifest_section(asset_id, parts, packed, [opaque, glass], maps, atlas)
+    if whole_inside is not None:
+        section["interior_file"] = interior_mesh_name(asset_id)
+        section["interior_triangles"] = int(whole_inside.sum())
     if sections:
         glass_face = np.array([m.transmittance for m in mesh.materials], dtype=float)[mesh.face_material] > 0.0
         cut_files, section["sections"] = write_sections(
             out_dir, asset_id, mesh.vertices[mesh.faces], mesh.vertex_normals()[mesh.faces], packed.face_uv01, glass_face, sections,
             (OPAQUE_SURFACE + surface_suffix, GLASS_SURFACE + surface_suffix), ((1.0, 1.0, 1.0, 1.0), (0.0, 0.0, 0.0, 0.3)),
-            None if interior is None else np.asarray(interior(mesh.face_centroids(), mesh.face_normals()), dtype=bool))
+            inside)
         paths += cut_files
     drawn = any(p.seams for p in parts)
     for name, level in (detail_levels or {}).items():
@@ -316,5 +337,5 @@ def write_textured_mesh(out_dir: Path, asset_id: str, parts: Sequence[TexturedPa
     return paths, section
 
 
-__all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "ChunkCut", "PackedParts", "SectionCut", "TexturedPart", "atlas_of", "import_sidecar", "pack_parts",
-           "write_textured_mesh"]
+__all__ = ["DEFAULT_ATLAS_PX", "DEFAULT_TEXEL_M", "ChunkCut", "PackedParts", "SectionCut", "TexturedPart", "atlas_of", "import_sidecar", "interior_mesh_name",
+           "pack_parts", "write_textured_mesh"]

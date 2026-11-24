@@ -252,6 +252,9 @@ func _hull_prop(asset_id: String) -> Node3D:
 	var hull := MeshInstance3D.new()
 	hull.mesh = mesh
 	node.add_child(hull)
+	var interior: MeshInstance3D = MeshAssets.interior_for_asset(hull_id, mesh, root)
+	if interior != null:
+		hull.add_child(interior)  # its bays' halls, as the game draws them (M10-T72)
 	node.set_meta(&"aabb", mesh.get_aabb())
 	var fighter: Mesh = MeshAssets.for_asset(SCALE_FIGHTER, asset_root)
 	var data: Variant = JSON.parse_string(FileAccess.get_file_as_string(root.path_join(hull_id).path_join("hardpoints.json")))

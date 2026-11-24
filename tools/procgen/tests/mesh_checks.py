@@ -36,6 +36,8 @@ def assert_model_mesh(tc: unittest.TestCase, folder: Path, section: dict, obj_na
     tc.assertEqual(section["file"], obj_name[: -len(".obj")] + ".glb", label)
     obj = read_obj(folder / obj_name)
     tris = glb_triangles(folder / section["file"])
+    if "interior_file" in section:  # a capital's bay halls, drawn apart (M10-T72): the two glbs are the hull together
+        tris = np.concatenate([tris, glb_triangles(folder / section["interior_file"])])
     tc.assertEqual(len(tris), len(obj.faces), f"{label}: every fallback-mesh triangle, no more")
     tc.assertEqual(section["triangles"], len(tris), label)
     verts = tris.reshape(-1, 3)

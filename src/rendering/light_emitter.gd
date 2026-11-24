@@ -27,6 +27,9 @@ var anchor: Node3D = null:
 		_anchored = value != null
 ## Where on `anchor`, in its local frame.
 var offset: Vector3 = Vector3.ZERO
+## A lamp inside a closed space (a capital's bay, M10-T72): it lights only what is on `LightRig.INTERIOR_LAYER`, so it never shines
+## through the hull's walls onto the hull or a ship outside.
+var interior_only: bool = false
 
 var _anchored: bool = false
 
