@@ -415,7 +415,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
 | T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | done |
 | T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | not started |
-| T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | in progress |
+| T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | done |
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | not started |
 | T16 | E | The `capital` brain and fighters' attacks on capitals; the capital helm (steering, today ~52 µs per capital per tick in GDScript) moves into the native brain (Q70) | T12, T14 | Opus | not started |
 | T17 | E | Carriers launch fighters from bays and tubes | T07, T16 | Opus | not started |
