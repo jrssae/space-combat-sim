@@ -612,7 +612,7 @@ vertical plate and on the roof (`only_faction` `renegades`). **Names**: `data/sh
 the show's Schwarzkopf first.
 
 **Paint and lamps** (T67, `parts/ea_nova_marks.py`, from the show's stills and the Omega's): the ship's name (`mark_name_r`, `_l`,
-10 m, light outlined in black like the Hyperion's) high on each vertical plate above the gun pod; the Earth Alliance emblem
+10 m, light outlined in black like the Hyperion's) high on each vertical plate above the gun pod, ahead of where the spine's fins come through the plate at 330 m; the Earth Alliance emblem
 (`mark_emblem_r`, `_l`, 56 m wide, `core/hull_decals.py`) low on it under the pod; a flood lamp on a bracket under each, shining
 up the plate, its pool baked into the plate's maps (the emblem's glow passed to its decal); red beacons beside the top mast's, the
 keel mast's and the sensor boom's tips; and a darker grey band 4.5 m wide, 0.5 m in from the edges of the armour plates, the

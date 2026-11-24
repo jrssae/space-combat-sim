@@ -29,8 +29,9 @@ from .ea_omega import PANEL
 
 RIGHT = (1.0, 0.0, 0.0)
 NAME_INK = (0.86, 0.87, 0.88)  # the Hyperion's light lettering
-NAME_HEIGHT_M, NAME_AT = 10.0, (45.0, 300.0)  # its height; its centre's y and z (above the pod, toward the plate's aft end)
-EMBLEM_WIDTH_M, EMBLEM_AT = 56.0, (-40.0, 322.0)  # its width; its centre's y and z (under the pod's tail)
+# Both end ahead of 330 m, where the spine's fins come through the plate (a 3 m ledge above and below the pod).
+NAME_HEIGHT_M, NAME_AT = 10.0, (45.0, 284.0)  # its height; its centre's y and z (above the pod)
+EMBLEM_WIDTH_M, EMBLEM_AT = 56.0, (-42.0, 298.0)  # its width; its centre's y and z (under the pod)
 EMBLEM_HEIGHT_M = EMBLEM_WIDTH_M * hull_decals.DESIGN_H / hull_decals.DESIGN_W
 FLOOD_LAMP = (1.0, 0.92, 0.82)  # the Hyperion's warm white
 FLOOD_RGB = (244, 240, 232)
@@ -52,7 +53,7 @@ def _flood(name: str, target_y: float, z: float, below: float, outer: float, inn
 
 
 FLOODS = (_flood("flood_name", NAME_AT[0] + 5.0, NAME_AT[1], 16.0, 60.0, 22.0, 45.0),
-          _flood("flood_emblem", EMBLEM_AT[0] + 6.0, EMBLEM_AT[1], 23.0, 55.0, 20.0, 45.0))
+          _flood("flood_emblem", EMBLEM_AT[0] + 6.0, EMBLEM_AT[1], 20.0, 55.0, 20.0, 45.0))
 
 
 def _linear(rgb: tuple[int, int, int]) -> tuple[float, float, float]:
