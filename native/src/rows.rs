@@ -9,7 +9,8 @@ use godot::builtin::{Basis, Vector3};
 /// sweep and the rams see it), a hull at all, a row added after the tick's first sync (a ship back from the pool), a
 /// low-attention tier row with no body and no node (M4-T21: integrated by the tier, skipped by the kernels that write to
 /// a body or fire from one), a hulk (a tier row that drifts with no brain and no force), and a ship sheltered inside a
-/// station (M7-T62: in the docking bay's black void; it flies its own row, but nothing outside sees, targets or hits it).
+/// station (M7-T62: in the docking bay's black void; it flies its own row, but nothing outside sees, targets or hits it), and
+/// a near ship disabled (M10-T14: its `CapitalDamage.is_disabled`, the one source; guns engage it last).
 pub const FLAG_RIGID: u32 = 1;
 pub const FLAG_HULL: u32 = 2;
 pub const FLAG_HULL_ACTIVE: u32 = 4;
@@ -17,6 +18,7 @@ pub const FLAG_LATE: u32 = 8;
 pub const FLAG_TIER: u32 = 16;
 pub const FLAG_HULK: u32 = 32;
 pub const FLAG_SHELTERED: u32 = 64;
+pub const FLAG_DISABLED: u32 = 128;
 /// The transponder disguise (M10-T02): from this bit up a row's flags hold the index of the faction it broadcasts plus one
 /// (0 for no disguise). Ships of other factions see the row as that faction until it is revealed; its own side sees it as it is.
 pub const FLAG_DISGUISE_SHIFT: u32 = 8;
@@ -448,6 +450,12 @@ impl Rows {
         }
         let surfaces = self.surfaces.as_ref()?;
         surfaces.get(self.body_ids.get(r)?).map(|s| s.as_ref())
+    }
+
+    /// Whether row `r` is part of body `owner`: the body itself or a rotating section of its hull (a capital's drum, the
+    /// station's), so a ship's own shots pass through its own pieces.
+    pub fn is_part_of(&self, r: usize, owner: i64) -> bool {
+        self.body_ids.get(r) == Some(&owner) || self.surface(r).is_some_and(|s| s.named_by != 0 && s.named_by == owner)
     }
 
     /// The row whose marker id is `id`, or -1.

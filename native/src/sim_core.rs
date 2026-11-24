@@ -100,6 +100,8 @@ struct Attrs {
     role: u8,
     // Inside a station (M7-T62, `set_sheltered`): its row flies, but takes `FLAG_SHELTERED` in place of an active hull.
     sheltered: bool,
+    // Disabled (M10-T14, `set_disabled`): its row takes `FLAG_DISABLED`.
+    disabled: bool,
     // The faction index plus one its transponder broadcasts while the ship is disguised (M10-T02, `set_disguise`), else 0.
     disguise: u32,
 }
@@ -288,6 +290,8 @@ pub struct ScsSimCore {
     pub(crate) nav_bodies: std::collections::HashSet<i64>,
     // The ships sheltered inside a station by id (M7-T62, `set_sheltered`): their rows take `FLAG_SHELTERED`.
     pub(crate) sheltered: std::collections::HashSet<i64>,
+    // The disabled ships by id (M10-T14, `set_disabled`): their rows take `FLAG_DISABLED`.
+    pub(crate) disabled: std::collections::HashSet<i64>,
     // The ships broadcasting another faction's transponder, by body id (M10-T02, `set_disguise`): the faction index to show.
     pub(crate) disguised: std::collections::HashMap<i64, u32>,
 }
@@ -465,6 +469,24 @@ impl ScsSimCore {
             self.sheltered.remove(&body_id);
         }
         self.touch(body_id);
+    }
+
+    /// Marks a ship disabled (or whole again, M10-T14): the guns engage it only when nothing live is in reach. The ship's own
+    /// disabled state is the one source (`CapitalShip`), told here from the next sync on.
+    #[func]
+    pub fn set_disabled(&mut self, body_id: i64, on: bool) {
+        if on {
+            self.disabled.insert(body_id);
+        } else {
+            self.disabled.remove(&body_id);
+        }
+        self.touch(body_id);
+    }
+
+    /// Ships marked disabled now.
+    #[func]
+    fn disabled_count(&self) -> i64 {
+        self.disabled.len() as i64
     }
 
     /// Makes a ship broadcast `transponder` as its faction to every other side (M10-T02), or, with an empty name, shows its
@@ -1200,7 +1222,7 @@ impl ScsSimCore {
     /// The hit resolver's bolts for one tick (M5-T32, L2): only the bolts with a live pair, in launch order, and what the
     /// narrow phase reads of them and of the hulls they pair with. `hull_keys` (`bolt * hulls + hull`, ascending, the
     /// hulls in `sweep_rows` order, as `pairs_core` gives them) lose the pairs of spent bolts and of a bolt with its own
-    /// shooter's hull; `rock_keys` (`bolt * rock_count + rock`) lose those of spent bolts. Returns `[index, id, start, end,
+    /// shooter's hull or one of its rotating sections (M10-T14 review: a capital's missiles leave through its drum); `rock_keys` (`bolt * rock_count + rock`) lose those of spent bolts. Returns `[index, id, start, end,
     /// radius, shooter, faction, damage, color, hull_first, hull_next, rock_first, rock_next, hull_slots, rock_keys, beams,
     /// beam_ids, owned, bolt_count, hull_body_ids, hull_ids, hull_positions, hull_velocities, hull_bases, hull_total]`: one
     /// entry per bolt kept in the first thirteen (ranges into `hull_slots` and `rock_keys`); per kept hull pair the paired
@@ -1237,14 +1259,14 @@ impl ScsSimCore {
             if i >= n || b.spent[i] || b.kinds[i] == KIND_INTERCEPT {
                 continue;
             }
-            let body = self
-                .sweep_rows
-                .get(j)
-                .map_or(0, |&r| self.rows.body_ids[r as usize]);
-            if body == b.shooters[i] {
+            let Some(&row) = self.sweep_rows.get(j) else {
+                continue;
+            };
+            let row = row as usize;
+            // A ship's own bolts and missiles pass through its own hull and rotating sections.
+            if self.rows.is_part_of(row, b.shooters[i]) {
                 continue;
             }
-            let row = self.sweep_rows[j] as usize;
             let (surface_t, volume) = match self.rows.surface(row) {
                 Some(surface) => match self.surface_entry(surface, row, i, delta) {
                     Some((t, k)) => (t, k as i32),
@@ -1472,6 +1494,9 @@ impl ScsSimCore {
             flags |= FLAG_SHELTERED;
         } else if has_hull && !attrs.destroyed {
             flags |= FLAG_HULL_ACTIVE;
+        }
+        if attrs.disabled {
+            flags |= crate::rows::FLAG_DISABLED;
         }
         flags |= attrs.disguise << crate::rows::FLAG_DISGUISE_SHIFT;
         // The brains' two live reads of a contact (M4-T17), `Damageable.hull.fraction()` and the ship's selection: the
@@ -1946,6 +1971,7 @@ impl ScsSimCore {
         Attrs {
             role,
             sheltered: self.sheltered.contains(&m.body_id),
+            disabled: self.disabled.contains(&m.body_id),
             disguise: self.disguised.get(&m.body_id).map_or(0, |&f| f + 1),
             faction_ix: self.faction_index(faction),
             name_id,

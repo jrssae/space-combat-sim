@@ -126,6 +126,8 @@ static func of_body(body_id: int) -> CapitalShip:
 func _enter_tree() -> void:
 	add_to_group(GROUP)
 	_by_body[get_instance_id()] = self
+	if damage != null and damage.is_disabled:
+		SimCore.set_disabled(get_instance_id(), true)  # back in play still disabled
 
 
 func _ready() -> void:
@@ -148,6 +150,7 @@ func _ready() -> void:
 
 func _exit_tree() -> void:
 	_by_body.erase(get_instance_id())
+	SimCore.set_disabled(get_instance_id(), false)
 	if _world_signals != null and is_instance_valid(_world_signals):
 		if _world_signals.rebased.is_connected(_on_rebased):
 			_world_signals.rebased.disconnect(_on_rebased)
@@ -593,6 +596,7 @@ func _power_for_drive() -> float:
 
 # Disabled: the wind-down starts, its lights get their own materials to dim; a hull already in the tier is a hulk row at once.
 func _on_disabled() -> void:
+	SimCore.set_disabled(get_instance_id(), true)
 	if CapitalData.never_hulk(faction, type_id):
 		_blow_instead.call_deferred()  # not inside the hit that disabled it
 		return
@@ -620,6 +624,7 @@ func _blow_instead() -> void:
 func _on_restored() -> void:
 	var was_hulk: bool = is_hulk()
 	damage.restore()
+	SimCore.set_disabled(get_instance_id(), false)
 	hulk_stages.reset()
 	_drive_power = 1.0
 	if _lights != null:

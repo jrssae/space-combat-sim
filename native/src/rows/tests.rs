@@ -451,3 +451,22 @@ fn a_near_strike_and_gun_pick_are_fooled_by_a_transponder_until_the_reveal() {
     assert_eq!(strike(&rows), rows.body_ids[1], "revealed, it is the nearest hostile");
     assert_eq!(gun(&rows), rows.body_ids[1]);
 }
+
+#[test]
+fn a_ships_rotating_section_is_part_of_it_and_nothing_else_is() {
+    // Row 0 the hull (body 1000), row 1 its drum (body 1001, named by the hull), row 2 a stranger's hull.
+    let mut rows = rows_with(&[0, 1, 2]);
+    rows.roles = vec![ROLE_SURFACE; 3];
+    let piece = |named_by: i64| {
+        let mut s = crate::surface::from_packed(&[0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 5.0, 5.0, 5.0], 0.0);
+        s.named_by = named_by;
+        Arc::new(s)
+    };
+    let map: HashMap<i64, Arc<Surface>> = [(1000, piece(0)), (1001, piece(1000)), (1002, piece(0))].into_iter().collect();
+    rows.surfaces = Some(Arc::new(map));
+    assert!(rows.is_part_of(0, 1000), "its hull");
+    assert!(rows.is_part_of(1, 1000), "its drum");
+    assert!(!rows.is_part_of(2, 1000), "another ship's hull");
+    assert!(!rows.is_part_of(0, 1001), "a drum's shots are not the hull's");
+    assert!(!rows.is_part_of(2, 0), "no shooter owns a piece named by nothing");
+}

@@ -35,6 +35,7 @@ pub struct ScsCapitalGuns {
     shots: Vec<Shot>,
     steers: Vec<(usize, Vector3)>,
     tally: Tally,
+    scratch: ck::Scratch,
     bolts_total: i64,
     missiles_total: i64,
     last_us: f64,
@@ -158,27 +159,10 @@ impl ScsCapitalGuns {
     }
 
     /// Ship `body` leaves: its mounts go, the rest keep their order (GDScript drops the same entries). Its missiles in
-    /// flight fly on, guided as before.
+    /// flight fly on, guided as before (`capital_gun_kernels::remove_owner`).
     #[func]
     fn remove_owner(&mut self, body: i64) {
-        let Some(o) = self.owners.iter().position(|w| w.body == body) else {
-            return;
-        };
-        let gone: Vec<bool> = self.mounts.iter().map(|m| m.owner == body).collect();
-        // A missile names its mount by index: the ones after a removed mount move down.
-        for missile in &mut self.missiles {
-            let k = missile.mount as usize;
-            let before = gone[..k.min(gone.len())].iter().filter(|&&g| g).count();
-            missile.mount = (k - before) as u32;
-        }
-        self.mounts.retain(|m| m.owner != body);
-        self.owners.remove(o);
-        let owners = &self.owners;
-        self.owner_of = self
-            .mounts
-            .iter()
-            .map(|m| owners.iter().position(|w| w.body == m.owner).unwrap_or(0) as u32)
-            .collect();
+        ck::remove_owner(&mut self.mounts, &mut self.owners, &mut self.owner_of, &mut self.missiles, body);
     }
 
     /// Whether mount `index` works, and its ship's rate of fire (0 to 1).
@@ -335,6 +319,7 @@ impl ScsCapitalGuns {
                 delta,
                 tick,
                 &mut self.shots,
+                &mut self.scratch,
                 &mut self.tally,
             );
         }

@@ -6,7 +6,7 @@
 // reads this file): rows in, plain numbers out, no statics.
 use godot::builtin::{Basis, Vector3};
 
-use crate::rows::{FLAG_HULK, FLAG_HULL_ACTIVE, FLAG_SHELTERED, FLAG_TIER, Rows};
+use crate::rows::{FLAG_DISABLED, FLAG_HULK, FLAG_HULL_ACTIVE, FLAG_SHELTERED, FLAG_TIER, Rows};
 use crate::surface::{into_body, sweep};
 use crate::v3::{add, cross, dist_sq, dot, length, normalized, scale, sub, xform, xform_inv};
 
@@ -440,7 +440,7 @@ fn hostile<F: Fn(i64) -> Option<usize>>(
 }
 
 // The target emitter `b` takes when it has none: its brain's order when that bears, else (on its staggered pick tick) the
-// nearest capital it can hold, else the nearest ship. 0: none; it looks again `PICK_EVERY` ticks later.
+// nearest live capital it can hold, else the nearest live ship, else a disabled hull. 0: none; it looks again `PICK_EVERY` ticks later.
 fn choose<F: Fn(i64) -> Option<usize>>(
     b: &mut Beam,
     owner: &Owner,
@@ -458,13 +458,14 @@ fn choose<F: Fn(i64) -> Option<usize>>(
     }
     b.pick_wait = PICK_EVERY - 1;
     let rows = world.rows;
-    let mut best: Option<(bool, f32, usize)> = None;
+    // A disabled hull last (M10-T14 review), then capitals before ships, nearest first.
+    let mut best: Option<((bool, bool), f32, usize)> = None;
     for &h in world.hull_rows {
         let j = h as usize;
         if !takes(b, owner, world, r, basis, from, j) {
             continue;
         }
-        let small = rows.kinds[j] != KIND_CAPITAL;
+        let small = (rows.flags[j] & FLAG_DISABLED != 0, rows.kinds[j] != KIND_CAPITAL);
         let d = dist_sq(rows.positions[j], from);
         if best.is_none_or(|(bs, bd, _)| (small, d) < (bs, bd)) {
             best = Some((small, d, j));

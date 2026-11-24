@@ -84,6 +84,8 @@ static var _civilians: Dictionary[int, bool] = {}
 static var _nav_bodies: Dictionary[int, bool] = {}
 # The ships sheltered inside a station (M7-T62, `set_sheltered`), given again to each core that attaches.
 static var _sheltered: Dictionary[int, bool] = {}
+# The disabled ships (M10-T14, `set_disabled`), given again to each core that attaches.
+static var _disabled: Dictionary[int, bool] = {}
 # The ships broadcasting another faction's transponder (M10-T02, `Targetable.disguise_as`): body id -> the faction it shows,
 # given again to each core that attaches.
 static var _disguised: Dictionary[int, StringName] = {}
@@ -227,6 +229,11 @@ func _ready() -> void:
 			core.set_sheltered(body_id, true)
 		else:
 			_sheltered.erase(body_id)
+	for body_id: int in _disabled.keys():
+		if is_instance_id_valid(body_id):
+			core.set_disabled(body_id, true)
+		else:
+			_disabled.erase(body_id)
 	for body_id: int in _disguised.keys():
 		if is_instance_id_valid(body_id):
 			core.set_disguise(body_id, _disguised[body_id])
@@ -339,6 +346,18 @@ static func set_sheltered(body_id: int, on: bool) -> void:
 	var sim: SimCore = current()
 	if sim != null and sim.core != null:
 		sim.core.set_sheltered(body_id, on)
+
+
+## Marks ship `body_id` disabled (M10-T14, `CapitalShip` on its `CapitalDamage.disabled`) or whole again: the guns and beams
+## engage it only when nothing live is in reach.
+static func set_disabled(body_id: int, on: bool) -> void:
+	if on:
+		_disabled[body_id] = true
+	else:
+		_disabled.erase(body_id)
+	var sim: SimCore = current()
+	if sim != null and sim.core != null:
+		sim.core.set_disabled(body_id, on)
 
 
 ## Makes ship `body_id` broadcast `transponder` as its faction to every other side (M10-T02), or its own again with `&""`: the

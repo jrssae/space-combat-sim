@@ -5,7 +5,7 @@ use std::sync::Arc;
 use godot::builtin::Basis;
 
 use super::*;
-use crate::rows::{FLAG_DISGUISE_SHIFT, FLAG_RIGID, ROLE_COMBAT, ROLE_SURFACE, Surface};
+use crate::rows::{FLAG_DISABLED, FLAG_DISGUISE_SHIFT, FLAG_RIGID, ROLE_COMBAT, ROLE_SURFACE, Surface};
 use crate::surface::from_packed;
 
 const LIVE: u32 = FLAG_RIGID | FLAG_HULL_ACTIVE;
@@ -147,7 +147,8 @@ impl Run {
         };
         let mut shots = Vec::new();
         let mut tally = Tally::default();
-        step(&mut self.mounts, &self.owners, &self.owner_of, &world, self.now_s, DT, self.tick, &mut shots, &mut tally);
+        let mut scratch = Scratch::default();
+        step(&mut self.mounts, &self.owners, &self.owner_of, &world, self.now_s, DT, self.tick, &mut shots, &mut scratch, &mut tally);
         self.now_s += DT;
         self.tick += 1;
         (shots, tally)
@@ -541,4 +542,149 @@ fn a_fixed_gun_fires_when_its_line_meets_the_targets_rotating_section() {
     }
     let mut bare = Run::with(rows, mount);
     assert!(bare.first_shots(5).is_none());
+}
+
+// Review round: a held target is weighed again on the pick beat, so a role's preference holds after the pick too.
+#[test]
+fn an_anti_fighter_gun_holding_a_capital_turns_to_a_fighter_that_comes_in() {
+    let bodies = [
+        (1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE),
+        (2, v(0.0, 500.0, -1500.0), 300.0, 1, 1, LIVE), // a capital
+        (3, v(0.0, 500.0, 9000.0), 8.0, 0, 1, LIVE),    // a fighter, out of reach for now
+    ];
+    let mut run = Run::new(rows_of(&bodies, None), gun(ROLE_AF));
+    run.tick();
+    assert_eq!(run.mounts[0].target, 2, "nothing better: it takes the capital");
+    run.rows.positions[2] = v(0.0, 500.0, 2500.0);
+    for _ in 0..PICK_EVERY {
+        run.tick();
+    }
+    assert_eq!(run.mounts[0].target, 3, "a fighter in reach: the capital is dropped by the next beat");
+    // A nearer fighter does not take it off the one it holds.
+    run.rows.positions[1] = v(0.0, 500.0, -800.0);
+    run.rows.radii[1] = 8.0;
+    run.rows.kinds[1] = 0;
+    for _ in 0..3 * PICK_EVERY {
+        run.tick();
+    }
+    assert_eq!(run.mounts[0].target, 3);
+}
+
+#[test]
+fn an_order_given_while_a_heavy_gun_holds_a_target_is_taken_on_the_next_beat() {
+    let bodies = [
+        (1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE),
+        (2, v(0.0, 500.0, -1000.0), 300.0, 1, 1, LIVE),
+        (3, v(0.0, 500.0, -3000.0), 300.0, 1, 1, LIVE),
+    ];
+    let mut run = Run::new(rows_of(&bodies, None), gun(ROLE_AC));
+    run.tick();
+    assert_eq!(run.mounts[0].target, 2);
+    run.owners[0].order = 3;
+    for _ in 0..PICK_EVERY {
+        run.tick();
+    }
+    assert_eq!(run.mounts[0].target, 3);
+}
+
+// Review round: a disabled capital is engaged last, only when nothing live is in reach.
+#[test]
+fn a_disabled_capital_is_taken_only_when_no_live_hostile_is_in_reach() {
+    let bodies = [
+        (1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE),
+        (2, v(0.0, 500.0, -1000.0), 300.0, 1, 1, LIVE | FLAG_DISABLED), // disabled, nearer
+        (3, v(0.0, 500.0, -3000.0), 300.0, 1, 1, LIVE),
+        (4, v(0.0, 500.0, 2000.0), 8.0, 0, 1, LIVE), // a live fighter
+    ];
+    let mut ac = Run::new(rows_of(&bodies, None), gun(ROLE_AC));
+    ac.tick();
+    assert_eq!(ac.mounts[0].target, 3, "the live capital first");
+    let mut only_fighter = Run::new(rows_of(&[bodies[0], bodies[1], bodies[3]], None), gun(ROLE_AC));
+    only_fighter.tick();
+    assert_eq!(only_fighter.mounts[0].target, 4, "a live fighter before a disabled capital, even for a heavy gun");
+    let mut alone = Run::new(rows_of(&bodies[..2], None), gun(ROLE_AC));
+    alone.tick();
+    assert_eq!(alone.mounts[0].target, 2, "nothing live: the hulk is fair game");
+    // Holding the disabled hull, it turns to a live one that comes into reach.
+    alone.rows = rows_of(&bodies[..3], None);
+    for _ in 0..PICK_EVERY {
+        alone.tick();
+    }
+    assert_eq!(alone.mounts[0].target, 3);
+}
+
+// Review round: a launcher fires only at what its rounds reach with time to spare (a torpedo's range was its whole flight).
+#[test]
+fn a_torpedo_is_launched_only_within_nine_tenths_of_its_flight() {
+    let mut spec = launcher(ROLE_AC);
+    spec.warhead = WARHEAD_TORPEDO;
+    spec.speed_mps = 250.0;
+    spec.lifetime_s = 40.0;
+    spec.range_m = 10_000.0;
+    assert!((spec.reach_m() - 9000.0).abs() < 1e-9);
+    let mount = Mount::new(1, 1, v(0.0, 0.0, -200.0), v(0.0, 0.0, -1.0), v(0.0, 1.0, 0.0), 45f64.to_radians(), true, 0.0, spec);
+    // Its near side 9 500 m from the tube: in range, out of the torpedo's reach.
+    let bodies = [(1, v(0.0, 0.0, 0.0), 60.0, 1, 0, LIVE), (2, v(0.0, 0.0, -10_100.0), 400.0, 1, 1, LIVE)];
+    let mut run = Run::with(rows_of(&bodies, None), mount);
+    assert!(run.first_shots(120).is_none());
+    run.rows.positions[1] = v(0.0, 0.0, -9_100.0);
+    assert!(run.first_shots(60).is_some(), "8 500 m off: launched");
+    assert_eq!(gun(ROLE_AC).reach_m(), 4000.0, "a gun's reach is its range");
+}
+
+// Review round: a ship leaving takes its mounts; missiles in flight keep naming their own mount, the gone ship's none.
+#[test]
+fn a_ship_leaving_keeps_every_other_missile_on_its_own_mount() {
+    let spec = launcher(ROLE_DUAL);
+    let at = v(0.0, 0.0, 0.0);
+    let up = v(0.0, 1.0, 0.0);
+    let fwd = v(0.0, 0.0, -1.0);
+    let mut mounts = vec![
+        Mount::new(10, 1, at, up, fwd, 1.0, true, 0.0, spec),
+        Mount::new(20, 2, at, up, fwd, 1.0, true, 0.0, spec),
+        Mount::new(10, 3, at, up, fwd, 1.0, true, 0.0, spec),
+        Mount::new(30, 4, at, up, fwd, 1.0, true, 0.0, spec),
+    ];
+    let mut owners = vec![
+        Owner { body: 10, bodies: vec![10], order: 0 },
+        Owner { body: 20, bodies: vec![20], order: 0 },
+        Owner { body: 30, bodies: vec![30], order: 0 },
+    ];
+    let mut owner_of = vec![0, 1, 0, 2];
+    let missile = |mount: u32| Missile { bolt: -1, target: 0, mount, nav_gain: 4.0, turn_rad_s: 0.6, warhead: WARHEAD_MISSILE };
+    let mut missiles = vec![missile(0), missile(1), missile(2), missile(3)];
+    remove_owner(&mut mounts, &mut owners, &mut owner_of, &mut missiles, 10);
+    assert_eq!(mounts.iter().map(|m| m.id).collect::<Vec<_>>(), vec![2, 4]);
+    assert_eq!(owner_of, vec![0, 1]);
+    let named: Vec<u32> = missiles.iter().map(|m| m.mount).collect();
+    assert_eq!(named, vec![NO_MOUNT, 0, NO_MOUNT, 1], "ship 20's on its mount, ship 30's on its own, ship 10's on none");
+    remove_owner(&mut mounts, &mut owners, &mut owner_of, &mut missiles, 99);
+    assert_eq!(mounts.len(), 2, "an unknown ship changes nothing");
+}
+
+// Review round: a pick reuses its buffers, and a re-weigh on the beat stays deterministic.
+#[test]
+fn picks_on_the_beat_with_reused_buffers_fire_alike_on_two_runs() {
+    let bodies = [
+        (1, v(0.0, 0.0, 0.0), 200.0, 1, 0, LIVE),
+        (2, v(0.0, 300.0, -3000.0), 300.0, 1, 1, LIVE | FLAG_DISABLED),
+        (3, v(200.0, 400.0, -2000.0), 8.0, 0, 1, LIVE),
+        (4, v(-300.0, 600.0, 1500.0), 8.0, 0, 1, LIVE),
+    ];
+    let mut spec = gun(ROLE_AF);
+    spec.spread_rad = 0.3f64.to_radians();
+    let mut a = Run::new(rows_of(&bodies, Some(hull())), spec);
+    let mut b = Run::new(rows_of(&bodies, Some(hull())), spec);
+    let (mut sa, mut sb) = (Vec::new(), Vec::new());
+    for t in 0..600 {
+        if t == 200 {
+            a.rows.positions[2] = v(200.0, 400.0, -9000.0);
+            b.rows.positions[2] = v(200.0, 400.0, -9000.0);
+        }
+        sa.extend(a.tick().0);
+        sb.extend(b.tick().0);
+    }
+    assert!(!sa.is_empty());
+    assert_eq!(sa, sb);
+    assert_eq!(a.mounts, b.mounts);
 }

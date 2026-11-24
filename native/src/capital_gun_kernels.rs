@@ -8,7 +8,7 @@
 use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::solve;
-use crate::rows::{Bolts, FLAG_HULK, FLAG_HULL_ACTIVE, FLAG_SHELTERED, FLAG_TIER, Rows, Surface};
+use crate::rows::{Bolts, FLAG_DISABLED, FLAG_HULK, FLAG_HULL_ACTIVE, FLAG_SHELTERED, FLAG_TIER, Rows, Surface};
 use crate::surface::{enters_from_outside, into_body};
 use crate::turret_kernels::{self as tk, Gun, LINE_LIFT_M};
 use crate::v3::{add, cross, dist_sq, dot, length, normalized, scale, sub, xform, xform_inv};
@@ -28,14 +28,17 @@ const KIND_SHIP: u8 = 0;
 const KIND_CAPITAL: u8 = 1;
 /// Hulls up to this radius are fighters to a gun's pick; anything larger (and every capital) is a capital (as the grid's).
 pub const FIGHTER_RADIUS_MAX_M: f64 = 50.0;
-/// A mount with no target looks for one this many ticks apart, staggered by its index (as the beams do).
+/// A mount looks for a target this many ticks apart, staggered by its index (as the beams do); one holding a target looks
+/// for a better one (its own class, a live hull, its ship's order) on the same beat.
 pub const PICK_EVERY: u32 = 15;
 /// A mount whose every candidate its own hull hid looks again this many ticks later, staggered as its picks are.
 pub const HIDDEN_WAIT: u32 = 60;
 /// How much further than its range a gun picks a target, so it is already laid when the target comes in.
 pub const PICK_REACH: f64 = 1.1;
-// Score offsets that rank the pick's classes ahead of distance (a gun's own class first).
-const CLASS_PENALTY: f64 = 16.0;
+/// A launcher fires only at what its round reaches in this share of its life (a torpedo's range was its whole flight).
+pub const FLIGHT_SHARE: f64 = 0.9;
+/// A missile whose mount has gone (its ship left the rows).
+pub const NO_MOUNT: u32 = u32::MAX;
 /// A capital is aimed at its centre; a gun fires when its miss there is within this share of the hull's radius (at least
 /// `CAPITAL_AIM_MIN_M`), since a long hull is far thinner than its bounding sphere.
 pub const CAPITAL_AIM_SHARE: f64 = 0.1;
@@ -90,6 +93,15 @@ impl GunSpec {
             elevation_rad_s: self.elevation_rad_s,
             color: self.color,
             look: self.look,
+        }
+    }
+
+    /// How far it fires: its range, a launcher's no further than its round flies in `FLIGHT_SHARE` of its life.
+    pub fn reach_m(&self) -> f64 {
+        if self.launcher {
+            self.range_m.min(FLIGHT_SHARE * self.speed_mps * self.lifetime_s)
+        } else {
+            self.range_m
         }
     }
 }
@@ -232,6 +244,13 @@ pub struct GunWorld<'a, F: Fn(i64) -> Option<usize>> {
     pub rest: Vector3,
 }
 
+/// Buffers a pick reuses from tick to tick, so a pick allocates nothing.
+#[derive(Clone, Debug, Default)]
+pub struct Scratch {
+    ranked: Vec<(u8, f64, usize, usize)>,
+    points: Vec<(f32, usize, Vector3)>,
+}
+
 /// Counts a step adds to (readouts).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Tally {
@@ -255,6 +274,7 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
     dt: f64,
     tick: i64,
     shots: &mut Vec<Shot>,
+    scratch: &mut Scratch,
     tally: &mut Tally,
 ) {
     for (i, m) in mounts.iter_mut().enumerate() {
@@ -275,13 +295,12 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
         if m.target != 0 && !bears(m, owner, world, r, &basis, pivot, m.target, PICK_REACH) {
             m.target = 0;
         }
-        if m.target == 0 {
-            let (target, aim_local) = choose(m, owner, world, r, &basis, pivot, tally);
+        if m.pick_wait > 0 {
+            m.pick_wait -= 1;
+        } else if let Some((target, aim_local)) = choose(m, owner, world, r, &basis, pivot, scratch, tally) {
             m.target = target;
             m.aim_local = aim_local;
-            if m.target != 0 {
-                tally.picks += 1;
-            }
+            tally.picks += 1;
         }
         let Some(j) = (m.target != 0).then(|| (world.row_of)(m.target)).flatten() else {
             continue;
@@ -409,7 +428,7 @@ fn launch<F: Fn(i64) -> Option<usize>>(
         return;
     }
     let rows = world.rows;
-    if f64::from(length(sub(rows.positions[j], pivot))) - rows.radii[j] > m.spec.range_m {
+    if f64::from(length(sub(rows.positions[j], pivot))) - rows.radii[j] > m.spec.reach_m() {
         return; // held from a little further out, launched once in range
     }
     let ship_velocity = rows.velocities[r];
@@ -511,6 +530,35 @@ fn segment_distance(a: Vector3, b: Vector3, p: Vector3) -> f64 {
         (f64::from(dot(sub(p, a), ab)) / len_sq).clamp(0.0, 1.0)
     };
     f64::from(length(sub(p, add(a, scale(ab, t as f32)))))
+}
+
+/// Ship `body` leaves: its mounts and its owner go, the rest keep their order. Its missiles in flight fly on, guided as before,
+/// naming no mount (`NO_MOUNT`); every other missile keeps naming its own mount.
+pub fn remove_owner(
+    mounts: &mut Vec<Mount>,
+    owners: &mut Vec<Owner>,
+    owner_of: &mut Vec<u32>,
+    missiles: &mut [Missile],
+    body: i64,
+) {
+    let Some(o) = owners.iter().position(|w| w.body == body) else {
+        return;
+    };
+    for missile in missiles.iter_mut() {
+        let k = missile.mount as usize;
+        if k >= mounts.len() {
+            continue;
+        }
+        missile.mount = if mounts[k].owner == body {
+            NO_MOUNT
+        } else {
+            (k - mounts[..k].iter().filter(|m| m.owner == body).count()) as u32
+        };
+    }
+    mounts.retain(|m| m.owner != body);
+    owners.remove(o);
+    owner_of.clear();
+    owner_of.extend(mounts.iter().map(|m| owners.iter().position(|w| w.body == m.owner).unwrap_or(0) as u32));
 }
 
 /// One tick of every missile's guidance, in launch order: each bolt still in the table turned toward its target by
@@ -627,11 +675,7 @@ fn takes<F: Fn(i64) -> Option<usize>>(
     reach: f64,
 ) -> bool {
     let rows = world.rows;
-    if j >= rows.positions.len()
-        || !live_hull(rows, j)
-        || rows.flags[j] & (FLAG_HULK | FLAG_SHELTERED) != 0
-        || rows.is_static[j]
-    {
+    if j >= rows.positions.len() || !live_hull(rows, j) || rows.flags[j] & FLAG_SHELTERED != 0 || rows.is_static[j] {
         return false;
     }
     let kind = rows.kinds[j];
@@ -652,7 +696,7 @@ fn takes<F: Fn(i64) -> Option<usize>>(
     }
     let rel = sub(rows.positions[j], pivot);
     let d = f64::from(length(rel));
-    if d - rows.radii[j] > m.spec.range_m * reach {
+    if d - rows.radii[j] > m.spec.reach_m() * reach {
         return false;
     }
     d < 1e-6 || in_cone(m, basis, rel, d)
@@ -664,10 +708,26 @@ fn in_cone(m: &Mount, basis: &Basis, rel: Vector3, d: f64) -> bool {
     along.clamp(-1.0, 1.0).asin() >= m.pick_min_elevation
 }
 
-// The target mount `m` takes when it has none, and the point on it to aim at, on its staggered pick tick: its brain's order (an
-// anti-capital or dual weapon) when that bears and shows, else the best hostile in reach and cone by its role, nearest
-// first, that its own hull does not wholly hide. 0: none; it looks again `PICK_EVERY` ticks later (`HIDDEN_WAIT` when its own
-// hull hid every candidate).
+// Where row `j` stands in mount `m`'s preference, 0 best: a live hull of its own class (anti-fighter guns fighters,
+// anti-capital guns capitals, dual guns either), a live hull of the other class, then a disabled hull or a hulk, engaged only
+// when nothing live is in reach.
+fn rank(m: &Mount, rows: &Rows, j: usize) -> u8 {
+    let capital = is_capital(rows, j);
+    let off_class = match m.spec.role {
+        ROLE_AF => capital,
+        ROLE_AC => !capital,
+        ROLE_DUAL => false,
+        _ => false,
+    };
+    let disabled = rows.flags[j] & (FLAG_DISABLED | FLAG_HULK) != 0;
+    2 * u8::from(disabled) + u8::from(off_class)
+}
+
+// Mount `m`'s pick on its staggered beat, and the point on the target to aim at: its brain's order (an anti-capital or dual
+// weapon) when that bears and shows, else the best hostile by `rank` in reach and cone, nearest first, that its own hull does
+// not wholly hide. A mount holding a target trades it only for its order or a better-ranked one, so it never leaves a fighter
+// for a nearer fighter. None: it keeps what it holds (or nothing) and looks again `PICK_EVERY` ticks later, `HIDDEN_WAIT`
+// when its own hull hid every candidate and it holds nothing.
 #[allow(clippy::too_many_arguments)]
 fn choose<F: Fn(i64) -> Option<usize>>(
     m: &mut Mount,
@@ -676,62 +736,62 @@ fn choose<F: Fn(i64) -> Option<usize>>(
     r: usize,
     basis: &Basis,
     pivot: Vector3,
+    scratch: &mut Scratch,
     tally: &mut Tally,
-) -> (i64, Vector3) {
-    let from = line_from(m, pivot, normalized(xform(basis, m.axis)));
-    if m.pick_wait > 0 {
-        m.pick_wait -= 1;
-        return (0, Vector3::ZERO);
-    }
-    let ordered = m.spec.role != ROLE_AF && owner.order != 0 && bears(m, owner, world, r, basis, pivot, owner.order, 1.0);
-    if let Some(aim) = ordered
-        .then(|| (world.row_of)(owner.order).and_then(|j| visible_point(m, world, owner, basis, from, j)))
-        .flatten()
-    {
-        m.pick_wait = PICK_EVERY - 1;
-        return (owner.order, aim);
-    }
+) -> Option<(i64, Vector3)> {
+    let Scratch { ranked, points } = scratch;
     let rows = world.rows;
-    let reach = m.spec.range_m * PICK_REACH;
-    let reach_sq = reach * reach;
-    // Every hostile it could hold, best first; its own hull is tested only down that list, until one shows.
-    let mut ranked: Vec<(f64, usize, usize)> = Vec::new();
+    let from = line_from(m, pivot, normalized(xform(basis, m.axis)));
+    m.pick_wait = PICK_EVERY - 1;
+    if m.spec.role != ROLE_AF && owner.order != 0 {
+        if m.target == owner.order {
+            return None;
+        }
+        if bears(m, owner, world, r, basis, pivot, owner.order, 1.0)
+            && let Some(aim) = (world.row_of)(owner.order).and_then(|j| visible_point(m, world, owner, basis, from, j, points))
+        {
+            return Some((owner.order, aim));
+        }
+    }
+    // Only a better rank than the held target's is worth a look.
+    let bar = match (m.target != 0).then(|| (world.row_of)(m.target)).flatten() {
+        Some(j) => rank(m, rows, j),
+        None if m.target != 0 => return None,
+        None => u8::MAX,
+    };
+    if bar == 0 {
+        return None;
+    }
+    // Every hostile it could take, best first; its own hull is tested only down that list, until one shows.
+    ranked.clear();
     for (k, &h) in world.hull_rows.iter().enumerate() {
         let j = h as usize;
         if !takes(m, owner, world, r, basis, pivot, j, PICK_REACH) {
             continue;
         }
-        let mut score = f64::from(dist_sq(rows.positions[j], pivot));
-        let capital = is_capital(rows, j);
-        let off_class = match m.spec.role {
-            ROLE_AF => capital,
-            ROLE_AC => !capital,
-            ROLE_DUAL => false,
-            _ => false,
-        };
-        if off_class {
-            score += CLASS_PENALTY * reach_sq;
+        let class = rank(m, rows, j);
+        if class < bar {
+            ranked.push((class, f64::from(dist_sq(rows.positions[j], pivot)), k, j));
         }
-        ranked.push((score, k, j));
     }
-    // Equal scores keep the hull rows' order, so a pick never depends on the sort.
-    ranked.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
-    for &(_, _, j) in &ranked {
-        if let Some(aim) = visible_point(m, world, owner, basis, from, j) {
-            m.pick_wait = PICK_EVERY - 1;
-            return (rows.body_ids[j], aim);
+    // Equal keys keep the hull rows' order, so a pick never depends on the sort.
+    ranked.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.total_cmp(&b.1)).then(a.2.cmp(&b.2)));
+    for &(_, _, _, j) in ranked.iter() {
+        if let Some(aim) = visible_point(m, world, owner, basis, from, j, points) {
+            return Some((rows.body_ids[j], aim));
         }
         tally.hidden += 1;
     }
-    // Nothing, or only hulls its own hull hides: it looks again later, longer when they were all hidden (they take a while
-    // to come round).
-    m.pick_wait = if ranked.is_empty() { PICK_EVERY - 1 } else { HIDDEN_WAIT - 1 };
-    (0, Vector3::ZERO)
+    // Only hulls its own hull hides: they take a while to come round.
+    if m.target == 0 && !ranked.is_empty() {
+        m.pick_wait = HIDDEN_WAIT - 1;
+    }
+    None
 }
 
 // Where on row `j`, in its body frame, mount `m` at `from` (its ship's basis `own_basis`) can see past its own hull: the centre
 // when it shows (always, for a launcher), else for a big hull the first that shows of the `AIM_POINTS_TRIED` surface volume
-// centres lying highest over the mount's base; none when its own hull hides them.
+// centres lying highest over the mount's base; none when its own hull hides them. `points` is scratch.
 fn visible_point<F: Fn(i64) -> Option<usize>>(
     m: &Mount,
     world: &GunWorld<'_, F>,
@@ -739,6 +799,7 @@ fn visible_point<F: Fn(i64) -> Option<usize>>(
     own_basis: &Basis,
     from: Vector3,
     j: usize,
+    points: &mut Vec<(f32, usize, Vector3)>,
 ) -> Option<Vector3> {
     let rows = world.rows;
     // A launcher's rounds climb out of their cells and turn: its own hull never hides a target.
@@ -749,26 +810,22 @@ fn visible_point<F: Fn(i64) -> Option<usize>>(
     let (basis, origin) = (&rows.bases[j], rows.positions[j]);
     // The parts lying highest over the mount's base (for a fixed gun, nearest its line) clear its own hull most easily.
     let axis = normalized(xform(own_basis, m.axis));
-    let mut points: Vec<(f32, usize, Vector3)> = surface
-        .volumes
-        .iter()
-        .enumerate()
-        .map(|(k, v)| {
-            let local = Vector3::new(v.centre[0] as f32, v.centre[1] as f32, v.centre[2] as f32);
-            (-dot(normalized(sub(add(origin, xform(basis, local)), from)), axis), k, local)
-        })
-        .collect();
+    points.clear();
+    points.extend(surface.volumes.iter().enumerate().map(|(k, v)| {
+        let local = Vector3::new(v.centre[0] as f32, v.centre[1] as f32, v.centre[2] as f32);
+        (-dot(normalized(sub(add(origin, xform(basis, local)), from)), axis), k, local)
+    }));
     // Only the best few are tried, so only they are put in order (ties by the volume's place).
     let best = |a: &(f32, usize, Vector3), b: &(f32, usize, Vector3)| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1));
     if points.len() > AIM_POINTS_TRIED {
         points.select_nth_unstable_by(AIM_POINTS_TRIED - 1, best);
         points.truncate(AIM_POINTS_TRIED);
     }
-    points.sort_by(best);
+    points.sort_unstable_by(best);
     points
-        .into_iter()
-        .find(|&(_, _, local)| !own_hull_blocks(world, owner, from, add(origin, xform(basis, local))))
-        .map(|(_, _, local)| local)
+        .iter()
+        .find(|&&(_, _, local)| !own_hull_blocks(world, owner, from, add(origin, xform(basis, local))))
+        .map(|&(_, _, local)| local)
 }
 
 // The World point a gun aims at on row `j`: `aim_local` in its body frame.
