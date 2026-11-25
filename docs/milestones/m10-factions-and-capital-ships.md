@@ -107,6 +107,8 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q78 | T65's open points (2026-11-25) | **The reactor's shut-down stage returns:** a reactor at **10 %** powers the ship down and makes it a **hulk** (Q72's no power: lights, weapons, launches and docking off); the reactor at **0 %** still explodes it, hulk or not. Vorlon and Shadow ships keep exploding where others become hulks. **No retune now** (the Omega's 89-91 % after 12 Starfuries, the 145 s duel): everything is rebalanced later. The **station-damage bar** in the 12-raider grid raid is **lowered** to what the raid now does (raiders mostly hit the defence guns), to be rebalanced later. **A docking aborts at once** when the station or ship being docked to loses power, even one already under way (T65) |
 | Q79 | The Starfury's default fire mode (2026-11-25) | The Starfury starts in **alternating** fire (Q76 had left it linked), so the tutorial's lesson order (linked first, then alternating) stays as written and its first check is not passed for free. Tests expect alternating; a test that needs linked sets the mode itself (T14) |
 | Q80 | Launches on power loss; the brain mix after Q79 (2026-11-25) | A **launch already under way** when the station or carrier loses power **finishes**; only new launches are refused (T65). With alternating fire (Q79), `test_brain_tolerance`'s behaviour mix against the M4 GDScript recording is off by 5.5 points on one seed (evade, spread seed 1; the bar is 5): **investigate why before any test change**; 599d62ef stays unpushed until then (T14). **Found and fixed (2026-11-25, T14):** a hit's reaction counted from the latest hit, so a hit every 0.125 s kept resetting a raider's 0.25 s reaction and it evaded only once the burst stopped; it now counts from the first hit not yet answered, in the native brain and `AiPilot` alike. Every seed is back within 5 points (worst 3.6, furball seed 1); the native parity entries re-recorded (`tests/fixtures/parity/README.md`). Balance suite: the dogfight finishes 0 of 5 seeds in 360 s (2 of 5 before; pending as before), the sandbox clears waves 1 and 2 with 1 wingman left (wave 1, 3 left before), the Saturns unchanged, the grid's mean 102.2 s (101.9), the tutorial passes |
+| Q81 | T13's interceptors (2026-11-25) | The maintainer took every recommendation: **4 pulses a second per mount** (`cycle_s` 0.25; the Nova's pods 2/s); **real pulses** with lead and seeded spread that can miss, as the station grid's batteries; **toughness** 1/2/3 is that many pulses; each side guards **its own hull plus friendly capitals and stations** (not fighters); **missiles and torpedoes first**, then the shot that would hit soonest, own hull before friends; **friendly-fire bolts and a still-disguised shooter's bolts are not shot**; **one kernel for capitals and the B5 grid**, and the grid takes toughness too; **no retune**: the duel and the Omega against 12 Starfuries are reported only (Q78); far capitals are left to **T85**; the grid's pulse, burst and sound (pitched up) for now. This settles the open questions in T13's section |
+| Q82 | Our own Starfury gun sound (2026-11-25) | A new task, **T87**, after T13: our own Starfury shot made by synthesis in `tools/procgen` to sound very close to `references/starfurybolt.wav` (1.08 s, mono, 22 kHz; nothing from it copied into the repo, `DISCLAIMER.md`). **95 %** means log-mel spectrogram similarity >= 0.95, loudness envelope correlation >= 0.95 and length within 5 %, then the maintainer's A/B by ear (H) before it replaces today's `pulse_fire`. **Full length**, the tail faded when the same ship fires again, so rapid fire stays crisp. **Larger weapons**: pitched down and lengthened, by a per-weapon table the agent proposes with samples for the maintainer to hear first. **Raiders**: the same sound **+3 semitones** (about 19 % higher), same length; `raider_fire` is dropped |
 
 ## The hulls
 
@@ -412,6 +414,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T84 | A | Hyperion follow-up (Q75): the conning tower's dome and forward dish taken from `references/EA Hyperion Class Heavy Cruiser.stl`, in plain medium grey metal (no mosaic, no seams); the conning tower's underside carries **two gun turrets** as that STL has them, replacing the two cylinders with badly placed turrets; the midship's vertically facing turrets removed (not in the model); the **beam weapons sit in the stubby side wings**, the mid-bow flank pods (Q77; a small recessed opening in each for the emitter), and the **nose antenna array holds no weapons** (maintainer 2026-11-24); loadout and hardpoints updated; a report explaining each remaining gun and weapon's place and capability (arc, range, damage, target kind); the 90 % rule and sections kept; look sheet; tests | T22 | Opus | not started |
 | T85 | D | Far capitals fire (found in T14's review): a real capital beyond the 10 km tier radius fires nothing, since the far group's rolls serve only the stand-ins; feed real capitals' mounts (guns, missiles, beams) into the low-attention tier's fire, native, 1 and 6 threads identical, parity kept, the disguise respected (Q55); before T45 removes the stand-ins | T14 | Opus | not started |
 | T86 | G | Babylon 5 Classic model review (maintainer 2026-11-24): the "Babylon 5 Classic" model offered for download by Chris Kuhn (artist/modeler) in https://www.facebook.com/100063622114904/posts/2433942860027157/ (the post needs a logged-in browser). The maintainer downloaded it to `references/Babylon5_Station_FBX/`: `Babylon5FBX.fbx` and its textures in `Textures/` (colour and specular maps per part: base assembly, chassis, Cobra bay, cylinder accessories, main cylinder, reactor, solar panels with a glass mask; `Babylon5_Station_FBX.zip` is the original download). Find its licence and terms (the post, any readme); compare it with `references/EA Babylon 5 Station.stl` and today's generator (silhouettes, per-part sections with `tools/refview`, detail the STL lacks, and what its textures show of the hull's paint and markings for our procedural textures); a short report with a recommendation: use it as a new reference in `references/` (never committed, never shipped, `DISCLAIMER.md`), as a second reference beside the STL, or not at all; nothing changes without the maintainer's OK; before T82 rebuilds the station at its new size | - | Opus | not started |
+| T87 | G | Our own Starfury gun sound (Q82): a synthesized match for `references/starfurybolt.wav` (log-mel similarity and envelope correlation >= 0.95, length within 5 %, then the maintainer's A/B (H)) as the Starfury's shot, its tail faded when the same ship fires again; raiders +3 semitones; a pitched-down, lengthened table for larger weapons proposed with samples first; tests | T13 | Opus | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -424,7 +427,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | done |
 | T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
 | T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | done |
-| T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | not started |
+| T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | in progress |
 | T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | done |
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | not started |
 | T16 | E | The `capital` brain and fighters' attacks on capitals; the capital helm (steering, today ~52 µs per capital per tick in GDScript) moves into the native brain (Q70) | T12, T14 | Opus | not started |
@@ -640,6 +643,84 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   (one honest whole-hull score); the old STL's paths go.
 - **Done when:** the 90 % rule against the kit (three views, sizes, every part's sections), face slices >= 0.90, the depth-diff
   limit, the look sheet beside the screenshots, and the maintainer has seen the bay close-ups (H).
+
+### M10-T13 Interceptors: the native kernel against bolts and missiles (Q9, Q16, Q53, Q76, Q77)
+
+**Goal.** Every capital's `interceptor` mounts shoot down hostile bolts, missiles and torpedoes headed for their ship or a
+covered friend, in the native core, on the station grid's battery model (M7-T41: real pulses with lead and seeded spread,
+barrels in turn, a pulse can miss). This is the last thing Q53's anchor and Q77's duel bar were waiting for: B1 and B10 are run
+again and reported once it lands (Q76, Q77; no retune here unless the maintainer asks, Q78).
+
+**What exists to reuse.**
+- The grid's batteries (`native/src/grid_kernels.rs`, `turret_rows.rs::step_interceptors`, `meet_pulses`, `pulse_cover`): incoming
+  fire whose path meets a big hull (`time_to_hull`, cached per bolt per tick), missiles first then soonest hit, arc and own-hull
+  line checks, `KIND_INTERCEPT` pulses as owned bolt rows that meet only hostile missiles and bolts, cover so two batteries do not
+  waste pulses on one shot. Main thread, before the guns fire; 1 and 6 threads identical by construction.
+- T14's path (`capital_gun_rows.rs`, `CapitalGunMounts`, `CapitalGuns`, `NativeHostility`): mounts of every `CapitalShip` as rows,
+  hostility by what the ship perceives (`rows::seen_ix`, Q55), mounts stopped by `mount_lost`, `FLAG_DISABLED`/`FLAG_HULK`
+  (T10, T65: a hulk has no power), the `fire_rate()` stretch, a digest for the threads test, console and provider.
+- Data: `loadouts.json` interceptor weapons (`ea_interceptor` 4 barrels / 0.25 s, `ea_interceptor_pod` 2 barrels, `drazi_`
+  half rate, `brakiri_`, `isa_`; reach 1 500 m) and per-hull counts (Omega 8, Hyperion 4, Nova 4 pods, Warlock 8, Stormfalcon 4,
+  Avioki 4, Victory 10, Explorer 4). Built hulls with interceptor hardpoints today: Omega, Hyperion, Nova. Mount hit points 400
+  (`capitals.json`); T18/T65 already list them under TURRETS. `WeaponSpec.toughness` is in 29 `.tres` (1, 2 or 3) but read by
+  nothing yet. `assets/weapons/ea_interceptor_pod.tres` exists; `ea_interceptor.tres` does not.
+- FX and sound: the grid's muzzle flash per barrel, `FxSpecs.INTERCEPT` burst tinted by the shot's colour, the turret shot
+  pitched 1.6 (`station_grid.gd`).
+
+**What is new.**
+- **One kernel for both.** The battery logic moves out of `turret_rows.rs` into an engine-free `native/src/intercept_kernels.rs`
+  (under the guard test) that the grid and the capitals both call; the grid's results stay byte for byte
+  (`test_interceptor_battery_model`, `test_station_grid_threads`, the grid's parity entries untouched).
+- **The guarded set per side.** The grid guards every big hull; a capital battery guards its own hull and covered friends
+  (open question: which friends count). `time_to_hull` is cached per (bolt, guarded set) so it still sweeps a bolt once a tick per side.
+- **Toughness.** A `hits_left` byte per bolt row, set at fire time from the shot's `WeaponSpec.toughness` (fighter and medium
+  bolts and missiles 1; heavy, fixed and kinetic bolts 2; torpedoes 3; energy mines 3 when T15 lands). A pulse that meets a
+  shot takes one off; the shot is spent at 0. Cover allows as many pulses on a shot as it has hits left.
+- **Capital interceptor rows** in `ScsCapitalGuns` (a third mount kind beside turrets and launchers, same owners, hostility table,
+  remove and digest), stepped first in `step_now`: pulses meet, then batteries fire, then the guns. The grid's `Latch` ("never
+  first", grid off) does not apply to capitals.
+- **Broad phase.** Candidates come from the hit sweep's cells (`sweep_cells`), not a scan of every bolt per battery, so 4 Omegas a
+  side (64 batteries) against hundreds of bolts stays in budget.
+
+**Files.** `native/src/intercept_kernels.rs` (new, with `tests.rs`), `grid_kernels.rs` and `turret_rows.rs` (call it),
+`capital_gun_kernels.rs`/`capital_gun_rows.rs` (interceptor rows), `rows.rs` (`Bolts.hits_left`), `sim_core.rs` (owned bolts take
+toughness); `src/capital/capital_gun_mounts.gd` (`interceptor` kind), `capital_guns.gd` (flashes, kills, sound, counters),
+`src/perf/sim_core.gd` (order); `assets/weapons/ea_interceptor.tres` (+ the other races' when their hulls land, or now);
+`docs/architecture.md` §22.8 (new) and §20.3 (shared kernel), `docs/assets-capital.md` (as built), `info.md`.
+
+**Behaviour.**
+- A battery fires at a hostile bolt, missile or torpedo within its reach whose straight path (missiles: to their target) meets a
+  guarded hull within 6 s, inside its arc, its line not behind its own hull, not already covered; never beams, blasts, rams,
+  mines laid in a field, friendly fire, or another battery's pulse. Pulses never hurt a hull.
+- Hostile is what the ship perceives of the shooter (Q55); a disguised shooter's shot at Earth Alliance reveals it already
+  (`Transponder.note_shot_at`), so in practice its next shots are taken.
+- No power, no pulses: a hulk (bridge 0, hull < 10 %, reactor 10 %), a destroyed ship, a lost mount or section, `hold`.
+- Counters: pulses, shots down by kind (bolt, heavy, missile, torpedo), share of incoming taken per ship; console
+  `intercept [info|hold|free]`, provider `interceptors` (`info.md`).
+
+**Done when.**
+- Rust: toughness (2 pulses for a heavy, 3 for a torpedo), guarded set (own hull, a covered friend, not a hostile hull), the pick
+  order, cover with several pulses, a hulk silent, a disguised shooter; the grid's kernel tests unchanged.
+- GUT `test_capital_interceptors` on the Omega: a missile salvo and a torpedo shot down, part of a Starfury's linked bolts
+  taken, a beam never, a lost mount and a hulk silent, the Nova's 4 pods; `test_capital_interceptor_threads`: 1 vs 6 threads
+  byte for byte. Grid files (`test_interceptor_battery_model`, `test_station_grid*`) and the parity recordings unchanged.
+- Balance (`GUT_BALANCE`): B1 and B10 run; reported against Q53's anchor shares (about half the Starfuries' bolts and 40 % of a
+  capital's taken) and Q77's bars; misses stay pending.
+- Cost (release): per battery per tick, idle and engaged; 4 Omegas a side broadside. GPU shot (H).
+- Open for T85: far capitals' interceptors (the stand-ins' far rolls) until T45.
+
+### M10-T87 Our own Starfury gun sound (Q82)
+
+- **Goal:** the Starfury's shot made by our own synthesis (`tools/procgen/assets/sfx_combat.py`, `core/audio`), sounding very close to
+  `references/starfurybolt.wav` (1.08 s, mono, 22 kHz, from the ITF folder; never committed, nothing sampled from it).
+- **Match:** log-mel spectrogram similarity >= 0.95, loudness envelope correlation >= 0.95, length within 5 %, measured by a tool and a
+  test; then an A/B pair for the maintainer (H) before it replaces `pulse_fire`.
+- **In play:** full length; when the same ship fires again the previous shot's tail fades out quickly (voice per ship), so 8 shots a
+  second stay crisp; `AudioDirector` voice limits kept.
+- **Others:** raiders use the same sound +3 semitones, same length (`raider_fire` dropped). Larger weapons (capital pulse cannons,
+  turrets, grid guns, heavy plasma, railguns, particle cannons) pitched down and lengthened by a per-weapon table the agent proposes,
+  with rendered samples for the maintainer to hear before it lands. Beams, missiles and interceptors keep their own sounds.
+- **Done when:** the metrics pass, the maintainer's A/B is OK, the table is approved, Python and GUT tests for the sounds and the tail fade.
 
 ### M10-T65 Subsystems targeted by kind (Q60)
 
