@@ -156,6 +156,12 @@ events plus those settings, applied before the first frame. The tutorial checks 
   members steer, avoid and aim every tick (T32's option B, `docs/research/wing-level-ai.md`). It saves almost nothing in performance;
   it is built only if the maintainer judges that it makes the dogfights feel better (H), starting from "the wing picks targets" on
   `WingDirector`.
+- **Later, a look feature** (maintainer, 2026-11-25): engine plumes with a moving, cloud-like turbulence. A plume shader on
+  today's cone and core (`ThrusterVisuals`, `assets/materials/thruster_plume.tres`): noise scrolling along the exhaust, brighter
+  and denser at the nozzle, soft at the rim, fading at the tip, its speed and brightness from the throttle level, the noise
+  phase from the per-entity hash so ships do not pulse together. Not a GLB: glTF holds meshes and keyframed animation, not
+  shaders, so a baked cloud would loop and could not follow the throttle. The instanced plumes' one draw call per ship stays;
+  fill rate measured on the GPU in a fleet fight (a cheaper far setting if needed); the look is the maintainer's (H).
 - **Not planned** (deferred indefinitely): macOS (Apple Silicon), Xbox and other consoles. Release builds are Linux x86_64,
   and Windows x86_64 from M9 (the maintainer, 2026-11-18; it was not planned before).
 
