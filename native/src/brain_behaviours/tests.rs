@@ -145,6 +145,11 @@ impl Bench {
 
     // One think of `brain` (the row whose id is `RAIDER`) at `now_s`, hit last by `attacker` at `hit_s`, seeing `k` nearest.
     fn think(&mut self, brain: &mut Brain, now_s: f64, attacker: i64, hit_s: f64, k: i64) -> Output {
+        self.think_shot(brain, now_s, attacker, hit_s, f64::NEG_INFINITY, k)
+    }
+
+    // As `think`, with its last bolt hit at `bolt_hit_s`.
+    fn think_shot(&mut self, brain: &mut Brain, now_s: f64, attacker: i64, hit_s: f64, bolt_hit_s: f64, k: i64) -> Output {
         let own_row = self.rows.ids.iter().position(|&id| id == RAIDER).unwrap();
         let inputs = Inputs {
             relations: &RAIDER_SEES,
@@ -155,7 +160,7 @@ impl Bench {
             self_id: RAIDER,
             selected_id: 0,
             last_hit_s: hit_s,
-            last_bolt_hit_s: f64::NEG_INFINITY,
+            last_bolt_hit_s: bolt_hit_s,
             last_attacker_id: attacker,
             friendly_fire: false,
             origin: [0.0; 3],
@@ -1371,4 +1376,62 @@ fn a_long_rejoin_closes_fast_and_brakes_in_time() {
     assert!(!on, "back to formation's own closing: the rejoin ends");
     let (_, on) = catch_up_cap(1400.0, 600.0, true, beyond, fast, base, settle, brake);
     assert!(!on, "inside the settle point: the rejoin ends");
+}
+
+// --- hit reaction (Q80) ------------------------------------------------------------------------------------------------
+
+const DT: f64 = 1.0 / 60.0;
+
+fn shot_at_bench() -> Bench {
+    let own = Vector3::new(0.0, 0.0, OUT);
+    Bench::new(rows_with(&[(RAIDER, 1, own), (BANDIT, 0, own + Vector3::new(0.0, 0.0, -800.0))], 50.0, 0.0))
+}
+
+// Ticks from a hit to its answer: the reaction is checked against the end of the tick.
+fn reaction_ticks(brain: &Brain) -> i32 {
+    ((brain.temperament.reaction_s() - 1e-6) / DT).ceil() as i32
+}
+
+// Thinks tick by tick from `from` to `to` (ticks), hit by a bolt on every tick `hits` lists; returns the last bolt hit.
+fn under_fire(bench: &mut Bench, brain: &mut Brain, from: i32, to: i32, hits: &[i32], mut last: f64) -> f64 {
+    for k in from..to {
+        let now_s = f64::from(k) * DT;
+        if hits.contains(&k) {
+            last = now_s;
+        }
+        bench.think_shot(brain, now_s, BANDIT, last, last, 12);
+    }
+    last
+}
+
+#[test]
+fn a_burst_faster_than_the_reaction_is_answered_at_the_first_hit_plus_the_reaction() {
+    // Q80: alternating fire hits every 0.125 s, inside a regular pilot's 0.25 s; the latest hit kept resetting the clock.
+    let mut bench = shot_at_bench();
+    let mut brain = raider_brain(&[KIND_ATTACK, KIND_EVADE, KIND_IDLE]);
+    let reaction_ticks = reaction_ticks(&brain);
+    let burst: Vec<i32> = (0..20).map(|i| 30 + i * 7).collect();
+    let last = under_fire(&mut bench, &mut brain, 0, 30 + reaction_ticks - 1, &burst, NEVER);
+    assert_eq!(brain.reacted_hit_s, NEVER, "not yet answered a tick before the reaction time");
+    assert!(brain.unanswered_hit_s == 30.0 * DT, "the clock runs from the burst's first hit");
+    under_fire(&mut bench, &mut brain, 30 + reaction_ticks - 1, 30 + reaction_ticks, &burst, last);
+    assert_eq!(brain.current_kind(), i32::from(KIND_EVADE), "evading at the first hit plus the reaction, the burst still on");
+    assert!(brain.reacted_hit_s > 30.0 * DT, "every hit so far is answered");
+}
+
+#[test]
+fn an_answered_hit_does_not_fire_again_until_a_new_one_lands() {
+    let mut bench = shot_at_bench();
+    let mut brain = raider_brain(&[KIND_ATTACK, KIND_EVADE, KIND_IDLE]);
+    let reaction_ticks = reaction_ticks(&brain);
+    let last = under_fire(&mut bench, &mut brain, 0, 30 + reaction_ticks + 1, &[30, 37], NEVER);
+    let answered = brain.reacted_hit_s;
+    assert!(answered == 37.0 * DT, "both hits answered by the one reaction");
+    let lock = brain.evade.lock_until_jinks;
+    let last = under_fire(&mut bench, &mut brain, 30 + reaction_ticks + 1, 300, &[], last);
+    assert!(brain.reacted_hit_s == answered && brain.unanswered_hit_s == NEVER, "no new hit, no new reaction");
+    assert_eq!(brain.evade.lock_until_jinks, lock, "and the evasion's lock is not renewed");
+    under_fire(&mut bench, &mut brain, 300, 301 + reaction_ticks, &[300], last);
+    assert!(brain.reacted_hit_s == 300.0 * DT, "a new hit is answered after its own reaction time");
+    assert_eq!(brain.current_kind(), i32::from(KIND_EVADE));
 }

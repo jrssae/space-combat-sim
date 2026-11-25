@@ -96,3 +96,11 @@ as Q76's linked pairs). Run as M7-T16's command above. What moved (old → new):
 `flight_parity_fight` 95 → 98 hits over 10 s and 247 → 371 over 30 s, mix attack 16 evade 9 → attack 18 evade 7;
 `brain_tolerance` native hits furball 485, 537, 457 → 680, 710, 644, spread 568, 561, 515 → 618, 888, 513. Its mix gate against
 the GDScript fight fails on spread seed 1 (evade 5.5 points against the 5 allowed); left for the maintainer, not widened.
+
+**Q80 re-recorded the same native entries**: a bolt hit's reaction counts from the first hit the pilot has not yet answered,
+not the latest (under alternating fire a hit every 0.125 s kept resetting a 0.25 s reaction, so raiders evaded only once a burst
+stopped). Run as M7-T16's command above. What moved (old → new): `weapon_rows_battle` 1 315, 355, 147, 144, 25, 56 → 966, 339,
+127, 138, 24, 36; the 100-ship battle 89 → 93 hits (thinks 8 250 → 8 251 far rate; the player's battle 89 → 88 hits);
+`flight_parity_fight` 98 → 54 hits over 10 s and 371 → 201 over 30 s, mix attack 18 evade 7 → attack 15 evade 10;
+`brain_tolerance` native hits furball 680, 710, 644 → 368, 446, 394, spread 618, 888, 513 → 460, 427, 378. Its mix gate against
+the GDScript fight passes again: worst furball 3.6, 2.2, 0.4 points, spread 1.4, 0.6, 0.3.

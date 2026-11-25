@@ -1,9 +1,9 @@
 {
   "battle_with_bolt_nodes": {
-    "rows": "c0edd9af0f6c1b3ca9ff25520f40111b3af3b53e2594f104a587a27858d7e101",
-    "bolts": "6fbf185156fa1788a7c304814abe3a84fedaa1c50bed618faef628fa3b71dfe3",
-    "hits": "5d1c749b71ff43b1aa3b1c8f38427eb121436e398e10605ec65a6f37745242b8",
-    "hits_total": 89.0,
+    "rows": "f79f04dd8c35190b7e3a1e1910ba1faa7debc269130cf68c47999dd12ace3664",
+    "bolts": "c398d83d7ffe5ff75f8b80ba40bcc0a8fa65a29d9c88765c6f61ee5082634af8",
+    "hits": "68123a88198b436b1e902625fe8a9328d66a68cf1039f109c3d86e08e59d648b",
+    "hits_total": 93.0,
     "kills": 3.0
   }
 }

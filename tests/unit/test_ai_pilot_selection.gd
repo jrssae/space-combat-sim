@@ -619,6 +619,49 @@ func test_further_hits_keep_it_evading() -> void:
 	assert_eq(pilot.current.id, &"evade")
 
 
+# Ticks from a hit to its answer: the reaction is checked against the end of the tick.
+func _reaction_ticks(pilot: AiPilot) -> int:
+	return ceili((pilot.temperament.reaction_s() - 1e-6) / DT)
+
+
+func test_a_burst_faster_than_the_reaction_is_answered_at_the_first_hit_plus_the_reaction() -> void:
+	# Q80: alternating fire hits every 0.125 s, inside a regular pilot's 0.25 s; the latest hit kept resetting the clock.
+	var setup: Array = _attacking()
+	var pilot: AiPilot = setup[0]
+	var p: Perception = setup[1]
+	var first_s: float = p.now_s + DT
+	var answer_tick: int = _reaction_ticks(pilot) - 1
+	for k: int in answer_tick + 1:
+		p.now_s += DT
+		if k % 7 == 0:
+			p.last_bolt_hit_s = p.now_s
+		pilot.think(p, DT)
+		if k < answer_tick:
+			assert_eq(pilot.current.id, &"attack", "not yet at %.3f s after the first hit" % (p.now_s - first_s))
+	assert_gt(p.last_bolt_hit_s, first_s, "the burst is still on")
+	assert_eq(pilot.current.id, &"evade", "evading at the first hit plus the reaction")
+
+
+func test_an_answered_hit_does_not_fire_again_until_a_new_one_lands() -> void:
+	var setup: Array = _attacking()
+	var pilot: AiPilot = setup[0]
+	var p: Perception = setup[1]
+	p.last_bolt_hit_s = p.now_s + DT
+	_advance(pilot, p, 7.0 * DT)
+	p.last_bolt_hit_s = p.now_s  # a second hit inside the reaction: answered with the first
+	_advance(pilot, p, pilot.temperament.reaction_s())
+	var evade := pilot.current as BehaviourEvade
+	assert_not_null(evade, "it evades")
+	assert_eq(evade.jinks, 1)
+	_advance(pilot, p, evade.jink_left_s + 2.0 * DT)
+	assert_false(evade.locked(), "one reaction for both hits: unlocked after a single jink")
+	_advance(pilot, p, 0.5)
+	assert_eq(pilot.current.id, &"attack", "back to the attack")
+	p.last_bolt_hit_s = p.now_s
+	_advance(pilot, p, pilot.temperament.reaction_s() + DT)
+	assert_eq(pilot.current.id, &"evade", "a new hit is answered after its own reaction time")
+
+
 func test_a_ram_or_console_hit_is_no_interrupt() -> void:
 	var setup: Array = _attacking()
 	var pilot: AiPilot = setup[0]

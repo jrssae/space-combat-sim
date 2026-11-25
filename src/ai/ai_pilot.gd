@@ -11,8 +11,9 @@ extends PilotBrain
 ## Temperament (M3-T13, Q12): the pilot flies `profile`, its `base_profile` scaled by `temperament` (skill, aggression).
 ##
 ## Hit reaction (M3-T10, Q11): a fresh bolt hit hands control to evade after the pilot's reaction time (ace 0.1 s, regular
-## 0.25 s, rookie 0.6 s), whatever the scores, and evade keeps it while `BehaviourEvade.locked()`. A pilot without evade, or
-## weighting it 0 (the instructor), never reacts.
+## 0.25 s, rookie 0.6 s), whatever the scores, and evade keeps it while `BehaviourEvade.locked()`. The time counts from the
+## first hit it has not yet answered (Q80), so a burst faster than the reaction still breaks it off. A pilot without evade,
+## or weighting it 0 (the instructor), never reacts.
 ##
 ## `wanted_target_id` follows the behaviour in control, so the targeting computer shows what the ship is really attacking.
 ## With `profile.fires` false the trigger is never pulled.
@@ -101,6 +102,8 @@ var _idle_index: int = -1
 var _evade_index: int = -1
 ## The latest bolt hit reacted to (sim time), so each hit interrupts once.
 var _reacted_hit_s: float = -INF
+## The first bolt hit since it last reacted (Q80), so a burst is answered on time rather than once it stops.
+var _unanswered_hit_s: float = -INF
 ## The seed the behaviours roll from (M4-T17: the native slot rolls from the same).
 var seed_value: int = 0
 ## Whether the last think ran in the native brains, and what the driver reads of it: the dodge and the contacts seen.
@@ -353,10 +356,13 @@ func select(dt: float) -> AiBehaviour:
 	if _evade_index >= 0 and _weights[_evade_index] > 0.0:
 		var evade := behaviours[_evade_index] as BehaviourEvade
 		var hit_s: float = context.perception.last_bolt_hit_s
+		if hit_s > _reacted_hit_s and _unanswered_hit_s == -INF:
+			_unanswered_hit_s = hit_s
 		var committed: bool = current != null and current.id == &"ram" and (current as BehaviourRam).committed
-		if hit_s > _reacted_hit_s and not committed \
-				and context.perception.now_s + dt - hit_s >= temperament.reaction_s() - 1e-6:  # by the end of this tick
+		if _unanswered_hit_s > -INF and not committed \
+				and context.perception.now_s + dt - _unanswered_hit_s >= temperament.reaction_s() - 1e-6:  # by the end of this tick
 			_reacted_hit_s = hit_s
+			_unanswered_hit_s = -INF
 			if _current_index != _evade_index:
 				_switch(_evade_index)
 			if evade != null:
@@ -419,6 +425,7 @@ func reset() -> void:
 	switches = 0
 	_current_index = -1
 	_reacted_hit_s = -INF
+	_unanswered_hit_s = -INF
 	avoid_exempt_id = 0
 	_raw.fill(0.0)
 	_weighted.fill(0.0)

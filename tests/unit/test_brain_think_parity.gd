@@ -448,6 +448,28 @@ func test_a_plain_crowd_thinks_the_same_natively_tick_by_tick() -> void:
 	assert_eq(differences.size(), 0, "the native brains think the same bits as the GDScript twins: %s" % differences.slice(0, 4))
 
 
+func test_a_burst_of_hits_faster_than_the_reaction_thinks_the_same() -> void:
+	# Q80: the reaction counts from the first unanswered hit in both brains, under a burst every 7 ticks and a lone hit after.
+	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 1711
+	var rows := Rows.new(rng, 24, 8, 12, 2500.0)
+	var twins: Array[Twin] = []
+	for i: int in 4:
+		var t: Twin = _twin(rows, i, [&"raider", &"ally_starfury"][i % 2], 400 + i, rng, [0.2, 0.5, 0.95, 0.7][i], 0.5)
+		_make_slot(brains, t, rows)
+		t.pilot.reset()
+		brains.reset(t.slot)
+		twins.append(t)
+	var hits: Dictionary = {}
+	for k: int in 12:
+		hits[30 + 7 * k] = 0
+		hits[33 + 7 * k] = 1
+	hits[200] = 0
+	var differences: PackedStringArray = _run(brains, rows, twins, rng, TICKS, hits, "burst")
+	assert_eq(differences.size(), 0, "a burst of hits thinks the same bits: %s" % differences.slice(0, 4))
+
+
 func test_wings_under_each_order_and_a_leaderless_wing_think_the_same() -> void:
 	var brains: Object = NativeLib.instantiate(BRAINS_CLASS)
 	var rng := RandomNumberGenerator.new()

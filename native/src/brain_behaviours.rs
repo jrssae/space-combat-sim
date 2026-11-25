@@ -657,6 +657,8 @@ pub struct Brain {
     pub dwell_s: f64,
     pub switches: i64,
     reacted_hit_s: f64,
+    // The first bolt hit since it last reacted (Q80): a burst is answered on time, not once it stops.
+    unanswered_hit_s: f64,
     pub wanted_target_id: i64,
     pub avoid_exempt_id: i64,
     pub has_desired_velocity: bool,
@@ -707,6 +709,7 @@ impl Brain {
             dwell_s: 0.0,
             switches: 0,
             reacted_hit_s: f64::NEG_INFINITY,
+            unanswered_hit_s: f64::NEG_INFINITY,
             wanted_target_id: TARGET_NONE,
             avoid_exempt_id: 0,
             has_desired_velocity: false,
@@ -780,6 +783,7 @@ impl Brain {
         self.dwell_s = 0.0;
         self.switches = 0;
         self.reacted_hit_s = f64::NEG_INFINITY;
+        self.unanswered_hit_s = f64::NEG_INFINITY;
         self.avoid_exempt_id = 0;
         for v in self.raw.iter_mut() {
             *v = 0.0;
@@ -1395,12 +1399,16 @@ impl Brain {
         let evade_index = self.index_of(KIND_EVADE);
         if evade_index >= 0 && self.weights[evade_index as usize] > 0.0 {
             let hit_s = tick.p.last_bolt_hit_s;
+            if hit_s > self.reacted_hit_s && self.unanswered_hit_s == f64::NEG_INFINITY {
+                self.unanswered_hit_s = hit_s;
+            }
             let committed = self.current_kind() == i32::from(KIND_RAM) && self.ram.committed;
-            if hit_s > self.reacted_hit_s
+            if self.unanswered_hit_s > f64::NEG_INFINITY
                 && !committed
-                && tick.p.now_s + dt - hit_s >= self.temperament.reaction_s() - 1e-6
+                && tick.p.now_s + dt - self.unanswered_hit_s >= self.temperament.reaction_s() - 1e-6
             {
                 self.reacted_hit_s = hit_s;
+                self.unanswered_hit_s = f64::NEG_INFINITY;
                 if self.current != evade_index {
                     self.switch_to(evade_index);
                 }
