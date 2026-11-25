@@ -861,7 +861,7 @@ All fighters: the fighter pipeline (the Starfury's); none opens a jump point (Q2
 | `ea_shuttle` | T57, T69 | EA shuttle | **38** (Q65; T57 built it at 18.64) | TE 1.1; TBP | 18 to 25 by variant (SotG) | y/x/z | 18.8 x 10.7 | | | civilian | |
 | `ea_atmo_shuttle` | T57, T69 | EA atmospheric shuttle | **29** (Q65; T57 built it at 25.59) | TE 1.1; TBP ("Kestrel" class) | | y/x/z | 51.6 x 9.6 | | | civilian | Wingspan 1.8 times the length (TE's drawing: about 1.45) |
 | `centauri_shuttle` | T58 | Centauri shuttle | **36** | SotG | | x/y/z | 52 x 13.5 | | | civilian | |
-| `minbari_flyer` | T58 | Minbari Flyer | **29.19** | TE 1.1; TBP | | x/y/z | 13.5 x 6.0 | | gate (TBP: jump yes; Q22: small craft never) | civilian | |
+| `minbari_flyer` | T58 | Minbari Flyer | **40** (Q67; T01 had 29.19) | TE 1.1; TBP | | x/y/z | 18.5 x 8.2 | | gate (TBP: jump yes; Q22: small craft never) | civilian | |
 
 The Falkosi and the Sentri have no carrier in M10 (Q49): the sources give the Avioki and the Primus no fighters.
 

@@ -1633,11 +1633,14 @@ Every `refview` call below is `.venv/bin/python3 -I tools/refview/refview.py ref
   ±26, its trailing edge notched; a tall swept **tail fin**; the wing tips droop (from ahead an arc). Engine louvres along
   the wing roots.
 - **Colours (show).** Purple-maroon with gold detailing and red lights, as the Centauri warships.
+- **As measured (T58).** The STL has no separate tail fin: the tall swept shape in its side view is the upswept wing tip
+  (to y +6.75). One large nozzle (radius 2 m) either side of the keel, a keel pod under the stern, a blister either side of the
+  spine and five louvres either side ahead of the stern. Skin: Q83 (solid purple with darker patches, no panel mosaic).
 
 ### Minbari Flyer (`minbari_flyer`, T58)
 
-- **Reference.** `Minbari_Flyer_diplomat_transport.stl`, mapping `--right=+y --up=+z --aft=+x`, 29.19 m. Box 13.5 m wide,
-  6.0 m tall. Show: `minbari_flyer/` (two stills, docked). Skin: hexagonal grid (Q45).
+- **Reference.** `Minbari_Flyer_diplomat_transport_40m.stl`, mapping `--right=+y --up=+z --aft=+x`, **40 m** (Q67; T01 had
+  29.19 m). Box 18.5 m wide, 8.2 m tall. Show: `minbari_flyer/` (two stills, docked). Skin: hexagonal grid (Q45).
 - **Shape.** A smooth, tapered **fuselage** (0 to 75 %) with a forked nose and blade-like strakes along its flanks; at 70
   to 85 % a **crossbar wing** with an engine **pod** at each tip (x ±6.5), and a pointed tail cone aft (to 100 %).
 - **Colours (show).** Iridescent blue-violet with pale highlights.

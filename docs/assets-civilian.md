@@ -283,6 +283,8 @@ within a pixel; the splat column is gone with the splats.
 | `ea_atmo_shuttle` | whole craft at 29 m (best shift x +0.07 m, the model's vanes sit 0.15 m to starboard; unshifted 0.979, 0.974, 0.917; M10-T57, re-run at T69's size) | 0.973 | 0.974 | 0.932 | 1.000 | 0.999 | 0.988 | 2026-11-23 |
 | `ea_panama` | whole hull at 20 m tall, 121.6 m (no shift; M10-T51, re-run at T71's size) | 0.982 | 0.983 | 0.972 | 1.000 | 0.999 | 1.006 | 2026-11-24 |
 | `ea_construction_tender` | whole craft at 8 m (no shift; M10-T55, re-run at T69's size) | 0.934 | 0.959 | 0.926 | 1.000 | 1.000 | 1.000 | 2026-11-23 |
+| `centauri_shuttle` | whole craft at 36 m (M10-T58 stage 1) | 0.957 | 0.959 | 0.925 | 1.000 | 1.000 | 0.997 | 2026-11-25 |
+| `minbari_flyer` | whole craft at 40 m (Q67; M10-T58 stage 1) | 0.941 | 0.973 | 0.913 | 1.000 | 0.999 | 1.000 | 2026-11-25 |
 
 **The generator sections below** record each task as it was built on splats (T12 to T22). Their geometry, hardpoints and
 fidelity stand; their splat counts, level shares, lighting records and splat-check numbers are history since M5-T27,
@@ -742,6 +744,54 @@ traffic do not draw them, so older scenarios' seeded picks stay as they were; a 
 ```
 .venv/bin/python3 -I tools/refview/compare.py "references/EA Panama class.STL" ea_panama --length 121.6 --right=-x --up=+z --aft=+y
 .venv/bin/python3 -I tools/refview/compare.py references/EA_construction_tender.stl ea_construction_tender --length 8 --right=-x --up=+z --aft=+y
+```
+
+## `centauri_shuttle` and `minbari_flyer` (M10-T58)
+
+`tools/procgen/assets/centauri_shuttle.py` and `assets/minbari_flyer.py`, parts in `tools/procgen/parts/centauri_shuttle.py` and
+`parts/minbari_flyer.py`, looks in `tools/procgen/styles/centauri_shuttle.py` and `styles/minbari_flyer.py`, built through the
+shuttles' `build_craft` (`assets/ea_shuttles.py`). Both are **small craft** (M10 Q38): one 2 048 px atlas, the low texture set a
+mip level down. Unarmed. Option `look` (`a`, `b`, `c`) picks the surface option; until the maintainer chooses, `a` is built.
+
+**Stage 1 as built (2026-11-25, seed 42).** Generators, looks and the 90 % compare; collision, docking, `ShipSpec`s and catalogue
+entries come in stage 2 with the chosen looks.
+
+| | `centauri_shuttle` | `minbari_flyer` |
+|---|---|---|
+| Size (L x W x H) | 36.00 x 51.96 x 13.47 m | 40.00 x 18.46 x 8.20 m (Q67's length; T01 had 29.19) |
+| Triangles (budget 30 000) | 1 794 | 7 596 |
+| Texel | 3.4 cm | 3.5 cm |
+| Texture memory, high / low set (budget 16.0 / 6.0 MB) | 13.3 / 3.3 MB | 13.3 / 3.3 MB |
+| Video memory on the GPU, high set (RX 6950 XT, sheet run) | about 13 MB | about 14 MB |
+| Chunks | `body`, `stern`, `wing_l`, `wing_r` | `body`, `bow`, `tail`, `crossbar`, `spindle_l`, `spindle_r` |
+| 90 % compare: top, side, front IoU | 0.957, 0.959, 0.925 | 0.941, 0.973, 0.913 |
+
+| Craft | Parts (authored frame: x to starboard, y up, z aft from the nose, x and y on the reference's box centre) |
+|---|---|
+| `centauri_shuttle` | A flat delta body lofted with hard edges through 12 stations: flat deck faces from the centre line to a blunt rim, a keel that bulges a little at half width, deeper aft (y -2.8 at the nose, -5.75 at the stern face, z 33.6); the half width grows from 2 m to 9 m at z 20.5 and on to 15 m along the wing roots. On it: a spine from z 6.3 to 34.8 with the canopy on its first runs and a gold crown; a blister either side (x 3.66, 12 m long); five louvres either side at z 29.4 to 33.8 with gold tops. Under the stern a keel pod (y -5.9) on a strut; one nozzle either side of it (x 3.3, y -2.28, radius 2, exit z 35.5). The wings: eight sections from x 11.5 inside the body to the tips at x 26 and y 6.6, the leading edge swept from z 23.6 to 32, the trailing edge at z 35.5 to 36; gold leading edges. |
+| `minbari_flyer` | Smooth lofts of ellipses (Q47). A round fuselage (radius 3.05 at z 8 to 10, 0.85 from z 28 to 35, the tail spike to z 39.6), its nose a ring of 12 petals; a pod either side (x 3.8, z 3.3 to 18.4), a thin web from it to a tall blade at x 8.15 (4.1 m above and below its middle at z 4, a diamond with hollow sides in section) with a lobe at its root and two intake pods on its front; a flat strake along each flank from z 18 to 33 with a rod at x 1.3 to the tail; four waist pods (x 2.25, y 1.0, z 22 to 30); the crossbar (z 30 to 34.7, 16.6 m across) with a spindle at each tip (x 8.3, z 29.3 to 40, 3.6 m above and below), its tail glowing from z 37, and a forward tube. |
+
+**The references differ from T01's descriptions.** The Centauri shuttle's STL has no tail fin: the tall swept shape in its side
+view is the upswept wing tip. It carries one large nozzle either side of the keel. The Flyer's blades and spindles are diamonds in
+section, wide at their middle and thin at their edges.
+
+**Looks (stage 1, for the maintainer's choice).** Sheets in `references/screenshots/M10-T58 Centauri shuttle and Minbari Flyer/`:
+`centauri_shuttle_option_sheet.png`, `minbari_flyer_option_sheet.png` (each look at 15 or 12 m lit and dark, 5 m with the high and
+the low set), `*_look_sheet.png` (look A at 50 and 500 m, top, side, front, 5 m dark), `compare/` (the overlays).
+
+- **Centauri shuttle (Q83):** no panel mosaic; a solid paint with small patches a few shades darker at two or three sizes, as
+  the Agamemnon model's textures are painted (a style reference only), in Centauri purple; gold on the spine's crown, the louvres
+  and the wings' leading edges; the nozzles glow pink-white. **A**, show plum (#6E3466) with sparse patches and warm gold;
+  **B**, Centauri violet (#5A3A86) with denser patches and pale gold; **C**, deep maroon (#5A2346) with heavy dark patches and
+  bright gold.
+- **Minbari Flyer (Q45):** the hexagonal grid (1.2 m cells, each its own shade, kept in the low set; seams in the full set) on a
+  glossy, lightly metallic paint, under long streaks along the hull; the spindles' tails glow cold blue-white. **A**, the show's
+  blue-violet (#6A68AE) with pale lavender streaks; **B**, pale lavender (#B0ACD8) with violet streaks; **C**, deep blue (#3C4496)
+  with azure streaks.
+
+```
+.venv/bin/python3 -I tools/refview/compare.py references/Centauri_Shuttle.stl centauri_shuttle --length 36 --right=+y --up=+z --aft=+x
+.venv/bin/python3 -I tools/refview/compare.py references/Minbari_Flyer_diplomat_transport_40m.stl minbari_flyer --length 40 --right=+y --up=+z --aft=+x
 ```
 
 ## Styles

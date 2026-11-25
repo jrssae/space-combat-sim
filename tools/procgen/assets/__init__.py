@@ -10,11 +10,11 @@ from collections.abc import Callable
 
 from ..core.context import AssetOutputs, BuildContext
 from . import asteroids, b5_interior, babylon5_station, brakiri_bokmai, capital_hulls, capital_test_cruiser, cargo_pod_craft
-from . import centauri_brezebel
+from . import centauri_brezebel, centauri_shuttle
 from . import ea_hyperion, ea_nova, ea_omega, ea_shuttles, ea_thunderbolt, ea_work_ships
 from . import grid_heavy_cannon
 from . import grid_interceptor_battery, jumpgate, planet, saturn_family, skylark_transport
-from . import maintenance_bot, narn_transport, nav_buoy, organic_test_hull, raider_fighter, raider_strike_carrier
+from . import maintenance_bot, minbari_flyer, narn_transport, nav_buoy, organic_test_hull, raider_fighter, raider_strike_carrier
 from . import sfx_combat, sfx_ui, sfx_world, sky_default
 from . import starfury_aurora
 
@@ -27,6 +27,7 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "capital_test_cruiser": capital_test_cruiser.build,
     "cargo_pod_craft": cargo_pod_craft.build,
     "centauri_brezebel": centauri_brezebel.build,
+    "centauri_shuttle": centauri_shuttle.build,
     "ea_atmo_shuttle": ea_shuttles.build_atmo,
     "ea_construction_tender": ea_work_ships.build_tender,
     "ea_hyperion": ea_hyperion.build,
@@ -39,6 +40,7 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "grid_interceptor_battery": grid_interceptor_battery.build,
     "jumpgate": jumpgate.build,
     "maintenance_bot": maintenance_bot.build,
+    "minbari_flyer": minbari_flyer.build,
     "narn_transport": narn_transport.build,
     "nav_buoy": nav_buoy.build,
     "organic_test_hull": organic_test_hull.build,
