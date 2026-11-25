@@ -17,4 +17,3 @@ bolt_color = Color(0.9, 1.5, 3, 1)
 capacitor_capacity = 200.0
 capacitor_cost_per_shot = 14.0
 capacitor_recharge_per_s = 50.0
-fire_linked = true

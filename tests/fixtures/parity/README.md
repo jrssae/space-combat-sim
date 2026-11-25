@@ -89,3 +89,10 @@ battle of `bolt_rows`, `core_state`, `driver_step` and `row_commands` 67 → 119
 attack 16 evade 9; `brain_tolerance` native hits furball 268, 248, 285 → 485, 537, 457, spread 330, 324, 293 → 568, 561, 515.
 The GDScript entries cannot be flown again with two cannons, so both Q16 files print their hits against them, no longer gate
 them; `brain_tolerance` still gates the mix (within 5 points on every seed) and both gate the native step bit for bit.
+
+**Q79 re-recorded the same native entries**: the Starfury starts in alternating fire (one bolt every 0.125 s, the same bolt rate
+as Q76's linked pairs). Run as M7-T16's command above. What moved (old → new): `weapon_rows_battle` 1 156, 340, 133, 145, 24, 36 →
+1 315, 355, 147, 144, 25, 56; the 100-ship battle 119 → 89 hits, 4 → 3 kills (thinks 8 242 → 8 250 far rate, 12 037 → 12 042);
+`flight_parity_fight` 95 → 98 hits over 10 s and 247 → 371 over 30 s, mix attack 16 evade 9 → attack 18 evade 7;
+`brain_tolerance` native hits furball 485, 537, 457 → 680, 710, 644, spread 568, 561, 515 → 618, 888, 513. Its mix gate against
+the GDScript fight fails on spread seed 1 (evade 5.5 points against the 5 allowed); left for the maintainer, not widened.

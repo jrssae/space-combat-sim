@@ -33,7 +33,7 @@ extends Resource
 @export var capacitor_cost_per_shot: float = 14.0
 ## Energy units regained per second.
 @export var capacitor_recharge_per_s: float = 25.0
-## Whether the cannon starts in LINKED mode, every muzzle firing together (Q76: the Starfury fires both its cannons).
+## Whether the cannon starts in LINKED mode, every muzzle firing together (the Starfury starts alternating, Q79).
 @export var fire_linked: bool = false
 
 @export_group("Turret")

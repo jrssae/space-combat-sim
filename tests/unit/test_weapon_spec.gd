@@ -35,10 +35,9 @@ func test_make_capacitor_takes_the_spec_numbers() -> void:
 	assert_eq(cap.charge_at(0.0), 50.0, "starts full")
 
 
-## Q76's two cannons: the Starfury fires both together, twice the bolts the M1 defaults give, its capacitor twice as big and
-## as quick; everything else is still the default.
-const Q76_STARFURY: Dictionary = {"shot_interval_s": 0.125, "capacitor_capacity": 200.0, "capacitor_recharge_per_s": 50.0,
-		"fire_linked": true}
+## Q76's two cannons: twice the bolts the M1 defaults give, its capacitor twice as big and as quick; it starts in alternating
+## fire like the default (Q79); everything else is still the default.
+const Q76_STARFURY: Dictionary = {"shot_interval_s": 0.125, "capacitor_capacity": 200.0, "capacitor_recharge_per_s": 50.0}
 
 
 func test_the_shipped_pulse_cannon_reproduces_the_defaults() -> void:

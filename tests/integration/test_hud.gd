@@ -99,7 +99,7 @@ func test_the_input_carries_the_players_state() -> void:
 	assert_eq(input.own_velocity, Vector3(0.0, 0.0, -45.0))
 	assert_almost_eq(input.hull_fraction, 0.75, 1e-6)
 	assert_almost_eq(input.charge_fraction, 0.5, 1e-3)
-	assert_eq(input.fire_mode, "linked", "the Starfury fires both cannons together (Q76)")
+	assert_eq(input.fire_mode, "alternating", "the Starfury starts in alternating fire (Q79)")
 	assert_eq(input.weapon_speed_mps, main.cannon.weapon.muzzle_speed_mps)
 	assert_true(input.fuel_unlimited)
 	assert_eq(input.faction, Factions.EARTH_ALLIANCE)

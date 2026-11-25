@@ -75,11 +75,11 @@ func test_components_are_wired_when_the_ship_enters_the_tree() -> void:
 	assert_eq(near_raider.cannon.gate.interval_s, spec.weapon.shot_interval_s)
 
 
-## M1's cannon with Q76's buff: both cannons fire together, twice the bolts, the capacitor twice as big.
+## M1's cannon with Q76's buff: twice the bolts, the capacitor twice as big; it starts in alternating fire (Q79).
 func test_the_starfury_defaults_reproduce_m1() -> void:
 	assert_eq(spec.weapon.muzzle_speed_mps, 1000.0)
 	assert_eq(near_raider.cannon.gate.muzzle_count, 2)
-	assert_eq(near_raider.cannon.gate.mode, PulseCannonGate.Mode.LINKED, "Q76: the Starfury fires both cannons")
+	assert_eq(near_raider.cannon.gate.mode, PulseCannonGate.Mode.ALTERNATING, "Q79: the Starfury starts in alternating fire")
 	assert_eq(near_raider.cannon.gate.interval_s, PulseCannonGate.ALTERNATING_INTERVAL_S / 2.0, "Q76: twice M1's bolts")
 	assert_eq(near_raider.cannon.gate.linked_interval_s(), PulseCannonGate.LINKED_INTERVAL_S / 2.0)
 	assert_eq(near_raider.cannon.gate.capacitor.capacity, WeaponCapacitor.DEFAULT_CAPACITY * 2.0)
@@ -146,15 +146,12 @@ func test_exactly_one_set_of_player_providers_and_commands() -> void:
 
 
 func test_the_player_owns_the_weapons_provider() -> void:
-	# Every Starfury here starts linked (Q76), so the player's switch shows only on its own entry.
 	player.cannon.gate.cycle_mode()
-	assert_eq(DebugConsole.registry.format_path("weapons.mode"), "weapons.mode = alternating")
-	assert_eq(near_raider.cannon.gate.mode, PulseCannonGate.Mode.LINKED)
-	_console("set weapons.mode linked")
-	assert_eq(player.cannon.gate.mode, PulseCannonGate.Mode.LINKED)
+	assert_eq(DebugConsole.registry.format_path("weapons.mode"), "weapons.mode = linked")
+	assert_eq(near_raider.cannon.gate.mode, PulseCannonGate.Mode.ALTERNATING)
 	_console("set weapons.mode alternating")
 	assert_eq(player.cannon.gate.mode, PulseCannonGate.Mode.ALTERNATING)
-	assert_eq(far_raider.cannon.gate.mode, PulseCannonGate.Mode.LINKED)
+	assert_eq(far_raider.cannon.gate.mode, PulseCannonGate.Mode.ALTERNATING)
 
 
 func test_freeing_the_other_ships_leaves_the_players_entries_intact() -> void:
