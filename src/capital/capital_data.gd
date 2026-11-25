@@ -10,8 +10,9 @@ const PATH: String = "res://data/capitals/capitals.json"
 ## The weapons' kinds (M10-T03), for a mount's hit points.
 const LOADOUTS_PATH: String = "res://data/capitals/loadouts.json"
 ## The section rules a file without `section_damage` falls back on (D12.5's numbers).
-const SECTION_DEFAULTS: Dictionary = {"subsystem_hull_share": 0.5, "hulk_below": 0.1, "power_stage_at": 0.5,
-		"power_stage_level": 0.5, "mount_reach_m": 10.0, "engine_hit_points": 1500.0, "bay_hit_points": 1500.0}
+const SECTION_DEFAULTS: Dictionary = {"subsystem_hull_share": 0.5, "hulk_below": 0.1, "reactor_shutdown_at": 0.1,
+		"power_stage_at": 0.5, "power_stage_level": 0.5, "mount_reach_m": 10.0, "engine_hit_points": 1500.0,
+		"bay_hit_points": 1500.0}
 ## The hulk rules a file without `hulks` falls back on (D12.7, Q19): when control goes and when the drive is cold after the ship
 ## is disabled, and how long its lights take to die, s.
 const HULK_DEFAULTS: Dictionary = {"control_loss_s": 2.0, "cold_s": 6.0, "lights_fade_s": 3.0}

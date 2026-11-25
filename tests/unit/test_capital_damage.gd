@@ -1,7 +1,8 @@
 extends GutTest
 ## `CapitalDamage` (M10-T08, D12.5, Q53; M10-T65, Q72): points by hull share, only the part a shot hits takes it (a subsystem in
 ## full and the hull half, else hull damage off the section and the total), a lost section takes what it holds and its hits go to
-## the total, a magazine, fuel or reactor section at 0 blows, the bridge at 0 or the hull below a tenth makes a hulk with no power.
+## the total, a magazine, fuel or reactor section at 0 blows (a hulk or not), the bridge at 0, the reactor at a tenth (Q78) or the
+## hull below a tenth makes a hulk with no power.
 ## A synthetic hull of 10 000 points laid along z.
 
 const HULL: float = 10000.0
@@ -185,10 +186,31 @@ func test_the_reactor_is_a_subsystem_that_cuts_power_in_a_stage_and_explodes_at_
 	assert_almost_eq(m.thrust_fraction(), 0.5, 1e-6)
 	assert_eq(_drive, 1, "the drive is refitted")
 	m.hit("reactor", _at(5), 700.0)
-	assert_true(m.is_destroyed, "at 0 it explodes, no shut-down first (Q72)")
+	assert_true(m.is_destroyed, "from 700 to 0 in one hit it explodes, with no hulk first")
 	assert_eq(m.blown, "reactor")
 	assert_eq(m.sections["reactor"].state, CapitalSection.State.DESTROYED)
 	assert_eq(_disabled, 0, "never a hulk on the way")
+
+
+func test_the_reactor_at_a_tenth_shuts_the_ship_down_and_at_zero_still_blows_it() -> void:
+	var m: CapitalDamage = _model()
+	m.hit("reactor", _at(5), 1340.0)
+	assert_false(m.is_disabled, "160 of 1 500 points: still above a tenth")
+	assert_false(m.reactor_shut_down())
+	m.hit("reactor", _at(5), 15.0)
+	assert_true(m.reactor_shut_down(), "145 of 1 500: at or below a tenth (Q78)")
+	assert_true(m.is_disabled, "it powers down into a hulk")
+	assert_eq(_disabled, 1)
+	assert_false(m.has_power())
+	assert_eq(m.fire_rate(), 0.0, "no weapon fires")
+	assert_eq(m.live_bays().size(), 0, "nothing launches or docks")
+	assert_true(m.has_bridge(), "with its bridge standing")
+	assert_false(m.is_destroyed)
+	m.hit("reactor", _at(5), 100.0)
+	assert_eq(_disabled, 1, "once")
+	m.hit("reactor", _at(5), 45.0)
+	assert_true(m.is_destroyed, "the hulk's reactor at 0 still blows it")
+	assert_eq(_blew, ["reactor"] as Array[String])
 
 
 func test_the_bridge_at_zero_makes_a_hulk_with_no_power() -> void:

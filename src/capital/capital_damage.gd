@@ -7,9 +7,10 @@ extends RefCounted
 ##   bridge or reactor section itself) takes the full damage and the ship's total `subsystem_hull_share` of it (no section
 ##   else); any other hit is hull damage, off the section it lands in and the total. A lost section's hits go to the total.
 ## - A section at 0 is lost with what it holds (mounts, engines, bays). A magazine, fuel or reactor section at 0 blows: the ship
-##   is destroyed. Below `power_stage_at` of its points a reactor gives `power_stage_level` of its power.
-## - The bridge at 0, or the total below `hulk_below` of the hull, disables the ship: a hulk with no power (nothing fires,
-##   launches or docks; `CapitalShip` puts its lights out). The Vorlons and Shadows explode instead (`CapitalShip`).
+##   is destroyed, a hulk or not. Below `power_stage_at` of its points a reactor gives `power_stage_level` of its power.
+## - The bridge at 0, a reactor at or below `reactor_shutdown_at` of its points (Q78), or the total below `hulk_below` of the
+##   hull, disables the ship: a hulk with no power (nothing fires, launches or docks; `CapitalShip` puts its lights out). The
+##   Vorlons and Shadows explode instead (`CapitalShip`).
 ##
 ## `CapitalShip` routes its hits here and acts on the signals; the weapons, bays, helm and HUD read the state.
 
@@ -21,7 +22,7 @@ signal mount_lost(mount: String)
 signal part_lost(key: String)
 ## The thrust it can give changed (an engine lost, the reactor's power down a stage).
 signal drive_changed
-## It became a hulk: the bridge lost, the hull below its last tenth, or scuttled (once per life).
+## It became a hulk: the bridge lost, a reactor shut down, the hull below its last tenth, or scuttled (once per life).
 signal disabled
 ## An explosive section blew: the ship is destroyed (once per life).
 signal blew(section: String)
@@ -185,6 +186,16 @@ func power() -> float:
 			continue
 		total += float(_rules["power_stage_level"]) if s.fraction() <= float(_rules["power_stage_at"]) else 1.0
 	return total / float(count) if count > 0 else 1.0
+
+
+## Whether a reactor still standing is at or below `reactor_shutdown_at` of its points (Q78): it powers the ship down.
+func reactor_shut_down() -> bool:
+	var at: float = float(_rules["reactor_shutdown_at"])
+	for name: String in _order:
+		var s: CapitalSection = sections[name]
+		if s.kind == CapitalSection.REACTOR and not s.lost() and s.fraction() <= at:
+			return true
+	return false
 
 
 ## Whether it has power at all: neither a hulk nor destroyed.
@@ -417,11 +428,12 @@ func _blow(s: CapitalSection) -> void:
 	blew.emit(s.name)
 
 
-# A hulk once the bridge is lost or the hull falls below its last tenth; a hull at 0 is destroyed instead (`CapitalShip`).
+# A hulk once the bridge is lost, a reactor shuts down or the hull falls below its last tenth; a hull at 0 is destroyed
+# instead (`CapitalShip`).
 func _check_disabled() -> void:
 	if is_disabled or is_destroyed or hull_hp <= 0.0:
 		return
-	if not has_bridge() or hull_hp < float(_rules["hulk_below"]) * hull_max:
+	if not has_bridge() or reactor_shut_down() or hull_hp < float(_rules["hulk_below"]) * hull_max:
 		_disable()
 
 

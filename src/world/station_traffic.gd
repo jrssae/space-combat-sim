@@ -24,6 +24,8 @@ extends Node
 ##   stay there, and every other civilian (leaving, undocking once clear, freighters) stands off behind the station, away from
 ##   the gate, until the shelter is lifted and they leave. The run's own spawn rule (T28's switch) is untouched.
 ##
+## - **No power** (M10-T65, Q78): nothing starts, and a civilian still on its way in turns away and leaves.
+##
 ## Console: command and provider `traffic`.
 
 const NODE_NAME: StringName = &"StationTraffic"
@@ -466,8 +468,24 @@ func _physics_process(delta: float) -> void:
 		elapsed_s += delta
 		if not sheltering:
 			_keep_flow()
+	var s: Station = station()
+	if s != null and not s.has_power():
+		_turn_away(s)
 	for i: int in range(_own.size() - 1, -1, -1):
 		_step(i)
+
+
+# The station lost power (Q78): every civilian still on its way in, the lane included, gives up and leaves; one already
+# through the doors is inside.
+func _turn_away(s: Station) -> void:
+	for entry: Dictionary in _own:
+		if entry["kind"] != &"dock" or bool(entry.get("through", false)) or not _still_ours(entry):
+			continue
+		var state: StringName = entry["state"]
+		if state == &"transit" or state == &"lane" or state == &"yield":
+			_let_doors_go(entry)
+			var c: Combatant = entry["combatant"]
+			_leave(entry, (c.ship.global_position - s.global_position).normalized())
 
 
 # --- starting ---------------------------------------------------------------------------------------------------
@@ -1025,8 +1043,8 @@ func _stand_off(entry: Dictionary) -> void:
 	entry["state"] = &"shelter"
 
 
-# The way out after a lane: through the gate when there is one, else straight on to where it is let go.
-func _leave(entry: Dictionary) -> void:
+# The way out after a lane: through the gate when there is one, else straight on (or along `away`) to where it is let go.
+func _leave(entry: Dictionary, away: Vector3 = Vector3.ZERO) -> void:
 	var c: Combatant = entry["combatant"]
 	var brain: PilotBrain = entry["brain"]
 	entry["state"] = &"leave"
@@ -1039,7 +1057,7 @@ func _leave(entry: Dictionary) -> void:
 	route.name = "LEAVING"
 	route.pace = Route.PACE_NONE
 	route.cruise_mps = TRANSIT_CRUISE_MPS
-	var heading: Vector3 = -c.ship.global_basis.z
+	var heading: Vector3 = away if away != Vector3.ZERO else -c.ship.global_basis.z
 	route.add(main.world.to_universe(c.ship.global_position + heading * LEAVE_OUT_M))
 	BehaviourFollowPath.attach(brain as AiPilot, route)
 

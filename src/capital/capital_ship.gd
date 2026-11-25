@@ -13,8 +13,8 @@ extends CapitalBody
 ## - **Damage by what is hit** (M10-T08, D12.5; M10-T65, Q72). Its `Damageable` routes every hit to `damage` (`CapitalDamage`):
 ##   a subsystem struck takes it in full and the hull half, any other hit is hull damage. An engine lost or the reactor's power
 ##   down a stage refits the drive (the live engines' nozzles at the power left); a magazine, fuel or reactor section at 0 blows
-##   it up; the bridge at 0 or the hull below a tenth makes it a hulk. `mount_works`, `bay_works` and `damage.fire_rate()` are
-##   what its weapons and launches read (T12 to T17).
+##   it up, a hulk or not; the bridge at 0, the reactor at a tenth (Q78) or the hull below a tenth makes it a hulk.
+##   `mount_works`, `bay_works` and `damage.fire_rate()` are what its weapons and launches read (T12 to T17).
 ## - **Beams** (M10-T12, D12.9): its beam mounts are emitters on the native beam rows (`CapitalBeams`), from its `_ready` until
 ##   it leaves the tree; a lost mount or section, a disabled or destroyed ship stops them.
 ## - **Guns and launchers** (M10-T14, D12.9): its turret, fixed gun and missile mounts are rows of `CapitalGuns`, the same way.

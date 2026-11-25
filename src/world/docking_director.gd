@@ -39,6 +39,8 @@ const PRIORITY: int = -44
 const NOTICE_S: float = 4.0
 ## The route a wingman flies to its stand-off while the player docks.
 const STAND_OFF_ROUTE: String = "STANDING OFF"
+## Why a docking ended when the station lost power (Q78).
+const POWER_LOST: String = "the station lost power"
 ## A fighter through the inner doors waits at most this long for them to shut behind it, seconds.
 const DOORS_WAIT_S: float = 20.0
 ## The docking shots, a pool per stage (M8-T31).
@@ -485,6 +487,8 @@ func _physics_process(delta: float) -> void:
 		for entry: Dictionary in _entries.duplicate():
 			_end(entry, "the station is gone")
 		return
+	if not s.has_power():
+		_abort_unpowered(s)
 	for entry: Dictionary in _entries.duplicate():
 		var visit: DockVisit = entry["visit"]
 		visit.advance(delta)
@@ -753,6 +757,13 @@ func _relaunch(entry: Dictionary) -> bool:
 
 # No Cobra bay took the ship in time: it is let out off the bow instead, at rest, so nobody stays inside for good.
 func _put_outside(entry: Dictionary, s: Station) -> void:
+	_let_out(entry, s)
+	push_warning("DockingDirector: no Cobra bay took %s; released off the bow" % (entry["combatant"] as Combatant).display_name)
+	_finish(entry)
+
+
+# Back in play at the lane's far end, at rest and facing away from the bay.
+func _let_out(entry: Dictionary, s: Station) -> void:
 	var c: Combatant = entry["combatant"]
 	_bring_back(entry)
 	var far: Vector3 = plan.dock_in[0]["at"]
@@ -761,8 +772,28 @@ func _put_outside(entry: Dictionary, s: Station) -> void:
 	c.ship.linear_velocity = main.world.anchored_velocity()
 	c.ship.angular_velocity = Vector3.ZERO
 	c.ship.reset_physics_interpolation()
-	push_warning("DockingDirector: no Cobra bay took %s; released off the bow" % c.display_name)
-	_finish(entry)
+
+
+# The station lost power (Q78): no docking goes on. A ship still flying in is its pilot's again where it is; one through the
+# doors or inside, which no bay can launch now, is let out off the bow. A launch already under way is the launches' to finish.
+func _abort_unpowered(s: Station) -> void:
+	for entry: Dictionary in _entries.duplicate():
+		var visit: DockVisit = entry["visit"]
+		var c: Combatant = entry["combatant"]
+		var alive: bool = is_instance_valid(c) and is_instance_valid(c.ship)
+		match visit.state:
+			DockVisit.State.APPROACH, DockVisit.State.LANE:
+				_end(entry, POWER_LOST)
+			DockVisit.State.INSIDE, DockVisit.State.REPAIR, DockVisit.State.RELAUNCH:
+				if alive and plan != null:
+					_let_out(entry, s)
+				if alive and not visit.is_player and c.driver != null:
+					c.driver.in_passage = false  # its pilot flies it again
+				_end(entry, POWER_LOST)
+			_:
+				continue
+		if visit.is_player:
+			_say("%s: NO POWER, DOCKING ABORTED" % Station.DOCKING_BAY_NAME)
 
 
 # The visit is over with the ship flying again: the player has the controls, a wingman its own pilot and its slot.

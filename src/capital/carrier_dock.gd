@@ -10,6 +10,7 @@ extends Node3D
 ## node only moves the ships it is told to.
 ##
 ## While a ship is launched or drawn in it does not collide with the carrier (it passes within centimetres of its pad).
+## A carrier with no power (a hulk, M10-T65, Q78) takes nobody in: a recall is refused and a fighter on its way back is let go.
 
 ## A fighter left its cradle and flies on its own again.
 signal launched(ship: Ship)
@@ -115,6 +116,12 @@ func is_handling(ship: Ship) -> bool:
 	return ship != null and _held.has(ship.get_instance_id())
 
 
+## Whether the carrier can take fighters in: not a hulk (Q78). The bench's boxes always can.
+func has_power() -> bool:
+	var body := get_parent() as CapitalBody
+	return body == null or not body.is_hulk()
+
+
 ## Puts `ship` (a pooled fighter in play) on a free cradle at once: how a raid's fighters come in docked (Q29). False when
 ## no cradle is free.
 func dock_now(ship: Ship) -> bool:
@@ -152,9 +159,10 @@ func scramble() -> int:
 
 
 ## Calls `ship` back to a free cradle (the one nearest to it): its pilot is held and the dock flies it in. False when it
-## cannot (no free cradle, or the ship is already here).
+## cannot (no free cradle, no power, or the ship is already here).
 func recall(ship: Ship) -> bool:
-	if ship == null or not is_instance_valid(ship) or is_docked(ship) or is_handling(ship) or not ship.is_visible_in_tree():
+	if ship == null or not is_instance_valid(ship) or is_docked(ship) or is_handling(ship) or not ship.is_visible_in_tree() \
+			or not has_power():
 		return false
 	var body: RigidBody3D = carrier()
 	var index: int = cradles.nearest_free(body.global_transform.affine_inverse() * ship.global_position)
@@ -213,6 +221,8 @@ func _physics_process(delta: float) -> void:
 
 # One tick of the ships under the dock's control: the kernel says where each goes, this applies it.
 func _step_rows(delta: float) -> void:
+	if not has_power():
+		abandon()  # the carrier went dark: a docking under way aborts at once (Q78)
 	var keys: PackedInt64Array = _rows.keys()
 	for key: int in keys:  # a ship that died or left play on the way is dropped first
 		var entry: Dictionary = _held.get(key, {})

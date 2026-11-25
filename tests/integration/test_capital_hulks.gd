@@ -3,6 +3,8 @@ extends GutTest
 ## control and thrust in stages and then drifts cold on its last motion, still a target whose sections can blow; its lights go
 ## out while a sister's stay lit; a jump point it held collapses; in the low-attention tier it is a hulk row that ignores its
 ## cruise, and comes back a hulk; a scuttle is silent and makes a hulk; a hulk destroyed blasts as its kind does; the Vorlons never leave a hulk.
+## The reactor at a tenth shuts the ship down into a hulk, and at 0 still blows it (Q78); a Shadow ship blows at the tenth; a
+## carrier gone dark lets a fighter flying back to it go and takes none in.
 
 const TYPE: StringName = &"ea_omega"
 const SPEED_UP: float = 4.0
@@ -250,6 +252,79 @@ func test_a_vorlon_or_shadow_ship_explodes_instead_of_becoming_a_hulk() -> void:
 	assert_eq(deaths, [[cap, HitInfo.CAUSE_NO_HULK]], "it blows at once, a hulk never forms")
 	assert_false(cap.is_hulk())
 	assert_true(cap.hulk_stages.is_live(), "no wind-down began")
+
+
+func test_the_reactor_at_a_tenth_shuts_it_down_into_a_hulk_and_at_zero_still_blows_it() -> void:
+	var cap: CapitalShip = _spawn("EAS Agamemnon", 4000.0)
+	if cap == null:
+		return
+	await wait_physics_frames(3)
+	var deaths: Array = []
+	main.director.capital_destroyed.connect(func(c: CapitalBody, info: HitInfo) -> void: deaths.append([c, info.cause]))
+	assert_true(_run("capital focus %s" % String(cap.name)).ok)
+	var reactor: CapitalSection = cap.damage.sections["reactor"]
+	assert_true(_run("capital damage reactor %.0f" % (reactor.max_hp * 0.85)).ok)
+	assert_false(cap.is_hulk(), "at 15 % it fights on")
+	assert_true(_run("capital damage reactor %.0f" % (reactor.max_hp * 0.06)).ok)
+	assert_true(cap.is_hulk(), "at 9 % the reactor shuts it down (Q78)")
+	assert_eq(cap.hulk_stages.stage, HulkStages.Stage.POWER_LOST, "it winds down as any hulk")
+	assert_true(cap.damage.has_bridge(), "with its bridge standing")
+	assert_false(cap.mount_works("plasma_top_1"), "no power: nothing fires")
+	assert_true(cap.damage.live_bays().is_empty(), "nothing launches or docks")
+	for bay: String in cap.damage.bays:
+		assert_false(cap.set_bay_door(bay, true), "no door moves")
+	assert_true(_run("capital damage reactor %.0f" % reactor.max_hp).ok)
+	await wait_physics_frames(2)
+	assert_eq(cap.damage.blown, "reactor", "the hulk's reactor at 0 still blows it")
+	assert_eq(deaths.size(), 1)
+	assert_eq(deaths[0][0], cap)
+
+
+func test_a_shadow_ship_blows_where_its_reactor_would_shut_it_down() -> void:
+	var cap: CapitalShip = CapitalShip.create(TYPE, &"shadows", "Shadow test", Vector3.ZERO)
+	if cap == null:
+		return
+	main.world.spawn(cap, main.world.to_universe(main.ship.global_position + Vector3(0.0, 0.0, -6000.0)), Basis.IDENTITY)
+	await wait_physics_frames(3)
+	var deaths: Array = []
+	main.director.capital_destroyed.connect(func(c: CapitalBody, info: HitInfo) -> void: deaths.append([c, info.cause]))
+	assert_true(_run("capital focus %s" % String(cap.name)).ok)
+	assert_true(_run("capital damage reactor %.0f" % (cap.damage.sections["reactor"].max_hp * 0.91)).ok)
+	await wait_physics_frames(3)
+	assert_eq(deaths, [[cap, HitInfo.CAUSE_NO_HULK]], "it blows at the tenth, a hulk never forms (Q57)")
+	assert_false(cap.is_hulk())
+
+
+func test_a_carrier_that_loses_power_lets_a_returning_fighter_go_and_takes_none_in() -> void:
+	var cap: CapitalShip = _spawn("EAS Agamemnon", 4000.0)
+	if cap == null:
+		return
+	var dock := CarrierDock.new()
+	dock.setup(CarrierCradles.from_hardpoints([{"name": "test", "position": [0.0, 80.0, 0.0], "forward": [0.0, 0.0, -1.0],
+			"up": [0.0, 1.0, 0.0]}]))
+	cap.add_child(dock)
+	main.ensure_free(ShipPool.ALLY_TYPE, 1)
+	var fighter: Combatant = main.ships.acquire("ALPHA 9", main.world.to_universe(cap.global_position + cap.global_basis.y * 1500.0),
+			Basis.IDENTITY, main.world.rest_velocity(), null, ShipPool.ALLY_TYPE)
+	assert_not_null(fighter)
+	if fighter == null:
+		return
+	await wait_physics_frames(3)
+	var gave_up: Array[Ship] = []
+	dock.gave_up.connect(func(ship: Ship) -> void: gave_up.append(ship))
+	var exempt: bool = fighter.ship.tier_exempt
+	assert_true(dock.recall(fighter.ship), "called back while the carrier has power")
+	await wait_physics_frames(3)
+	assert_true(dock.is_handling(fighter.ship))
+	_disable(cap)
+	await wait_physics_frames(2)
+	assert_false(dock.is_handling(fighter.ship), "the docking under way is aborted at once (Q78)")
+	assert_eq(gave_up, [fighter.ship] as Array[Ship])
+	assert_eq(dock.busy_count(), 0)
+	assert_eq(dock.free_count(), 1, "its cradle free again")
+	assert_true(fighter.driver == null or not fighter.driver.in_passage, "its pilot flies it again")
+	assert_eq(fighter.ship.tier_exempt, exempt, "as it was before")
+	assert_false(dock.recall(fighter.ship), "a hulk takes nobody in")
 
 
 func test_the_console_reads_the_wind_down() -> void:

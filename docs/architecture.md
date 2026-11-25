@@ -5908,9 +5908,10 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / set_surface_owner / cl
   damage and the hull half; any other hit lowers its section and the hull; a lost section's hits go to the hull. The reactor at
   0 or the hull at 0 destroys the station (`Station.station_destroyed`; the destruction director draws and sets off its blast,
   `station_damage.babylon5.blast`; the wreck stays, no break-up yet), and a mission that needs it (`MissionApi.needs_station`,
-  default true) ends lost ("station destroyed"). The command section at 0 or the hull below 10 % leaves a hulk. With no power
-  (`Station.has_power`) its grid stays off (`StationGrid.set_powered`), its lights, bay and grid lamps and hull glow go out, and
-  launches, docking and civilian traffic refuse. No mission flag protects it. Section kinds and the blast row are in
+  default true) ends lost ("station destroyed"). The command section at 0, the reactor at or below 10 % (Q78) or the hull below
+  10 % leaves a hulk. With no power (`Station.has_power`) its grid stays off (`StationGrid.set_powered`), its lights, bay and grid
+  lamps and hull glow go out, and launches, docking and civilian traffic refuse; a docking under way aborts at once (Q78: a ship
+  on its way in is its pilot's again, one inside is let out off the bow, a civilian coming in turns away). No mission flag protects it. Section kinds and the blast row are in
   `data/capitals/capitals.json` `station_damage`.
 - **Marker.** `BABYLON 5`, `earth_alliance`, kind `PROP`, broadcasting to 1 000 km (the AI hears it, M3-T17).
 - **Cost.** Jolt's physics stage with a fighter in the tunnel, along the spine and along the drum: +11 to +31 us a tick on a quiet
@@ -7073,10 +7074,11 @@ src/capital/capital_hulk_lights.gd CapitalHulkLights: one disabled ship's own gl
   own points: `mount_hit_points`, `engine_hit_points`, `bay_hit_points`), or the bridge or reactor section itself, takes the full
   damage and the hull's total `subsystem_hull_share` (half) of it; any other hit lowers the section it lands in and the total; a
   lost section's hits go to the total alone. A section at 0 is lost (`disabled`) with what its hardpoints name. A magazine, fuel
-  or reactor section at 0 blows (`destroyed`, no shut-down stage), and the hull goes with it, so the destruction director takes
-  the death; below half its points a reactor gives half power. The bridge at 0 or the total below `hulk_below` (10 %) makes a
-  hulk with no power (`has_power`: nothing fires, launches or docks; its lights and bay lamps go out; §22.5), and a Vorlon or
-  Shadow hull explodes instead (`CapitalData.never_hulk`). The rules are `section_damage` in the same file; a station takes
+  or reactor section at 0 blows (`destroyed`, a hulk or not), and the hull goes with it, so the destruction director takes
+  the death; below half its points a reactor gives half power. The bridge at 0, a reactor at or below `reactor_shutdown_at`
+  (10 %, Q78: its shut-down) or the total below `hulk_below` (10 %) makes a hulk with no power (`has_power`: nothing fires,
+  launches or docks, and a docking under way aborts: `CarrierDock` lets a returning fighter go; its lights and bay lamps go out;
+  §22.5), and a Vorlon or Shadow hull explodes instead (`CapitalData.never_hulk`). The rules are `section_damage` in the same file; a station takes
   the same (`StationDamage`, §20.1 "Babylon 5's damage"). Effects: an engine lost or a power stage refits the drive
   (`CapitalPropulsion.live_layout`: the live engines' nozzles at their thrust as built, an engine left alone on one side listed
   on both, scaled by the power); `mount_works`, `bay_works`, `damage.fire_rate()`, `damage.is_disabled` (the one source of
@@ -7226,7 +7228,7 @@ src/ai/tier_director.gd             a disabled capital demoted as a hulk row; ma
   drifts on its last motion and tumble with no force, the pull aside (it stays in the flight step with an empty command, so the
   core's pull still acts; zero damping as every body). Its brain is released: `set_course` is ignored from the loss.
 - **Still in play.** It stays `Targetable` (kind capital) and its sections take hits as before, so a magazine or fuel section at
-  0, or the reactor's overload, blows it up later through the destruction director (D12.8's break-up is T11's). A jump point it
+  0, or its reactor at 0, blows it up later through the destruction director (D12.8's break-up is T11's). A jump point it
   held collapses (`JumpCapability.is_disabled` reads `CapitalBody.is_hulk`; M6-T23's rule).
 - **The lights.** On the loss its hull's and rotors' glowing surfaces (a `StandardMaterial3D` with emission, a shader with
   `emission_energy` or the sheen's `glow_energy`) get copies of their materials as surface overrides, and `_process` sets their

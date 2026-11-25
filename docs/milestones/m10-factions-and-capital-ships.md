@@ -254,8 +254,8 @@ Out:
 - **Rules (T03, Q53; T65, Q72).** No armour. Sections share the hull by a template per role (docs/assets-capital.md, "Weapons and loadouts (T03)").
   Only the part a shot hits takes its damage: a subsystem (a mount, an engine, a bay, the bridge or reactor section) takes the
   full damage and the hull half; any other hit lowers its section and the hull; a lost section's hits go to the hull. A
-  magazine, fuel or reactor section at 0 blows (destroyed). The bridge at 0 or the hull below 10 % makes a hulk with no power
-  (Vorlon and Shadow ships explode instead). Mounts have their own points (light 300 to beam emitter 2 500), engines and
+  magazine, fuel or reactor section at 0 blows (destroyed), a hulk or not. The bridge at 0, the reactor at or below 10 % (Q78)
+  or the hull below 10 % makes a hulk with no power (Vorlon and Shadow ships explode instead); a docking with it aborts. Mounts have their own points (light 300 to beam emitter 2 500), engines and
   bays 1 500 each (placeholders); each dies with its section. Stations take the same (Babylon 5 included, always
   destructible). *(Before T65: a reactor shut down first and blew after another 50 %, a lost bridge left last orders at half
   rate of fire, and a lost section passed half on to the nearest live one.)*
@@ -684,6 +684,18 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   27 passed, 4 pending (the dogfight and sandbox reviews, B10 and B1 until T13), 3 fixed and rerun (grid balance and the fought
   raid: 15 passed, 1 pending). Screenshots: `references/screenshots/M10-T65 kind targeting/` (menu kinds, box on turrets,
   engines, missiles destroyed, bridge).
+- **Q78 (2026-11-25, awaiting the maintainer).** *Reactor shut-down:* a standing reactor at or below `reactor_shutdown_at` (0.1,
+  `section_damage`) makes a hulk through the one `disabled` source (`CapitalDamage.reactor_shut_down`, `StationDamage` for
+  Babylon 5's reactor section); at 0 it still blows, hulk or not; Vorlon and Shadow hulls blow at the tenth (their `never_hulk`).
+  *Grid raid bar:* `test_station_grid_balance` asserts each seed's worst section shows damage (`WORST_SECTION_MIN` 0, was 3 %,
+  pending) until the later rebalance; this run 0.1 to 3 %. *Docking on power loss:* the station's dockings abort at once
+  (`DockingDirector._abort_unpowered`, reason "the station lost power", HUD line NO POWER, DOCKING ABORTED): a ship on its way in
+  is its pilot's again where it is; one inside is let out off the bow with its own pilot (`in_passage` cleared), unrepaired; a
+  launch already under way finishes. A civilian coming in turns away and leaves away from the station (`StationTraffic._turn_away`).
+  A `CarrierDock` on a hulk refuses recalls and lets every returning fighter go (no EA carrier docks yet: T17). Tests (staged
+  copy, GUT_SLOW): compile check 1 118 scripts clean; 66 capital, station, docking, hulk, carrier, launch and tutorial files 517
+  tests, 510 passed, 7 pending (balance-gated), 0 failed; balance (GUT_BALANCE): `test_station_grid_balance` 3/3 and the
+  tutorial's fought raid 1/1.
 
 ### M10-T02 Factions as data
 

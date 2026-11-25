@@ -4,7 +4,8 @@ extends GutTest
 ## mouth and the inner doors; inside it leaves play, is repaired by a clock set from its damage and launches again from a Cobra
 ## bay with the controls back; a ship that comes in fast is slowed first; the skip jumps a stage ahead; a cancel gives the ship
 ## back; a rebase moves nothing; a wingman docks on the order and by itself below the hull threshold, keeps its slot while
-## away and rejoins. Flown with the physics rate and the time scale raised together.
+## away and rejoins; a station that loses power aborts every docking at once, inside or on the way in (M10-T65, Q78). Flown
+## with the physics rate and the time scale raised together.
 
 const SCENARIO: String = "res://data/scenarios/station_dock.json"
 const SPEED_UP: float = 8.0
@@ -385,6 +386,86 @@ func test_a_rebase_during_docking_moves_nothing() -> void:
 	assert_true(ok, "and it docks all the same (%s)" % main.docking.describe())
 	assert_false(main.docking.player_visit().skipped)
 	assert_eq(rams, 0)
+
+
+func test_a_station_that_loses_power_aborts_every_docking_at_once() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var ship: Ship = main.ship
+	_damage(main.combatant, 0.5)
+	# The player on the autopilot's way in: the command section lost leaves a hulk, and the pilot has the ship at once (Q78).
+	assert_true(_run("dock player").ok)
+	await _ticks(30)
+	assert_true(main.controls_locked())
+	station.damage_section(station.sections.index_of("command"), StationSections.SECTION_HEALTH)
+	assert_false(station.has_power())
+	await _ticks(2)
+	assert_null(main.docking.player_visit(), "the docking is aborted")
+	assert_eq(main.docking.last_visit.state, DockVisit.State.CANCELLED)
+	assert_eq(main.docking.last_visit.cancel_reason, DockingDirector.POWER_LOST)
+	assert_string_contains(main.docking.last_notice, "NO POWER")
+	assert_false(main.controls_locked(), "the controls are back")
+	assert_false(main.camera_rig.is_playing_shot(), "and the cinematic ends")
+	assert_true(ship.visible)
+	assert_false(ship.inside_station)
+	assert_false(ship.clamped)
+	assert_ne(ship.collision_layer, 0)
+	assert_string_contains(main.docking.player_refusal(), "no power", "nor can it start again")
+	station.heal()
+	await _ticks(2)
+	# A wingman already inside under repair: the reactor at a tenth shuts the station down, and the wingman is let out off the
+	# bow, flown by its own pilot again.
+	var wing: Wing = main.wings.player_wing()
+	var two: Combatant = _ship("ALPHA 2")
+	var pilot_two: PilotBrain = two.driver.brain
+	_damage(two, 0.7)
+	assert_true(_run("dock wing ALPHA 2").ok)
+	_fast()
+	var inside: bool = await _until(func() -> bool:
+		var visit: DockVisit = main.docking.visit_of("ALPHA 2")
+		return visit != null and visit.state == DockVisit.State.REPAIR, 300.0)
+	assert_true(inside, "ALPHA 2 docked (%s)" % main.docking.describe())
+	if not inside:
+		return
+	assert_false(two.ship.visible)
+	station.damage_section(station.sections.index_of("reactor"), StationSections.SECTION_HEALTH * 0.91)
+	assert_false(station.has_power(), "the reactor at 9 %: no power")
+	assert_false(station.is_destroyed())
+	await _ticks(2)
+	assert_null(main.docking.visit_of("ALPHA 2"), "its docking is aborted too")
+	assert_eq(main.docking.last_visit.cancel_reason, DockingDirector.POWER_LOST)
+	assert_true(two.ship.visible, "back in play")
+	assert_false(two.ship.inside_station)
+	assert_false(two.ship.clamped)
+	assert_false(two.ship.custom_integrator)
+	assert_ne(two.ship.collision_layer, 0)
+	assert_gt(main.docking.plan.mouth.distance_to(_local(two.ship)), 100.0, "outside, off the bow")
+	assert_eq(two.driver.brain, pilot_two, "its own pilot again")
+	assert_false(two.driver.in_passage, "and flying it")
+	assert_false(wing.is_away(two))
+	assert_lt(two.damageable.hull.fraction(), 1.0, "not repaired")
+	assert_eq(main.docking.visits().size(), 0)
+
+
+func test_a_civilian_on_its_way_in_turns_away_when_the_station_loses_power() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	_fast()
+	assert_true(_run("traffic dock").ok)
+	var civilian: Combatant = main.traffic.last_ship()
+	assert_true(await _until(func() -> bool: return main.traffic.state_of(civilian) == &"lane", 60.0), "the civilian has the lane")
+	var along: float = _on_lane(civilian.ship).x
+	station.damage_section(station.sections.index_of("command"), StationSections.SECTION_HEALTH)
+	await _ticks(2)
+	assert_eq(main.traffic.state_of(civilian), &"leave", "it gives up and leaves (Q78)")
+	assert_false(main.traffic.bay_busy(), "the bay is nobody's")
+	var away: bool = await _until(func() -> bool: return _on_lane(civilian.ship).x < along - 200.0, 120.0)
+	assert_true(away, "once it has turned it flies away from the mouth (%.0f m along the lane, %.0f m when the power went)" % [
+			_on_lane(civilian.ship).x, along])
+	assert_eq(main.traffic.state_of(civilian), &"leave")
+	assert_eq(main.traffic.docked_count, 0, "it never docks")
 
 
 func test_wingmen_dock_on_the_order_and_below_the_hull_threshold_and_rejoin() -> void:

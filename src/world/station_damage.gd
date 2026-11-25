@@ -6,8 +6,9 @@ extends RefCounted
 ## - A grid mount within reach of the hit takes the full damage and the hull's total `subsystem_hull_share` of it (its section
 ##   none); a hit in the command (bridge) or reactor section is a hit on that subsystem, in full, with the same share
 ##   off the total; any other hit is hull damage, off its section and the total; a lost section's hits go to the total.
-## - The reactor at 0, or the total at 0, destroys the station; the command section at 0 or the total below `hulk_below` of its
-##   points leaves it a hulk with no power (`Station` puts out its lights and stops its grid, launches and docking).
+## - The reactor at 0, or the total at 0, destroys the station, a hulk or not; the command section at 0, the reactor at or below
+##   `reactor_shutdown_at` of its points (Q78) or the total below `hulk_below` of its points leaves it a hulk with no power
+##   (`Station` puts out its lights and stops its grid, launches and docking, and docking under way aborts).
 ## - The station is always destructible: no mission flag protects it (a mission that needs it fails when it is lost).
 
 ## It became a hulk (once per life).
@@ -33,6 +34,7 @@ var wear_mount: Callable = Callable()
 
 var _share: float = 0.5
 var _hulk_below: float = 0.1
+var _shutdown_at: float = 0.1
 
 
 ## The rules over `p_sections` and `p_mounts` (null: no grid), the sections named in `section_kinds` (name -> kind) being the
@@ -43,6 +45,7 @@ static func make(p_sections: StationSections, p_mounts: GridMountHealth, section
 	out.mounts = p_mounts
 	out._share = CapitalData.section_rule("subsystem_hull_share")
 	out._hulk_below = CapitalData.section_rule("hulk_below")
+	out._shutdown_at = CapitalData.section_rule("reactor_shutdown_at")
 	var total: float = 0.0
 	for i: int in p_sections.count():
 		out.kinds.append(str(section_kinds.get(String(p_sections.sections[i]["name"]), "structure")))
@@ -130,11 +133,13 @@ func _wear(mount: int, amount: float) -> void:
 
 
 func _wear_section(index: int, amount: float) -> void:
-	if not sections.damage(index, amount):
-		return
+	var lost: bool = sections.damage(index, amount)
 	if kinds[index] == REACTOR:
-		_destroy(String(sections.sections[index]["name"]))
-	elif kinds[index] == BRIDGE and not is_disabled:
+		if lost:
+			_destroy(String(sections.sections[index]["name"]))
+		elif sections.fraction(index) <= _shutdown_at:
+			_disable()  # the reactor shuts down (Q78)
+	elif kinds[index] == BRIDGE and lost:
 		_disable()
 
 

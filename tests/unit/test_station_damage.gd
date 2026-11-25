@@ -1,8 +1,8 @@
 extends GutTest
 ## `StationDamage` (M10-T65, Q72), pure: the capitals' rules on a station's own ledgers. A grid mount hit takes it in full and the
 ## hull half, the command (bridge) and reactor sections are subsystems too, any other hit is hull damage off its section and the
-## total, a lost section's hits go to the total; the reactor or the hull at 0 destroys it, the command at 0 or the hull below a
-## tenth leaves a hulk. Three sections of 1 000 points side by side on the frame, one light gun on the cargo section.
+## total, a lost section's hits go to the total; the reactor or the hull at 0 destroys it (a hulk or not), the command at 0, the
+## reactor at a tenth (Q78) or the hull below a tenth leaves a hulk. Three sections of 1 000 points side by side on the frame, one light gun on the cargo section.
 
 var _disabled: int = 0
 var _destroyed: Array[String] = []
@@ -66,11 +66,28 @@ func test_the_command_section_is_its_bridge_and_at_zero_a_hulk() -> void:
 func test_the_reactor_at_zero_destroys_it() -> void:
 	var d: StationDamage = _model()
 	d.hit("frame", Vector3(250.0, 0.0, 0.0), 1000.0)
-	assert_true(d.is_destroyed, "no shut-down first")
+	assert_true(d.is_destroyed, "from whole to 0 in one hit: destroyed, no hulk first")
+	assert_eq(_disabled, 0)
 	assert_eq(d.blown, "reactor")
 	assert_eq(_destroyed, ["reactor"] as Array[String])
 	assert_eq(d.hull_hp, 0.0)
 	assert_eq(d.hit("frame", Vector3(110.0, 0.0, 0.0), 10.0), 0.0, "a wreck takes nothing more")
+
+
+func test_the_reactor_at_a_tenth_leaves_a_hulk_and_at_zero_still_destroys_it() -> void:
+	var d: StationDamage = _model()
+	d.hit_section(2, 890.0)
+	assert_false(d.is_disabled, "110 of 1 000 points: still above a tenth")
+	d.hit_section(2, 15.0)
+	assert_true(d.is_disabled, "95 of 1 000: the reactor shuts down (Q78)")
+	assert_false(d.has_power())
+	assert_eq(_disabled, 1)
+	assert_false(d.is_destroyed)
+	d.hit_section(2, 50.0)
+	assert_eq(_disabled, 1, "once")
+	d.hit_section(2, 45.0)
+	assert_true(d.is_destroyed, "the hulk's reactor at 0 still destroys it")
+	assert_eq(_destroyed, ["reactor"] as Array[String])
 
 
 func test_the_hull_below_a_tenth_is_a_hulk_and_at_zero_destroyed() -> void:

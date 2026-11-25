@@ -31,9 +31,10 @@
   }
  },
  "section_damage": {
-  "_doc": "M10-T08 (D12.5, Q53), M10-T65 (Q72): how a capital or a station takes damage. Only the part a shot hits takes it: a subsystem (a weapon mount, an engine or a bay within reach of the hit, the bridge or reactor section) takes the full damage and the hull's total subsystem_hull_share of it (no section takes any); any other hit lowers the section it lands in and the hull's total; a lost section's hits go to the total. A magazine, fuel or reactor section at 0 blows the ship up; the bridge at 0 or the hull below hulk_below of its points makes a hulk (no power). power_stage_at and power_stage_level: below this share of its points a reactor gives this share of power; mount_reach_m: a hit this close to a live mount (or within its barrel's length), an engine's nozzle (plus its radius) or a bay's mouth (plus half its diagonal) lands on it; engine_hit_points and bay_hit_points: an engine's and a bay's own points (placeholders).",
+  "_doc": "M10-T08 (D12.5, Q53), M10-T65 (Q72): how a capital or a station takes damage. Only the part a shot hits takes it: a subsystem (a weapon mount, an engine or a bay within reach of the hit, the bridge or reactor section) takes the full damage and the hull's total subsystem_hull_share of it (no section takes any); any other hit lowers the section it lands in and the hull's total; a lost section's hits go to the total. A magazine, fuel or reactor section at 0 blows the ship up, a hulk or not; the bridge at 0, a reactor at or below reactor_shutdown_at of its points (Q78) or the hull below hulk_below of its points makes a hulk (no power). power_stage_at and power_stage_level: below this share of its points a reactor gives this share of power; mount_reach_m: a hit this close to a live mount (or within its barrel's length), an engine's nozzle (plus its radius) or a bay's mouth (plus half its diagonal) lands on it; engine_hit_points and bay_hit_points: an engine's and a bay's own points (placeholders).",
   "subsystem_hull_share": 0.5,
   "hulk_below": 0.1,
+  "reactor_shutdown_at": 0.1,
   "power_stage_at": 0.5,
   "power_stage_level": 0.5,
   "mount_reach_m": 10.0,

@@ -7,7 +7,7 @@ extends GutTest
 ## - **The raid**: 12 raiders on the raider profile dive from a loose box 0.9 to 1.7 km up and forward of a point 450 m over the
 ##   spine's first light turret, ordered to attack the station itself (M7-T10: they aim at the grid's mounts, go round the hull
 ##   and none may ram it or hang beside it). Their hits set the grid weapons free; the grid answers. Tuned (maintainer, after
-##   T07) so the grid takes 90 to 120 s on the three seeds' mean, each seed 75 to 140 s, and the hull shows damage.
+##   T07) so the grid takes 90 to 120 s on the three seeds' mean, each seed 75 to 140 s, and a section shows damage (Q78's bar).
 ## - **The capital**: a cruiser stand-in holding station 2.2 to 2.7 km off the bow tower (placed by the seed). The stand-in's own director picks fighters
 ##   only, so this file fires its weapons at the bow (its eight guns' bolts once a second each, its two beams every 2 s, a
 ##   missile every 3 s): the interceptors' pulses take its bolts and missiles, its beams get through (D75).
@@ -20,6 +20,10 @@ const RAID_LIMIT_S: float = 180.0
 ## may stray further than the mean.
 const RAID_MEAN_BAND_S: Vector2 = Vector2(90.0, 120.0)
 const RAID_SEED_BAND_S: Vector2 = Vector2(75.0, 140.0)
+## The least a raid's worst-hit section must lose, as a share of its points. The raiders' bolts mostly land on the grid's mounts,
+## which since Q72 take them alone, so the sections show little (0.1 to 3 %): Q78 lowered the bar from 3 % to any mark at all
+## until the later rebalance.
+const WORST_SECTION_MIN: float = 0.0
 const CAPITAL_LIMIT_S: float = 300.0
 const SEEDS: Array[int] = [1, 2, 3]
 const RAIDER: StringName = &"raider_fighter"
@@ -68,7 +72,6 @@ func after_each() -> void:
 func test_the_grid_alone_beats_twelve_raiders() -> void:
 	var lines := PackedStringArray()
 	var total_s: float = 0.0
-	var unmarked := PackedStringArray()
 	for seed_value: int in SEEDS:
 		var f: Dictionary = await _raid(seed_value, false)
 		if f.is_empty():
@@ -80,17 +83,14 @@ func test_the_grid_alone_beats_twelve_raiders() -> void:
 		assert_between(float(f["time_s"]), RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y, "seed %d: the raid lasts %.0f to %.0f s" % [
 				seed_value, RAID_SEED_BAND_S.x, RAID_SEED_BAND_S.y])
 		total_s += float(f["time_s"])
-		if float(f["worst_section"]) <= 0.03:
-			unmarked.append("seed %d: worst section %.1f %%" % [seed_value, 100.0 * float(f["worst_section"])])
+		assert_gt(float(f["worst_section"]), WORST_SECTION_MIN, ("seed %d: a section shows the raid's damage (%.1f %%), Q78's "
+				+ "lowered bar until a later rebalance revisits it") % [seed_value, 100.0 * float(f["worst_section"])])
 		assert_eq(int(f["rammed"]), 0, "seed %d: no raider rams the station" % seed_value)
 		assert_lt(float(f["hanging"]), HANG_SHARE_MAX, "seed %d: the raiders do not hang beside the hull" % seed_value)
 	var mean_s: float = total_s / float(SEEDS.size())
 	assert_between(mean_s, RAID_MEAN_BAND_S.x, RAID_MEAN_BAND_S.y, "the seeds' mean lasts %.0f to %.0f s" % [RAID_MEAN_BAND_S.x,
 			RAID_MEAN_BAND_S.y])
 	gut.p("BALANCE grid vs %d raiders (mean %.1f s):\n    %s" % [RAID_SIZE, mean_s, "\n    ".join(lines)])
-	# The raiders' bolts mostly land on the grid's mounts, which since Q72 take them alone, so the sections show little.
-	if not unmarked.is_empty():
-		pending("visible section damage under review by the maintainer (M10-T65, Q72): %s" % ", ".join(unmarked))
 
 
 func test_the_grid_alone_beats_one_capital() -> void:
