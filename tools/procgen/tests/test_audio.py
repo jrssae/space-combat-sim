@@ -153,6 +153,23 @@ class FilterTests(unittest.TestCase):
         both = np.concatenate([noise, noise])
         self.assertLessEqual(abs(float(both[n] - both[n - 1])), float(np.max(np.abs(np.diff(noise)))) + 1e-12)
 
+    def test_spectral_noise_follows_its_table_in_frequency_and_time(self) -> None:
+        # Two bands, two moments: low loud then quiet, high quiet then loud (M10-T87).
+        levels = np.array([[0.0, -30.0], [-30.0, 0.0]])
+        noise = audio.spectral_noise(np.random.default_rng(4), 1.0, (300.0, 6000.0), (0.0, 1.0), levels)
+        self.assertEqual(len(noise), audio.SAMPLE_RATE)
+
+        def band_db(part: np.ndarray, low: float, high: float) -> float:
+            power = np.abs(np.fft.rfft(part)) ** 2
+            freqs = np.fft.rfftfreq(len(part), 1.0 / audio.SAMPLE_RATE)
+            return 10.0 * float(np.log10(power[(freqs >= low) & (freqs < high)].mean()))  # per hertz
+
+        start, end = noise[: _at(0.15)], noise[-_at(0.15) :]
+        self.assertGreater(band_db(start, 200.0, 450.0) - band_db(start, 4000.0, 9000.0), 15.0, "low first")
+        self.assertGreater(band_db(end, 4000.0, 9000.0) - band_db(end, 200.0, 450.0), 15.0, "high last")
+        same = audio.spectral_noise(np.random.default_rng(4), 1.0, (300.0, 6000.0), (0.0, 1.0), levels)
+        np.testing.assert_array_equal(noise, same)
+
 
 class LevelAndFileTests(unittest.TestCase):
     def test_peak_dbfs_and_normalise(self) -> None:

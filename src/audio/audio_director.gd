@@ -28,7 +28,7 @@ extends Node3D
 ## gains and apply the moment they change.
 ## The Dummy audio driver of a headless run plays silently, and nothing here errors without sound files.
 ##
-## Console: provider `audio` (`sounds`, `voices_active`, `volume`, `engine_voices`, `engine_sounding`, `engine_frame_work`,
+## Console: provider `audio` (`sounds`, `voices_active`, `tails_fading`, `volume`, `engine_voices`, `engine_sounding`, `engine_frame_work`,
 ## `engine_rank_work`) and
 ## `sfx <name>` (play at the player; a burst plays once).
 
@@ -52,6 +52,8 @@ var player: Combatant = null
 var _streams: Dictionary = {}  # StringName -> AudioStreamWAV
 var _voices: Array[AudioStreamPlayer3D] = []
 var _voice_serial: Array[int] = []
+var _voice_level_db := PackedFloat32Array()  # each voice's level before a tail fade
+var _tails := ShotTails.new(VOICES)
 var _serial: int = 0
 var _ui_voices: Array[AudioStreamPlayer] = []
 var _warn_in_s: float = 0.0
@@ -87,6 +89,7 @@ func _ready() -> void:
 		add_child(voice)
 		_voices.append(voice)
 		_voice_serial.append(0)
+		_voice_level_db.append(0.0)
 	for i: int in UI_VOICES:
 		var ui := AudioStreamPlayer.new()
 		ui.name = "UiVoice%d" % i
@@ -104,6 +107,7 @@ func _ready() -> void:
 		&"engine_frame_work": {"get": func() -> int: return engine_frame_work,
 				"doc": "Engine voices and voiced ships touched in the last frame"},
 		&"shots_culled": {"get": func() -> int: return shots_culled, "doc": "Gun shots skipped as beyond earshot"},
+		&"tails_fading": {"get": tails_fading, "doc": "Voices fading out as a ship's cut-off shot (T87)"},
 		&"master_peak_db": {"get": bus_peak_db.bind(AudioBuses.MASTER),
 				"doc": "Master bus peak now, dBFS (the limiter holds it under %.1f)" % SoundMix.LIMITER_CEILING_DB},
 		&"sfx_peak_db": {"get": bus_peak_db.bind(AudioBuses.SFX), "doc": "SFX bus peak now, dBFS (above 0: the limiter is working)"},
@@ -130,6 +134,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_tails(delta)
 	_update_engines(delta)
 	_update_warning(delta)
 
@@ -172,8 +177,9 @@ func bus_peak_db(bus: StringName) -> float:
 
 
 ## Plays `sound_name` at the World-local `at`, at its `SoundMix` level plus `volume_db`. With every voice busy the oldest is
-## stolen. Returns the voice, or null when the sound is not loaded.
-func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: float = 1.0) -> AudioStreamPlayer3D:
+## stolen. A gun's shot names its ship (`owner`, an instance id): that ship's previous shot then fades out (`ShotTails`).
+## Returns the voice, or null when the sound is not loaded.
+func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: float = 1.0, owner: int = 0) -> AudioStreamPlayer3D:
 	if not _streams.has(sound_name):
 		return null
 	var index: int = _free_voice()
@@ -183,22 +189,40 @@ func play(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: fl
 	voice.stream = _streams[sound_name]
 	voice.global_position = at
 	voice.reset_physics_interpolation()  # no blend from its last sound or a rebase
-	voice.volume_db = SoundMix.level_db(sound_name) + volume_db
+	_voice_level_db[index] = SoundMix.level_db(sound_name) + volume_db
+	voice.volume_db = _voice_level_db[index]
 	voice.pitch_scale = pitch
 	voice.play()
+	_tails.claim(index, owner)
 	_played[sound_name] = times_played(sound_name) + 1
 	return voice
 
 
+## Voices fading out as a ship's cut-off shot (tests, console).
+func tails_fading() -> int:
+	return _tails.fading_count()
+
+
+# Lowers the cut-off shots' tails and stops those whose fade ended.
+func _update_tails(delta: float) -> void:
+	if _tails.fading_count() == 0:
+		return
+	for index: int in _tails.step(delta):
+		_voices[index].stop()
+	for index: int in VOICES:
+		if _tails.is_fading(index):
+			_voices[index].volume_db = _voice_level_db[index] + _tails.gain_db(index)
+
+
 ## Plays a gun's shot like `play`, unless it is beyond `ShotCull.SOUND_RANGE_M` of the listener: a shot that far cannot be heard,
 ## so it takes no voice (M5-T37, review L6). Returns the voice, or null when culled or not loaded.
-func play_shot(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: float = 1.0) -> AudioStreamPlayer3D:
+func play_shot(sound_name: StringName, at: Vector3, volume_db: float = 0.0, pitch: float = 1.0, owner: int = 0) -> AudioStreamPlayer3D:
 	var from: Variant = ShotCull.listener(self)
 	if from != null and not ShotCull.within(from as Vector3, at, ShotCull.SOUND_RANGE_M):
 		shots_culled += 1
 		return null
 	shots_played += 1
-	return play(sound_name, at, volume_db, pitch)
+	return play(sound_name, at, volume_db, pitch, owner)
 
 
 ## Plays `sound_name` in 2D (menu sounds, warnings, the target blip) on the bus `AudioBuses.bus_of_sound` gives it: `UI` for a
@@ -331,8 +355,9 @@ func watch_ship(combatant: Combatant) -> void:
 	if combatant.cannon != null:
 		var shot: StringName = &"pulse_fire" if combatant.faction == Factions.EARTH_ALLIANCE else &"raider_fire"
 		# `shot_fired` sounds on both bolt paths; `projectile_fired` is silent for the AI cannons' rows (M4-T35).
+		var owner: int = combatant.get_instance_id()
 		combatant.cannon.shot_fired.connect(func(_index: int, at: Vector3) -> void:
-			play_shot(shot, at, 0.0, randf_range(0.96, 1.04)))
+			play_shot(shot, at, 0.0, randf_range(0.96, 1.04), owner))
 	if combatant.ship.is_node_ready():
 		_watch_turrets(combatant)
 	else:

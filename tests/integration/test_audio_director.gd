@@ -205,3 +205,30 @@ func test_the_console_surface() -> void:
 	assert_eq(Settings.get_value(&"sfx_volume"), 0.25)
 	assert_false(registry.execute("sfx nonsense")[0].ok)
 	assert_eq(registry.format_path("audio.sounds").count("pulse_fire"), 1)
+
+
+func test_a_ships_next_shot_fades_its_last_one_out() -> void:
+	var owner: int = 7
+	var first: AudioStreamPlayer3D = main.audio.play_shot(&"main_burst", Vector3(0.0, 0.0, -50.0), 0.0, 1.0, owner)  # 4 s: still ringing
+	var other: AudioStreamPlayer3D = main.audio.play_shot(&"main_burst", Vector3(0.0, 0.0, -60.0), 0.0, 1.0, owner + 1)
+	var second: AudioStreamPlayer3D = main.audio.play_shot(&"main_burst", Vector3(0.0, 0.0, -50.0), 0.0, 1.0, owner)
+	assert_ne(first, second, "the new shot takes its own voice")
+	assert_eq(main.audio.tails_fading(), 1, "only this ship's last shot fades")
+	var level: float = second.volume_db
+	main.audio._process(ShotTails.FADE_S * 0.5)
+	assert_lt(first.volume_db, level - 5.0, "the tail is falling")
+	assert_eq(second.volume_db, level, "the new shot plays at full level")
+	main.audio._process(ShotTails.FADE_S)
+	assert_false(first.playing, "the tail is gone within the fade")
+	assert_true(second.playing)
+	assert_true(other.playing, "another ship's shot rings on")
+	assert_eq(other.volume_db, level)
+
+
+func test_a_cannon_firing_again_fades_its_last_shot() -> void:
+	var cmd := CombatCommand.new()
+	cmd.fire = true
+	main.cannon.set_combat_command(cmd)
+	main.cannon.step(SimClock.now() + 1.0)
+	main.cannon.step(SimClock.now() + 2.0)
+	assert_eq(main.audio.tails_fading(), 1, "the player's second shot fades the first")

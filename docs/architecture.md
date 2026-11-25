@@ -1842,7 +1842,7 @@ with bad entries, still makes the profile invalid. The built-in data profiles ar
 | `waves` | WaveDirector (T09, M3-T16) | `scenario`, `index`, `name`, `state`, `next_in_s`, `alive`, `kills`, `player_kills`, `player_assists`, `losses` |
 | `hud` | Hud (T08) | `visible`, `lead_tof_s`, `lead_on_screen`, `prograde_on_screen`, `target_box` |
 | `controls` | ControlProfiles (T11) | `profile`, `profiles`, `unsaved` |
-| `audio` | AudioDirector (T12) | `sounds`, `voices_active`, `volume`, `master_peak_db`, `sfx_peak_db` (M8-T12) |
+| `audio` | AudioDirector (T12) | `sounds`, `voices_active`, `volume`, `master_peak_db`, `sfx_peak_db` (M8-T12), `tails_fading` (M10-T87) |
 
 | Command | Owner | Does |
 |---|---|---|
@@ -5123,6 +5123,12 @@ native/src/voice_kernels.rs, voice_rows.rs   ScsSimCore.ships_near(centre, radiu
 - **The re-rank (T28).** Four times a second the director asks the core for the ships near the listener and offers them
   until the cap is spent, so its work follows the ships in earshot, not the ships in play. The rows are the tick's, so a
   candidate's node is checked before it is offered. Without a core only the player's voices sound.
+- **Our own gun (M10-T87, Q82; awaiting the maintainer's A/B).** `tools/procgen/assets/sfx_gun.py` makes the Starfury's shot
+  as noise shaped by a 20-band x 16-moment level table (`audio.spectral_noise`), fitted with `tools/procgen/core/sound_match.py`
+  (log-mel similarity, loudness envelope correlation, audible length) against the local reference clip; `WEAPONS` is the
+  proposed pitched-down, lengthened family (raiders +3 semitones). `python3 -m tools.procgen.assets.sfx_gun <dir>` renders the
+  listening set. In play a ship's next shot fades its last one's tail out in 40 ms (`ShotTails`, `src/audio/shot_tails.gd`;
+  `AudioDirector.play_shot(..., owner)`), so a ship holds at most two voices. `pulse_fire` stays until the A/B is approved.
 - **Culling (T37)** is §18.26.
 - **One loudness reference and the mix (M8-T12).** Every generated sound is written at -20 LUFS (BS.1770 K-weighting, 50 ms
   blocks every 12.5 ms, gated at -70 LUFS and 10 LU under; a loop read circularly), never above -1 dBFS:

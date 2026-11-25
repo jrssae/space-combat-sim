@@ -148,6 +148,32 @@ def shaped_periodic_noise(
     return out / max(float(np.max(np.abs(out))), 1e-12)
 
 
+def spectral_noise(rng: np.random.Generator, duration_s: float, freqs_hz: Sequence[float], times_s: Sequence[float],
+                   levels_db: np.ndarray, edge_db_per_octave: float = 24.0, frame: int = 1024,
+                   sample_rate: int = SAMPLE_RATE) -> np.ndarray:
+    """Noise whose spectrum changes over time by a table: ``levels_db[i, j]`` is the level at ``freqs_hz[i]`` and ``times_s[j]``,
+    read between control points in log frequency and in time, falling ``edge_db_per_octave`` outside the table's frequencies.
+    Random phases frame by frame, overlap-added (Hann windows a quarter frame apart), so it is noise with no grain of its own."""
+    n = int(round(duration_s * sample_rate))
+    hop = frame // 4
+    window = np.hanning(frame + 1)[:-1]
+    log_f = np.log2(np.maximum(np.fft.rfftfreq(frame, 1.0 / sample_rate), 1.0))
+    log_cf = np.log2(np.asarray(freqs_hz, dtype=float))
+    edge = -edge_db_per_octave * (np.maximum(log_cf[0] - log_f, 0.0) + np.maximum(log_f - log_cf[-1], 0.0))
+    levels = np.asarray(levels_db, dtype=float)
+    per_bin = np.array([np.interp(log_f, log_cf, levels[:, j]) for j in range(levels.shape[1])]) + edge  # times x bins
+    starts = np.arange(0, n + hop, hop)  # frame k is centred on sample starts[k]
+    centres = starts / sample_rate
+    times = np.asarray(times_s, dtype=float)
+    gains_db = np.array([np.interp(centres, times, per_bin[:, b]) for b in range(per_bin.shape[1])]).T
+    spectra = 10.0 ** (gains_db / 20.0) * np.exp(2j * np.pi * rng.random(gains_db.shape))
+    frames = np.fft.irfft(spectra, frame, axis=1) * window
+    out = np.zeros(n + 2 * frame)
+    for start, piece in zip(starts, frames):
+        out[start : start + frame] += piece
+    return out[frame // 2 : frame // 2 + n]
+
+
 # --- levels and files -----------------------------------------------------------------------------------
 def peak_dbfs(samples: np.ndarray) -> float:
     """Peak level in dB relative to full scale (1.0); -inf for silence."""
