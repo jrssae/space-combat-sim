@@ -15,6 +15,8 @@ var _target: float = 0.0
 var _backing: MeshInstance3D = null
 ## The hall's red lamp, lit as the door opens (null when the bay has no light).
 var emitter: LightEmitter = null
+## The ship's power for the lamp, 0 to 1: a hulk's lamps go out with its other lights and its doors stay where they are (Q72).
+var power: float = 1.0
 var _rig: LightRig = null
 
 static var _material: StandardMaterial3D = null
@@ -68,8 +70,10 @@ func is_open() -> bool:
 	return _target > 0.5
 
 
-## Rolls toward open (true) or shut (false).
+## Rolls toward open (true) or shut (false); a door with no power stays put.
 func set_open(open: bool) -> void:
+	if power <= 0.0:
+		return
 	_target = 1.0 if open else 0.0
 	set_process(not is_equal_approx(amount, _target))
 
@@ -80,6 +84,13 @@ func snap(open: bool) -> void:
 	amount = _target
 	_draw()
 	set_process(false)
+
+
+## The ship's power for the lamp (1 lit, 0 dark), as its glow dims.
+func set_power(level: float) -> void:
+	power = clampf(level, 0.0, 1.0)
+	if emitter != null:
+		emitter.energy = BayDoors.light_energy(amount) * power * power
 
 
 ## Holds the shutter part-way (0 shut, 1 open), for a look sheet.
@@ -117,7 +128,7 @@ func _draw() -> void:
 		MultiMeshUpload.set_instance_transform(multimesh, i, Transform3D(Basis.from_scale(Vector3(1.0, shown[i].y, 1.0)), Vector3(0.0, shown[i].x, 0.0)))
 	multimesh.visible_instance_count = shown.size()
 	if emitter != null:
-		emitter.energy = BayDoors.light_energy(amount)
+		emitter.energy = BayDoors.light_energy(amount) * power
 	visible = not shown.is_empty()
 	var back: Vector2 = BayDoors.backing(_door, amount)
 	var depth: float = float((_door.get("size_m", [1.0, 1.0, 0.2]) as Array)[2])

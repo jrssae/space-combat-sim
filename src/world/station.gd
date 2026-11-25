@@ -16,8 +16,13 @@ extends Node3D
 ##   and bolts do not (bolts have no body; the hit sweep lands them).
 ## - **Hit volumes** go to the native core as the big hulls' surfaces (`ScsSimCore.set_surface`), with the convex hulls they
 ##   are fitted to, so the hit sweep lands bolts on the shape Jolt collides with, avoidance and the fire lane go round its skin and a ship that scrapes the turning drum takes
-##   a ram at the skin's speed (Q9). Each piece also carries a `Damageable` (the frame's on this node, beside the `Targetable`)
-##   whose hits go to the damage sections (`StationSections`, Q5); the hull itself never falls.
+##   a ram at the skin's speed (Q9). Each piece also carries a `Damageable` (the frame's on this node, beside the `Targetable`),
+##   the two sharing one hull, whose hits go by what they strike (`StationDamage`, M10-T65, Q72): a grid mount or the command or
+##   reactor section in full and the hull half, anything else off its damage section (`StationSections`, Q5) and the hull.
+## - **Always destructible** (Q72): the reactor at 0 or the hull at 0 destroys it (its death blast, `DestructionDirector`; a mission
+##   that needs it fails), the command section at 0 or the hull below a tenth leaves a hulk. With no power its lights go out
+##   (`StationLights`, the bays' and grid's lamps, the hull's glow) and its grid, launches and docking stop (`has_power`). The
+##   wreck stays where it is (no break-up yet).
 ## - **Visuals** are the pieces' `RenderPiece`s, with the drum's on a pivot turned each frame to the body's angle.
 ## - Lights: the bays' red lamps (two down the main docking bay's mouth, two in the cargo bay) take `LightPicker` slots
 ##   (`BayLights`, M7-T25, M7-T32); M7-T18 lights the rest of the station.
@@ -28,8 +33,12 @@ extends Node3D
 
 ## A damage section took a hit: its index, name and health left.
 signal section_damaged(index: int, section_name: String, health: float)
-## A damage section reached zero (once per loss): a mission can fail on it (Q5). The station goes on.
+## A damage section reached zero (once per loss): a mission can fail on it (Q5).
 signal section_lost(index: int, section_name: String)
+## It became a hulk (M10-T65): no power from now on.
+signal disabled
+## It was destroyed (M10-T65): the section that blew, or "" when the hull ran out. The destruction director draws its blast.
+signal station_destroyed(section: String)
 ## A lost section repaired above zero, or a damaged one made whole, by the maintenance bots (M7-T35).
 signal section_repaired(index: int, section_name: String, health: float)
 
@@ -45,8 +54,8 @@ const BROADCAST_RANGE_M: float = 1.0e6
 const SPIN_PRIORITY: int = -50
 ## The bodies' collision kind (`CollisionLayers`): ships hit it, rocks do not, as the jumpgate.
 const COLLISION_KIND: StringName = &"rock"
-## The hull number behind the sections; never reduced (the `Damageable`s are invulnerable).
-const HULL_MAX: float = 1.0e9
+## The id its damage rules go by (`data/capitals/capitals.json` `station_damage`).
+const DAMAGE_ID: String = "babylon5"
 const PROVIDER: StringName = &"station"
 const ACTIONS: Array[StringName] = [&"info", &"section", &"spin", &"goto", &"heal"]
 ## The bays as navigation targets (M7-T27): what the pilot reads, and what a hold of X will do there once missions fill it in.
@@ -57,6 +66,10 @@ const BAY_REACH_M: float = 2000.0
 
 var hardpoints: StationHardpoints = null
 var sections: StationSections = null
+## Its damage by what is hit (M10-T65): the sections', the grid mounts' and the hull's points, and whether it has power.
+var damage: StationDamage = null
+## The one hull both pieces' `Damageable`s share.
+var hull: HullHealth = null
 var spin: StationSpin = StationSpin.new()
 ## False holds the drum still (`station spin off`, captures).
 var spinning: bool = true
@@ -107,6 +120,7 @@ var _held_angle: float = 0.0
 var _phase: float = 0.0  # added to the clock's angle, so a drum started again goes on from where it was held
 var _world: WorldFrame = null  # whose rebases teleport the bodies
 var _goto_after_launch: String = ""  # the tour point a `station goto` during a launch waits to place the player at
+var _glow: CapitalHulkLights = null  # the hull's own glow on materials of its own, dark while it has no power
 
 
 func _init() -> void:
@@ -140,6 +154,7 @@ func build() -> bool:
 	grid = StationGrid.new()
 	grid.build(self)
 	add_child(grid)
+	_build_damage()
 	airlock = StationAirlock.make(self)
 	if airlock != null:
 		add_child(airlock)
@@ -172,6 +187,9 @@ func far_visuals() -> Array[Node3D]:
 func _ready() -> void:
 	add_to_group(TargetCategories.LAUNCH_BASES)  # the fighters it launches name it home; the target menu pins it in ALLIES
 	_register_surfaces()
+	var destruction: DestructionDirector = DestructionDirector.current()
+	if destruction != null:
+		destruction.watch_station(self)  # its death blast, and a mission that needs it fails (M10-T65)
 	_register_console()
 	_world = WorldFrame.of(self)
 	if _world != null and not _world.rebased.is_connected(_teleport_bodies):
@@ -279,16 +297,25 @@ func universe_position() -> UniversePos:
 	return world.to_universe(global_position) if world != null else UniversePos.new()
 
 
-## Takes `amount` off the damage section `index` as a hit would; true when that lost it.
+## A hit of `amount` on damage section `index` itself (the console's, no mount struck), by the rules a shot's takes (Q72): the
+## command or reactor section in full and the hull half, any other off the section and the hull. True when it lost the section.
 func damage_section(index: int, amount: float) -> bool:
-	if sections == null or index < 0 or index >= sections.count():
+	if damage == null or index < 0 or index >= sections.count():
 		return false
 	var was_lost: bool = sections.is_lost(index)
-	var lost_now: bool = sections.damage(index, amount)
-	if frame_hull != null and not was_lost:
-		frame_hull.zones.record_zone(index, amount)
-	section_damaged.emit(index, String(sections.sections[index]["name"]), sections.health[index])
-	return lost_now
+	var before: float = sections.health[index]
+	_take_hull(damage.hit_section(index, amount))
+	_note_section(index, before)
+	return not was_lost and sections.is_lost(index)
+
+
+## Whether it has power: neither a hulk nor destroyed (Q72). Without it nothing fires, launches or docks, and its lights are out.
+func has_power() -> bool:
+	return damage == null or damage.has_power()
+
+
+func is_destroyed() -> bool:
+	return damage != null and damage.is_destroyed
 
 
 ## Adds `amount` to damage section `index` (a maintenance bot's work, M7-T35); a lost section comes back above zero and can be
@@ -303,12 +330,16 @@ func repair_section(index: int, amount: float) -> void:
 		section_repaired.emit(index, String(sections.sections[index]["name"]), sections.health[index])
 
 
-## Every section whole again.
+## Every section, the hull and its power whole again (the console's heal).
 func heal() -> void:
-	if sections != null:
+	if damage != null:
+		damage.restore()
+	elif sections != null:
 		sections.restore()
 	if frame_hull != null:
+		frame_hull.restore()
 		frame_hull.zones.set_capacities(sections.max_health)
+	_set_power(true)
 
 
 func _angle_now() -> float:
@@ -368,8 +399,8 @@ func _build_hulls(collision: CollisionPieces) -> void:
 	drum_hull.name = "Hull"
 	drum_body.add_child(drum_hull)
 	frame_hull.zones.set_capacities(sections.max_health)
-	frame_hull.hit_taken.connect(_on_hit.bind(StationHardpoints.FRAME))
-	drum_hull.hit_taken.connect(_on_hit.bind(StationHardpoints.DRUM))
+	frame_hull.hit_router = _route_hit.bind(StationHardpoints.FRAME)
+	drum_hull.hit_router = _route_hit.bind(StationHardpoints.DRUM)
 	_frame_volumes = pack_volumes(frame_volumes)
 	_drum_volumes = pack_volumes(drum_volumes)
 	_frame_hulls = pack_hulls(collision.piece("frame")["shapes"], frame_volumes)
@@ -408,16 +439,45 @@ func _build_nav_points() -> void:
 	add_child(cargo_bay)
 
 
-# A piece's hull: its hit volumes, the station's faction, never falling (hits go to the sections).
+# A piece's hull: its hit volumes and the station's faction; its points are set with the damage model (`_build_damage`).
 func _hull(volumes: Array[HitShape], layout: StringName) -> Damageable:
 	var entries: Array[Dictionary] = []
 	for v: HitShape in volumes:
 		entries.append(volume_entry(v))
-	var hull := Damageable.new()
-	hull.setup(entries, HULL_MAX, Factions.EARTH_ALLIANCE, false, false, layout)
-	hull.invulnerable = true
-	hull.stops_friendly_bolts = true
-	return hull
+	var piece := Damageable.new()
+	piece.setup(entries, 1.0, Factions.EARTH_ALLIANCE, false, false, layout)
+	piece.stops_friendly_bolts = true
+	return piece
+
+
+# Its damage by what is hit (M10-T65): the sections and the grid's mounts under one hull, which both pieces share.
+func _build_damage() -> void:
+	var rules: Dictionary = CapitalData.station_rules(DAMAGE_ID)
+	damage = StationDamage.make(sections, grid.health if grid != null else null, rules.get("section_kinds", {}) as Dictionary)
+	if grid != null:
+		damage.wear_mount = grid.damage_mount
+	damage.disabled.connect(_on_disabled)
+	damage.destroyed.connect(_on_destroyed)
+	hull = HullHealth.new(damage.hull_max)
+	if frame_hull != null:
+		frame_hull.hull = hull
+	if drum_hull != null:
+		drum_hull.hull = hull
+
+
+## Its death blast and where it goes off (World frame), `[BlastSpec, Vector3]`: the table's row for its class and kind
+## (`station_damage`), from its reactor section's centre (the section that blew, else the reactor, else the station's centre).
+func death_blast() -> Array:
+	var rule: Array = CapitalData.station_rules(DAMAGE_ID).get("blast", ["dreadnought", CapitalSection.REACTOR]) as Array
+	var spec: BlastSpec = BlastTable.section(StringName(str(rule[0])), str(rule[1]))
+	var index: int = sections.index_of(damage.blown) if damage != null and not damage.blown.is_empty() else -1
+	if index < 0 and damage != null:
+		index = damage.kinds.find(CapitalSection.REACTOR)
+	var centre: Vector3 = global_position
+	if index >= 0:
+		var box: AABB = sections.sections[index]["aabb"]
+		centre = to_world(box.get_center(), String(sections.sections[index]["body"]))
+	return [spec, centre]
 
 
 ## A hit volume back in `Hardpoints.collision`'s form, for `Damageable.setup`.
@@ -478,17 +538,72 @@ func _register_surfaces() -> void:
 	_core.set_surface_owner(drum_body.get_instance_id(), get_instance_id(), true)
 
 
-# A hit on one piece goes to the damage section it landed in.
-func _on_hit(info: HitInfo, body: String) -> void:
+# A hit on one piece (its `Damageable`'s router) lands by what it strikes there: a mount, the command or reactor section, or
+# the hull in its section. Returns the hull points it removed.
+func _route_hit(info: HitInfo, body: String) -> float:
 	var node: Node3D = drum_body if body == StationHardpoints.DRUM else self
-	if node == null or not node.is_inside_tree():
-		return
+	if damage == null or node == null or not node.is_inside_tree():
+		return 0.0
 	var local: Vector3 = node.global_transform.affine_inverse() * info.point
 	var index: int = sections.section_at(body, local)
+	var before: float = sections.health[index] if index >= 0 else 0.0
+	var removed: float = _take_hull(damage.hit(body, local, info.damage))
 	if index >= 0:
-		damage_section(index, info.damage)
+		_note_section(index, before)
+	return removed
+
+
+# The hull's share of a hit off the shared hull; all of it once the station is destroyed.
+func _take_hull(amount: float) -> float:
+	if hull == null:
+		return 0.0
+	return hull.apply(hull.hp if damage.is_destroyed else amount)
+
+
+# A section's points fell from `before`: the HUD's zone and the signal.
+func _note_section(index: int, before: float) -> void:
+	var lost: float = before - sections.health[index]
+	if lost <= 0.0:
+		return
+	if frame_hull != null:
+		frame_hull.zones.record_zone(index, lost)
+	section_damaged.emit(index, String(sections.sections[index]["name"]), sections.health[index])
+
+
+func _on_disabled() -> void:
+	_set_power(false)
+	disabled.emit()
+
+
+func _on_destroyed(section: String) -> void:
+	_set_power(false)
+	station_destroyed.emit(section)
+
+
+# Power on or off: the grid, every light (the points and floods, the bays' and the grid's lamps, the hull's own glow) and, through
+# `has_power`, its launches and docking.
+func _set_power(on: bool) -> void:
 	if grid != null:
-		grid.take_hit(body, local, info.damage)  # the grid's mounts near the hit wear down too (M7-T07)
+		grid.set_powered(on)
+	if station_lights != null:
+		station_lights.set_shown(on)
+	var lamps: Array[LightEmitter] = []
+	if bay_lights != null:
+		lamps.append_array(bay_lights.emitters)
+	if grid_lights != null:
+		lamps.append_array(grid_lights.emitters)
+	for emitter: LightEmitter in lamps:
+		if not on:
+			emitter.set_meta(&"_powered_energy", emitter.energy)
+			emitter.energy = 0.0
+		elif emitter.has_meta(&"_powered_energy"):
+			emitter.energy = float(emitter.get_meta(&"_powered_energy"))
+	if not on and _glow == null:
+		_glow = CapitalHulkLights.collect([frame_piece, drum_pivot] as Array[Node])
+		_glow.apply(0.0)
+	elif on and _glow != null:
+		_glow.release()
+		_glow = null
 
 
 func _on_section_lost(index: int) -> void:
@@ -507,6 +622,12 @@ func _register_console() -> void:
 		&"spinning": {"get": func() -> bool: return spinning, "type": TYPE_BOOL, "doc": "The drum turns (station spin on|off)"},
 		&"sections": {"get": func() -> String: return sections.describe() if sections != null else "",
 				"doc": "Each damage section's health (Q5); a lost one says LOST"},
+		&"state": {"get": func() -> String: return damage.describe() if damage != null else "",
+				"doc": "fighting, hulk or destroyed (M10-T65, Q72), and the hull's points"},
+		&"hull": {"get": func() -> float: return hull.fraction() if hull != null else 1.0, "type": TYPE_FLOAT,
+				"doc": "Hull points left, 0 to 1 (below 0.1 a hulk, at 0 destroyed)"},
+		&"powered": {"get": has_power, "type": TYPE_BOOL,
+				"doc": "It has power: its lights, grid, launches and docking work (a hulk or a wreck has none)"},
 		&"broadcast_km": {"get": func() -> float: return BROADCAST_RANGE_M / 1000.0, "type": TYPE_FLOAT,
 				"doc": "How far the station's beacon is heard, km"},
 		&"collision": {"get": _collision_text,
@@ -534,11 +655,11 @@ func _cmd_station(args: Dictionary) -> ConsoleResult:
 			if index < 0 or b != "damage" or args[&"amount"] == null:
 				return ConsoleResult.failure("station section <name> damage <n>; sections: %s" % _section_names())
 			var lost: bool = damage_section(index, float(args[&"amount"]))
-			return ConsoleResult.line("%s %.0f/%.0f%s" % [a, sections.health[index], sections.max_health[index],
-					" (lost)" if lost else ""])
+			return ConsoleResult.line("%s %.0f/%.0f%s; %s" % [a, sections.health[index], sections.max_health[index],
+					" (lost)" if lost else "", damage.describe()])
 		&"heal":
 			heal()
-			return ConsoleResult.line("station sections whole")
+			return ConsoleResult.line("station sections, hull and power whole")
 		&"spin":
 			if a != "on" and a != "off":
 				return ConsoleResult.failure("station spin on|off")
@@ -546,8 +667,8 @@ func _cmd_station(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.line("drum %s at %.1f deg" % ["turning" if spinning else "held", rad_to_deg(drum_angle)])
 		&"goto":
 			return _goto(a)
-	return ConsoleResult.line("%s: %s; drum %.1f deg%s; %s; %s" % [DISPLAY_NAME, universe_position(), rad_to_deg(drum_angle),
-			"" if spinning else " (held)", sections.describe(), _collision_text()])
+	return ConsoleResult.line("%s: %s; drum %.1f deg%s; %s; %s; %s" % [DISPLAY_NAME, universe_position(), rad_to_deg(drum_angle),
+			"" if spinning else " (held)", damage.describe(), sections.describe(), _collision_text()])
 
 
 func _section_names() -> String:

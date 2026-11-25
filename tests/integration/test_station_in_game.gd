@@ -261,7 +261,8 @@ func test_a_bolt_lands_on_the_real_shape_and_lowers_only_its_section() -> void:
 			assert_almost_eq(station.sections.health[i], StationSections.SECTION_HEALTH - 6.0, 1e-6, "the command section took it")
 		else:
 			assert_eq(station.sections.health[i], StationSections.SECTION_HEALTH, "%s untouched" % station.sections.sections[i]["name"])
-	assert_eq(station.frame_hull.hull.hp, Station.HULL_MAX, "the hull itself never falls")
+	assert_almost_eq(station.hull.hp, station.damage.hull_max - 3.0, 1e-6, "the command section is its bridge: the hull takes half (Q72)")
+	assert_eq(station.drum_hull.hull, station.frame_hull.hull, "one hull for both pieces")
 	# The target box shows the sections: the player targets the station.
 	assert_true(main.ship.targeting.select_id(station.targetable.get_instance_id()))
 	var info: TargetInfo = station.targetable.to_target_info()
@@ -281,7 +282,9 @@ func test_a_lost_section_says_so_once_and_the_station_goes_on() -> void:
 	assert_true(station.damage_section(cargo, 5.0), "this hit loses it")
 	assert_false(station.damage_section(cargo, 5.0), "lost already")
 	assert_eq(lost, ["cargo"] as Array[String], "once")
-	assert_true(station.is_inside_tree() and station.targetable.is_active(), "never destroyed or disabled (Q5)")
+	assert_true(station.has_power() and station.targetable.is_active(), "a lost hull section leaves it fighting (Q72)")
+	assert_almost_eq(station.hull.hp, station.damage.hull_max - StationSections.SECTION_HEALTH - 9.0, 1e-6,
+			"hull damage off the total; the lost section's last hit too")
 	station.heal()
 	assert_eq(station.sections.health[cargo], StationSections.SECTION_HEALTH)
 

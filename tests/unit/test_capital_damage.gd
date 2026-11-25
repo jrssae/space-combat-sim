@@ -1,7 +1,8 @@
 extends GutTest
-## `CapitalDamage` (M10-T08, D12.5, Q53), per section kind: points by hull share, a lost section takes what it holds, a
-## magazine or fuel section blows, a reactor shuts down and blows on its overload, a lost bridge halves the rate of fire, hits
-## on a lost section pass half on, mounts take their own points. A synthetic hull of 10 000 points laid along z.
+## `CapitalDamage` (M10-T08, D12.5, Q53; M10-T65, Q72): points by hull share, only the part a shot hits takes it (a subsystem in
+## full and the hull half, else hull damage off the section and the total), a lost section takes what it holds and its hits go to
+## the total, a magazine, fuel or reactor section at 0 blows, the bridge at 0 or the hull below a tenth makes a hulk with no power.
+## A synthetic hull of 10 000 points laid along z.
 
 const HULL: float = 10000.0
 
@@ -10,6 +11,7 @@ var _lost_mounts: Array[String] = []
 var _drive: int = 0
 var _disabled: int = 0
 var _blew: Array[String] = []
+var _parts_lost: Array[String] = []
 
 
 # Sections in a row along z, each 100 m long: [name, kind, share].
@@ -39,8 +41,10 @@ func _model() -> CapitalDamage:
 			{"name": "beam", "section": "reactor", "kind": "beam", "weapon": "ea_sweep_beam", "position": [20.0, 0.0, 550.0]},
 			{"name": "dome", "section": "engine_r", "kind": "interceptor", "position": [20.0, 0.0, 650.0]},
 		],
-		"bays": [{"name": "bay_1", "section": "hangar"}, {"name": "bay_2", "section": "hangar"}],
-		"engines": [{"name": "eng_r", "section": "engine_r", "share": 0.5}, {"name": "eng_l", "section": "engine_l", "share": 0.5}],
+		"bays": [{"name": "bay_1", "section": "hangar", "position": [0.0, -20.0, 430.0], "exit": [0.0, -20.0, 420.0], "mouth_m": [16.0, 12.0]},
+				{"name": "bay_2", "section": "hangar", "position": [0.0, 20.0, 470.0], "exit": [0.0, 20.0, 480.0], "mouth_m": [16.0, 12.0]}],
+		"engines": [{"name": "eng_r", "section": "engine_r", "share": 0.5, "position": [0.0, 0.0, 699.0], "radius_m": 8.0},
+				{"name": "eng_l", "section": "engine_l", "share": 0.5, "position": [0.0, 0.0, 799.0], "radius_m": 8.0}],
 	}
 	var m: CapitalDamage = CapitalDamage.build(sections, hardpoints, HULL)
 	_changes.clear()
@@ -48,6 +52,8 @@ func _model() -> CapitalDamage:
 	_drive = 0
 	_disabled = 0
 	_blew.clear()
+	_parts_lost.clear()
+	m.part_lost.connect(func(k: String) -> void: _parts_lost.append(k))
 	m.section_changed.connect(func(s: String, state: int) -> void: _changes.append([s, state]))
 	m.mount_lost.connect(func(n: String) -> void: _lost_mounts.append(n))
 	m.drive_changed.connect(func() -> void: _drive += 1)
@@ -56,73 +62,101 @@ func _model() -> CapitalDamage:
 	return m
 
 
+# A point on the bow clear of its two turrets.
+const BOW_CLEAR := Vector3(0.0, 0.0, 10.0)
+
+
 # The centre of section `index` of `LAYOUT`.
 static func _at(index: int) -> Vector3:
 	return Vector3(0.0, 0.0, 100.0 * index + 50.0)
 
 
-func test_sections_share_the_hull_and_mounts_take_their_kinds_points() -> void:
+func test_sections_share_the_hull_and_parts_take_their_own_points() -> void:
 	var m: CapitalDamage = _model()
 	var total: float = 0.0
 	for name: String in m.sections:
 		total += m.sections[name].max_hp
 	assert_almost_eq(total, HULL, 1e-6, "no armour: the sections hold the hull's points between them")
+	assert_eq(m.hull_max, HULL)
 	assert_almost_eq(m.sections["bow"].max_hp, 2000.0, 1e-6)
 	assert_eq(m.mounts["plasma"].max_hp, 2000.0, "a heavy mount (Q53)")
 	assert_eq(m.mounts["pulse"].max_hp, 800.0, "a medium one")
 	assert_eq(m.mounts["beam"].max_hp, 2500.0, "a beam emitter")
 	assert_eq(m.mounts["dome"].max_hp, 400.0, "an interceptor battery, by its hardpoint's kind with no weapon named")
 	assert_eq(m.mounts["plasma"].reach_m, 24.0, "a hit within its barrel's length lands on it")
+	assert_eq(m.engines["eng_r"].max_hp, 1500.0, "an engine's own points (section_damage)")
+	assert_eq(m.engines["eng_r"].reach_m, 18.0, "its nozzle's radius and the mount reach")
+	assert_eq(m.bays["bay_1"].position, Vector3(0.0, -20.0, 420.0), "a bay is hit at its mouth")
+	assert_eq(m.bays["bay_1"].reach_m, 20.0, "half its mouth's diagonal and the mount reach")
 	assert_eq(m.live_mounts().size(), 4)
 	assert_eq(m.live_bays().size(), 2)
 	assert_eq(m.thrust_fraction(), 1.0)
 	assert_eq(m.fire_rate(), 1.0)
 
 
-func test_a_structure_section_is_damaged_then_lost_with_its_mounts() -> void:
+func test_a_hull_hit_lowers_its_section_and_the_total_only() -> void:
 	var m: CapitalDamage = _model()
-	assert_eq(m.hit("bow", Vector3(0.0, 0.0, 10.0), 500.0), 500.0, "the points it removed")
+	assert_eq(m.hit("bow", Vector3(0.0, 0.0, 10.0), 500.0), 500.0, "all of it off the hull")
+	assert_eq(m.sections["bow"].hp, 1500.0)
+	assert_eq(m.hull_hp, HULL - 500.0)
 	assert_eq(m.sections["bow"].state, CapitalSection.State.DAMAGED)
 	assert_eq(_changes, [["bow", CapitalSection.State.DAMAGED]])
-	assert_true(m.mount_works("plasma"), "a hit out of reach leaves the mounts alone")
-	m.hit("bow", Vector3(0.0, 0.0, 10.0), 1500.0)
-	assert_eq(m.sections["bow"].state, CapitalSection.State.DISABLED, "at 0 a structure section is lost")
-	assert_eq(_lost_mounts, ["plasma", "pulse"] as Array[String], "its mounts die with it")
-	assert_false(m.mount_works("pulse"))
-	assert_false(m.is_disabled, "the ship fights on")
-	assert_false(m.is_destroyed)
+	assert_eq(m.mounts["plasma"].hp, 2000.0, "a hit out of reach leaves the mounts alone")
+	assert_eq(m.mounts["pulse"].hp, 800.0)
 
 
-func test_a_hit_on_a_mount_counts_against_its_section_and_kills_it_at_its_points() -> void:
+func test_only_the_part_hit_takes_it_in_full_and_the_hull_half() -> void:
 	var m: CapitalDamage = _model()
-	m.hit("bow", Vector3(0.0, -18.0, 52.0), 500.0)
-	assert_almost_eq(m.mounts["pulse"].hp, 300.0, 1e-6, "the mount took the hit")
-	assert_almost_eq(m.sections["bow"].hp, 1500.0, 1e-6, "and so did its section")
+	assert_almost_eq(m.hit("bow", Vector3(0.0, -18.0, 52.0), 500.0), 250.0, 1e-6, "half off the hull")
+	assert_almost_eq(m.mounts["pulse"].hp, 300.0, 1e-6, "the mount took it all")
+	assert_eq(m.mounts["plasma"].hp, 2000.0, "only the part hit: its neighbour is untouched")
+	assert_eq(m.sections["bow"].hp, 2000.0, "its section none: only the part hit")
+	assert_almost_eq(m.hull_hp, HULL - 250.0, 1e-6)
 	m.hit_mount("pulse", 300.0)
 	assert_false(m.mounts["pulse"].alive, "shot off at its own points")
 	assert_eq(_lost_mounts, ["pulse"] as Array[String])
 	assert_true(m.mount_works("plasma"), "its neighbour still fires")
-	assert_eq(m.sections["bow"].state, CapitalSection.State.DAMAGED, "the section stands")
+	assert_eq(m.sections["bow"].state, CapitalSection.State.INTACT, "the section untouched")
 
 
-func test_an_engine_lost_takes_its_thrust_share_and_its_mounts() -> void:
+func test_an_engine_or_a_bay_is_a_part_of_its_own() -> void:
 	var m: CapitalDamage = _model()
-	m.hit("engine_r", _at(6), 750.0)
-	assert_eq(m.live_engines(), PackedStringArray(["eng_l"]))
+	assert_almost_eq(m.hit("engine_r", Vector3(0.0, 3.0, 702.0), 1000.0), 500.0, 1e-6, "an engine: the hull half")
+	assert_almost_eq(m.engines["eng_r"].hp, 500.0, 1e-6)
+	assert_eq(m.mounts["dome"].hp, 400.0, "the dome on the section is not hit")
+	m.hit_part("engine:eng_r", 600.0)
+	assert_eq(m.live_engines(), PackedStringArray(["eng_l"]), "shot off")
 	assert_almost_eq(m.thrust_fraction(), 0.5, 1e-6, "half the thrust")
 	assert_gt(_drive, 0, "the drive is refitted")
+	assert_eq(m.sections["engine_r"].state, CapitalSection.State.INTACT, "its section untouched: only the part hit")
+	assert_true(m.mount_works("dome"))
+	m.hit("hangar", Vector3(0.0, -20.0, 421.0), 1500.0)
+	assert_false(m.bay_works("bay_1"), "a bay shot off at its mouth")
+	assert_true(m.bay_works("bay_2"))
+	assert_eq(_parts_lost, ["engine:eng_r", "bay:bay_1"] as Array[String])
+
+
+func test_a_lost_section_takes_what_it_holds() -> void:
+	var m: CapitalDamage = _model()
+	m.hit("engine_r", _at(6) + Vector3(0.0, 15.0, 0.0), 750.0)
+	assert_eq(m.sections["engine_r"].state, CapitalSection.State.DISABLED)
+	assert_eq(m.live_engines(), PackedStringArray(["eng_l"]))
 	assert_eq(_lost_mounts, ["dome"] as Array[String])
-	m.hit("engine_l", _at(7), 750.0)
-	assert_eq(m.thrust_fraction(), 0.0, "no engines")
-	assert_false(m.is_disabled, "with power and its bridge it still fights and turns")
+	m.hit("hangar", _at(4), 1200.0)
+	assert_eq(m.live_bays().size(), 0, "a hangar lost stops its bays")
+	assert_false(m.is_disabled, "the ship fights on")
 
 
-func test_a_hangar_lost_stops_its_bays() -> void:
+func test_hits_on_a_lost_section_go_to_the_hull() -> void:
 	var m: CapitalDamage = _model()
 	m.hit("hangar", _at(4), 1200.0)
-	assert_eq(m.live_bays().size(), 0)
-	assert_false(m.bay_works("bay_1"))
-	assert_false(m.is_disabled)
+	var fuel0: float = m.sections["fuel"].hp
+	var hull0: float = m.hull_hp
+	assert_eq(m.hit("hangar", Vector3(0.0, 0.0, 410.0), 100.0), 100.0, "all of it, no share passed on")
+	assert_eq(m.sections["fuel"].hp, fuel0, "no section nearby takes any")
+	assert_eq(m.hull_hp, hull0 - 100.0)
+	assert_eq(m.hit("bow", Vector3(0.0, 0.0, 95.0), 2400.0), 2400.0, "past a section's last point: the rest to the total")
+	assert_eq(m.sections["bridge"].hp, m.sections["bridge"].max_hp, "not to the section next to it")
 
 
 func test_a_magazine_or_fuel_section_blows_at_zero() -> void:
@@ -141,61 +175,55 @@ func test_a_magazine_or_fuel_section_blows_at_zero() -> void:
 		assert_eq(m.fire_rate(), 0.0)
 
 
-func test_a_reactor_cuts_power_in_a_stage_shuts_down_then_blows_on_its_overload() -> void:
+func test_the_reactor_is_a_subsystem_that_cuts_power_in_a_stage_and_explodes_at_zero() -> void:
 	var m: CapitalDamage = _model()
-	m.hit("reactor", _at(5), 700.0)
+	assert_almost_eq(m.hit("reactor", _at(5), 700.0), 350.0, 1e-6, "the reactor in full, the hull half")
+	assert_eq(m.sections["reactor"].hp, 800.0)
 	assert_eq(m.power(), 1.0, "above half its 1 500 points")
-	assert_eq(_drive, 0)
 	m.hit("reactor", _at(5), 100.0)
 	assert_almost_eq(m.power(), 0.5, 1e-6, "a stage down below half")
 	assert_almost_eq(m.thrust_fraction(), 0.5, 1e-6)
 	assert_eq(_drive, 1, "the drive is refitted")
 	m.hit("reactor", _at(5), 700.0)
-	assert_eq(m.sections["reactor"].state, CapitalSection.State.DISABLED, "at 0 it shuts down")
-	assert_true(m.is_disabled, "power gone: disabled")
-	assert_eq(_disabled, 1)
-	assert_false(m.is_destroyed, "not blown yet")
-	assert_eq(m.power(), 0.0)
-	assert_eq(m.thrust_fraction(), 0.0)
-	assert_false(m.mount_works("plasma"), "nothing fires without power")
-	assert_false(m.bay_works("bay_1"))
-	assert_eq(m.hit("reactor", _at(5), 700.0), 0.0, "its overload removes no hull points")
-	assert_false(m.is_destroyed)
-	m.hit("reactor", _at(5), 60.0)
-	assert_true(m.is_destroyed, "it blows after another half of its points")
+	assert_true(m.is_destroyed, "at 0 it explodes, no shut-down first (Q72)")
 	assert_eq(m.blown, "reactor")
 	assert_eq(m.sections["reactor"].state, CapitalSection.State.DESTROYED)
+	assert_eq(_disabled, 0, "never a hulk on the way")
 
 
-func test_a_lost_bridge_halves_the_rate_of_fire_and_disables_only_with_every_engine_gone() -> void:
+func test_the_bridge_at_zero_makes_a_hulk_with_no_power() -> void:
 	var m: CapitalDamage = _model()
-	m.hit("bridge", _at(1), 500.0)
-	assert_false(m.has_bridge())
-	assert_almost_eq(m.fire_rate(), 0.5, 1e-6, "last orders at half the rate of fire")
-	assert_false(m.is_disabled, "the engines still answer")
-	m.hit("engine_r", _at(6), 750.0)
+	assert_almost_eq(m.hit("bridge", _at(1), 400.0), 200.0, 1e-6, "the bridge in full, the hull half")
 	assert_false(m.is_disabled)
-	m.hit("engine_l", _at(7), 750.0)
-	assert_true(m.is_disabled, "no bridge and no engines: control is gone")
-	assert_eq(m.fire_rate(), 0.0)
+	m.hit("bridge", _at(1), 100.0)
+	assert_false(m.has_bridge())
+	assert_true(m.is_disabled, "a hulk (Q72)")
+	assert_eq(_disabled, 1)
+	assert_false(m.has_power())
+	assert_eq(m.fire_rate(), 0.0, "no weapon fires")
+	assert_eq(m.live_mounts().size(), 0)
+	assert_eq(m.live_bays().size(), 0, "nothing launches or docks")
+	assert_eq(m.thrust_fraction(), 0.0)
+	assert_eq(m.power(), 0.0)
+	assert_false(m.is_destroyed)
+	m.hit("bow", BOW_CLEAR, 100.0)
+	assert_almost_eq(m.hull_hp, HULL - 250.0 - 100.0, 1e-6, "a hulk still takes hits")
 
 
-func test_hits_on_a_lost_section_pass_half_on_to_the_nearest_live_one() -> void:
+func test_the_hull_below_a_tenth_makes_a_hulk() -> void:
 	var m: CapitalDamage = _model()
-	m.hit("hangar", _at(4), 1200.0)
-	var fuel0: float = m.sections["fuel"].hp
-	var reactor0: float = m.sections["reactor"].hp
-	var removed: float = m.hit("hangar", Vector3(0.0, 0.0, 410.0), 100.0)
-	assert_almost_eq(removed, 50.0, 1e-6, "half passed on")
-	assert_almost_eq(m.sections["fuel"].hp, fuel0 - 50.0, 1e-6, "to the fuel section, nearer the hit")
-	assert_eq(m.sections["reactor"].hp, reactor0)
-
-
-func test_damage_past_a_sections_last_point_passes_half_on() -> void:
-	var m: CapitalDamage = _model()
-	var removed: float = m.hit("bow", Vector3(0.0, 0.0, 95.0), 2400.0)
-	assert_almost_eq(removed, 2200.0, 1e-6, "its 2 000 points and half of the 400 past them")
-	assert_almost_eq(m.sections["bridge"].hp, 300.0, 1e-6, "on the bridge next to it")
+	m.hit("bow", BOW_CLEAR, 2000.0)
+	m.hit("spine", _at(8), 1500.0)
+	m.hit("bow", BOW_CLEAR, 5000.0)  # on the lost bow: the total alone
+	assert_almost_eq(m.hull_fraction(), 0.15, 1e-6)
+	assert_false(m.is_disabled)
+	m.hit("bow", BOW_CLEAR, 501.0)
+	assert_true(m.is_disabled, "below 10 % of its points")
+	assert_true(m.has_bridge(), "with its bridge standing")
+	assert_eq(_disabled, 1)
+	m.hit("bow", BOW_CLEAR, 999.0)
+	assert_eq(m.hull_hp, 0.0)
+	assert_eq(_disabled, 1, "once")
 
 
 func test_an_unknown_section_takes_the_hit_on_the_nearest() -> void:
@@ -204,13 +232,23 @@ func test_an_unknown_section_takes_the_hit_on_the_nearest() -> void:
 	assert_almost_eq(m.sections["spine"].hp, 1400.0, 1e-6)
 
 
+func test_scuttling_leaves_a_hulk_whole() -> void:
+	var m: CapitalDamage = _model()
+	assert_true(m.scuttle())
+	assert_true(m.is_disabled)
+	assert_false(m.has_power())
+	assert_false(m.scuttle(), "once")
+
+
 func test_restore_makes_it_whole() -> void:
 	var m: CapitalDamage = _model()
+	m.hit_part("engine:eng_l", 5000.0)
 	m.hit("magazine", _at(2), 5000.0)
 	assert_true(m.is_destroyed)
 	m.restore()
 	assert_false(m.is_destroyed)
 	assert_eq(m.blown, "")
+	assert_eq(m.hull_hp, HULL)
 	for name: String in m.sections:
 		assert_eq(m.sections[name].state, CapitalSection.State.INTACT)
 	assert_eq(m.live_mounts().size(), 4)

@@ -14,7 +14,8 @@ extends Node
 ## - **The drum's mounts turn with the drum**: they bind to the drum's body and hang from its visual pivot; the frame's stay
 ##   fixed. The station's own frame and drum block every gun's line of fire.
 ## - **Mounts can be knocked out** (maintainer, after T07): each has its own health (`GridMountHealth`); a hit on the station near
-##   it wears it down as well as its section, and at zero it stops (dark, silent) until `repair` (a mission, or `grid repair`).
+##   it wears it down (the hull half as much, `StationDamage`), and at zero it stops (dark, silent) until `repair` (a mission, or
+##   `grid repair`). A station with no power (a hulk or a wreck, M10-T65) keeps its grid off (`set_powered`).
 ## - **Sub-points**: `sub_points` (and the core's `grid_points`) give each mount's place and whether it works, for attackers (T10).
 ## - The models are per kind (`MODEL_ASSETS`): the light guns wear the Saturns' turret (T27) scaled, the heavy cannons their oval
 ##   gun in its recess (M7-T43), the interceptor batteries their own (M7-T42); sounds are the turret shot pitched per kind.
@@ -72,6 +73,9 @@ var mounts: Array[TurretMount] = []
 var faction: StringName = Factions.EARTH_ALLIANCE
 ## Each mount's own health, in `mounts`' order.
 var health: GridMountHealth = null
+## False while the station has no power (`set_powered`).
+var powered: bool = true
+var _wanted_on: bool = true
 
 var _pool: MuzzleFlashPool = null
 var _fx: FxPool = null
@@ -120,16 +124,6 @@ static func muzzles_for(kind: Kind) -> Array[Vector3]:
 	for m: Vector3 in TurretMount.pitch_muzzles(MODEL_ASSETS[kind]):
 		out.append(m * MODEL_SCALE[kind])
 	return out
-
-
-## A hit of `amount` on the station at `point` in `body`'s frame (`Station`, beside its section's share): the mounts near it wear
-## down, and one that reaches zero is knocked out.
-func take_hit(body: String, point: Vector3, amount: float) -> void:
-	if health == null:
-		return
-	for i: int in health.hit(body, point, amount):
-		mounts[i].knocked_out = true
-		mount_knocked_out.emit(mounts[i].mount_name)
 
 
 ## Repairs mount `mount_name` (or every mount for `all`); false for no such mount.
@@ -235,9 +229,21 @@ func is_on() -> bool:
 
 
 func set_on(on: bool) -> void:
+	_wanted_on = on
+	_apply_on()
+
+
+## Whether the station has power for the grid (M10-T65, Q72): a hulk's or a wreck's grid stays off whatever it is told, and
+## comes back as it was told once the station is whole again.
+func set_powered(on: bool) -> void:
+	powered = on
+	_apply_on()
+
+
+func _apply_on() -> void:
 	var sim: SimCore = _sim()
 	if sim != null:
-		sim.core.set_grid_off(faction, not on)
+		sim.core.set_grid_off(faction, not (_wanted_on and powered))
 
 
 ## How far from the station's centre its guns reach, m: the furthest any mount's fire goes (M8-T08: what a raider carrier

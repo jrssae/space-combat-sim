@@ -477,6 +477,8 @@ func _ready_plan() -> String:
 	var s: Station = station()
 	if s == null:
 		return "no station in this scenario"
+	if not s.has_power():
+		return "%s has no power" % Station.DISPLAY_NAME  # no civilian docks at a hulk or a wreck (M10-T65)
 	if plan == null or not plan.valid:
 		plan = DockingPlan.build(s.hardpoints, s.drum_origin)
 	return "" if plan.valid else plan.error

@@ -41,8 +41,11 @@ var keeps_candidates: bool = true
 ## broadcasts. Once identified it stays so while it is selected, so a target that opens the range does not lose its name.
 ## Kept for a controller that keeps its candidates (the player's).
 var selection_identified: bool = false
-## The selected capital's subsystem (`CapitalSubsystems` key, M10-T18, Q17): "" for the whole ship. Cleared whenever the selection changes.
+## The selected capital's subsystem kind (`CapitalSubsystems` key, M10-T18, Q17; by kind since M10-T65, Q60): "" for the whole
+## ship. Cleared whenever the selection changes.
 var subsystem_key: String = ""
+## The part of that kind aimed at now: kept while it stands, then the nearest one left (Q60); "" when none is.
+var subsystem_part: String = ""
 
 var _body: RigidBody3D = null
 # The list was not built since the last refresh (M4-T34, built on read): the next reader builds it.
@@ -89,8 +92,9 @@ func _register_console() -> void:
 				"doc": "Closing speed of the selected target (positive = closing)"},
 		&"candidates": {"get": _console_candidates, "doc": "Targets in sensor range, nearest first"},
 		&"subsystem": {"get": _console_subsystem, "set": _console_set_subsystem, "type": TYPE_STRING,
-				"doc": "The selected capital's aimed subsystem key (whole when the whole ship); set a key, next or whole"},
-		&"subsystems": {"get": _console_subsystems, "doc": "The selected capital's subsystems: key, state and points, nearest first"},
+				"doc": "The selected capital's aimed subsystem kind (whole when the whole ship); set a kind, next or whole (Q60)"},
+		&"subsystems": {"get": _console_subsystems,
+				"doc": "The selected capital's subsystem kinds: kind, parts standing, the part aimed at and its state"},
 	}), self)
 
 
@@ -206,16 +210,18 @@ func selected_capital() -> CapitalShip:
 	return cap if cap != null and cap.damage != null else null
 
 
-## The subsystems of the selected capital, nearest the player first; empty when it is not one (or not identified).
+## The subsystem kinds of the selected capital, each aimed at its part kept or nearest the player; empty when it is not one (or
+## not identified).
 func subsystem_entries() -> Array[Dictionary]:
 	var cap: CapitalShip = selected_capital()
 	if cap == null or not _has_body():
 		return []
-	return CapitalSubsystems.list(cap.damage, cap.global_transform.affine_inverse() * _ship_position())
+	return CapitalSubsystems.list(cap.damage, cap.global_transform.affine_inverse() * _ship_position(), {subsystem_key: subsystem_part})
 
 
-## Aims at subsystem `key` of the selected capital ("" the whole ship). Returns whether the selection holds it.
+## Aims at subsystem kind `key` of the selected capital ("" the whole ship). Returns whether the selection holds it.
 func select_subsystem(key: String) -> bool:
+	subsystem_part = ""
 	if key.is_empty():
 		subsystem_key = ""
 		return true
@@ -225,24 +231,29 @@ func select_subsystem(key: String) -> bool:
 	return true
 
 
-## The next subsystem of the selected capital (the whole ship between the last and the first); `step` -1 goes back.
+## The next subsystem kind of the selected capital (the whole ship between the last and the first); `step` -1 goes back.
 func cycle_subsystem(step: int = 1) -> void:
 	var entries: Array[Dictionary] = subsystem_entries()
 	if not entries.is_empty():
 		subsystem_key = CapitalSubsystems.cycled(entries, subsystem_key, step)
+		subsystem_part = ""
 
 
-# Names the picked subsystem on `readout` and where the guns lead: its point on the capital now. Nothing for an unidentified
-# target, whose parts the pilot cannot tell apart.
+# Names the picked kind on `readout` and where the guns lead: the part aimed at, on the capital now. A kind with nothing left
+# standing gives the aim back to the whole ship (Q60). Nothing for an unidentified target, whose parts the pilot cannot tell
+# apart.
 func _note_subsystem(readout: TargetReadout) -> void:
 	if subsystem_key.is_empty():
 		return
 	var cap: CapitalShip = selected_capital()
 	if cap == null:
 		return
-	var entry: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(cap.damage), subsystem_key)
-	if entry.is_empty():
+	var entry: Dictionary = CapitalSubsystems.find(subsystem_entries(), subsystem_key)
+	if entry.is_empty() or not bool(entry["works"]):
+		subsystem_key = ""
+		subsystem_part = ""
 		return
+	subsystem_part = entry["part"]
 	readout.subsystem = entry
 	readout.aim_offset = cap.global_transform * (entry["point"] as Vector3) - cap.global_position
 
@@ -537,6 +548,7 @@ func _note_identified() -> void:
 func _emit_if_changed(before: int) -> void:
 	if system.selected_id() != before:
 		subsystem_key = ""
+		subsystem_part = ""
 		selection_identified = false
 		_note_identified()
 		if _body != null:
@@ -627,7 +639,7 @@ func _console_set_subsystem(value: Variant) -> String:
 		cycle_subsystem()
 		return "" if selected_capital() != null else "the target is not an identified capital"
 	if wanted == "whole" or wanted == "none":
-		subsystem_key = ""
+		select_subsystem("")
 		return ""
 	return "" if select_subsystem(wanted) else "no subsystem '%s' on the selected capital (targeting.subsystems lists them)" % wanted
 
@@ -635,7 +647,8 @@ func _console_set_subsystem(value: Variant) -> String:
 func _console_subsystems() -> PackedStringArray:
 	var out := PackedStringArray()
 	for entry: Dictionary in subsystem_entries():
-		out.append("%s %s" % [entry["key"], CapitalSubsystems.state_text(entry)])
+		out.append("%s %d/%d %s %s" % [entry["key"], int(entry["live"]), int(entry["total"]), entry["part"],
+				CapitalSubsystems.state_text(entry)])
 	return out
 
 

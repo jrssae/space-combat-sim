@@ -10,8 +10,8 @@ const PATH: String = "res://data/capitals/capitals.json"
 ## The weapons' kinds (M10-T03), for a mount's hit points.
 const LOADOUTS_PATH: String = "res://data/capitals/loadouts.json"
 ## The section rules a file without `section_damage` falls back on (D12.5's numbers).
-const SECTION_DEFAULTS: Dictionary = {"reactor_overload": 0.5, "pass_on": 0.5, "headless_fire_rate": 0.5,
-		"power_stage_at": 0.5, "power_stage_level": 0.5, "mount_reach_m": 10.0}
+const SECTION_DEFAULTS: Dictionary = {"subsystem_hull_share": 0.5, "hulk_below": 0.1, "power_stage_at": 0.5,
+		"power_stage_level": 0.5, "mount_reach_m": 10.0, "engine_hit_points": 1500.0, "bay_hit_points": 1500.0}
 ## The hulk rules a file without `hulks` falls back on (D12.7, Q19): when control goes and when the drive is cold after the ship
 ## is disabled, and how long its lights take to die, s.
 const HULK_DEFAULTS: Dictionary = {"control_loss_s": 2.0, "cold_s": 6.0, "lights_fade_s": 3.0}
@@ -68,6 +68,14 @@ static func never_hulk(faction: StringName, type_id: StringName) -> bool:
 	var factions: Variant = (rule as Dictionary).get("factions")
 	var hulls: Variant = (rule as Dictionary).get("hulls")
 	return (factions is Array and (factions as Array).has(String(faction))) or (hulls is Array and (hulls as Array).has(String(type_id)))
+
+
+## Station `id`'s damage rules (M10-T65, `station_damage`): `section_kinds` (section name -> `bridge` or `reactor`) and `blast`
+## ([class row, section kind]); empty when the file names none.
+static func station_rules(id: String) -> Dictionary:
+	var table: Variant = _read().get("station_damage")
+	var rules: Variant = (table as Dictionary).get(id) if table is Dictionary else null
+	return rules if rules is Dictionary else {}
 
 
 ## Section rule `key` (`SECTION_DEFAULTS` lists them): the file's `section_damage` value, else the default.

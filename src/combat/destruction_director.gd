@@ -46,6 +46,8 @@ signal player_destroyed(info: HitInfo)
 signal respawn_due
 ## A capital stand-in was destroyed (it has left play) (M4-T23).
 signal capital_destroyed(capital: CapitalBody, info: HitInfo)
+## A station was destroyed (M10-T65, Q72): its blast is drawn and set off; the wreck stays. A mission that needs it fails.
+signal station_destroyed(station: Station)
 ## A mine's explosion was drawn as an explosion at `at` (M7-T64): once a tick, so a chain sounds as one blast.
 signal mine_exploded(at: Vector3)
 
@@ -58,6 +60,8 @@ const ZONE_CHUNKS: Dictionary[int, StringName] = {
 const KILL_CHOICES: Array[StringName] = [&"target", &"all", &"allies", &"player"]
 ## Mine explosions alive at once (M7-T64); past it a mine's blast is a far flash.
 const MINE_BLASTS_MAX: int = 12
+## A station's fireball against its blast's reach (M10-T65; to judge in play).
+const STATION_FIREBALL_SHARE: float = 0.25
 
 var world: WorldFrame = null
 var pool: ShipPool = null
@@ -160,6 +164,12 @@ func watch_capital(cap: CapitalBody) -> void:
 	cap.damageable.destroyed.connect(_on_capital_destroyed.bind(cap))
 
 
+## Reacts to this station's death from now on (M10-T65): its blast drawn at its level of detail and set off. Twice is harmless.
+func watch_station(station: Station) -> void:
+	if station != null and not station.station_destroyed.is_connected(_on_station_destroyed):
+		station.station_destroyed.connect(_on_station_destroyed.bind(station))
+
+
 ## Draws every mine of `belt` that goes off from now on (M7-T64). Watching a belt twice is harmless.
 func watch_mines(belt: MineStandin) -> void:
 	if belt == null or belt.detonated.is_connected(_on_mine_detonated):
@@ -241,6 +251,25 @@ func _on_capital_destroyed(info: HitInfo, cap: CapitalBody) -> void:
 	set_blast(info, blast[0], blast[1])
 	capital_destroyed.emit(cap, info)
 	BlastResolver.set_off(blast[0], blast[1], cap.faction)
+
+
+func _on_station_destroyed(_section: String, station: Station) -> void:
+	if not is_instance_valid(station):
+		return
+	var blast: Array = station.death_blast()
+	var spec: BlastSpec = blast[0]
+	var at: Vector3 = blast[1]
+	var velocity: Vector3 = world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
+	var radius: float = STATION_FIREBALL_SHARE * spec.radius_m if spec != null else 500.0  # the reactor's fireball, not the whole blast
+	last_blast_position = at
+	var level: ExplosionLod.Level = _level_at(radius, at)
+	if level == ExplosionLod.Level.FULL:
+		_add_explosion(radius, velocity, at, false)
+	else:
+		_spawn_far(level, at, velocity, radius, spec.energy_j() if spec != null else 0.0)
+	station_destroyed.emit(station)
+	if spec != null:
+		BlastResolver.set_off(spec, at, Factions.EARTH_ALLIANCE)
 
 
 func _on_mine_detonated(index: int, belt: MineStandin) -> void:

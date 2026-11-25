@@ -51,6 +51,8 @@ extends RefCounted
 ##     m.note(key, value) / m.noted(key [, default])   the script's own facts; kept by a checkpoint restart
 ##     m.checkpoint(step, label)       from now on a lost mission's debrief offers a restart from `step`
 ##     m.debrief_line(text) / m.award_rank(rank)       a line on the debrief; the rank the mission earns (`Career`)
+##     m.needs_station = false         the station may fall: by default losing Babylon 5 ends the mission as lost
+##                                     ("station destroyed", M10-T65, Q72: no flag makes it indestructible)
 ##
 ## Lines (D53): `dialog_book` holds the mission's dialog file and `dialog` is the queue the comms panel shows; a line is recorded
 ## in the `MissionWorld` as finished when it ends, shown out or cut (an interrupt, a skip, the mission's end). Without a book
@@ -110,6 +112,8 @@ var waypoint_name: String = ""
 var waypoint_serial: int = 0
 ## `lock_controls` asked for the player's controls to be held: `Main` zeroes their commands while it is set.
 var controls_locked: bool = false
+## Losing the station fails the mission (M10-T65, Q72); a script whose story lets it fall sets this false.
+var needs_station: bool = true
 ## The scenario's camera shots by id (`load_cinematics`).
 var cinematics: Dictionary = {}  # StringName -> CinematicShot
 ## The mission's dialog file (the runner loads it), or null: `say` then resolves at once.
@@ -856,6 +860,13 @@ func skip_opening() -> String:
 ## The player's ship was destroyed: the mission is lost (D51).
 func player_destroyed() -> void:
 	end(false, "player destroyed")
+
+
+## The station was destroyed (M10-T65, Q72: Babylon 5 is always destructible): a mission that needs it (`needs_station`, the
+## default) is lost.
+func station_destroyed() -> void:
+	if needs_station:
+		end(false, "station destroyed")
 
 
 ## Drops the waiting step and the links back to the game (the runner leaves the tree).

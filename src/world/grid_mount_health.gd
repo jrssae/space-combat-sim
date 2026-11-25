@@ -1,7 +1,7 @@
 class_name GridMountHealth
 extends RefCounted
 ## The station grid's mounts' own health (M7-T07 fix, maintainer): a hit on the station within a mount's radius, on the same body,
-## wears that mount down (the damage section takes the hit as well, `Station`), and at zero the mount is knocked out until a
+## wears that mount down (the nearest one only, and the hull half as much, `StationDamage`), and at zero the mount is knocked out until a
 ## mission or the console repairs it. Pure: `StationGrid` feeds it the station's hits and turns a loss into a mount that stops.
 
 ## Health and the radius around the pivot a hit counts within, per kind (`StationGrid.Kind`: 1 light, 2 heavy, 3 interceptor).
@@ -44,21 +44,28 @@ func is_out(index: int) -> bool:
 	return health[index] <= 0.0
 
 
-## A hit of `amount` at `point` in `body`'s frame: every mount on that body within its radius loses it. Returns the mounts this
-## hit knocked out.
-func hit(body: String, point: Vector3, amount: float) -> PackedInt32Array:
-	var lost := PackedInt32Array()
-	if amount <= 0.0:
-		return lost
+## The live mount on `body` whose radius holds `point` (in that body's frame), the nearest of them; -1 when none does.
+func nearest(body: String, point: Vector3) -> int:
+	var best: int = -1
+	var best_d: float = INF
 	for i: int in names.size():
 		if bodies[i] != body or health[i] <= 0.0:
 			continue
 		var r: float = RADIUS_M.get(kinds[i], 30.0)
-		if positions[i].distance_squared_to(point) > r * r:
-			continue
-		health[i] = maxf(health[i] - amount, 0.0)
-		if health[i] <= 0.0:
-			lost.append(i)
+		var d: float = positions[i].distance_squared_to(point)
+		if d <= r * r and d < best_d:
+			best_d = d
+			best = i
+	return best
+
+
+## A hit of `amount` at `point` in `body`'s frame: only the nearest live mount whose radius holds it takes it (M10-T65, Q72).
+## Returns the mounts this hit knocked out.
+func hit(body: String, point: Vector3, amount: float) -> PackedInt32Array:
+	var lost := PackedInt32Array()
+	var i: int = nearest(body, point)
+	if i >= 0 and wear(i, amount):
+		lost.append(i)
 	return lost
 
 

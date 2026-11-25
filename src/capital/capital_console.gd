@@ -39,13 +39,13 @@ func register() -> void:
 				"doc": "The section the last hit or ram landed on"},
 		&"state": {"get": _state_text, "doc": "fighting, disabled or destroyed (and the section that blew), M10-T08"},
 		&"sections": {"get": func() -> String: return "; ".join(_focused().damage.describe()) if _focused() != null else "",
-				"doc": "Each section: kind, state (intact, damaged, disabled, destroyed), points left, a reactor's overload"},
+				"doc": "Each section: kind, state (intact, damaged, disabled, destroyed), points left; and the hull's total"},
 		&"power": {"get": func() -> float: return _focused().damage.power() if _focused() != null else 0.0, "type": TYPE_FLOAT,
-				"doc": "Its reactors' power, 0 to 1 (a stage down below half a reactor's points)"},
+				"doc": "Its reactors' power, 0 to 1 (a stage down below half a reactor's points; 0 for a hulk)"},
 		&"thrust": {"get": func() -> float: return _focused().damage.thrust_fraction() if _focused() != null else 0.0,
 				"type": TYPE_FLOAT, "doc": "The thrust it can give, 0 to 1: the live engines' share at the power left"},
 		&"fire_rate": {"get": func() -> float: return _focused().damage.fire_rate() if _focused() != null else 0.0,
-				"type": TYPE_FLOAT, "doc": "Its weapons' rate of fire, 0 to 1 (half on last orders with the bridge lost)"},
+				"type": TYPE_FLOAT, "doc": "Its weapons' rate of fire: 1 while it has power, 0 for a hulk"},
 		&"mounts": {"get": func() -> String: return _live_text(_focused().damage.live_mounts().size(), _focused().damage.mounts.size()) if _focused() != null else "",
 				"doc": "Weapon mounts that work, of all"},
 		&"bays": {"get": func() -> String: return _live_text(_focused().damage.live_bays().size(), _focused().damage.bay_sections.size()) if _focused() != null else "",
@@ -63,7 +63,7 @@ func register() -> void:
 				"doc": "Wall-clock cost of the last tick's capital flight, us (a readout)"},
 	}), flight)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Capital ships (M10-T07): info, list, spawn <type[:faction]> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount> <amount>, disable, scuttle, hulks, doors <open|close>[:<bay>]",
+			"Capital ships (M10-T07): info, list, spawn <type[:faction]> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount|engine|bay> <amount>, disable, scuttle, hulks, doors <open|close>[:<bay>]",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"a"),
 					ConsoleArg.float_optional(&"b", null)]), _cmd, flight)
 
@@ -116,18 +116,21 @@ func _sections() -> ConsoleResult:
 	return ConsoleResult.success(lines)
 
 
-# A hit of `amount` with no shooter on the focused ship's section or mount `target`, through its Damageable (god mode aside),
-# landing at the section's centre or on the mount.
+# A hit of `amount` with no shooter on the focused ship's section, mount, engine or bay `target`, through its Damageable (god
+# mode aside), landing at the section's centre or on the part (Q72: the part in full, the hull half).
 func _damage(target: String, amount: Variant) -> ConsoleResult:
 	var ship: CapitalShip = _focused()
-	var usage: String = "capital damage <section|mount> <amount>"
+	var usage: String = "capital damage <section|mount|engine|bay> <amount>"
 	if ship == null or amount == null or float(amount) <= 0.0:
 		return ConsoleResult.failure(usage)
 	var rest: Vector3
 	var section: String = target
-	if ship.damage.mounts.has(target):
-		rest = ship.damage.mounts[target].position
-		section = ship.damage.mounts[target].section
+	var part: Object = null
+	for kind: String in ["mount", "engine", "bay"]:
+		part = ship.damage.part_of("%s:%s" % [kind, target]) if part == null else part
+	if part != null:
+		rest = part.get(&"position")
+		section = str(part.get(&"section"))
 	elif ship.damage.sections.has(target):
 		rest = ship.damage.sections[target].box.get_center()
 	else:
@@ -137,12 +140,13 @@ func _damage(target: String, amount: Variant) -> ConsoleResult:
 	info.set_meta(CapitalShip.SECTION_META, section)
 	info.set_meta(CapitalShip.REST_POINT_META, rest)
 	ship.damageable.apply_hit(info)
-	var s: CapitalSection = ship.damage.sections[section]
-	return ConsoleResult.line("%s: %.0f on %s, now %s %.0f/%.0f; %s" % [ship.targetable.display_name, info.applied, target,
-			CapitalSection.state_name(s.state), s.hp, s.max_hp, _state_text()])
+	var s: CapitalSection = ship.damage.sections.get(section)
+	return ConsoleResult.line("%s: %.0f off the hull from %s, section %s %.0f/%.0f; %s" % [ship.targetable.display_name,
+			info.applied, target, CapitalSection.state_name(s.state) if s != null else "-", s.hp if s != null else 0.0,
+			s.max_hp if s != null else 0.0, _state_text()])
 
 
-# Disables the focused ship as a lost reactor does: each reactor takes a console hit of its points left (god mode aside).
+# Makes the focused ship a hulk as a lost bridge does (Q72): each bridge takes a console hit of its points left (god mode aside).
 func _disable() -> ConsoleResult:
 	var ship: CapitalShip = _focused()
 	if ship == null:
@@ -150,14 +154,16 @@ func _disable() -> ConsoleResult:
 	if ship.is_hulk():
 		return ConsoleResult.line("%s is already disabled (%s)" % [ship.targetable.display_name, _hulk_text()])
 	for s: CapitalSection in ship.damage.sections.values():
-		if s.kind == CapitalSection.REACTOR and not s.lost():
+		if s.kind == CapitalSection.BRIDGE and not s.lost():
 			var info := HitInfo.new(ship.get_instance_id(), 0, &"", s.hp, ship.global_transform * s.box.get_center(), Vector3.ZERO,
 					0.0, HitInfo.CAUSE_CONSOLE)
 			info.set_meta(CapitalShip.SECTION_META, s.name)
 			info.set_meta(CapitalShip.REST_POINT_META, s.box.get_center())
 			ship.damageable.apply_hit(info)
+	if not ship.is_hulk() and not ship.damage.is_destroyed:
+		ship.scuttle()  # no bridge to take out: the crew's own way to a hulk
 	if not ship.is_hulk():
-		return ConsoleResult.failure("capital disable: %s has no reactor to shut down (%s)" % [ship.targetable.display_name, _state_text()])
+		return ConsoleResult.failure("capital disable: %s did not become a hulk (%s)" % [ship.targetable.display_name, _state_text()])
 	return ConsoleResult.line("%s disabled: %s" % [ship.targetable.display_name, _hulk_text()])
 
 

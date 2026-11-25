@@ -7,8 +7,8 @@ extends RefCounted
 ##     {action: target, id, label}           a ship becomes the target
 ##     {action: waypoint, id, label, point}  a beacon or an objective becomes the HUD waypoint (`id` 0 for a bare place)
 ##     {action: clear_target} / {action: clear_waypoint}   "none"
-## A capital's pick first opens its subsystem rings (M10-T18, `CapitalSubsystems`): WHOLE SHIP and the groups, then a group's members; the
-## pick then carries `subsystem` (a key, "" for the whole ship). A pick closes the menu. A second-ring slot also carries its `source` (the `TargetInfo` or the objective it was built from),
+## A capital's pick first opens its subsystem ring (M10-T18, `CapitalSubsystems`): WHOLE SHIP and the kinds it has (Q60, M10-T65:
+## a kind, never one part); the pick then carries `subsystem` (a kind, "" for the whole ship). A pick closes the menu. A second-ring slot also carries its `source` (the `TargetInfo` or the objective it was built from),
 ## which the preview panel reads for the highlighted entry (T43).
 
 const HEADING: String = "TACTICAL PAUSE"
@@ -18,8 +18,6 @@ const ACTION_TARGET: StringName = &"target"
 const ACTION_WAYPOINT: StringName = &"waypoint"
 const ACTION_CLEAR_TARGET: StringName = &"clear_target"
 const ACTION_CLEAR_WAYPOINT: StringName = &"clear_waypoint"
-## A subsystem ring's entry that opens its group (never returned by `select`).
-const ACTION_GROUP: StringName = &"group"
 ## An objective's text is cut to this on its slice; the whole text shows under the ring while it is highlighted.
 const OBJECTIVE_LABEL_CHARS: int = 16
 ## The categories whose picks set the waypoint rather than the target.
@@ -79,9 +77,9 @@ func close(reason: StringName = &"close") -> void:
 	_pending = {}
 
 
-## Which subsystem ring is open: 0 on none, 1 on the groups (whole ship, bridge, ...), 2 on one group's members.
+## Which subsystem ring is open: 0 on none, 1 on the kinds (whole ship, bridge, engines, ...).
 func subsystem_level() -> int:
-	return maxi(radial.depth() - 2, 0) if radial.is_open() and category >= 0 else 0
+	return mini(maxi(radial.depth() - 2, 0), 1) if radial.is_open() and category >= 0 else 0
 
 
 ## How many entries `c` holds in all (the first ring's numbers).
@@ -96,7 +94,7 @@ func page_name() -> String:
 	if not radial.is_open():
 		return ""
 	if subsystem_level() > 0:
-		return "subsystems" if subsystem_level() == 1 else "members"
+		return "subsystems"
 	return "categories" if category < 0 else String(TargetCategories.NAMES[category]).to_lower()
 
 
@@ -122,18 +120,14 @@ func select() -> Dictionary:
 		_open_category(entry["payload"] as TargetCategories.Category)
 		return {}
 	var picked: Dictionary = (entry["payload"] as Dictionary).duplicate()
-	if picked["action"] == ACTION_GROUP:
-		picked = _open_members(picked["group"])
-		if picked.is_empty():
-			return {}
 	if picked["action"] == ACTION_TARGET and subsystem_level() == 0 and _open_subsystems(picked):
 		return {}
 	close(&"pick")
 	return picked
 
 
-# A ship with subsystems opens its groups ring instead of being targeted at once: "whole ship" first, then each group it has
-# (ring of at most eight). Returns whether a ring opened.
+# A ship with subsystems opens its kinds ring instead of being targeted at once: "whole ship" first, then each kind it has
+# (ring of at most eight; Q60: a kind, never one part). Returns whether a ring opened.
 func _open_subsystems(picked: Dictionary) -> bool:
 	if not subsystems_of.is_valid():
 		return false
@@ -147,41 +141,19 @@ func _open_subsystems(picked: Dictionary) -> bool:
 	var whole: Dictionary = picked.duplicate()
 	whole["subsystem"] = ""
 	var entries: Array[Dictionary] = [{"label": CapitalSubsystems.WHOLE_LABEL, "sub": "", "color": color, "payload": whole}]
-	for group: String in CapitalSubsystems.GROUPS:
-		var members: Array[Dictionary] = CapitalSubsystems.members(found, group)
-		if not members.is_empty():
-			entries.append({"label": CapitalSubsystems.GROUP_LABELS[group], "sub": _group_sub(members), "color": color,
-					"payload": {"action": ACTION_GROUP, "group": group}})
+	for entry: Dictionary in found:
+		var pick: Dictionary = picked.duplicate()
+		pick["subsystem"] = entry["key"]
+		entries.append({"label": entry["label"], "sub": _kind_sub(entry), "color": _state_color(entry, color), "payload": pick})
 	radial.push("%s · %s" % [HEADING, str(picked["label"])], entries, color)
 	return true
 
 
-# A group with one member is that member's pick (returned); with more, its own ring of the first eight (nothing returned).
-func _open_members(group: String) -> Dictionary:
-	var members: Array[Dictionary] = CapitalSubsystems.members(_subsystems, group)
-	if members.size() == 1:
-		var only: Dictionary = _pending.duplicate()
-		only["subsystem"] = members[0]["key"]
-		return only
-	var color: Color = radial.color()
-	var entries: Array[Dictionary] = []
-	for member: Dictionary in members.slice(0, TargetCategories.RING_SIZE):
-		var pick: Dictionary = _pending.duplicate()
-		pick["subsystem"] = member["key"]
-		entries.append({"label": member["label"], "sub": CapitalSubsystems.state_text(member), "color": _state_color(member, color),
-				"payload": pick})
-	radial.push("%s · %s" % [HEADING, CapitalSubsystems.GROUP_LABELS[group]], entries, color)
-	return {}
-
-
-# "3 of 4 working" for a group, the state for a single member.
-static func _group_sub(members: Array[Dictionary]) -> String:
-	if members.size() == 1:
-		return CapitalSubsystems.state_text(members[0])
-	var working: int = 0
-	for member: Dictionary in members:
-		working += 1 if bool(member["works"]) else 0
-	return "%d of %d working" % [working, members.size()]
+# The aimed part's state for a kind of one part, how many still stand for a kind of several.
+static func _kind_sub(entry: Dictionary) -> String:
+	if int(entry["total"]) <= 1:
+		return CapitalSubsystems.state_text(entry)
+	return "%d of %d working" % [int(entry["live"]), int(entry["total"])]
 
 
 static func _state_color(member: Dictionary, fallback: Color) -> Color:

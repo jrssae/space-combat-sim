@@ -210,6 +210,8 @@ func launch_squadron(wing: String = "", door: int = 0, flights: int = 0) -> Stri
 	var s: Station = station()
 	if s == null:
 		return "no station in this scenario (anchor it on babylon5)"
+	if not s.has_power():
+		return "%s has no power" % Station.DISPLAY_NAME  # a hulk or a wreck launches nothing (M10-T65)
 	var own: Wing = main.wings.player_wing() if main.wings != null else null
 	if own != null and (own.leader != main.combatant):
 		own = null
@@ -244,6 +246,8 @@ func launch_from_bay(bay_name: String, with_wingmen: bool = true) -> String:
 	var s: Station = station()
 	if s == null:
 		return "no station in this scenario (anchor it on babylon5)"
+	if not s.has_power():
+		return "%s has no power" % Station.DISPLAY_NAME  # a hulk or a wreck launches nothing (M10-T65)
 	var bay: Dictionary = s.hardpoints.bay(bay_name)
 	if bay.is_empty():
 		return "no launch bay '%s'" % bay_name
@@ -282,6 +286,8 @@ func launch_wing(wing: String, count: int = WING_SIZE, extra: Array[Combatant] =
 	var s: Station = station()
 	if s == null:
 		return "no station in this scenario"
+	if not s.has_power():
+		return "%s has no power" % Station.DISPLAY_NAME  # a hulk or a wreck launches nothing (M10-T65)
 	if not WINGS.has(wing.to_lower()):
 		return "no wing '%s' (%s)" % [wing, ", ".join(WINGS)]
 	for launch: Dictionary in launches:
@@ -668,6 +674,8 @@ func _start(wing: String, door: int, ships: Array[Combatant], player_id: String,
 	var s: Station = station()
 	if s == null:
 		return "no station in this scenario (anchor it on babylon5)"
+	if not s.has_power():
+		return "%s has no power" % Station.DISPLAY_NAME  # a hulk or a wreck launches nothing (M10-T65)
 	if profile == null:
 		return "no launch profile (%s)" % LaunchProfile.DEFAULT_PATH
 	for launch: Dictionary in launches:

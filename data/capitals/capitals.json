@@ -31,13 +31,24 @@
   }
  },
  "section_damage": {
-  "_doc": "M10-T08 (D12.5, Q53): how a capital's sections take damage. reactor_overload: share of a reactor's points it takes after it shuts down before it blows; pass_on: share of a hit on a lost section passed to the nearest live section; headless_fire_rate: rate of fire on last orders after the bridge is lost; power_stage_at and power_stage_level: below this share of its points a reactor gives this share of power; mount_reach_m: a hit this close to a live mount (or within its barrel's length) lands on it too.",
-  "reactor_overload": 0.5,
-  "pass_on": 0.5,
-  "headless_fire_rate": 0.5,
+  "_doc": "M10-T08 (D12.5, Q53), M10-T65 (Q72): how a capital or a station takes damage. Only the part a shot hits takes it: a subsystem (a weapon mount, an engine or a bay within reach of the hit, the bridge or reactor section) takes the full damage and the hull's total subsystem_hull_share of it (no section takes any); any other hit lowers the section it lands in and the hull's total; a lost section's hits go to the total. A magazine, fuel or reactor section at 0 blows the ship up; the bridge at 0 or the hull below hulk_below of its points makes a hulk (no power). power_stage_at and power_stage_level: below this share of its points a reactor gives this share of power; mount_reach_m: a hit this close to a live mount (or within its barrel's length), an engine's nozzle (plus its radius) or a bay's mouth (plus half its diagonal) lands on it; engine_hit_points and bay_hit_points: an engine's and a bay's own points (placeholders).",
+  "subsystem_hull_share": 0.5,
+  "hulk_below": 0.1,
   "power_stage_at": 0.5,
   "power_stage_level": 0.5,
-  "mount_reach_m": 10.0
+  "mount_reach_m": 10.0,
+  "engine_hit_points": 1500.0,
+  "bay_hit_points": 1500.0
+ },
+ "station_damage": {
+  "_doc": "M10-T65 (Q72): a station takes damage by the capitals' rules (section_damage) on its own sections (StationSections, 5 000 points each) and grid mounts; its hull's total is its sections' points together. section_kinds: the sections that are its bridge and reactor (the rest are hull); blast: the class row and section kind of its death blast (blasts.sections, unscaled). Babylon 5 is always destructible: losing it fails the mission.",
+  "babylon5": {
+   "section_kinds": {
+    "command": "bridge",
+    "reactor": "reactor"
+   },
+   "blast": ["dreadnought", "reactor"]
+  }
  },
  "hulks": {
   "_doc": "M10-T10 (D12.7, Q19): a disabled capital loses power at once (its weapons, bays and lights), control at control_loss_s (the helm stops steering, the mains hold their last setting), and its drive winds down to cold at cold_s, after which it drifts with no force; its lights die over lights_fade_s. There is no cap on hulks. never_hulk: factions and hulls that explode when disabled instead of becoming a hulk (the Vorlons and Shadows).",

@@ -1,6 +1,7 @@
 extends GutTest
-## `CapitalSubsystems` (M10-T18, Q17), pure: what a pilot can pick on a capital, in group order with its state and health; the
-## cycle through them and back to the whole ship; and the target menu's subsystem rings built on it.
+## `CapitalSubsystems` (M10-T18, Q17; by kind since M10-T65, Q60), pure: what a pilot can pick on a capital, one entry a kind in
+## ring order, aimed at the nearest part still standing and kept until it is lost; the cycle through them and back to the whole
+## ship; and the target menu's subsystem ring built on it.
 
 const HULL: float = 10000.0
 const LAYOUT: Array = [
@@ -24,55 +25,78 @@ func _damage() -> CapitalDamage:
 	weapons.append({"name": "mine_1", "section": "spine", "kind": "mine", "position": [0.0, 0.0, 650.0]})
 	var hardpoints: Dictionary = {
 		"weapons": weapons,
-		"bays": [{"name": "bay_1", "section": "hangar"}, {"name": "bay_2", "section": "hangar"}],
-		"engines": [{"name": "eng_r", "section": "engine_r", "share": 0.5}, {"name": "eng_l", "section": "engine_l", "share": 0.5}],
+		"bays": [{"name": "bay_1", "section": "hangar", "position": [0.0, -20.0, 230.0]}, {"name": "bay_2", "section": "hangar"}],
+		"engines": [{"name": "eng_r", "section": "engine_r", "share": 0.5, "position": [10.0, 0.0, 499.0], "radius_m": 5.0},
+				{"name": "eng_l", "section": "engine_l", "share": 0.5, "position": [-10.0, 0.0, 599.0], "radius_m": 5.0}],
 	}
 	return CapitalDamage.build(sections, hardpoints, HULL)
 
 
-func _groups(entries: Array[Dictionary]) -> Array[String]:
+func _keys(entries: Array[Dictionary]) -> Array[String]:
 	var out: Array[String] = []
 	for e: Dictionary in entries:
-		if not out.has(e["group"]):
-			out.append(e["group"])
+		out.append(e["key"])
 	return out
 
 
-func test_every_kind_the_pilot_can_pick_is_listed_in_group_order() -> void:
+func test_one_entry_a_kind_in_ring_order_never_a_single_part() -> void:
 	var entries: Array[Dictionary] = CapitalSubsystems.list(_damage())
-	assert_eq(_groups(entries), ["bridge", "reactor", "engines", "bays", "turrets", "beams"] as Array[String],
-			"no missiles aboard: no group; the mine is not a target")
-	assert_eq(CapitalSubsystems.members(entries, "turrets").size(), 11, "ten turrets and the interceptor dome")
-	assert_true(CapitalSubsystems.find(entries, "mount:mine_1").is_empty())
-	assert_eq(CapitalSubsystems.find(entries, "bridge:bridge")["point"], Vector3(0.0, 0.0, 150.0), "a section sits at its box's centre")
-	assert_eq(CapitalSubsystems.find(entries, "mount:beam_1")["point"], Vector3(20.0, 0.0, 350.0), "a mount where it is mounted")
+	assert_eq(_keys(entries), ["bridge", "reactor", "engines", "bays", "turrets", "beams"] as Array[String],
+			"no missiles aboard: no kind; the mine is not a target (Q60)")
+	var turrets: Dictionary = CapitalSubsystems.find(entries, "turrets")
+	assert_eq([turrets["live"], turrets["total"]], [11, 11], "ten turrets and the interceptor dome as one kind")
+	assert_eq(turrets["label"], "TURRETS 11/11")
+	assert_eq(CapitalSubsystems.find(entries, "bridge")["label"], "BRIDGE", "a kind of one part")
+	assert_eq(CapitalSubsystems.find(entries, "bridge")["point"], Vector3(0.0, 0.0, 150.0), "a section sits at its box's centre")
+	assert_eq(CapitalSubsystems.find(entries, "beams")["point"], Vector3(20.0, 0.0, 350.0), "a mount where it is mounted")
+	assert_true(CapitalSubsystems.find(entries, "mount:turret_3").is_empty(), "no single part is offered")
 
 
-func test_mounts_nearest_the_pilot_come_first() -> void:
-	var entries: Array[Dictionary] = CapitalSubsystems.list(_damage(), Vector3(0.0, 20.0, 95.0))
-	var turrets: Array[Dictionary] = CapitalSubsystems.members(entries, "turrets")
-	assert_eq(turrets[0]["key"], "mount:turret_9")
-	assert_eq(turrets[1]["key"], "mount:turret_8")
+func test_a_kind_aims_at_its_nearest_standing_part() -> void:
+	var d: CapitalDamage = _damage()
+	var turrets: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d, Vector3(0.0, 20.0, 95.0)), "turrets")
+	assert_eq(turrets["part"], "mount:turret_9", "the nearest to the pilot")
+	turrets = CapitalSubsystems.find(CapitalSubsystems.list(d, Vector3(0.0, 20.0, -50.0)), "turrets")
+	assert_eq(turrets["part"], "mount:turret_0")
+	var engines: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d, Vector3(0.0, 0.0, 700.0)), "engines")
+	assert_eq(engines["part"], "engine:eng_l")
+	assert_eq(engines["point"], Vector3(-10.0, 0.0, 599.0), "an engine at its nozzle")
+	var bays: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d, Vector3(0.0, 0.0, 1000.0)), "bays")
+	assert_eq(bays["part"], "bay:bay_2", "a bay placed nowhere sits at its section's centre: nearer the pilot here")
+
+
+func test_the_part_aimed_at_is_kept_until_it_is_lost_then_the_nearest_left_until_none() -> void:
+	var d: CapitalDamage = _damage()
+	var from := Vector3(0.0, 20.0, 95.0)
+	var held: Dictionary = {"turrets": "mount:turret_2"}
+	assert_eq(CapitalSubsystems.find(CapitalSubsystems.list(d, from, held), "turrets")["part"], "mount:turret_2", "kept while it stands")
+	d.hit_mount("turret_2", 1.0e6)
+	var turrets: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d, from, held), "turrets")
+	assert_eq(turrets["part"], "mount:turret_9", "lost: the nearest left")
+	assert_eq([turrets["live"], turrets["total"]], [10, 11])
+	for i: int in 10:
+		d.hit_mount("turret_%d" % i, 1.0e6)
+	d.hit_mount("dome", 1.0e6)
+	turrets = CapitalSubsystems.find(CapitalSubsystems.list(d, from, held), "turrets")
+	assert_false(turrets["works"], "none left")
+	assert_eq(turrets["part"], "")
+	assert_eq(turrets["state"], CapitalSubsystems.STATE_LOST)
 
 
 func test_states_and_health_follow_the_damage_model() -> void:
 	var d: CapitalDamage = _damage()
-	assert_eq(CapitalSubsystems.find(CapitalSubsystems.list(d), "bridge:bridge")["state"], "intact")
+	assert_eq(CapitalSubsystems.find(CapitalSubsystems.list(d), "bridge")["state"], "intact")
 	d.hit("bridge", Vector3(0.0, 0.0, 150.0), 250.0)  # half of the bridge's 500 points
-	var bridge: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d), "bridge:bridge")
+	var bridge: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d), "bridge")
 	assert_eq(bridge["state"], "damaged")
 	assert_almost_eq(float(bridge["fraction"]), 0.5, 1e-6)
 	assert_eq(CapitalSubsystems.state_text(bridge), "DAMAGED 50%")
-	d.hit_mount("turret_3", 1.0e6)
-	var turret: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d), "mount:turret_3")
-	assert_eq(turret["state"], "destroyed")
-	assert_false(turret["works"])
 	d.hit("engine_r", Vector3(0.0, 0.0, 450.0), 1.0e6)  # engine_r lost: its engine and the dome on it
-	var entries: Array[Dictionary] = CapitalSubsystems.list(d)
-	assert_eq(CapitalSubsystems.find(entries, "engine:eng_r")["state"], "disabled")
-	assert_false(CapitalSubsystems.find(entries, "engine:eng_r")["works"])
-	assert_true(CapitalSubsystems.find(entries, "engine:eng_l")["works"])
-	assert_false(CapitalSubsystems.find(entries, "mount:dome")["works"], "a mount with its section lost does not work")
+	var entries: Array[Dictionary] = CapitalSubsystems.list(d, Vector3(10.0, 0.0, 499.0))
+	var engines: Dictionary = CapitalSubsystems.find(entries, "engines")
+	assert_eq(engines["part"], "engine:eng_l", "the lost section's engine is passed over")
+	assert_eq([engines["live"], engines["total"]], [1, 2])
+	assert_eq(CapitalSubsystems.find(entries, "turrets")["live"], 10, "the dome went with its section")
 
 
 func test_cycling_runs_through_every_subsystem_and_the_whole_ship() -> void:
@@ -86,7 +110,7 @@ func test_cycling_runs_through_every_subsystem_and_the_whole_ship() -> void:
 	assert_false(seen.has(""), "every subsystem comes up before the whole ship")
 	assert_eq(CapitalSubsystems.cycled(entries, key), "", "after the last: the whole ship")
 	assert_eq(CapitalSubsystems.cycled(entries, "", -1), key, "backwards from the whole ship: the last")
-	assert_eq(CapitalSubsystems.cycled(entries, "mount:gone"), entries[0]["key"], "a subsystem that is gone counts as the whole ship")
+	assert_eq(CapitalSubsystems.cycled(entries, "missiles"), entries[0]["key"], "a kind it lacks counts as the whole ship")
 
 
 func test_without_a_damage_model_there_is_nothing_to_pick() -> void:
@@ -132,7 +156,7 @@ func test_picking_a_capital_opens_its_subsystem_ring_with_the_whole_ship_first()
 	var labels: Array[String] = []
 	for slot: Dictionary in menu.radial.slots():
 		labels.append(str(slot["label"]))
-	assert_eq(labels, ["WHOLE SHIP", "BRIDGE", "REACTOR", "ENGINES", "LAUNCH BAYS", "TURRETS", "BEAM EMITTERS"] as Array[String])
+	assert_eq(labels, ["WHOLE SHIP", "BRIDGE", "REACTOR", "ENGINES 2/2", "LAUNCH BAYS 2/2", "TURRETS 11/11", "BEAM EMITTERS"] as Array[String])
 	assert_eq(menu.radial.slice_count(), 7, "one slice per entry")
 	menu.radial.set_highlight(0)
 	var pick: Dictionary = menu.select()
@@ -142,35 +166,27 @@ func test_picking_a_capital_opens_its_subsystem_ring_with_the_whole_ship_first()
 	assert_false(menu.is_open())
 
 
-func test_a_group_of_one_is_picked_at_once_and_a_group_of_many_opens_its_members() -> void:
+func test_a_kind_is_picked_at_once_from_the_ring() -> void:
 	var menu: TargetMenu = _menu()
 	_highlight_target(menu, TargetCategories.Category.ENEMIES, "EAS AGAMEMNON")
 	menu.select()
 	menu.radial.set_highlight(1)  # BRIDGE
-	var pick: Dictionary = menu.select()
-	assert_eq(pick["subsystem"], "bridge:bridge")
+	assert_eq(menu.select()["subsystem"], "bridge")
 	menu = _menu()
 	_highlight_target(menu, TargetCategories.Category.ENEMIES, "EAS AGAMEMNON")
 	menu.select()
 	menu.radial.set_highlight(5)  # TURRETS
-	assert_eq(menu.select(), {})
-	assert_eq(menu.subsystem_level(), 2)
-	assert_eq(menu.page_name(), "members")
-	assert_eq(menu.radial.slice_count(), TargetCategories.RING_SIZE, "eleven turrets: the first eight")
-	menu.radial.set_highlight(2)
-	var turret: Dictionary = menu.select()
-	assert_true(String(turret["subsystem"]).begins_with("mount:"))
-	assert_eq(turret["id"], 7)
+	assert_eq(str(menu.radial.slots()[5]["sub"]), "11 of 11 working")
+	var pick: Dictionary = menu.select()
+	assert_eq(pick["subsystem"], "turrets", "the kind, no ring of parts (Q60)")
+	assert_eq(pick["id"], 7)
+	assert_false(menu.is_open())
 
 
 func test_back_walks_out_one_ring_at_a_time() -> void:
 	var menu: TargetMenu = _menu()
 	_highlight_target(menu, TargetCategories.Category.ENEMIES, "EAS AGAMEMNON")
 	menu.select()
-	menu.radial.set_highlight(5)
-	menu.select()
-	assert_eq(menu.subsystem_level(), 2)
-	assert_true(menu.back())
 	assert_eq(menu.subsystem_level(), 1)
 	assert_true(menu.back())
 	assert_eq(menu.subsystem_level(), 0)

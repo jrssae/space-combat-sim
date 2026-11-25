@@ -10,17 +10,18 @@ extends CapitalBody
 ##   `CapitalRotor`, a kinematic body turned about its pivot. Every section's hit volumes, with the convex hulls they are fitted
 ##   to, go to the native core as the body's surface (`ScsSimCore.set_surface`), so the hit sweep, the rams and the turrets' line
 ##   of fire see the real shape; a hit or ram is named by its section (`section_hit`), by the volume the core's sweep entered.
-## - **Damage by section** (M10-T08, D12.5). Its `Damageable` routes every hit to `damage` (`CapitalDamage`): the section's
-##   points, a mount within reach, what a lost section takes with it. An engine lost or the reactor's power down a stage refits
-##   the drive (the live engines' nozzles at the power left); a section that blows destroys the hull. `mount_works`, `bay_works`
-##   and `damage.fire_rate()` are what its weapons and launches read (T12 to T17).
+## - **Damage by what is hit** (M10-T08, D12.5; M10-T65, Q72). Its `Damageable` routes every hit to `damage` (`CapitalDamage`):
+##   a subsystem struck takes it in full and the hull half, any other hit is hull damage. An engine lost or the reactor's power
+##   down a stage refits the drive (the live engines' nozzles at the power left); a magazine, fuel or reactor section at 0 blows
+##   it up; the bridge at 0 or the hull below a tenth makes it a hulk. `mount_works`, `bay_works` and `damage.fire_rate()` are
+##   what its weapons and launches read (T12 to T17).
 ## - **Beams** (M10-T12, D12.9): its beam mounts are emitters on the native beam rows (`CapitalBeams`), from its `_ready` until
 ##   it leaves the tree; a lost mount or section, a disabled or destroyed ship stops them.
 ## - **Guns and launchers** (M10-T14, D12.9): its turret, fixed gun and missile mounts are rows of `CapitalGuns`, the same way.
 ## - **Disguise** (M10-T02, Q55): a faction that broadcasts another's transponder (the renegades) does so from its capitals too,
 ##   until a hostile shot or hit gives the ship away.
-## - **Disabled** (M10-T10, D12.7), it winds down in stages (`hulk_stages`): power first (weapons, bays; its lights die,
-##   `CapitalHulkLights`), then control (the helm stops steering), then thrust (the mains' last setting winds down to cold), and
+## - **Disabled** (M10-T10, D12.7), it winds down in stages (`hulk_stages`): power first (weapons, bays, doors; its lights die,
+##   `CapitalHulkLights`, its bay lamps with them), then control (the helm stops steering), then thrust (the mains' last setting winds down to cold), and
 ##   then it drifts on its last motion with no force, still a target whose sections can be hit and blow. In the tier it is a
 ##   hulk row. There is no cap on hulks; `scuttle()` is the crew's silent way to make one.
 ## - **In play.** `Targetable` of kind capital, heard as far as its class broadcasts (`CapitalData.broadcast_range_m`); in the
@@ -177,8 +178,7 @@ func _process(_delta: float) -> void:
 		rotor.visual_pivot.transform = Transform3D(Basis(rotor.axis, rotor.visual_angle(fraction)), rotor.pivot)
 	if _lights != null and hulk_stages.lights_fading():
 		_lights.apply(hulk_stages.lights_level())
-		if bay_lamps != null:
-			bay_lamps.set_level(hulk_stages.lights_level())
+		_set_lamps(hulk_stages.lights_level())
 
 
 func half_extents() -> Vector3:
@@ -242,6 +242,7 @@ func settle_as_hulk() -> void:
 	_refit_drive()
 	if _lights != null:
 		_lights.apply(0.0)
+	_set_lamps(0.0)
 	hulk_cold.emit()
 
 
@@ -319,8 +320,9 @@ func bay_works(bay: String) -> bool:
 	return damage.bay_works(bay)
 
 
-## Takes hit `info` by section (its `Damageable`'s and each rotor's `hit_router`): the points go off the section it landed on,
-## and off the hull's total; a section that blows takes the rest of the hull. Returns the hull points removed.
+## Takes hit `info` by what it struck (its `Damageable`'s and each rotor's `hit_router`, Q72): a subsystem in full and the hull
+## half, else the section it landed on and the hull's total; a section that blows takes the rest of the hull. Returns the hull
+## points removed.
 func route_hit(info: HitInfo) -> float:
 	if not info.has_meta(SECTION_META):
 		_name_hit(info)
@@ -424,10 +426,11 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	_packed_hulls = Station.pack_hulls(shapes, volumes)
 
 
-## Opens (true) or shuts a bay's door; false when the hull has no door for that bay (T17 calls this around a launch or a docking).
+## Opens (true) or shuts a bay's door; false when the hull has no door for that bay or no power to move it (T17 calls this
+## around a launch or a docking).
 func set_bay_door(bay: String, open: bool, instant: bool = false) -> bool:
 	var door: BayDoorNode = bay_doors.get(bay) as BayDoorNode
-	if door == null:
+	if door == null or not damage.has_power():
 		return false
 	if instant:
 		door.snap(open)
@@ -630,11 +633,18 @@ func _on_restored() -> void:
 	if _lights != null:
 		_lights.release()
 		_lights = null
-	if bay_lamps != null:
-		bay_lamps.set_level(1.0)
+	_set_lamps(1.0)
 	_refit_drive()
 	if was_hulk and is_tier_parked() and TierDirector.current() != null:
 		TierDirector.current().mark_hulk(self, false)
+
+
+# Its bays' lamps (the open halls' and the doors') at `level` of their strength: out with a hulk's other lights.
+func _set_lamps(level: float) -> void:
+	if bay_lamps != null:
+		bay_lamps.set_level(level)
+	for door: Variant in bay_doors.values():
+		(door as BayDoorNode).set_power(level)
 
 
 # After a rebase moved the hull, the rotors are put beside it at once (they are not in the shifted group).

@@ -112,6 +112,7 @@ func _ready() -> void:
 	add_child(hint)
 	api.ended.connect(_on_ended)
 	main.director.player_destroyed.connect(_on_player_destroyed)
+	main.director.station_destroyed.connect(_on_station_destroyed)
 	recorder = DebriefRecorder.new()
 	recorder.main = main
 	add_child(recorder)
@@ -309,6 +310,12 @@ func _on_player_destroyed(_info: HitInfo) -> void:
 	main.director.cancel_respawn()  # no respawn in a mission (D51)
 	if api != null:
 		api.player_destroyed()
+
+
+# Babylon 5 is always destructible (M10-T65, Q72): a mission that needs it is lost with it.
+func _on_station_destroyed(_station: Station) -> void:
+	if api != null:
+		api.station_destroyed()
 
 
 func _on_ended(result: Dictionary) -> void:

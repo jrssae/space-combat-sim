@@ -1,7 +1,7 @@
 class_name StationSections
 extends RefCounted
 ## The station's damage sections (M7-T06, Q5): each has its own health, a hit lowers the section it lands in and no other, and
-## a section at zero is lost (once). The station itself is never destroyed or disabled in M7: a lost section only says so.
+## a section at zero is lost (once). What a loss does to the station (a hulk, its destruction) is `StationDamage`'s (M10-T65).
 ## Pure: the sections come from the manifest's hardpoints (`StationHardpoints.damage_sections`), the hits from `Station`.
 
 ## A section's health when whole (about 830 raider bolts of 6). T07's fix round set it so a 12-raider raid leaves visible
