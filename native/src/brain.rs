@@ -489,6 +489,15 @@ impl ScsBrains {
         }
     }
 
+    /// The pilot's squadron lost half its ships on a capital (M10-T16; `AiContext.capital_abort`): its runs on a capital
+    /// regroup off it and hold their fire.
+    #[func]
+    fn set_capital_abort(&mut self, slot: i64, abort: bool) {
+        if let Some(b) = self.brain_mut(slot) {
+            b.ctx.capital_abort = abort;
+        }
+    }
+
     /// A long rejoin's band for the pilot (M8-T17; `AiContext.catch_up_m`, `catch_up_mps`): in formation farther than
     /// `beyond_m` from its slot it closes at up to `fast_mps`, braking back to formation's own closing in time (0: none).
     #[func]
@@ -890,7 +899,9 @@ impl ScsBrains {
                 .take_commands(&mut handover.snapshot.commands, true);
         }
         if let Some(core) = self.core.as_mut() {
-            core.bind_mut().take_turret_picks(&handover.snapshot.turrets);
+            let mut c = core.bind_mut();
+            c.take_turret_picks(&handover.snapshot.turrets);
+            c.take_capital_answers(&handover.snapshot.capitals);
         }
         self.spare = Some(handover.snapshot);
         self.handed_events = handover.events;
@@ -1763,6 +1774,7 @@ impl ScsBrains {
                 snapshot.touched.clear();
                 snapshot.commands.clear();
                 snapshot.turrets.clear();
+                snapshot.capitals.clear();
                 snapshot.rows_version = self.own_version;
                 if own_pool {
                     self.step_pool.runner()
@@ -1862,7 +1874,9 @@ impl ScsBrains {
                 .take_commands(&mut done.snapshot.commands, filter);
         }
         if let Some(core) = self.core.as_mut() {
-            core.bind_mut().take_turret_picks(&done.snapshot.turrets);
+            let mut c = core.bind_mut();
+            c.take_turret_picks(&done.snapshot.turrets);
+            c.take_capital_answers(&done.snapshot.capitals);
         }
         self.spare = Some(done.snapshot);
         self.handed_events = events;

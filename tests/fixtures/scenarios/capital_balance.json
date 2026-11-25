@@ -32,6 +32,7 @@
    "faction": "earth_alliance",
    "leader": "ZETA 1",
    "order": "engage",
+   "press": true,
    "formation": "wedge",
    "members": [
     {
@@ -83,6 +84,7 @@
    "faction": "earth_alliance",
    "leader": "DELTA 1",
    "order": "engage",
+   "press": true,
    "formation": "wedge",
    "members": [
     {
@@ -134,6 +136,7 @@
    "faction": "earth_alliance",
    "leader": "BETA 1",
    "order": "engage",
+   "press": true,
    "formation": "wedge",
    "members": [
     {
@@ -185,6 +188,7 @@
    "faction": "earth_alliance",
    "leader": "GAMMA 1",
    "order": "engage",
+   "press": true,
    "formation": "wedge",
    "members": [
     {

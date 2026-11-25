@@ -90,7 +90,7 @@ impl ScsCapitalGuns {
         let list = bodies.as_slice().to_vec();
         match self.owners.iter_mut().find(|o| o.body == body) {
             Some(o) => o.bodies = list,
-            None => self.owners.push(Owner { body, bodies: list, order: 0 }),
+            None => self.owners.push(Owner { body, bodies: list, order: 0, order_aim: None }),
         }
     }
 
@@ -187,8 +187,15 @@ impl ScsCapitalGuns {
     /// The target ship `body`'s brain gives its anti-capital and dual mounts (0: they pick their own).
     #[func]
     fn set_order(&mut self, body: i64, target: i64) {
+        self.set_order_at(body, target, Vector3::ZERO, false);
+    }
+
+    /// `set_order` with the point the heavy weapons aim at on the target, in its frame, when `has_aim` (M10-T16: a subsystem).
+    #[func]
+    fn set_order_at(&mut self, body: i64, target: i64, aim: Vector3, has_aim: bool) {
         if let Some(o) = self.owners.iter_mut().find(|w| w.body == body) {
             o.order = target;
+            o.order_aim = has_aim.then_some(aim);
         }
     }
 

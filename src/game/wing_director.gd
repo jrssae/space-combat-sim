@@ -75,6 +75,9 @@ var _declared: Dictionary = {}
 var _launched: int = 0
 ## How flights fly (M8-T19); a test may set its own.
 var flight_rules: FlightRules = FlightRules.shared()
+## A squadron's most ships at once, by lowered name: what its losses on a capital ship count from (M10-T16).
+var _squadron_peak: Dictionary = {}
+var _abort_share: float = -1.0
 
 
 func _init() -> void:
@@ -168,6 +171,7 @@ func join(wing_name: String, ship: Combatant) -> Wing:
 		wing.order = int(d.get("order", AiContext.Order.ENGAGE_AT_WILL)) as AiContext.Order
 		wing.formation.shape = int(d.get("formation", Formation.Shape.FINGER_FOUR)) as Formation.Shape
 		wing.home = StringName(d.get("home", ""))
+		wing.press = bool(d.get("press", false))
 	else:
 		refresh(wing)
 	give_home(wing, ship)
@@ -621,13 +625,16 @@ func refresh(wing: Wing) -> void:
 		if member.targetable != null and not wing.is_away(member):
 			ids.append(member.targetable.get_instance_id())
 	var leader_pilot: AiPilot = _pilot_of(wing.leader) if alive else null
+	var abort: bool = capital_abort_of(wing)
 	if leader_pilot != null:
 		_set_wing_ids(leader_pilot.context, ids, wing.leader)
+		leader_pilot.context.capital_abort = abort
 	for member: Combatant in wing.members():
 		if wing.is_away(member):
 			continue
 		var ctx: AiContext = _pilot_of(member).context
 		_set_wing_ids(ctx, ids, member)
+		ctx.capital_abort = abort
 		ctx.order = order
 		ctx.leader_id = leader_id
 		ctx.leader_target_id = target_id
@@ -657,6 +664,25 @@ func refresh(wing: Wing) -> void:
 			member.ship.running_lights = wing.leader.ship.running_lights
 	if leader_pilot != null and wing.flight > 0:
 		_brief_flight_lead(wing, leader_pilot.context)
+
+
+## Whether `wing`'s squadron (its flights, or the wing alone) has lost `fighter_runs.abort_share` of the most ships it had
+## at once, so its runs on a capital ship break off and regroup (M10-T16, D12.10); never for a squadron told to press.
+func capital_abort_of(wing: Wing) -> bool:
+	if _abort_share < 0.0:
+		var runs: Variant = CapitalData.table("capital_brain").get("fighter_runs")
+		_abort_share = float((runs as Dictionary).get("abort_share", 0.5)) if runs is Dictionary else 0.5
+	var flights: Array[Wing] = flights_of(wing.name) if wing.flight > 0 else ([wing] as Array[Wing])
+	var strength: int = 0
+	var press: bool = false
+	for w: Wing in flights:
+		strength += w.members().size() + (1 if leader_alive(w) else 0)
+		press = press or w.press
+	var key: String = wing.name.to_lower()
+	press = press or bool((_declared.get(key, {}) as Dictionary).get("press", false))
+	var peak: int = maxi(int(_squadron_peak.get(key, 0)), strength)
+	_squadron_peak[key] = peak
+	return not press and peak > 1 and float(strength) <= float(peak) * (1.0 - _abort_share)
 
 
 # A flight's AI lead (M8-T19): it covers its flight, and unless it is the squadron's own lead it holds a slot on that one

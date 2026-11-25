@@ -253,7 +253,8 @@ func flush() -> void:
 		_join_launched()
 	if _drivers.is_empty():
 		var hosted_due: bool = not _hosted.is_empty()
-		# The turrets' pick rides in the job (M5-T21), so a tick with turrets launches one even when no ship thinks.
+		# The turrets' pick rides in the job (M5-T21), and the capitals' brains (M10-T16), so a tick with either launches one
+		# even when no ship thinks.
 		var turrets_due: bool = _turrets_waiting()
 		if not hosted_due and not turrets_due:
 			return
@@ -397,10 +398,10 @@ func _begin_hosted_tick() -> bool:
 	return true
 
 
-# Whether the core under this batch has turrets to pick for (M5-T21).
+# Whether the core under this batch has turrets to pick for (M5-T21) or capitals to think for (M10-T16).
 func _turrets_waiting() -> bool:
 	var sim := get_parent() as SimCore
-	return sim != null and sim.turret_count() > 0
+	return sim != null and (sim.turret_count() > 0 or int(sim.core.capital_count()) > 0)
 
 
 # What the hosted drivers' step reads this tick (M4-T35): the frame, the contexts that changed, the relation matrix.

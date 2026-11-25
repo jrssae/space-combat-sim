@@ -245,5 +245,63 @@
     "impulse": 1.25
    }
   }
+ },
+ "capital_brain": {
+  "_doc": "M10-T16 (D12.10): the capital brain's numbers. think_hz thinks a second, staggered; engage_share of the main weapon's range is held; approach_mps and arrive_s pace closing and opening; sensor_m is how far it looks; an escort screens screen_min_m to screen_max_m off its charge; it withdraws under withdraw_hull of its hull or withdraw_reactor of its reactor (or with every main engine lost); outgunned_ratio of the target's dps over its own sends its heavy weapons at the mounts bearing on it; keep_bonus and attitude_margin hold a target and an attitude against near ties. class_value: a class's worth as a target. doctrine: per faction, threat_w and value_w are the exponents of threat and value in threat x value / time_to_kill, cripple aims at a withdrawing target's engines (default for any faction not listed). fighter_runs: the fighters' attack runs on a capital (fire_from_m to fire_to_m at a subsystem, open to open_m, re-plan every replan_s, regroup at regroup_m after the squadron loses abort_share).",
+  "think_hz": 5.0,
+  "engage_share": 0.7,
+  "approach_mps": 40.0,
+  "arrive_s": 30.0,
+  "sensor_m": 30000.0,
+  "screen_min_m": 800.0,
+  "screen_max_m": 1200.0,
+  "withdraw_hull": 0.3,
+  "withdraw_reactor": 0.5,
+  "outgunned_ratio": 1.5,
+  "keep_bonus": 1.25,
+  "attitude_margin": 1.1,
+  "class_value": {
+   "cruiser": 1.0,
+   "destroyer": 2.0,
+   "carrier": 2.0,
+   "capital": 2.0,
+   "dreadnought": 4.0,
+   "strike_carrier": 1.0
+  },
+  "doctrine": {
+   "default": {
+    "threat_w": 1.0,
+    "value_w": 1.0,
+    "cripple": false
+   },
+   "centauri": {
+    "threat_w": 1.0,
+    "value_w": 1.5,
+    "cripple": true
+   },
+   "drazi": {
+    "threat_w": 1.5,
+    "value_w": 1.0,
+    "cripple": true
+   },
+   "narn": {
+    "threat_w": 1.5,
+    "value_w": 1.0,
+    "cripple": false
+   },
+   "minbari": {
+    "threat_w": 1.0,
+    "value_w": 1.0,
+    "cripple": false
+   }
+  },
+  "fighter_runs": {
+   "fire_from_m": 1500.0,
+   "fire_to_m": 400.0,
+   "open_m": 3000.0,
+   "replan_s": 2.0,
+   "regroup_m": 5000.0,
+   "abort_share": 0.5
+  }
  }
 }

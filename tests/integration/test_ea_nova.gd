@@ -177,7 +177,7 @@ func test_it_flies_on_its_mains_and_brakes_on_its_retros() -> void:
 	cap.set_course(Vector3.FORWARD, rest)
 	await _fly(30.0)
 	assert_lt((cap.linear_velocity - rest).length(), 1.5, "its retros stopped it")
-	assert_false(cap.helm.flipping, "no flip: stand-in retros at the mains")
+	assert_false(cap.helm_flipping(), "no flip: stand-in retros at the mains")
 	assert_gt((-cap.global_basis.z).dot(Vector3.FORWARD), 0.995, "its bow held on its heading")
 	assert_eq(cap.linear_damp, 0.0)
 	assert_eq(cap.linear_damp_mode, RigidBody3D.DAMP_MODE_REPLACE)

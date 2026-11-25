@@ -1,7 +1,8 @@
 extends GutTest
 ## The capital helm's parity recording (M10-T16, Q70): the helm moved from GDScript (`CapitalHelm`, M10-T07) into the native
-## core. Before the GDScript helm went, this file recorded what it commanded for seeded poses on four hulls (retros, none, a
-## gravitic drive, the Omega's numbers) and for flips flown step by step; the native helm must give the same commands.
+## core (`capital_helm.rs`). Before the GDScript helm went, this file recorded what it commanded for seeded poses on four hulls
+## (retros, none, a gravitic drive, the Omega's numbers) and for flips flown step by step (`tests/fixtures/parity/
+## capital_helm.json`, recorded at d3e09c70); the native helm (`ScsSimCore.capital_helm_probe`) must give the same commands.
 
 const FILE: String = "capital_helm"
 const SEED: int = 16
@@ -44,21 +45,19 @@ func _hull(row: Array) -> Array:
 	return [flown, layout]
 
 
-# One helm per hull: [helm state, flight spec, layout]; the state is the helm the path keeps between commands.
+# One helm per hull: the numbers the native helm takes (`CapitalBrainSpec.helm_numbers`, as `CapitalShip` joins with).
 func _make_helm(row: Array) -> Variant:
 	var built: Array = _hull(row)
-	return CapitalHelm.make(built[0], built[1])
+	return CapitalBrainSpec.helm_numbers(built[0], built[1])
 
 
 # This tick's command and the flip state after it, as numbers: main l/r, retro l/r, strafe x/y, rot x/y/z, flipping.
 func _command(helm: Variant, heading: Vector3, velocity: Vector3, flipping: bool, basis: Basis, current: Vector3) -> Array:
-	var h: CapitalHelm = helm
-	h.heading = heading
-	h.velocity = velocity
-	h.flipping = flipping
-	var cmd: FlightCommand = h.command(basis, current)
-	return [cmd.main_left, cmd.main_right, cmd.retro_left, cmd.retro_right, cmd.strafe.x, cmd.strafe.y, cmd.rot.x, cmd.rot.y,
-			cmd.rot.z, 1.0 if h.flipping else 0.0]
+	var out: PackedFloat64Array = ScsSimCore.capital_helm_probe(helm, heading, velocity, flipping, basis, current)
+	var values: Array = []
+	for v: float in out:
+		values.append(v)
+	return values
 
 
 func _random_basis(rng: RandomNumberGenerator) -> Basis:
@@ -139,7 +138,7 @@ func _match_recording(label: String, got: Array, expected: Variant) -> void:
 			TOLERANCE, worst, first_bad])
 
 
-func test_single_commands_match_the_recorded_gdscript_helm() -> void:
+func test_the_native_helm_matches_the_recorded_gdscript_helm_command_for_command() -> void:
 	var got: Array = _singles()
 	var expected: Variant = await ParityFixture.expected(FILE, "singles", func() -> Array: return _singles())
 	_match_recording("singles", got, expected)

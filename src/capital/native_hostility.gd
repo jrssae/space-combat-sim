@@ -10,7 +10,12 @@ var _revision: int = -1
 
 
 func refresh(rows: Object, sim: SimCore) -> void:
-	var count: int = int(rows.faction_count())
+	refresh_with(int(rows.faction_count()), rows.set_hostility, sim)
+
+
+## `refresh` for a table that is not a row set's: `count` factions, handed to `apply(count, matrix)` (M10-T16: the capital
+## brains' table on the core).
+func refresh_with(count: int, apply: Callable, sim: SimCore) -> void:
 	var table: FactionTable = Factions.table()
 	if count == _count and table == _table and table.revision == _revision:
 		return
@@ -24,4 +29,4 @@ func refresh(rows: Object, sim: SimCore) -> void:
 		for b: int in count:
 			var relation: Factions.Relation = Factions.relation(names[a], names[b])
 			matrix[a * count + b] = 1 if relation == Factions.Relation.HOSTILE else (2 if relation == Factions.Relation.FRIENDLY else 0)
-	rows.set_hostility(count, matrix)
+	apply.call(count, matrix)

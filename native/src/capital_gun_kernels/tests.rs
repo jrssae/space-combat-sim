@@ -121,7 +121,7 @@ impl Run {
         Run {
             rows,
             mounts: vec![mount],
-            owners: vec![Owner { body: 1, bodies: vec![1], order: 0 }],
+            owners: vec![Owner { body: 1, bodies: vec![1], order: 0, order_aim: None }],
             owner_of: vec![0],
             hostile: table(),
             now_s: 0.0,
@@ -681,9 +681,9 @@ fn a_ship_leaving_keeps_every_other_missile_on_its_own_mount() {
         Mount::new(30, 4, at, up, fwd, 1.0, true, 0.0, spec),
     ];
     let mut owners = vec![
-        Owner { body: 10, bodies: vec![10], order: 0 },
-        Owner { body: 20, bodies: vec![20], order: 0 },
-        Owner { body: 30, bodies: vec![30], order: 0 },
+        Owner { body: 10, bodies: vec![10], order: 0, order_aim: None },
+        Owner { body: 20, bodies: vec![20], order: 0, order_aim: None },
+        Owner { body: 30, bodies: vec![30], order: 0, order_aim: None },
     ];
     let mut owner_of = vec![0, 1, 0, 2];
     let missile = |mount: u32| Missile { bolt: -1, target: 0, mount, nav_gain: 4.0, turn_rad_s: 0.6, warhead: WARHEAD_MISSILE };

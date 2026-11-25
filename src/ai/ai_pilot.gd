@@ -157,6 +157,7 @@ var _pushed_link_velocity: Vector3 = Vector3.ZERO
 var _pushed_cover: bool = false
 var _pushed_cohesion: float = 0.0
 var _pushed_leash: float = 0.0
+var _pushed_capital_abort: bool = false
 var _pushed_rejoined: float = 0.0
 var _pushed_catch_up: Vector2 = Vector2.ZERO
 var _pushed_form_fire: Vector3 = Vector3.ZERO
@@ -554,6 +555,7 @@ func prepare_native(p: Perception) -> int:
 		_pushed_catch_up = Vector2(context.catch_up_m, context.catch_up_mps)
 		_pushed_form_fire = Vector3(context.form_engage_m, context.form_leash_m, context.form_off_slot_s)
 		_pushed_leash = context.leash_m
+		_pushed_capital_abort = context.capital_abort
 		_pushed_objective = ""
 		_pushed_guard_radius = -1.0
 		_pushed_route_count = -1
@@ -868,6 +870,9 @@ func _sync_context(host: Object) -> void:
 		_pushed_cohesion = c.cohesion_m
 		_pushed_rejoined = c.rejoined_m
 		host.set_flight(_slot, c.cover, c.cohesion_m, c.rejoined_m)
+	if c.capital_abort != _pushed_capital_abort:
+		_pushed_capital_abort = c.capital_abort
+		host.set_capital_abort(_slot, c.capital_abort)
 	if c.leash_m != _pushed_leash:
 		_pushed_leash = c.leash_m
 		host.set_leash(_slot, c.leash_m)
@@ -974,6 +979,7 @@ static func native_push_context(host: Object, slot: int, ctx: AiContext) -> void
 			link.z if link != null else 0.0, ctx.leader_link_velocity)
 	host.set_flight(slot, ctx.cover, ctx.cohesion_m, ctx.rejoined_m)
 	host.set_leash(slot, ctx.leash_m)
+	host.set_capital_abort(slot, ctx.capital_abort)
 	host.set_catch_up(slot, ctx.catch_up_m, ctx.catch_up_mps)
 	host.set_form_fire(slot, ctx.form_engage_m, ctx.form_leash_m, ctx.form_off_slot_s)
 	host.set_objective(slot, ctx.objective_name)

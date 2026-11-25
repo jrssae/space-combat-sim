@@ -121,6 +121,7 @@ impl Run {
                 body: 1,
                 bodies: vec![1],
                 order: 0,
+                order_aim: None,
             }],
             owner_of: vec![0],
             hostile: table(),

@@ -99,3 +99,7 @@ mod capital_gun_kernels;
 mod capital_gun_rows;
 // M10-T13: the capitals' interceptor batteries, an engine-free kernel stepped by the capital guns' shell.
 mod capital_intercepts;
+// M10-T16: the capital ships' helm and brain, engine-free kernels and the core's shell around them.
+mod capital_brain;
+mod capital_brain_rows;
+mod capital_helm;

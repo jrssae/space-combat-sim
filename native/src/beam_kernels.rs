@@ -104,12 +104,14 @@ impl Beam {
     }
 }
 
-/// A ship's own bodies (its hull and its rotating sections), which its beams pass through, and the target its brain gives.
+/// A ship's own bodies (its hull and its rotating sections), which its beams pass through, and the target its brain gives,
+/// with the point to sweep there (its frame; none: the centre, M10-T16).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Owner {
     pub body: i64,
     pub bodies: Vec<i64>,
     pub order: i64,
+    pub order_aim: Option<Vector3>,
 }
 
 /// A beam landed this tick: the emitter, the hull row, where, the surface volume it entered (-1 for a sphere), and the
@@ -193,7 +195,8 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
         } else {
             b.local_fwd
         };
-        let wanted = target_dir(world, &basis, from, b.target).unwrap_or(rest);
+        let aim = owner.order_aim.filter(|_| b.target == owner.order);
+        let wanted = target_dir(world, &basis, from, b.target, aim).unwrap_or(rest);
         b.aim = turned(b.aim, wanted, b.spec.turn_rad_s * dt);
         match b.phase {
             COOLING => {
@@ -493,12 +496,17 @@ fn target_dir<F: Fn(i64) -> Option<usize>>(
     basis: &Basis,
     from: Vector3,
     target: i64,
+    aim: Option<Vector3>,
 ) -> Option<Vector3> {
     if target == 0 {
         return None;
     }
     let j = (world.row_of)(target)?;
-    let rel = sub(world.rows.positions[j], from);
+    let at = match aim {
+        Some(local) => add(world.rows.positions[j], xform(&world.rows.bases[j], local)),
+        None => world.rows.positions[j],
+    };
+    let rel = sub(at, from);
     if dot(rel, rel) < 1e-6 {
         return None;
     }

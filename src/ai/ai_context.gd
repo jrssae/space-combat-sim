@@ -167,6 +167,14 @@ var form_off_slot_s: float = 0.0:
 			return
 		form_off_slot_s = value
 		_changed()
+## The pilot's squadron lost half its ships on a capital ship (M10-T16, D12.10; `WingDirector` sets it unless the wing is told
+## to press): its attack runs on a capital regroup off it and hold their fire.
+var capital_abort: bool = false:
+	set(value):
+		if value == capital_abort:
+			return
+		capital_abort = value
+		_changed()
 ## Whether this wingman is too far from its lead to fight (`refresh` works it out every think).
 var strayed: bool = false
 ## The route this pilot leads (M3-T09, the instructor; `BehaviourFollowPath.attach` sets it), or null.
@@ -369,6 +377,7 @@ func clear_wing() -> void:
 	form_engage_m = 0.0
 	form_leash_m = 0.0
 	form_off_slot_s = 0.0
+	capital_abort = false
 	strayed = false
 
 

@@ -268,6 +268,8 @@ pub struct ScsSimCore {
     pub(crate) tier_ram_scratch: std::collections::HashSet<(i64, i64)>,
     // The defensive turrets (M5-T21): mounts on the ships' rows and the attacker memory.
     pub(crate) turrets: crate::turret_rows::TurretState,
+    // The capital ships' helms and brains (M10-T16): stepped here, thought in the AI job.
+    pub(crate) capitals: crate::capital_brain_rows::CapitalTable,
     // Promotions moved clear of a rock or mine they overlapped (M4-T23).
     pub(crate) tier_cleared: i64,
     // The last first sync's wall-clock parts, microseconds (readouts only, M5-T35): the tier's step, the bodies, the
@@ -893,6 +895,7 @@ impl ScsSimCore {
         self.rows.boost(dv);
         self.bolts.boost(dv);
         self.tier.boost(dv);
+        self.capitals.boost(dv);
     }
 
     /// `rows_version` for the crate's own readers (the brain host's grid, M4-T17).

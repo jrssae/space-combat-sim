@@ -211,12 +211,13 @@ impl Mount {
 }
 
 /// A ship's own bodies (its hull and its rotating sections), which never block or take its fire, and the target its brain
-/// gives its anti-capital mounts.
+/// gives its anti-capital mounts, with the point its heavy weapons aim at there (its frame; none: the centre, M10-T16).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Owner {
     pub body: i64,
     pub bodies: Vec<i64>,
     pub order: i64,
+    pub order_aim: Option<Vector3>,
 }
 
 /// A shot this tick: the mount, where it leaves and how fast (World), and for a missile the body it is guided at.
@@ -771,11 +772,18 @@ fn choose<F: Fn(i64) -> Option<usize>>(
     let from = line_from(m, pivot, normalized(xform(basis, m.axis)));
     m.pick_wait = PICK_EVERY - 1;
     if m.spec.role != ROLE_AF && owner.order != 0 {
+        // Heavy weapons aim at the subsystem the brain names when their own hull does not hide it (M10-T16, Q17).
+        let ordered = (world.row_of)(owner.order).and_then(|j| {
+            let at = owner.order_aim.filter(|_| m.spec.role == ROLE_AC)?;
+            (m.spec.launcher || !own_hull_blocks(world, owner, from, aim_point(rows, j, at))).then_some(at)
+        });
         if m.target == owner.order {
-            return None;
+            return ordered.filter(|&at| at != m.aim_local).map(|at| (owner.order, at));
         }
         if bears(m, owner, world, r, basis, pivot, owner.order, 1.0)
-            && let Some(aim) = (world.row_of)(owner.order).and_then(|j| visible_point(m, world, owner, basis, from, j, points))
+            && let Some(aim) = ordered.or_else(|| {
+                (world.row_of)(owner.order).and_then(|j| visible_point(m, world, owner, basis, from, j, points))
+            })
         {
             return Some((owner.order, aim));
         }

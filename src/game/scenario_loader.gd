@@ -44,7 +44,8 @@ extends RefCounted
 ##                                                  #       dock its ships belong to; a spawn's own `home` goes before it, and
 ##                                                  #       `home_set` says the spawn gave one), flight (bool, M8-T19: the wing
 ##                                                  #       flies as flights of three; led by the player, only the player's own
-##                                                  #       flight of two wingmen takes its orders)}; may be empty
+##                                                  #       flight of two wingmen takes its orders), press (bool,
+##                                                  #       M10-T16: its runs on a capital never abort)}; may be empty
 ##      "mission": Dictionary,                      # (M5-T05, D51) {} for none, else {title, briefing, script (a res://
 ##                                                  #       MissionScript path, loaded by the runner), dialog (a dialog file
 ##                                                  #       path), objectives: the raw `objectives[]`, already checked by
@@ -515,6 +516,9 @@ static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, 
 		var flight: Variant = wing.get("flight", false)
 		if not (flight is bool):
 			return "%s.flight must be true or false" % where
+		var press: Variant = wing.get("press", false)
+		if not (press is bool):
+			return "%s.press must be true or false" % where
 		if flight and leader != "player" and not (leader as String).is_empty():
 			return "%s: a wing of flights names no leader but \"player\": the first ship of each flight leads it" % where
 		var members_raw: Variant = wing.get("members", [])
@@ -545,7 +549,7 @@ static func _wings(raw: Variant, spawns: Array[Dictionary], system: StringName, 
 			return "%s.leader '%s' is not a spawn of this scenario (\"player\", or the name of a spawn or member)" % [where, leader]
 		out.append({"name": (wing_name as String).strip_edges(), "faction": StringName(faction as String),
 				"leader": leader as String, "formation": shape_value, "order": order, "home": home_id(wing_home as String),
-				"flight": flight as bool})
+				"flight": flight as bool, "press": press as bool})
 	return out
 
 

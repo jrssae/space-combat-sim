@@ -10,6 +10,7 @@ use std::time::Instant;
 use godot::builtin::Vector3;
 
 use crate::brain_behaviours::{self, Brain, Field, Inputs, Scratch};
+use crate::capital_brain::{self, CapitalJob};
 use crate::keep_out::KeepOut;
 use crate::kernels::contact::{self, Grid, Query, Work as QueryWork};
 use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};
@@ -178,6 +179,8 @@ pub struct Snapshot {
     pub rows_version: i64,
     /// The turrets' pick (M5-T21): the live mounts and the attacker memory as the launch found them, and the answers.
     pub turrets: PickJob,
+    /// The capital ships' brains (M10-T16): every capital as the launch found it, and their answers.
+    pub capitals: CapitalJob,
 }
 
 impl Snapshot {
@@ -254,6 +257,7 @@ pub fn run(job: Job) -> Done {
             work.hosted_slots.clear();
             work.failed = true;
             snapshot.turrets.picks.clear();
+            snapshot.capitals.answers.clear();
             Vec::new()
         }
     };
@@ -293,6 +297,7 @@ fn run_body(
     run_batch(work, snapshot, runner, total, &rel, params);
     work.rel_scratch = rel;
     pick_turrets(snapshot, &work.grid, params.now_s);
+    think_capitals(snapshot, params.origin);
     if params.from_rows {
         write_commands(work, snapshot, total);
         settle_hosted(work, params.n, total);
@@ -326,6 +331,28 @@ fn pick_turrets(snapshot: &mut Snapshot, grid: &Grid, now_s: f64) {
     turret_kernels::pick_all(rows, row_of, now_s, turrets, grid);
 }
 
+// The capital ships' thinks on the frozen rows (M10-T16): decisions, so they ride in the job beside the fighters'.
+fn think_capitals(snapshot: &mut Snapshot, origin: [f64; 3]) {
+    let Snapshot {
+        rows,
+        body_rows,
+        touched,
+        capitals,
+        ..
+    } = snapshot;
+    if capitals.entries.is_empty() {
+        capitals.answers.clear();
+        return;
+    }
+    let row_of = |body: i64| {
+        if touched.contains(&body) {
+            return -1;
+        }
+        HashMap::get(body_rows, &body).map_or(-1, |&r| i64::from(r))
+    };
+    capital_brain::think_all(capitals, rows, row_of, origin);
+}
+
 // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the runner's threads and
 // packs their outputs in order; with `from_rows` each ship's hull and selection are read from its own row first.
 fn run_batch(work: &mut Work, snap: &Snapshot, runner: &Runner, n: usize, rel: &[u8], p: &Params) {
@@ -341,6 +368,12 @@ fn run_batch(work: &mut Work, snap: &Snapshot, runner: &Runner, n: usize, rel: &
             });
         }
     }
+    // The capitals as their brains know them (M10-T16), for the fighters' attack runs on them.
+    work.field.capitals.clear();
+    work.field.capitals.extend(snap.capitals.entries.iter().map(|e| (e.spec.body, e.spec.clone())));
+    work.field.capitals.sort_by_key(|e| e.0);
+    work.field.runs = snap.capitals.tuning.runs;
+    work.field.raiders_ix = snap.capitals.raiders_ix;
     // The civilians' flight marks (M5-T16) from every brain's last think, before any think of this pass reads them.
     {
         let Work {

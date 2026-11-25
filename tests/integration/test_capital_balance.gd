@@ -86,8 +86,7 @@ func _spawn_omega(main: Main, faction: StringName = Factions.RAIDERS, title: Str
 	var nose: Basis = main.ship.global_basis
 	var basis: Basis = nose.rotated(nose.y, deg_to_rad(90.0))  # broadside on to the squadron's approach
 	main.world.spawn(cap, main.world.to_universe(main.ship.global_position - nose.z * ahead_m), basis)
-	cap.set_course(Vector3.ZERO, rest)
-	return cap
+	return cap  # its `capital` brain fights it (M10-T16), from rest
 
 
 # One fight: [seconds the Omega lasted (LIMIT_S when it held), Starfuries lost, its hull share left, damage from the squadron,

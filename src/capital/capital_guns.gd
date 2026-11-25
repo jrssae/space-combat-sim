@@ -209,6 +209,13 @@ func set_order(ship: CapitalShip, target: Node3D) -> void:
 		_rows.set_order(ship.get_instance_id(), target.get_instance_id() if target != null else 0)
 
 
+## `set_order` by the target's body id (0: none), its heavy weapons aimed at `aim` in its frame when `has_aim` (the `capital`
+## brain's order, M10-T16).
+func set_order_id(ship: CapitalShip, target_id: int, aim: Vector3, has_aim: bool) -> void:
+	if _rows != null and ship != null:
+		_rows.set_order_at(ship.get_instance_id(), target_id, aim, has_aim)
+
+
 ## The capital ships with guns or launchers, in join order.
 func ships() -> Array[CapitalShip]:
 	return _ships

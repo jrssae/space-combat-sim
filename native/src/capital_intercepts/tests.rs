@@ -139,7 +139,7 @@ impl Sim {
             rows,
             bolts: Bolts::default(),
             mounts: vec![battery],
-            owners: vec![Owner { body: OURS, bodies: vec![OURS], order: 0 }],
+            owners: vec![Owner { body: OURS, bodies: vec![OURS], order: 0, order_aim: None }],
             owner_of: vec![0],
             missiles: Vec::new(),
             guards: Guards::default(),

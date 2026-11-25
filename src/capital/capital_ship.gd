@@ -4,8 +4,10 @@ extends CapitalBody
 ##
 ## - **Flight.** Its numbers are a capital-scale `ShipSpec` (mass, inertia, slow turn rates, thrust per engine, propulsion,
 ##   `can_open_jump_point`). Its engines are the flight step's nozzles (`CapitalPropulsion`) and `CapitalFlight` flies it through
-##   the native flight step each tick from its helm's command (`CapitalHelm`: a heading and `cruise_velocity`). No damping;
-##   forces are re-applied every tick.
+##   the native flight step each tick from its helm's command (the core's native helm, M10-T16: a heading and the velocity
+##   `cruise_velocity` mirrors). No damping; forces are re-applied every tick.
+## - **Brain** (M10-T16, D12.10): its native `capital` brain (`CapitalBrains`) steers the helm and names its weapons' target,
+##   until `set_course` gives it orders (Hold); `release_helm` hands the helm back.
 ## - **Collision.** The hull piece's sections are compound shapes on this body (Jolt's compound); each rotating piece is a
 ##   `CapitalRotor`, a kinematic body turned about its pivot. Every section's hit volumes, with the convex hulls they are fitted
 ##   to, go to the native core as the body's surface (`ScsSimCore.set_surface`), so the hit sweep, the rams and the turrets' line
@@ -51,11 +53,10 @@ const REST_POINT_META: StringName = &"capital_rest_point"
 ## The catalogue type it was built from and its capital class (`capital_class` there: what its broadcast and drive read).
 var type_id: StringName = &""
 var capital_class: StringName = &""
-## The sections as its collision knows them, the engines as nozzles, the spec the flight step flies and the helm.
+## The sections as its collision knows them, the engines as nozzles and the spec the flight step flies (its helm is native).
 var sections: CapitalSections = null
 var layout: ThrusterLayout = null
 var flight_spec: ShipSpec = null
-var helm: CapitalHelm = null
 var rotors: Array[CapitalRotor] = []
 var hull_piece: RenderPiece = null
 ## The bays' roll-up doors (M10-T22), by bay name; shut until a launch or a docking opens one.
@@ -91,6 +92,7 @@ var _volume_sections: Dictionary[String, PackedStringArray] = {}  # per body: ea
 var _full_layout: ThrusterLayout = null  # every engine's nozzles, as built
 var _drive_power: float = 1.0  # the power the drive last had; kept while a disabled hull winds down
 var _lights: CapitalHulkLights = null  # its own glow, dimming, while disabled
+var _orders: Array = []  # [heading, velocity] given before its helm joined the core
 
 
 ## The capital ship of catalogue type `type`, for `p_faction`, called `display_name`, holding `velocity` (World frame). Null
@@ -141,6 +143,7 @@ func _ready() -> void:
 		_world_signals.rebased.connect(_on_rebased)
 	_register_surfaces()
 	if _world_signals != null:
+		_join_brain()
 		CapitalFlight.attach(_world_signals).join(self)
 		CapitalBeams.attach(_world_signals).join(self)  # its beam emitters on the native rows (M10-T12)
 		CapitalGuns.attach(_world_signals).join(self)  # its guns and launchers on the native rows (M10-T14)
@@ -158,6 +161,9 @@ func _exit_tree() -> void:
 		var flight: CapitalFlight = CapitalFlight.of(_world_signals)
 		if flight != null:
 			flight.leave(self)
+		var brains: CapitalBrains = CapitalBrains.of(_world_signals)
+		if brains != null:
+			brains.leave(self)
 		var beams: CapitalBeams = CapitalBeams.of(_world_signals)
 		if beams != null:
 			beams.leave(self)
@@ -198,25 +204,54 @@ func set_faction(p_faction: StringName) -> void:
 		targetable.disguise_as(Factions.table().transponder(p_faction))
 
 
-## Sets the helm: the bow toward `heading` (World; zero holds the bow where it is) and `velocity` to hold (World frame). A
-## disabled hull's brain is released: no new orders reach its helm.
+## Orders for the helm: the bow toward `heading` (World; zero holds the bow where it is) and `velocity` to hold (World
+## frame). Its brain holds (it still names its weapons' target) until `release_helm`. A disabled hull takes no orders.
 func set_course(heading: Vector3, velocity: Vector3) -> void:
 	if is_hulk():
 		return
-	helm.heading = heading.normalized() if heading.length_squared() > 1e-12 else Vector3.ZERO
 	cruise_velocity = velocity
+	_orders = [heading, velocity]
+	if _core != null and is_instance_valid(_core):
+		_core.capital_set_course(get_instance_id(), heading, velocity)
 
 
-## This tick's command for the flight step: the helm on `cruise_velocity`, shaped by the stage a disabled hull has reached
-## (`HulkStages.shape`); none for a destroyed or cold hull, which drifts.
-func flight_command() -> FlightCommand:
+## Its brain steers the helm again (after `set_course`'s orders).
+func release_helm() -> void:
+	_orders = []
+	if _core != null and is_instance_valid(_core):
+		_core.capital_release(get_instance_id())
+
+
+## Its helm as the core holds it: `{heading, velocity, flipping}` (empty before it joined).
+func helm_state() -> Dictionary:
+	var raw: Array = _core.capital_helm_state(get_instance_id()) if _core != null and is_instance_valid(_core) else []
+	if raw.size() < 3:
+		return {}
+	return {"heading": raw[0], "velocity": raw[1], "flipping": raw[2]}
+
+
+## Whether its helm is mid-flip (a reaction hull with no retros turned to burn against its motion).
+func helm_flipping() -> bool:
+	return bool(helm_state().get("flipping", false))
+
+
+## The command a disabled hull flies this tick: its helm's `asked`, shaped by the stage it has reached (`HulkStages.shape`);
+## none for a destroyed or cold hull, which drifts. A fighting hull flies its helm's command as it is.
+func hulk_command(asked: FlightCommand) -> FlightCommand:
 	if damage.is_destroyed or hulk_stages.is_cold():
 		return FlightCommand.new()
-	var asked: FlightCommand = null
-	if hulk_stages.has_control():
-		helm.velocity = cruise_velocity
-		asked = helm.command(global_basis, linear_velocity)
-	return hulk_stages.shape(asked)
+	return hulk_stages.shape(asked if hulk_stages.has_control() else null)
+
+
+## The command it flew on the last tick (a readout for the console and tests).
+func flight_command() -> FlightCommand:
+	var flight: CapitalFlight = CapitalFlight.of(_world_signals) if _world_signals != null else null
+	return flight.last_command(self) if flight != null else FlightCommand.new()
+
+
+## Whether its helm's command needs `hulk_command` this tick (a disabled or destroyed hull).
+func needs_hulk_command() -> bool:
+	return damage.is_disabled or damage.is_destroyed or hulk_stages.is_cold()
 
 
 ## Whether the flight step flies its assist this tick: the helm's, gone with control.
@@ -269,6 +304,8 @@ func step_rotors(delta: float) -> void:
 
 func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> void:
 	super.unpark_from_tier(xform, velocity, spin)
+	if _core != null and is_instance_valid(_core):
+		_core.capital_set_helm_velocity(get_instance_id(), cruise_velocity)  # the tier held its cruise
 	for rotor: CapitalRotor in rotors:
 		rotor.snap()
 
@@ -357,8 +394,6 @@ func _build(loaded: ShipSpec, display_name: String) -> bool:
 	spec = loaded
 	_dir = ShipSpec.ASSET_ROOT.path_join(loaded.asset_id)
 	flight_spec = CapitalPropulsion.flight_spec(spec, CapitalPropulsion.main_count(layout))
-	helm = CapitalHelm.make(flight_spec, layout)
-	helm.velocity = cruise_velocity
 	mass = spec.mass
 	inertia = spec.inertia
 	max_contacts_reported = CONTACTS_REPORTED
@@ -508,6 +543,16 @@ func _read_jump_anchor() -> void:
 				"mouth_radius_m": float((anchor as Dictionary).get("mouth_radius_m", 0.0))}
 
 
+# Its helm and brain join the core's capital table: the helm holds what it was told (its velocity at least).
+func _join_brain() -> void:
+	CapitalBrains.attach(_world_signals).join(self)
+	if _core == null or not is_instance_valid(_core):
+		return
+	_core.capital_set_helm_velocity(get_instance_id(), cruise_velocity)
+	if not _orders.is_empty():
+		_core.capital_set_course(get_instance_id(), _orders[0], _orders[1])
+
+
 # The sections' hit volumes to the native core, as the body's surface and each rotor's (named by this hull).
 func _register_surfaces() -> void:
 	var sim: SimCore = SimCore.for_tree(get_tree())
@@ -573,13 +618,11 @@ func _refit_drive() -> void:
 	var side: float = power * (damage.engine_share() if CapitalPropulsion.is_gravitic(spec) else 1.0)
 	scaled.rcs_force_max = base.rcs_force_max * side
 	scaled.rcs_torque_max = base.rcs_torque_max * power
-	var old: CapitalHelm = helm
 	layout = refit
 	flight_spec = scaled
-	helm = CapitalHelm.make(flight_spec, layout)
-	helm.heading = old.heading
-	helm.velocity = old.velocity
-	helm.flipping = old.flipping
+	var brains: CapitalBrains = CapitalBrains.of(_world_signals) if _world_signals != null else null
+	if brains != null and brains.ships().has(self):
+		brains.join(self)  # the helm's numbers again, its course, memory and orders kept
 	var flight: CapitalFlight = CapitalFlight.of(_world_signals) if _world_signals != null else null
 	if flight != null and flight.ships().has(self):
 		flight.join(self)

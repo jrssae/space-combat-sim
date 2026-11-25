@@ -38,6 +38,8 @@ var size: int = DEFAULT_SIZE
 var flight: int = 0
 ## The number in the leader's callsign: 1, or a later flight's first (4, 7, ...).
 var first_number: int = 1
+## Told to press its attack on a capital ship whatever it loses (M10-T16, a scenario's `press`): it never aborts its runs.
+var press: bool = false
 
 # By slot - 1; null for an empty slot.
 var _by_slot: Array[Combatant] = []

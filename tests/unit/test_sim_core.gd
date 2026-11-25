@@ -612,7 +612,7 @@ const BRAIN_FILES: Array[String] = ["res://native/src/v3.rs", "res://native/src/
 		"res://native/src/brain_behaviours.rs", "res://native/src/civilian.rs", "res://native/src/keep_out.rs"]
 const BRAIN_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::kernels::", "use crate::civilian;",
-		"use crate::surface;", "use crate::keep_out::"]
+		"use crate::surface;", "use crate::keep_out::", "use crate::capital_brain::", "use capital_run::"]
 ## The big hulls' surfaces (M7-T06): the station's volumes, nearest points, the sweep and the drum's skin speed, held to the
 ## kernels' rules; they import the row tables and the vector maths only. The core's shell (`surface_rows.rs`) reaches them.
 const SURFACE_KERNEL_FILE: String = "res://native/src/surface.rs"
@@ -676,6 +676,15 @@ const CAPITAL_GUN_KERNEL_FILE: String = "res://native/src/capital_gun_kernels.rs
 const CAPITAL_GUN_KERNEL_USER: String = "res://native/src/capital_gun_rows.rs"
 const CAPITAL_GUN_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::brain_maths::",
 		"use crate::intercept_kernels::", "use crate::rows::", "use crate::surface::", "use crate::turret_kernels::", "use crate::v3::", "use crate::weapon_kernels::"]
+## The capital ships' helm and brain (M10-T16): the helm's command, the brain's states, targets and attitude, held to the
+## kernels' rules; they import the row tables, the surfaces' and the brains' maths and each other only. The shell
+## (`capital_brain_rows.rs`) is what GDScript reaches; the AI job (`brain_step.rs`) thinks them.
+const CAPITAL_BRAIN_FILES: Array[String] = ["res://native/src/capital_helm.rs", "res://native/src/capital_brain.rs",
+		"res://native/src/capital_brain/attitude.rs", "res://native/src/capital_brain/targets.rs",
+		"res://native/src/brain_behaviours/capital_run.rs"]
+const CAPITAL_BRAIN_USE_ALLOWED: Array[String] = ["use std::sync::Arc;", "use godot::builtin::Vector3;",
+		"use godot::builtin::{Basis, Vector3};", "use crate::brain_maths::", "use crate::capital_helm::", "use crate::rows::",
+		"use crate::surface;", "use crate::v3::", "use crate::capital_brain::", "use super::"]
 ## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
 ## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
@@ -754,6 +763,13 @@ func test_the_kernels_hold_no_engine_type() -> void:
 			"the shell reads the capital gun kernel")
 	assert_false(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_FILE).contains("static mut"), "no shared state in the capital gun kernel")
 	violations.append_array(_engine_free_violations(INTERCEPT_KERNEL_FILE, KERNEL_FORBIDDEN, INTERCEPT_KERNEL_USE_ALLOWED))
+	for path: String in CAPITAL_BRAIN_FILES:
+		violations.append_array(_engine_free_violations(path, KERNEL_FORBIDDEN, CAPITAL_BRAIN_USE_ALLOWED))
+		assert_false(FileAccess.get_file_as_string(path).contains("static mut"), "no shared state in %s" % path.get_file())
+	assert_true(FileAccess.get_file_as_string("res://native/src/capital_brain_rows.rs").contains("use crate::capital_brain::"),
+			"the shell reads the capital brain")
+	assert_true(FileAccess.get_file_as_string("res://native/src/brain_step.rs").contains("capital_brain::think_all("),
+			"the AI job thinks the capitals")
 	violations.append_array(_engine_free_violations(CAPITAL_INTERCEPT_FILE, KERNEL_FORBIDDEN, CAPITAL_INTERCEPT_USE_ALLOWED))
 	for path: String in [INTERCEPT_KERNEL_FILE, CAPITAL_INTERCEPT_FILE]:
 		assert_false(FileAccess.get_file_as_string(path).contains("static mut"), "no shared state in %s" % path.get_file())
@@ -884,7 +900,7 @@ const BRAIN_STEP_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin:
 		"use crate::rows::", "use crate::v3::", "use crate::brain_maths::", "use crate::brain_behaviours::", "use crate::kernels::",
 		"use crate::row_commands::RowCommand;", "use crate::row_commands::{CommandMap, IdMap, IdSet, RowCommand};",
 		"use crate::row_commands::{CMD_LEN, EVENT_ENTER, EVENT_FIRE, EVENT_SELECT, EVENT_SETTLE};",
-		"use crate::threads::", "use crate::turret_kernels::", "use crate::keep_out::"]
+		"use crate::threads::", "use crate::turret_kernels::", "use crate::keep_out::", "use crate::capital_brain::"]
 
 
 ## The low-attention tier's table and integrator (M4-T21): held to the kernels' rules; they import the row tables, the shared

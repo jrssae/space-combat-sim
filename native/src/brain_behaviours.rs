@@ -5,12 +5,14 @@
 //! vector, the engine's order of operations and its rolls, so a native brain and its GDScript twin give the same bits.
 //! Plain data in and out, the caller's scratch, no engine type (the guard in `test_sim_core` reads this file).
 use std::f64::consts::TAU;
+use std::sync::Arc;
 
 use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::{
     self, Capability, FlightCmd, Manoeuvre, Pcg, Pose, Temperament, hash_seed,
 };
+use crate::capital_brain::{CapitalSpec, RunTuning};
 use crate::civilian;
 use crate::keep_out::{self, KeepOut};
 use crate::surface;
@@ -21,6 +23,9 @@ use crate::v3::{
     length_squared, limit_length, maxf, minf, neg, normalized, rad_to_deg, rotated, scale,
     snappedf, sub, xform,
 };
+
+mod capital_run;
+use capital_run::{CapitalRun, KIND_CAPITAL};
 
 /// The behaviour kinds in `AiPilot.TIE_ORDER`.
 pub const KINDS: usize = 9;
@@ -200,6 +205,11 @@ pub struct Field {
     /// The working weapon mounts on big hulls (the station's grid), in slot order: what an attack on the hull aims at.
     /// Filled by the job from the launch's copy of the mounts, before any think.
     pub sub_points: Vec<SubPoint>,
+    /// The capital ships as their brains know them (M10-T16), by body id, sorted: what a fighter's attack run on one reads
+    /// (its mounts' arcs, its subsystems); the runs' numbers; and the raiders' faction index (they never attack a warship).
+    pub capitals: Vec<(i64, Arc<CapitalSpec>)>,
+    pub runs: RunTuning,
+    pub raiders_ix: Option<u32>,
 }
 
 /// A weapon mount on a big hull as an attacker sees it (M7-T10): its hull's row, its slot and its place in the hull's frame.
@@ -385,6 +395,9 @@ pub struct Context {
     pub form_engage_m: f64,
     pub form_leash_m: f64,
     pub form_off_slot_s: f64,
+    /// The squadron lost half its ships on a capital (M10-T16, `AiContext.capital_abort`, set by `WingDirector`): its
+    /// fighters regroup off any capital they were running on and hold their fire there.
+    pub capital_abort: bool,
 }
 
 impl Context {
@@ -417,6 +430,7 @@ impl Context {
         self.form_engage_m = 0.0;
         self.form_leash_m = 0.0;
         self.form_off_slot_s = 0.0;
+        self.capital_abort = false;
     }
 }
 
@@ -488,6 +502,9 @@ struct Tick<'a> {
     // The big hulls' rows, for a civilian's shelter at a station of its people or a neutral port (M7-T55).
     hulls: &'a [u32],
     points: &'a [SubPoint],
+    capitals: &'a [(i64, Arc<CapitalSpec>)],
+    runs: RunTuning,
+    raiders_ix: Option<u32>,
     relations: &'a [u8],
     contacts: &'a [i32],
     broadcasts: &'a [i32],
@@ -502,9 +519,27 @@ struct Tick<'a> {
     ctx_leash_m: f64,
     ctx_catch_up: (f64, f64),
     ctx_form_fire: (f64, f64, f64),
+    ctx_capital_abort: bool,
 }
 
 impl Tick<'_> {
+    // The capital whose body is `body`, as its brain knows it (M10-T16).
+    fn capital_spec(&self, body: i64) -> Option<&CapitalSpec> {
+        self.capitals
+            .binary_search_by_key(&body, |e| e.0)
+            .ok()
+            .map(|k| self.capitals[k].1.as_ref())
+    }
+
+    // Whether row `j` is a warship a raider leaves alone (D12.10): a capital ship with a brain (the bench's stand-ins until
+    // T45 are not), no civilian.
+    fn raider_shuns(&self, j: usize) -> bool {
+        self.raiders_ix == Some(self.rows.faction_ix[self.own_row])
+            && self.rows.kinds.get(j).copied() == Some(KIND_CAPITAL)
+            && !self.rows.is_civilian(j)
+            && self.capital_spec(self.rows.body_ids[j]).is_some()
+    }
+
     // Contact `k`'s row.
     fn row(&self, k: usize) -> usize {
         self.contacts[k] as usize
@@ -623,6 +658,9 @@ impl<'a> Tick<'a> {
             alarmed: &field.alarmed,
             hulls: &field.surface_rows,
             points: &field.sub_points,
+            capitals: &field.capitals,
+            runs: field.runs,
+            raiders_ix: field.raiders_ix,
             relations,
             contacts,
             broadcasts,
@@ -636,6 +674,7 @@ impl<'a> Tick<'a> {
             ctx_leash_m: ctx.leash_m,
             ctx_catch_up: (ctx.catch_up_m, ctx.catch_up_mps),
             ctx_form_fire: (ctx.form_engage_m, ctx.form_leash_m, ctx.form_off_slot_s),
+            ctx_capital_abort: ctx.capital_abort,
         }
     }
 }
@@ -2623,6 +2662,9 @@ struct AttackState {
     wander: [f64; 8],
     brain: AttackBrainState,
     slash: SlashState,
+    // The runs on a capital ship (M10-T16), when that is the target.
+    run: CapitalRun,
+    on_capital: bool,
 }
 
 impl AttackState {
@@ -2648,6 +2690,8 @@ impl AttackState {
             wander: [0.0; 8],
             brain: AttackBrainState::new(profile.tactics, hash_seed(seed, "attack brain")),
             slash: SlashState::new(profile.tactics),
+            run: CapitalRun::new(seed),
+            on_capital: false,
         };
         s.reset();
         s
@@ -2679,6 +2723,8 @@ impl AttackState {
         self.aim_slot = -1;
         self.time_s = 0.0;
         self.transit = false;
+        self.run.restart(0);
+        self.on_capital = false;
         let mut rng = Pcg::seeded(hash_seed(self.seed, "aim"));
         for axis in 0..2 {
             let k = axis * 4;
@@ -2739,6 +2785,9 @@ impl AttackState {
                 continue;
             }
             if !at_will && !may_attack(tick, ctx, h) {
+                continue;
+            }
+            if tick.raider_shuns(row) {
                 continue;
             }
             let los = tick.lists.offsets[h];
@@ -2835,6 +2884,7 @@ impl AttackState {
     ) -> bool {
         self.transit = false;
         self.goal = None;
+        self.on_capital = false;
         if self.target < 0 {
             self.brain.firing = false;
             return false;
@@ -2880,6 +2930,31 @@ impl AttackState {
         self.brain.aim_offset_rad = aim;
         self.slash.aim_offset_rad = aim;
         let t = self.target as usize;
+        // A capital ship is taken by attack runs on its subsystems, set up where its arcs cover least (M10-T16, D12.10).
+        if on_hull
+            && tick.rows.kinds[t] == KIND_CAPITAL
+            && let Some(spec) = tick.capital_spec(tick.rows.body_ids[t])
+        {
+            self.uses_slash = false;
+            self.on_capital = true;
+            let runs = tick.runs;
+            let firing = self.run.engage(
+                tick,
+                ship,
+                &mut self.brain,
+                spec,
+                t,
+                self.target_id,
+                &runs,
+                tick.ctx_capital_abort,
+                dt,
+                cmd,
+                wish,
+            );
+            self.brain.firing = firing;
+            self.goal = Some(self.run.goal);
+            return firing;
+        }
         // A run on a big hull goes for one of its weapon mounts, else its nearest skin: a point, flown as a gun run
         // (a slashing pass would carry on through the hull).
         let (target_position, target_velocity, surface_m) = if on_hull {
@@ -3030,6 +3105,13 @@ impl AttackState {
         if self.transit {
             d.state = "transit".to_string();
             d.flags.push(("firing", false));
+            return;
+        }
+        if self.on_capital {
+            d.state = format!("capital {}", self.run.leg_name());
+            d.numbers.push(("range_m", snappedf(self.run.last_range_m, 1.0)));
+            d.numbers.push(("runs", self.run.runs as f64));
+            d.flags.push(("firing", self.run.firing));
             return;
         }
         let (state, range_m, firing) = if self.uses_slash {

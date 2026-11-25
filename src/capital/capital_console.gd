@@ -322,8 +322,10 @@ func _helm_text() -> String:
 	var ship: CapitalShip = _focused()
 	if ship == null:
 		return ""
-	return "heading %s, holding %.1f m/s%s" % [ship.helm.heading.snappedf(0.01), ship.cruise_velocity.length(),
-			", flipping" if ship.helm.flipping else ""]
+	var helm: Dictionary = ship.helm_state()
+	var heading: Vector3 = helm.get("heading", Vector3.ZERO)
+	return "heading %s, holding %.1f m/s%s" % [heading.snappedf(0.01), ship.cruise_velocity.length(),
+			", flipping" if bool(helm.get("flipping", false)) else ""]
 
 
 func _state_text() -> String:

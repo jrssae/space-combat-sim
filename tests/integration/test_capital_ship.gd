@@ -134,7 +134,7 @@ func test_reaction_with_retros_flies_out_and_brakes_with_its_bow_held() -> void:
 	cap.set_course(Vector3.FORWARD, rest)
 	await _fly(25.0)
 	assert_lt((cap.linear_velocity - rest).length(), 1.5, "its retros stopped it")
-	assert_false(cap.helm.flipping)
+	assert_false(cap.helm_flipping())
 	assert_gt((-cap.global_basis.z).dot(Vector3.FORWARD), 0.995, "with its bow on its heading the whole time")
 
 
@@ -148,9 +148,9 @@ func test_reaction_without_retros_flips_to_brake() -> void:
 	var flipped: Array[bool] = [false]
 	var turned_most: Array[float] = [1.0]
 	await _fly(150.0, func() -> bool:
-		flipped[0] = flipped[0] or cap.helm.flipping
+		flipped[0] = flipped[0] or cap.helm_flipping()
 		turned_most[0] = minf(turned_most[0], (-cap.global_basis.z).dot(Vector3.FORWARD))
-		return flipped[0] and not cap.helm.flipping and (cap.linear_velocity - rest).length() < 1.0)
+		return flipped[0] and not cap.helm_flipping() and (cap.linear_velocity - rest).length() < 1.0)
 	assert_true(flipped[0], "with no retros it turned to burn against its motion")
 	assert_lt(turned_most[0], -0.9, "its bow came round past the beam")
 	assert_lt((cap.linear_velocity - rest).length(), 1.0, "and its mains stopped it")
@@ -169,7 +169,7 @@ func test_a_gravitic_hull_slides_and_brakes_without_turning() -> void:
 	var v: Vector3 = cap.linear_velocity - rest
 	assert_almost_eq(v.z, 0.0, 1.0, "braked along its nose")
 	assert_almost_eq(v.x, 5.0, 1.0, "and slid sideways")
-	assert_false(cap.helm.flipping)
+	assert_false(cap.helm_flipping())
 	assert_gt((-cap.global_basis.z).dot(Vector3.FORWARD), 0.995, "without turning")
 
 

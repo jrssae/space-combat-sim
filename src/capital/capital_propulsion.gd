@@ -5,7 +5,7 @@ extends RefCounted
 ##
 ## - **Reaction** (EA, Drazi and other reaction drives): the mains, and stand-in retros at the mains' places pointing the other
 ##   way at the spec's `pod_retro_thrust` a nozzle. A hull with no room for retros has `pod_retro_thrust` 0: it flips and burns
-##   (`CapitalHelm`).
+##   (the native helm, M10-T16).
 ## - **Gravitic** (Minbari, Vorlon, Shadow, ISA): the same nozzles, but backward and sideways thrust are `gravitic_fraction` of the
 ##   forward thrust, so it never needs to flip.
 
