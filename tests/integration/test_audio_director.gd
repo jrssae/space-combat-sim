@@ -97,7 +97,8 @@ func test_a_players_shot_makes_a_pulse_sound_and_a_raiders_shot_a_raider_sound()
 	cmd.fire = true
 	main.cannon.set_combat_command(cmd)
 	main.cannon.step(SimClock.now() + 2.0)
-	assert_eq(main.audio.times_played(&"pulse_fire"), before + 1)
+	assert_eq(main.cannon.gate.mode, PulseCannonGate.Mode.LINKED, "the Starfury fires both cannons (Q76)")
+	assert_eq(main.audio.times_played(&"pulse_fire"), before + main.cannon.gate.muzzle_count, "one shot sound per cannon")
 	for voice: AudioStreamPlayer3D in _voices_playing(&"pulse_fire"):
 		assert_eq(voice.volume_db, SoundMix.level_db(&"pulse_fire"), "a shot plays at its gun's mix level")
 	assert_false(_voices_playing(&"pulse_fire").is_empty())

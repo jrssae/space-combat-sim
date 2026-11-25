@@ -5,8 +5,8 @@ extends TestSteps
 ## 50 000), the per-hull terms (`ShipSpec.tier_hit_scale`) from the even fight below on seeds 101 to 103, on the threaded step;
 ## never on the seeds tested here.
 ## - The duel: rounds of head-on engagements (the first build's steady chase, where Starfuries hit 73 % at 450 m, is a known
-##   limit the model under-scores), 1 000 shots or more: the model's expected to-hit rate over the same shots, with each shot's
-##   gate excess, within 10 % of full fidelity's (the seeded roll printed beside it). The per-hull term (`ShipSpec.
+##   limit the model under-scores), four rounds and 1 000 shots or more: the model's expected to-hit rate over the same
+##   shots, with each shot's gate excess, within 10 % of full fidelity's (the seeded roll printed beside it). The per-hull term (`ShipSpec.
 ##   tier_hit_scale`) is not in it: it corrects how a tier fight's flight differs (more and closer shots), which a comparison
 ##   over the same shots has no part of, and the even fight holds it.
 ## - An even fight (the maintainer's Q63): 12 Starfuries against 40 raiders at the same skill and temperament (regular,
@@ -26,6 +26,9 @@ const SCHEDULES: Array[StringName] = [&"threaded"]  # M4-T37: the inline step an
 const SEEDS: Array[int] = [1, 2, 3]
 const FIGHT_TICKS: int = 1800
 const DUEL_SHOTS: int = 1000
+## The engagements a duel samples, whatever the shot count: Q76's two-cannon Starfury fires twice the bolts, so 1 000 shots
+## came in half the rounds, and the to-hit rate of two rounds swings more than the model's 10 % (seeds from 50 000 hold).
+const DUEL_MIN_ROUNDS: int = 4
 const DUEL_PAIRS: int = 12
 const DUEL_MAX_TICKS: int = 9000
 const DUEL_ROUND_TICKS: int = 600
@@ -92,11 +95,11 @@ func test_the_to_hit_roll_matches_a_seeded_full_fidelity_duel_within_ten_percent
 	for schedule: StringName in SCHEDULES:
 		await _world(DUEL_PAIRS, DUEL_PAIRS, false, schedule)
 		# Rounds of duels: in each, a raider and an allied Starfury meet head on from 1.8 km (each pair 31 km from the next,
-		# out of each other's sensors) and fight for `DUEL_ROUND_TICKS`; then every pair starts again, until 1 000 shots.
+		# out of each other's sensors) and fight for `DUEL_ROUND_TICKS`; then every pair starts again, for four rounds and 1 000 shots.
 		var shots: Array = []
 		var round_index: int = 0
 		var ticks: int = 0
-		while shots.size() < DUEL_SHOTS and ticks < DUEL_MAX_TICKS:
+		while (shots.size() < DUEL_SHOTS or round_index < DUEL_MIN_ROUNDS) and ticks < DUEL_MAX_TICKS:
 			for c: Combatant in w.pool.alive():
 				_unwatch_duel(c)
 				w.pool.release(c)

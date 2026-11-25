@@ -98,7 +98,7 @@ func test_the_probe_fills_every_field_a_check_can_read() -> void:
 	var sample: ControlCheckSample = ControlCheckProbe.sample(main)
 	for field: StringName in ControlCheckSample.FIELDS:
 		assert_true(sample.state.has(field), "%s" % field)
-	assert_eq(sample.state[ControlCheckSample.FIRE_MODE], "alternating")
+	assert_eq(sample.state[ControlCheckSample.FIRE_MODE], "linked", "the Starfury starts with both cannons linked (Q76)")
 	assert_eq(sample.state[ControlCheckSample.CAMERA], String(CameraRig.mode_name(main.camera_rig.mode)))
 	main.player_alive = false
 	assert_true(ControlCheckProbe.sample(main).state.is_empty(), "nothing passes on a wreck")

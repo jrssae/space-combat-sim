@@ -63,8 +63,14 @@ func test_every_json_in_the_folder_is_offered_to_the_reader() -> void:
 		calls.append(path)
 		return {"ok": true, "mission": {"title": "Spy"}}
 	var entries: Array[Dictionary] = MissionCatalog.entries(FIXTURES, spy)
-	assert_eq(calls.size(), 4, "every .json in the folder is offered to the reader")
-	assert_eq(entries.size(), 4)
+	# The folder also holds other tests' scenarios (M10-T14's capital fights), so the count is the folder's own.
+	var json_files: int = 0
+	for file: String in DirAccess.get_files_at(FIXTURES):
+		if file.get_extension() == "json":
+			json_files += 1
+	assert_gte(json_files, 4, "the four mission fixtures at least")
+	assert_eq(calls.size(), json_files, "every .json in the folder is offered to the reader")
+	assert_eq(entries.size(), json_files)
 	# The shipped scenarios load through the real loader whatever they hold.
 	for entry: Dictionary in MissionCatalog.entries():
 		assert_true(entry.has("id") and entry.has("title") and entry.has("briefing"))

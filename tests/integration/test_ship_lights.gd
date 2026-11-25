@@ -193,20 +193,23 @@ func _flash_of(index: int) -> MuzzleFlash:
 func test_a_shot_adds_a_flash_light_for_sixty_milliseconds() -> void:
 	var before: int = rig.candidate_count()
 	_fire_once()
-	assert_eq(rig.candidate_count(), before + 1, "the shot's flash joins the competition")
-	var shot: MuzzleFlash = null
+	# The Starfury fires both cannons together (Q76): a flash per cannon.
+	var shots: Array[MuzzleFlash] = []
 	for i: int in main.ship.get_muzzles().size():
 		if _flash_of(i).is_active():
-			shot = _flash_of(i)
-	assert_not_null(shot)
-	var emitter: LightEmitter = shot.light_emitter()
-	assert_eq(emitter.priority, LightEmitter.PRIORITY_MUZZLE_FLASH)
-	assert_gt(emitter.energy, 0.0)
-	shot.advance(0.05)
-	assert_gt(emitter.energy, 0.0, "still on at 50 ms")
-	assert_eq(rig.candidate_count(), before + 1)
-	shot.advance(0.011)
-	assert_eq(emitter.energy, 0.0, "out at 60 ms")
+			shots.append(_flash_of(i))
+	assert_eq(shots.size(), main.cannon.gate.muzzle_count, "both cannons flashed")
+	assert_eq(rig.candidate_count(), before + shots.size(), "the shot's flashes join the competition")
+	for shot: MuzzleFlash in shots:
+		var emitter: LightEmitter = shot.light_emitter()
+		assert_eq(emitter.priority, LightEmitter.PRIORITY_MUZZLE_FLASH)
+		assert_gt(emitter.energy, 0.0)
+		shot.advance(0.05)
+		assert_gt(emitter.energy, 0.0, "still on at 50 ms")
+	assert_eq(rig.candidate_count(), before + shots.size())
+	for shot: MuzzleFlash in shots:
+		shot.advance(0.011)
+		assert_eq(shot.light_emitter().energy, 0.0, "out at 60 ms")
 	assert_eq(rig.candidate_count(), before, "and out of the competition")
 	assert_eq(_lights(main).size(), 8, "no node for it")
 
