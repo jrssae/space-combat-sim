@@ -428,7 +428,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | done |
 | T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
 | T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | done |
-| T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | in progress |
+| T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | done |
 | T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | done |
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | not started |
 | T16 | E | The `capital` brain and fighters' attacks on capitals; the capital helm (steering, today ~52 µs per capital per tick in GDScript) moves into the native brain (Q70) | T12, T14 | Opus | not started |
@@ -740,6 +740,7 @@ toughness); `src/capital/capital_gun_mounts.gd` (`interceptor` kind), `capital_g
   batteries at the edge of their arcs with the hull in the way, so end-on they take almost nothing (2 pulses against 28 shots
   in 30 s, both Omegas in line); broadside they work as above. *Open:* far capitals intercept nothing until T85; the grid's and
   a capital's pulses do not share cover.
+- **Closed by the maintainer (2026-11-25).** B1 and B10 are re-tuned after T16 (the `capital` brain changes how ships engage); the stern-cover gap is looked at then.
 
 ### M10-T87 Our own Starfury gun sound (Q82)
 
