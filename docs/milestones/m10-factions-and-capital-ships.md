@@ -114,6 +114,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q85 | Asimov liners in free flight (2026-11-25) | T53's stage 3 adds the liner to `StationTraffic` as civilian traffic: it **arrives through the jump gate**, travels to Babylon 5 and **holds station off the docking sphere**, launches **its two shuttles** (the bay's crew shuttle and Kestrel), which fly into **B5's main docking bay** by the existing lane and queue with the other traffic, **unload**, come back, then **load** (a second round trip out and back), and the liner leaves **back through the gate**. It stays **15 to 30 min** (seeded). On average **one liner every 20 min** of free flight, timed from the last one's departure so visits rarely overlap; about **1 visit in 10** brings a second liner at once (never more than two, each with its own standoff spot). Seeded per-entity, never the wall clock (gameplay time). A `traffic liner` console action spawns one on demand |
 | Q86 | Asimov liveries (2026-11-25) | The liner has **several liveries**: the show's **green** (the default, the first ship) and **at least three more** in the same scheme (white sphere, the same band layout and window rows, grey hub and engines) with a different band colour, so liners can be told apart. A livery belongs to the ship: picked from its name (`data/ships/names.json`), so the same liner always wears the same colours. Where the build allows, the band colour comes from a mask in one atlas, not an atlas a livery |
 | Q87 | Asimov skin (2026-11-25) | The liner's whole surface takes the **Agamemnon pattern** (`references/Agamemnon_B5_FBX/Textures/`: the base colours, hull-plate bump and scratch patterns) **instead of the panel mosaic**, recoloured to the liner's white, greys and its livery band colour (Q86). As Q83: generated in code (`PatchPlates` at two or three sizes and code-made scratches), the Agamemnon files a style reference only, never copied or sampled. The A/B/C options vary within this style |
+| Q88 | Asimov names (2026-11-25) | Every Asimov-class liner is **named after a science-fiction author**, `Asimov` first (the show's), e.g. Heinlein, Clarke, Bradbury, Le Guin, Herbert, Verne, Wells, Butler, Sturgeon, Pohl, Niven, Dick, Shelley, Bester. The show's *Callisto* is left out (not an author) |
 
 ## The hulls
 
@@ -745,6 +746,45 @@ toughness); `src/capital/capital_gun_mounts.gd` (`interceptor` kind), `capital_g
   in 30 s, both Omegas in line); broadside they work as above. *Open:* far capitals intercept nothing until T85; the grid's and
   a capital's pulses do not share cover.
 - **Closed by the maintainer (2026-11-25).** B1 and B10 are re-tuned after T16 (the `capital` brain changes how ships engage); the stern-cover gap is looked at then.
+
+### M10-T16 The `capital` brain, its native helm and fighters' runs on capitals (D12.10, Q16, Q17, Q70, Q77)
+
+**Goal.** D12.10's `capital` brain, native, in the AI job one tick behind; T07's GDScript helm moved into the core (Q70); fighters
+fly attack runs on capitals; B10 and B1 run and reported (Q77). Launch (carriers) is T17's: a hook only.
+
+- **Done (2026-11-25, awaiting the maintainer).** *Helm:* `native/src/capital_helm.rs` (T07's rules op for op, plus an optional top
+  to roll onto), one call a tick for every capital (`ScsSimCore.capital_helm_commands`); `capital_helm.gd` and its test removed; the
+  GDScript helm was recorded first (`tests/fixtures/parity/capital_helm.json`, 240 seeded commands on four hulls and 600 flown
+  steps, at d3e09c70) and the native helm matches it (`test_capital_helm_parity`). *Brain:* `native/src/capital_brain.rs`
+  (`attitude.rs`, `targets.rs`) on the job's frozen rows at 5 Hz staggered by each ship's own age, answers applied at the join
+  against the entry's stamp (`capital_brain_rows.rs`): approach, engage at 0.7 x the main weapon's range in the attitude that bears
+  the most mount dps (worked out against the hull's own volumes; the nearer of a flank and its mirror), screen 0.8 to 1.2 km off a
+  charge, withdraw (hull < 30 %, reactor < 50 %, every main engine lost) through its own point, a friendly one within 20 km or a
+  gate (`CapitalWithdraw`), else it fights on; hold on orders (`set_course`; `release_helm` frees it); idle takes up its earlier
+  course. Targets `threat x value / time_to_kill` with doctrine weights (`capitals.json` `capital_brain.doctrine`; Centauri and
+  Drazi cripple); subsystem aims when outgunned or crippling, handed to the guns and beams with `set_order_at`. *Fighters:*
+  `brain_behaviours/capital_run.rs` (set up where the arcs cover least, beams weighted most, re-planned every 2 s; in on a
+  subsystem from 1.5 km to 400 m; break away from the nearest beam; open to 3 km; regroup 5 km off once the squadron has lost
+  half, unless its wing says `press`); raiders never attack a capital with a brain. *Game side:* `CapitalBrains`,
+  `CapitalBrainSpec`, `CapitalBrainConsole` (`capbrain`, provider `capital_brain`, `info.md`), `AiContext.capital_abort`,
+  `Wing.press`, scenario `wings[].press`. Architecture §22.10 (new), §22.2, §22.6, §22.7 updated.
+  *Tests (staged copy):* see the last fix round below. *Cost* (release, debug Godot): brain 21 us a think = 1.8 us a tick a capital
+  at 5 Hz, helm 0.8 us a capital a tick (Q70's budget 8 us); the whole capital flight for 8 Omegas median 97 us, 12 us a capital
+  (239 us, 30 us a capital before). `bench_quick` before/after (`reports/perf/t16_before`, `t16_after`): furball 400 / 400 ships,
+  spread 500 / 500, battle 75 / 100, all in budget.
+  *Balance (GUT_BALANCE, reported only; both stay pending):* **B10** (12 Starfuries pressing on a lone Omega left to its brain):
+  the squadron is lost in 122, 128 and 106 s, the Omega at 98, 93 and 98 %, the interceptors take 69, 45 and 72 % (was 84 to 99 s,
+  93 to 95 %); the Starfuries' losses by cause: heavy plasma about 55 %, pulse cannons 20 %, beams 10 to 15 %, rams and blasts
+  the rest. **B1** (two Omegas, 3 km, each to its brain): 106, 105 and 105 s, the winner at 88 to 89 % (was 764 to 784 s): the
+  brain now turns each Omega to hold the other on its aft quarter, where its four aft sweep beams bear (broadside on before they
+  sat on their arcs' edges), and a sustained beam aimed at the centre burns the section there, the magazine, which blows the ship.
+  **Proposals for the rebalance (not done here):** (a) the heavy weapons' and beams' centre aim spread over the hull's sections
+  (seeded per burst or sweep), so a beam sweeps rather than burns one section; (b) the sweep beam's dps or the magazine's points;
+  (c) for B10, the heavy plasma not taking fighters (Q77 says it keeps firing; it does half the killing) or a slower traverse, and
+  `fire_to_m` 600 m (fewer rams).
+- **Open for the maintainer.** A capital in the tier thinks but flies its last cruise (the tier's capital law); scenario capitals
+  (`capitals[]`) are spawned on orders (Hold), so a mission frees one with `release_helm()` (no scenario key yet); the squadron's
+  abort counts losses from its peak strength, not only those to a capital.
 
 ### M10-T87 Our own Starfury gun sound (Q82)
 
