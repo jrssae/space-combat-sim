@@ -111,6 +111,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q82 | Our own Starfury gun sound (2026-11-25) | A new task, **T87**, after T13: our own Starfury shot made by synthesis in `tools/procgen` to sound very close to `references/starfurybolt.wav` (1.08 s, mono, 22 kHz; nothing from it copied into the repo, `DISCLAIMER.md`). **95 %** means log-mel spectrogram similarity >= 0.95, loudness envelope correlation >= 0.95 and length within 5 %, then the maintainer's A/B by ear (H) before it replaces today's `pulse_fire`. **Full length**, the tail faded when the same ship fires again, so rapid fire stays crisp. **Larger weapons**: pitched down and lengthened, by a per-weapon table the agent proposes with samples for the maintainer to hear first. **Raiders**: the same sound **+3 semitones** (about 19 % higher), same length; `raider_fire` is dropped |
 | Q83 | Centauri shuttle skin (2026-11-25) | Solid colour with small darker patches in the style of the Agamemnon textures, shifted to Centauri purple, instead of the panel mosaic (T58). The pattern is generated in code (`PatchPlates` at two or three sizes, no seam lines); the Agamemnon files are a style reference only, never copied or sampled. The A/B/C options vary within this style (purple's hue and depth, patch density and darkness, the gold); the Minbari Flyer keeps the hexagonal grid (Q45) |
 | Q84 | The Asimov liner and its shuttles (2026-11-25) | T53 builds a **screen-accurate or screen-plausible** liner from `references/EA Asimov liner 600m.stl` (600 m) and the stills in `references/show/m10/ea_asimov/` (more from the web only if those leave a part unclear). It is **unarmed**. Its **habitat band rotates** (a `CapitalRotor`, as the Omega's drum); the forward face, the bay and the collars stay still. **Docking:** an internal **shuttle bay** behind the hexagonal mouth in the sphere's forward face (about 45 x 30 m in the STL) holding **two at once, one crew shuttle and one Kestrel** (the Kestrel folds its wings, Q73), plus **four external docking collars** on the forward ring pods, where a crew shuttle mates by its stern hatch. **Playable:** AI crew shuttles and Kestrels dock in the bay and at the collars and launch again, on M8-T06's docking autopilot made to serve a ship-borne dock; a test scenario lets the player fly a crew shuttle and hold X to dock. The liner **holds station** while shuttles dock (no docking under way). Passenger counts and the evacuation loop stay M24's; the shuttle as a full player ship stays M24's. The generator takes a **variant** option so T56 (the mining transport) follows as its own task |
+| Q85 | Asimov liners in free flight (2026-11-25) | T53's stage 3 adds the liner to `StationTraffic` as civilian traffic: it **arrives through the jump gate**, travels to Babylon 5 and **holds station off the docking sphere**, launches **its two shuttles** (the bay's crew shuttle and Kestrel), which fly into **B5's main docking bay** by the existing lane and queue with the other traffic, **unload**, come back, then **load** (a second round trip out and back), and the liner leaves **back through the gate**. It stays **15 to 30 min** (seeded). On average **one liner every 20 min** of free flight, timed from the last one's departure so visits rarely overlap; about **1 visit in 10** brings a second liner at once (never more than two, each with its own standoff spot). Seeded per-entity, never the wall clock (gameplay time). A `traffic liner` console action spawns one on demand |
 
 ## The hulls
 
@@ -431,7 +432,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | done |
 | T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | done |
 | T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | done |
-| T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | not started |
+| T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | in progress |
 | T16 | E | The `capital` brain and fighters' attacks on capitals; the capital helm (steering, today ~52 µs per capital per tick in GDScript) moves into the native brain (Q70) | T12, T14 | Opus | in progress |
 | T17 | E | Carriers launch fighters from bays and tubes | T07, T16 | Opus | not started |
 | T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | done |
@@ -463,7 +464,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T50 | F | EA Thunderbolt fighter, model only | T01, T62; the Starfury's generator and style | Fable | done |
 | T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | done |
 | T52 | F | EA Explorer class | T19, T62 | Fable | not started |
-| T53 | F | EA Asimov liner (Q84): the hull, its rotating band, a shuttle bay for two and four docking collars, AI shuttles docking and a player test scenario | T19, T62 | Fable | in progress |
+| T53 | F | EA Asimov liner (Q84): the hull, its rotating band, a shuttle bay for two and four docking collars, AI shuttles docking and a player test scenario; liners in free-flight traffic (Q85) | T19, T62 | Fable | in progress |
 | T54 | F | not needed: reference removed by the maintainer, 2026-11-20 | - | - | not needed |
 | T55 | F | EA construction tender | T19, T62 | Fable | done |
 | T56 | F | EA mining transport (Q43): the mining variant of T53's generator | T53 | Fable | not started |
@@ -1048,7 +1049,7 @@ parity green.
   `test_bench` (the transit carrier's raiders are checked before its collapse kills it: its blast now takes them),
   `test_civilian_escort` (a killed carrier's raiders out of its blast fight on), `test_station_in_game` (the player's death
   blast may hurt the station; rams still never do), `test_explosion_lod` (the blast's energy and radius from the table).
-  **Open:** mines keep their flat 200 points until T15 (their far flash reads `mine_prox`); a dead capital's unblown sections
+  **Open:** (T15 replaced the mines' flat 200 points with their blast rows) their far flash reads `mine_prox`; a dead capital's unblown sections
   wait for T11; the manifests' `sections[].blast_energy_j` is no longer read (the generators can drop it); placeholders to
   confirm: the Thunderbolt as the heavy fighter (x1.3 on `d0` only) and the tankers' fuel cargo (x1.5 `d0`, x1.25 radius and
   impulse); a strike carrier's death (cruiser reactor, 1 800 at the centre out to 1 km) now kills its own fighters within
@@ -1222,6 +1223,49 @@ parity green.
   **Open (superseded above):** the pad's L3 was shared with free look; subsystem points are those of the rotating pieces at rest (a drum turret is
   marked where it sits at rest); engines and bays use their section's centre; no subsystem on a mine; destroyed subsystems stay
   selectable (the point still exists).
+
+### M10-T15 Mines and minefields
+
+Mines as native rows, placed by data and laid in battle, blasting through T09's falloff (`docs/architecture.md` §22.9; Q20, D12.9).
+Done notes (in progress until the maintainer closes it):
+
+- **What it is.** `mine_kernels.rs` and `mine_layers.rs` (engine-free under the guard, with `ScsMineRows` in `mine_rows.rs` as the
+  core's shell) hold every mine in a table in its field's frame: the proximity mine's trigger (60 m from a hull's surface,
+  hostile by true faction, a disguise does not fool it), touches by any hull's hit volumes, arming, the energy mine (flies to a
+  lead point, arms, goes off on a hostile capital within 200 m or 5 s after arriving) and the guided mine (dormant 60 s, then
+  homes at 150 m/s on a hostile within 800 m), the chain through blast radii and the radar's 1 km. A mine in flight is a bolt row
+  the interceptors shoot down (toughness 3 for an energy mine). GDScript: `MineField` (draw, static rows, lands each blast through
+  `BlastResolver`), `MineKinds` and `data/capitals/mines.json`, `MineFieldPlan` (box, sphere, shell, ring, line, points; scenario
+  `minefields[]` and `MissionApi.lay_minefield`), `MineLayers` (a hull's `mine` mounts), `MineConsole`.
+- **Removed (L11, no fallback).** `MineStandin`, `weapon_kernels.rs`' mine kernels and `ScsWeaponRows`' mine calls, the flat 200
+  points (a mine now blasts with its table row: 300 / 120 m, 250 / 300 m, 400 / 60 m), `checked_last_tick`; the bench's belts are
+  `MineField`s now (`StandinDirector.add_mines`), its counters stay until T45. `test_mine_kernel`, `test_mine_trigger` and the
+  `mine_kernel.json` recording went with their subjects (the kernels' own cargo tests and `test_mine_field` replace them).
+- **T76's seam.** The general blast landing stays in GDScript: `BlastResolver._land` calls `MineField.blast_reached` once per blast
+  (any source sets off the mines it reaches) and `ScsMineRows.in_blast` is the native half.
+- **Visuals.** `tools/procgen/assets/space_mines.py` (`space_mines`): three small textured meshes (a spiked red ball, an amber-ringed
+  pod, a finned body with a blue motor), one MultiMesh a kind, so a field of hundreds is a draw call a kind. Looks are (H).
+- **Tests (staged copy).** Cargo 377 (new: `mine_kernels` 14, `mine_layers` 6; the old stand-in mine tests removed); Python 399
+  (new: `test_space_mines` 3); GUT, the files touched and their neighbours: `test_mine_kinds` 5, `test_mine_field_plan` 5,
+  `test_mine_field` 9, `test_mine_field_threads` 1 (150 mines through the seeded battle, 1 vs 6 threads byte for byte: every
+  mine's state each tick, the order they went off, every blast hit), `test_mine_cost` 1, `test_standins` 24, `test_rocks_and_mines` 9,
+  `test_mine_blast` 6, `test_bench` 16, `test_collision_layers` 15, `test_frame_return` 6, `test_tier_proxies` 12,
+  `test_sim_core` 21, `test_native_constants`, `test_bench_layout` 28, `test_multimesh_upload`, `test_scenario_loader` 42,
+  `test_blasts` 7, `test_hit_resolver` 17, `test_weapon_rows_battle` 1 (the parity recording [966, 339, 127, 138, 24, 36] holds
+  unchanged: 36 mines set off in the seeded battle); compile check clean. Quick suite: its `test_mine_kernel` entry became the two
+  new unit files.
+- **Cost.** 500 mines through the seeded furball (a neutral side's, so none goes off: the steady cost): median 40 us a tick, p99 70
+  us, max 210 us, one thread and six alike. 150 mines going off through the battle: median 19 us, a tick with a chain up to 2 ms
+  (the blasts' landings, T09's 170 to 220 us each). GPU (RX 6950 XT, Forward+): a 50-mine field and the hostile energy and guided
+  mines 500 m ahead, 49 fps at 960x540; shots in `references/screenshots/M10-T15 mines/` (judging the look is (H)).
+- **Test changes by the new rules.** `test_bench`: the checks that fly the player to far lone groups cross a rebase now (the
+  blasts' push boosts the frame), so the way back is read again each tick (`_hold_player_beside`) and at rest in the frame;
+  `test_standins` and the other hand-stepped files call `MineField.step_all` where the director used to step the mines.
+- **Open.** The mines on the ground cannot be shot by the player's guns when laid in battle (flying ones by interceptors only);
+  no hull has `mine` mounts until T25 (G'Quan) and T26 (Vorchan), so the layers run on the test cruiser's; an energy mine aims at
+  where its target is when it launches and a turning target may be missed; a battery covers the hemisphere over its deck, so a mine
+  level with an Omega's axis is not engaged (it comes in from the flank in the test); balance (damage, counts, ranges) is T03's
+  starting points, T16's to tune.
 
 ### M10-T49 The player at a capital's helm
 
@@ -1439,8 +1483,12 @@ On top of it:
   shuttles' collision in (as T70); the docking autopilot and keep-out generalised from the station to a ship-borne dock; AI
   shuttles dock and relaunch (console command, mission API); a test scenario where the player flies a crew shuttle and holds X to
   dock; GUT tests; `info.md`.
-- **Done when:** the checklist for the hull, both shuttle types dock and relaunch in a headless test, the maintainer has seen the
-  look sheet.
+- **Stage 3, free-flight traffic (Q85):** a `liner` kind in `StationTraffic` (`data/station/traffic.json` for its timings): gate
+  arrival, the run to a standoff spot off the docking sphere clear of the docking lane, its two shuttles to the main bay and back
+  twice (unload, load), the dwell, the departure through the gate; the seeded schedule and the rare second liner; `traffic liner`
+  console action and its state in the `traffic` provider; GUT tests on a shortened clock.
+- **Done when:** the checklist for the hull, both shuttle types dock and relaunch in a headless test, a liner's whole visit runs
+  headless in free flight, the maintainer has seen the look sheet.
 
 ### M10-T70 Clearance of the resized EA craft in B5's main docking bay
 
