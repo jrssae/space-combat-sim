@@ -988,6 +988,35 @@ parity green.
   the 1.2 s first frame), with the hostile line crossing the tier's edge either: not T14's. **Open:** a real capital that is a tier
   row (beyond `tier_radius_m`) fires nothing: the far capitals' group rolls (`ScsWeaponRows`, `tier_fire`) serve the stand-ins
   only, so real hulls need their mounts fed into them before T45 removes the stand-ins.
+- **T14 follow-up (2026-11-24, Q76; in progress until the maintainer closes it).** EA capital pulse cannons fire 3-shot bursts
+  0.5 s apart every 3 s (1 s burst, 2 s recharge); a burst whose target is lost or held a whole spacing out of its line ends there
+  and recharges from its start (`capital_gun_kernels::end_stalled_burst`). Per mount: Omega `ea_pulse_medium` 3 x 30 (30 dps; 12
+  mounts 360), Warlock `ea_pulse_advanced` 3 x 33 (33; 6 mounts 198), Nova fixed pod 2 barrels x 3 x 12 (24, 80 % of an Omega
+  mount; 12 pods 288), swivel pod 2 x 3 x 9 (18, 75 % of a fixed pod; 2 pods 36; mounts 2 000 points as the fixed pods, `by_weapon`
+  in `capitals.json`), Explorer `ea_pulse_explorer` 3 x 6 (its old 6 dps); Nova total 324 dps against the Omega's 475 (pulse 360,
+  heavy plasma 48, sweep beams 60, missiles 7). `damage_scale` still multiplies role `ac` only. EA turrets traverse 10/8 deg/s
+  (pulse cannons, medium plasma, railgun; was 25/20), the light pulse 20/16 (was 60/50), pulse spread 1.5 deg (was 0.2; T03's
+  dial). Beams red: `ea_sweep_beam` and `ea_particle_cannon` (bolts stay orange). **Starfury:** fires both cannons together (a
+  pair every 0.25 s, `WeaponSpec.fire_linked`, the player's HUD reads LINKED; alternating stays on `weapon_next`), capacitor 200,
+  14 a bolt, +50/s: 35.7 dps sustained (17.9 before), a bolt still 10. **Hyperion (identify only):** its forward fixed guns are
+  `plasma_heavy_l/r`, the muzzles of two rods of the nose antenna array; the mount table and flags are on
+  `references/screenshots/M10-T14 follow-up/hyperion_forward_guns.png`: against T84, both heavies sit on the antenna and both
+  particle cannons (`particle_top/low`) on the bow, not in the stubby side wings (read as the sponsons); loadout and model
+  unchanged. **Balance** (`test_capital_balance.gd`, behind `GUT_BALANCE`, not in the suite; misses pending until T13): B10, 12
+  Starfuries against a lone Omega (no interceptors, none launched), before Q76 65 to 105 s, all 12 lost, the Omega at 94 to 96 %;
+  after, 84 to 86 s, all 12 lost, the Omega at 84 to 85 % (the squadron lands 4 400 to 4 800, twice before). B1, Omega against
+  Omega, before 443 to 503 s, the winner at 39 to 41 %; after 180 to 189 s, the winner at 29 to 31 %. Neither bar can be met
+  before T13: Q53's anchor counts on the interceptors taking half the Starfuries' bolts and 40 % of a capital's, and Q76 has
+  them stop every bolt but beams. What kills the squadron (B10 after, per fight): heavy plasma 1 900 to 2 140, pulse 880 to 980,
+  sweep beams 300 to 540, missiles 150 to 250; the Starfuries fly straight at the Omega (1 to 3 km out they swing round it at
+  about 1 deg/s), so a slower traverse alone does not spare them. **Fighters** (balance suite, before and after, raiders
+  unchanged): dogfight 1 of 5 seeds done in 360 s (154 s) before, 2 of 5 (48 and 77 s) after, the rest still stalled (pending
+  as before); sandbox wave 1 cleared in 900 s with 0 wingmen left before, 2 left after; the Saturns and the grid fight raiders
+  only, so they do not move (grid mean 101.9 s); tutorial passes. Raider toughness is left alone: the grid's 90 to 120 s and the
+  Saturns' bands hold only at the raider's 60 points. Parity: the native entries of every fight with Starfuries re-recorded
+  (`tests/fixtures/parity/README.md`); the two Q16 files print their hits against the GDScript fights, no longer gate them.
+  Tests (staged copy): cargo 322 (`a_burst_cut_short_by_a_lost_target_recharges_from_its_start` new), clippy with nothing in the touched files; GUT 369 of 369 in 42 files (weapons, HUD, the parity files, every `test_capital_*`, Nova, Hyperion, Omega; `test_capital_gun_threads` samples 20 s now, 81 hits, 1 and 6 threads byte for byte); balance files 23 passed, 4 pending (AC12's two as before, B10, B1), none failed; Python loadouts and factions 15 OK; compile check 1 115 scripts clean. GPU (RX 6950 XT, Forward+): two Omegas exchanging fire, 57 to 60 fps at 960x540, `references/screenshots/M10-T14 follow-up/exchange_e.png` (a red sweep beam; judging the look is (H)). **Open:** whether anti-capital guns and beams should fire at fighters at all (they do most of
+  B10's killing); raider re-tune by numbers; Hyperion forward guns' numbers wait for T84.
 - **T16 and T17 (AI):** D12.10: the `capital` brain and fighters' attacks on capitals (tests on its choices and T03's
   balance fights); carriers launching by faction (tests on the launch poses and rates). Done when AC10.
   The Nova (Q71) launches and recovers its 24 Starfuries through its one forward bay on a hidden elevator: the bay hardpoint
