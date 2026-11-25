@@ -110,6 +110,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q81 | T13's interceptors (2026-11-25) | The maintainer took every recommendation: **4 pulses a second per mount** (`cycle_s` 0.25; the Nova's pods 2/s); **real pulses** with lead and seeded spread that can miss, as the station grid's batteries; **toughness** 1/2/3 is that many pulses; each side guards **its own hull plus friendly capitals and stations** (not fighters); **missiles and torpedoes first**, then the shot that would hit soonest, own hull before friends; **friendly-fire bolts and a still-disguised shooter's bolts are not shot**; **one kernel for capitals and the B5 grid**, and the grid takes toughness too; **no retune**: the duel and the Omega against 12 Starfuries are reported only (Q78); far capitals are left to **T85**; the grid's pulse, burst and sound (pitched up) for now. This settles the open questions in T13's section |
 | Q82 | Our own Starfury gun sound (2026-11-25) | A new task, **T87**, after T13: our own Starfury shot made by synthesis in `tools/procgen` to sound very close to `references/starfurybolt.wav` (1.08 s, mono, 22 kHz; nothing from it copied into the repo, `DISCLAIMER.md`). **95 %** means log-mel spectrogram similarity >= 0.95, loudness envelope correlation >= 0.95 and length within 5 %, then the maintainer's A/B by ear (H) before it replaces today's `pulse_fire`. **Full length**, the tail faded when the same ship fires again, so rapid fire stays crisp. **Larger weapons**: pitched down and lengthened, by a per-weapon table the agent proposes with samples for the maintainer to hear first. **Raiders**: the same sound **+3 semitones** (about 19 % higher), same length; `raider_fire` is dropped |
 | Q83 | Centauri shuttle skin (2026-11-25) | Solid colour with small darker patches in the style of the Agamemnon textures, shifted to Centauri purple, instead of the panel mosaic (T58). The pattern is generated in code (`PatchPlates` at two or three sizes, no seam lines); the Agamemnon files are a style reference only, never copied or sampled. The A/B/C options vary within this style (purple's hue and depth, patch density and darkness, the gold); the Minbari Flyer keeps the hexagonal grid (Q45) |
+| Q84 | The Asimov liner and its shuttles (2026-11-25) | T53 builds a **screen-accurate or screen-plausible** liner from `references/EA Asimov liner 600m.stl` (600 m) and the stills in `references/show/m10/ea_asimov/` (more from the web only if those leave a part unclear). It is **unarmed**. Its **habitat band rotates** (a `CapitalRotor`, as the Omega's drum); the forward face, the bay and the collars stay still. **Docking:** an internal **shuttle bay** behind the hexagonal mouth in the sphere's forward face (about 45 x 30 m in the STL) holding **two at once, one crew shuttle and one Kestrel** (the Kestrel folds its wings, Q73), plus **four external docking collars** on the forward ring pods, where a crew shuttle mates by its stern hatch. **Playable:** AI crew shuttles and Kestrels dock in the bay and at the collars and launch again, on M8-T06's docking autopilot made to serve a ship-borne dock; a test scenario lets the player fly a crew shuttle and hold X to dock. The liner **holds station** while shuttles dock (no docking under way). Passenger counts and the evacuation loop stay M24's; the shuttle as a full player ship stays M24's. The generator takes a **variant** option so T56 (the mining transport) follows as its own task |
 
 ## The hulls
 
@@ -462,7 +463,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T50 | F | EA Thunderbolt fighter, model only | T01, T62; the Starfury's generator and style | Fable | done |
 | T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | done |
 | T52 | F | EA Explorer class | T19, T62 | Fable | not started |
-| T53 | F | EA Asimov liner | T19, T62 | Fable | not started |
+| T53 | F | EA Asimov liner (Q84): the hull, its rotating band, a shuttle bay for two and four docking collars, AI shuttles docking and a player test scenario | T19, T62 | Fable | in progress |
 | T54 | F | not needed: reference removed by the maintainer, 2026-11-20 | - | - | not needed |
 | T55 | F | EA construction tender | T19, T62 | Fable | done |
 | T56 | F | EA mining transport (Q43): the mining variant of T53's generator | T53 | Fable | not started |
@@ -1425,6 +1426,21 @@ On top of it:
   deep, Q58) no longer holds the 38 m shuttle; the Victory (T34) launches Kestrels, so its bay needs 52 x 10 m. Scale
   sheet: `references/screenshots/M10-T69 craft resize/scale_sheet.png` (each beside a Starfury at one distance); judging the
   look is (H).
+
+### M10-T53 EA Asimov liner (Q84)
+
+- **Goal:** the hull checklist ("Every hull task") for `ea_asimov`, and Q84's docking for both EA shuttles.
+- **Stage 1, the hull:** generator on the capital framework (variant option for T56); the 90 % rule with per-part sections
+  (the command hub, the spine, the forward face and its ring pods, the hex mouth, the band, the engine frame); the habitat band
+  a `CapitalRotor`; an A/B/C option sheet (the show's white sphere, green bands, blue window rows, grey hub and engines) for the
+  maintainer; `ShipSpec` (unarmed, T03's 9 000 hull points), catalogue entry with `random_pool: false`, names.
+- **Stage 2, the docks:** the bay hall behind the hex mouth on the interior layer (Q68), lit, with doors, two berths (crew
+  shuttle, Kestrel with folded wings); four collar `docking_ports` on the forward ring pods; a clearance test sweeping both
+  shuttles' collision in (as T70); the docking autopilot and keep-out generalised from the station to a ship-borne dock; AI
+  shuttles dock and relaunch (console command, mission API); a test scenario where the player flies a crew shuttle and holds X to
+  dock; GUT tests; `info.md`.
+- **Done when:** the checklist for the hull, both shuttle types dock and relaunch in a headless test, the maintainer has seen the
+  look sheet.
 
 ### M10-T70 Clearance of the resized EA craft in B5's main docking bay
 
