@@ -2838,6 +2838,7 @@ impl AttackState {
             && let Ok(j) = usize::try_from(tick.rows.row_of_id(answer))
             && tick.rows.surface(j).is_some()
             && tick.relation(j) == pilot::HOSTILE
+            && !tick.raider_shuns(j)
             && tick.contacts.contains(&(j as i32))
         {
             let range = f64::from(distance(tick.rows.positions[j], p.position));

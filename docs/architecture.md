@@ -7042,7 +7042,7 @@ src/capital/capital_body.gd        CapitalBody (RigidBody3D): what every capital
 src/capital/capital_ship.gd        CapitalShip: a catalogue capital built from its spec and manifest (T05's framework)
 src/capital/capital_rotor.gd       CapitalRotor (AnimatableBody3D): one rotating section, turned about its pivot each tick
 src/capital/capital_flight.gd      CapitalFlight (World child, priority -1): every capital through ScsFlightStep in one call
-src/capital/capital_helm.gd        CapitalHelm, pure: heading and velocity to a FlightCommand (flips a hull with no retros)
+native/src/capital_helm.rs         the helm (M10-T16, Q70; T07's GDScript CapitalHelm before): heading, velocity and top to a command (§22.10)
 src/capital/capital_propulsion.gd  CapitalPropulsion, pure: the engines as the step's nozzles; the gravitic flight spec (Q51)
 src/capital/capital_sections.gd    CapitalSections, pure: the collision pieces as sections per body; a point named by its section
 src/capital/capital_damage.gd      CapitalDamage, pure: damage by section (T08, D12.5): states, mounts, engines, bays, power
@@ -7061,12 +7061,13 @@ src/capital/capital_hulk_lights.gd CapitalHulkLights: one disabled ship's own gl
   Q51: cruiser 200 km, capital 500 km, dreadnought 1 000 km); its hull points are its sections' (T08, below).
 - **Flight.** The hardpoints' `engines[]` become the step's mains with a stand-in retro at each main's place, pointing the other
   way (`CapitalPropulsion.layout`; an engine on the centre line counts on both sides). A `reaction` spec flies as written: its
-  `pod_retro_thrust` is its retros (0: none, and `CapitalHelm` flips it: it turns toward the change, burns, turns back once it
+  `pod_retro_thrust` is its retros (0: none, and the helm flips it: it turns toward the change, burns, turns back once it
   is met; under 3 m/s it coasts rather than turning). A `gravitic` spec flies a copy whose retros and RCS give
   `gravitic_fraction` of the forward thrust, so the helm pushes along every axis with the bow held. `CapitalFlight` packs each
   ship's helm command and calls `step_core` once a tick on its own `ScsFlightStep` (the fighters' slots and parity recordings
   untouched); forces are re-applied every tick, the core adds the frame's pull. The helm's turns are paced to what the torque can
-  stop. Nothing steers a capital but its helm (`set_course`) until the `capital` brain (T16).
+  stop. Its `capital` brain steers the helm (M10-T16, §22.10) until `set_course` gives it orders; every helm is worked out
+  natively in one call a tick (`ScsSimCore.capital_helm_commands`) and `CapitalFlight` shapes only a disabled hull's command.
 - **Rotating sections.** Each rotating piece is a `CapitalRotor`: a kinematic body under the capital but placed by script
   (`top_level`), aimed one tick ahead of the hull (its velocity and spin) so the two move together through Jolt's step, its
   collision the piece's sections in its own frame, no collision with its own hull. Its picture turns on a pivot under the hull,
@@ -7099,8 +7100,8 @@ src/capital/capital_hulk_lights.gd CapitalHulkLights: one disabled ship's own gl
 - **Jump points.** `can_open_jump_point` per hull type (Q22; the test cruiser can, as a test hull); `open_own_point(pool)` opens
   a point at its `jump_point` anchor, sized for its anchor's mouth, held by it (hold range a length past the anchor) and
   collapsing as M6-T23 says; its drive recharges by class (`CapitalData`).
-- **Per tick and per event.** Native: the flight step, the surfaces, the rams. GDScript per tick and per capital: the helm
-  (a few vector operations) and the rotors' placing.
+- **Per tick and per event.** Native: the helm (M10-T16), the flight step, the surfaces, the rams. GDScript per tick and per
+  capital: the rotors' placing, the wind-down and the flight's packing.
 - **Console.** Command `capital [info|list|spawn|helm|jump|focus|sections|damage]`, provider `capital` (`info.md`).
 - **Tests.** `test_capital_propulsion`, `test_capital_helm`, `test_capital_sections` (unit); `test_capital_ship` (the main
   scene: the body and damping, both drives flown natively, a flip, a rebase, the tier hand-over, a ram on the bow, a held point,
@@ -7335,7 +7336,8 @@ assets/weapons/<id>.tres     a WeaponSpec per capital beam weapon of data/capita
   loadouts, the Omega's mounts, the damage scale, arcs); `test_capital_beams` (the main scene on the Omega: fore emitters beam a
   hull dead ahead by section; a lost mount stops while its sister fires; a disabled ship is silent; a disguised renegade left alone
   until its beam gives it away; the console); `test_beam_threads`; `test_sim_core`'s guard holds the kernel to the kernels' rules.
-- **Known gaps.** The `capital` brain (T16) gives no orders yet, so beams pick their own targets; a renegade capital is not disguised
+- **Known gaps.** The `capital` brain (T16) names a ship's target and the point to sweep (`set_order_at`), and when it bears the
+  beams take it; else they pick their own; a renegade capital is not disguised
   at spawn (T02 disguises fighters; T14 does capitals); mounts on a rotating piece would aim from the piece at rest; the
   `push` trait is gone (Q56: no push beams; the Brakiri carry pulse lasers); charging draws nothing and a hit draws no impact flash; the far tier's own beam
   rolls (`tier_fire`, the stand-ins) stay until T45; interceptors never stop beams (D12.9), so T13 has nothing to do here.
@@ -7404,8 +7406,8 @@ src/capital/native_hostility.gd     the hostility table by the core's faction in
   side by side hit by section and the missiles blast; a lost mount and a disabled ship; the renegade's disguise; the Nova's fixed
   guns; the Nova's swivelling hangar pods abeam; two renegades, only the one that fires revealed and engaged; a disabled capital
   engaged only with nothing live in reach; a ship's own bolt through its drum; the console), `test_capital_gun_threads`.
-- **Known gaps.** The `capital` brain and helm (T16) give no orders and do not turn the ship to bring fixed guns or broadsides
-  to bear, so a bow-on Omega fires few guns; mounts on a rotating piece would aim from the piece at rest; no muzzle flash or
+- **Known gaps.** The `capital` brain (T16, §22.10) orders the anti-capital and dual mounts onto its target (the heavy ones at a
+  subsystem when it names one, `set_order_at`) and turns the hull to bring its mounts to bear; mounts on a rotating piece would aim from the piece at rest; no muzzle flash or
   sound per shot; the far tier's own fire (`tier_fire`, the stand-ins) stays until T45, and a real capital that is a tier row
   (beyond `tier_radius_m`) fires nothing yet: its guns, beams and launchers would need the far capitals' group rolls
   (`ScsWeaponRows`) fed from its own mounts before T45 drops the stand-ins; renegade capitals show the red X marks
@@ -7462,3 +7464,82 @@ assets/weapons/*_interceptor*.tres  ea_interceptor (4 barrels, 0.25 s), ea_inter
   sparks in the shot's colour where they meet, the turret shot pitched 1.6 (`AudioDirector.watch_capital_guns`).
 - **Known gaps.** Far capitals (tier rows) intercept nothing yet (T85); the grid's and a capital's pulses do not share cover; a
   capital's battery model has no muzzles of its own (barrels side by side); no retune (Q78, Q81): B1 and B10 report only.
+
+### 22.10 The capital brain and helm (D12.10; T16, Q70)
+
+```
+native/src/capital_helm.rs                 the helm, engine-free: heading, velocity and top to a command; flips a hull with no retros
+native/src/capital_brain.rs                the brain, engine-free: states, the course, the stagger (5 Hz), `CapitalJob` in the AI job
+native/src/capital_brain/targets.rs        the target (threat x value / time to kill, doctrine weights) and the subsystem to aim at
+native/src/capital_brain/attitude.rs       the attitude that bears the most mount dps, and the heading and top that take it
+native/src/capital_brain_rows.rs           ScsSimCore's shell: the table, the helm every tick, the launch's copy, the join's answers
+native/src/brain_behaviours/capital_run.rs a fighter's attack runs on a capital (set up, inbound, break, open, regroup)
+src/capital/capital_brains.gd              CapitalBrains (World child, priority -5): ships join, works and status pushed, orders handed on
+src/capital/capital_brain_spec.gd          CapitalBrainSpec, pure: a ship's helm, worth, doctrine, mounts and subsystems as numbers
+src/capital/capital_withdraw.gd            CapitalWithdraw: a withdraw's exit (its own point, a friendly one, a gate, none) booked
+src/capital/capital_brain_console.gd       the `capbrain` command and the `capital_brain` provider
+data/capitals/capitals.json                `capital_brain`: the brain's numbers, class worth, doctrine per faction, the fighters' runs
+```
+
+- **The helm** (Q70). One per capital in the core's table (`ScsSimCore.capital_add`, from `CapitalBrainSpec`): a heading, a
+  velocity and, for an attitude off the bow, the top to roll onto; a reaction hull with retros or a gravitic one pushes along every
+  axis with its bow held, one with none flips to burn against its motion (T07's rules, op for op). `CapitalFlight` hands every
+  ship's basis and velocity to `capital_helm_commands` once a tick and flies the commands it gives (`cruise_velocity` mirrors the
+  helm's velocity for the tier); a disabled hull's is shaped by its wind-down in GDScript. `set_course` is orders: the helm holds
+  them and the brain stops steering (Hold) until `release_helm`. A velocity rebase boosts the helms with the rows.
+- **The brain.** It thinks in the AI job (`brain_step::think_capitals`, after the fighters' pass) on the job's frozen rows, at 5 Hz:
+  each capital on its own beat (its age in flown ticks plus its place at joining, never the core's clock), once a tick at most. Its
+  answer (state, target, aim, attitude, course, events) is applied at the join to the entry whose stamp it was thought for (a ship
+  that left or joined again meanwhile drops it, `stale`); the helm flies the course from the next tick. No randomness.
+  States: **hold** on orders; **withdraw** at hull under 30 %, reactor under 50 % or every main engine lost, once its exit is
+  found (asked for once, `EVENT_WITHDRAW`; none found and it fights on); **screen** with a charge (the `capital_charge` meta, a
+  body id): 0.8 to 1.2 km off it on the threat's side, matching its motion, bearing on the target; **approach** a target beyond
+  1.15 x the hold (1.3 once engaged), bow on at `approach_mps`; **engage** at `engage_share` (0.7) of the main weapon's range (the
+  range whose guns and beams give the most dps, launchers and anti-fighter guns left out: the Omega's pulse cannons, 4 km), the
+  range met over `arrive_s`, in the attitude below; **idle** with no target: the course it had before the fight, taken up again.
+  Launch is T17's (`STATE_LAUNCH`, never entered yet).
+- **Targets** (`targets.rs`). Hostile warships (capitals and stations' own hulls, as the ship perceives them) within `sensor_m`
+  (30 km): `(threat + 1)^threat_w x value^value_w / time_to_kill`, the time to kill its hull points at its own dps plus the time
+  to close to its main range; a disabled hull at 5 %, the held target 1.25 x. No capital in reach: no order, and the guns pick
+  their own (fighters too, Q77). The **aim** (Q17): under a cripple doctrine (`centauri`, `drazi`) a withdrawing target's nearest
+  working engine; outgunned (its dps over 1.5 x its own) the target's strongest mount whose arc covers it; else the centre. The
+  anti-capital and dual mounts take the order (`CapitalGuns.set_order_id`), the heavy ones at the aim when their own hull does not
+  hide it; the beams sweep at it (`CapitalBeams.set_order_id`). Orders are handed on per change (`capital_take_changes`).
+- **Attitude** (`attitude.rs`). Each mount bears along those of 26 directions (faces, edges, corners of its frame) inside its cone
+  whose line its own hull does not cross (worked out once against the hull's own surface volumes); the attitude is the
+  direction to hold the target on that bears the most dps (mounts out of reach at a quarter), the held one kept within 10 %; of
+  near-equal ones (a flank and its mirror) the one the hull reaches soonest. The heading and top turn the hull's chosen axis
+  onto the target by the shortest turn; bow-on and stern-on leave the roll alone. The Omega holds its target on its aft quarter.
+- **Fighters' runs** (`capital_run.rs`, D12.10). A fighter whose attack target is a capital with a brain sets up `open_m` (3 km)
+  off its skin along the direction its arcs cover least (beams weigh 3, anti-fighter guns 1.5, dual 1, the rest 0.5; plus a share
+  for the way round and a seeded share per run, so a squadron spreads), re-planned every `replan_s`; runs in on a subsystem (a
+  working mount covering the way in, else an interceptor on that side, an engine, a bay; torpedo craft would take the reactor:
+  none fly yet) with the attack's own gun run, firing from `fire_from_m` (1.5 km) to `fire_to_m` (400 m); breaks across the line
+  of sight away from the nearest working beam; opens to `open_m`; sets up again. A squadron (its flights, or the wing alone)
+  that has lost `abort_share` (half) of the most ships it had (`WingDirector.capital_abort_of`) regroups `regroup_m` (5 km) off
+  with its fire held, unless its scenario wing says `press` (B10). **Raiders never attack warships** (D12.10): a raider's attack
+  passes over a capital with a brain, and over one firing at it; the bench's stand-ins until T45 are not covered.
+- **Withdraw** (`CapitalWithdraw`, per event). Its own departure point when it can open one and its drive is charged (booked with
+  `CarrierJumps.send_departure`), else a friendly ship's open departure point within 20 km, else the nearest jumpgate
+  (`Jumpgate.send_departure`); the brain flies for the far end of the point or the gate; through, the ship leaves play
+  (`CapitalBrains.withdrew`). None: it fights on.
+- **Threads.** The brain on the job's frozen rows, its answers applied at the join; the helm on the main thread from the bodies'
+  state: 1 and 6 threads keep every brain, helm and order and every ship's place byte for byte (`test_capital_brain_threads`, four
+  Omegas across the seeded battle). The helm matches the recorded GDScript helm (`test_capital_helm_parity`, Q70's recording,
+  `tests/fixtures/parity/capital_helm.json`); the fighters' recordings are untouched (no capital there has a brain).
+- **Cost** (release library, debug Godot, four Omegas across the seeded battle's 110 rows): the brain 21 us a think, 1.8 us a tick
+  a capital at 5 Hz; the helm 0.8 us a capital a tick (packing included); Q70's budget is 8 us. The whole capital flight (rotors,
+  wind-down, packing, the native step) for 8 Omegas: median 97 us, 12 us a capital (239 us, 30 us a capital with the GDScript
+  helm).
+- **Console.** `capbrain [info|list|hold|free|withdraw|charge <name|none>]` on the `capital` command's focus; provider
+  `capital_brain` (`info.md`).
+- **Tests.** Rust `capital_helm::tests` (retros, a flip and back, a small slowing, gravitic, paced turns, no heading, the top),
+  `capital_brain::tests` (approach, broadside and bow-on attitudes, the mirror flank, the hold range, a held attitude and target,
+  friends and fighters no targets, the score, the outgunned and cripple aims, withdraw and fight on, reactor and engines, orders,
+  a hulk, screening, the stagger, determinism, bearings through the own hull, the top, the cruise taken up again); GUT
+  `test_capital_brain` (the main scene: two Omegas approach and engage at range in their attitude, orders held, withdraw through
+  its own point, for the gate, or fighting on, a fighter's runs and a raider leaving a warship alone, the console),
+  `test_capital_brain_threads`, `test_capital_helm_parity`; `test_sim_core`'s guard holds the kernels to the kernels' rules.
+- **Known gaps.** A capital in the low-attention tier thinks but its row flies its last cruise (the tier's capital law), so it does
+  not manoeuvre far from the player; carriers do not launch (T17); no Xill belly-on passes yet (no Xill hull); torpedo craft have
+  no reactor runs (none fly); the fighters' abort counts a squadron's losses from its peak, not only those to a capital.

@@ -74,8 +74,8 @@ pub fn bearings(spec: &CapitalSpec, own: Option<&Surface>) -> Vec<u32> {
         .collect()
 }
 
-/// The attitude toward a target `to_target` away (World), as an index of `DIRECTIONS`, and the heading that brings the
-/// ship's hull round to it from `basis` by the shortest turn. The held attitude stays unless another brings `margin` more.
+/// The attitude toward a target `to_target` away (World), as an index of `DIRECTIONS`, and the heading and top that bring
+/// the ship's hull round to it from `basis` by the shortest turn. The held attitude stays unless another brings `margin` more.
 pub fn choose(
     spec: &CapitalSpec,
     memory: &Memory,
@@ -83,7 +83,7 @@ pub fn choose(
     to_target: Vector3,
     held: u8,
     t: &Tuning,
-) -> (u8, Vector3) {
+) -> (u8, Vector3, Vector3) {
     let range_m = f64::from(length(to_target));
     let mut scores = [0.0f64; DIRECTIONS.len()];
     for (i, m) in spec.mounts.iter().enumerate() {
@@ -98,22 +98,36 @@ pub fn choose(
             }
         }
     }
-    let mut best = 0usize;
-    for k in 1..scores.len() {
-        if scores[k] > scores[best] {
-            best = k;
+    let top = scores.iter().copied().fold(0.0, f64::max);
+    let held = usize::from(held).min(DIRECTIONS.len() - 1);
+    // Of the attitudes that bring nearly the most to bear (a flank and its mirror), the one the hull turns to soonest; the
+    // held one while it is still among them.
+    let want = unit_or(to_target, nose(basis));
+    let mut best = held;
+    if scores[held] * t.attitude_margin < top || top <= 0.0 {
+        let mut least = f32::INFINITY;
+        for (k, &score) in scores.iter().enumerate() {
+            if score * t.attitude_margin < top {
+                continue;
+            }
+            let turn = 1.0 - dot(normalized(xform(basis, DIRECTIONS[k])), want);
+            if turn < least {
+                least = turn;
+                best = k;
+            }
         }
     }
-    let held = usize::from(held).min(DIRECTIONS.len() - 1);
-    if scores[held] * t.attitude_margin >= scores[best] {
-        best = held;
-    }
-    (best as u8, heading_for(basis, DIRECTIONS[best], to_target))
+    let (heading, up) = heading_for(basis, DIRECTIONS[best], to_target);
+    // Bow-on and stern-on attitudes leave the roll alone: every top serves.
+    let up = if best == 0 || best == 5 { Vector3::ZERO } else { up };
+    (best as u8, heading, up)
 }
 
-/// The heading (the bow's World direction) that turns the ship's own `local` axis onto `to_target` by the shortest turn.
-pub fn heading_for(basis: &Basis, local: Vector3, to_target: Vector3) -> Vector3 {
+/// The heading (the bow's World direction) and top that turn the ship's own `local` axis onto `to_target` by the shortest
+/// turn of the whole hull.
+pub fn heading_for(basis: &Basis, local: Vector3, to_target: Vector3) -> (Vector3, Vector3) {
     let nose = nose(basis);
+    let top = normalized(xform(basis, Vector3::new(0.0, 1.0, 0.0)));
     let want = unit_or(to_target, nose);
     let have = normalized(xform(basis, local));
     let axis = cross(have, want);
@@ -121,12 +135,13 @@ pub fn heading_for(basis: &Basis, local: Vector3, to_target: Vector3) -> Vector3
     let cos = dot(have, want);
     if sin < 1e-6 {
         if cos > 0.0 {
-            return nose;
+            return (nose, top);
         }
         // Exactly the wrong way: half a turn about the ship's own up.
-        return rotated(nose, normalized(xform(basis, Vector3::new(0.0, 1.0, 0.0))), std::f32::consts::PI);
+        return (rotated(nose, top, std::f32::consts::PI), top);
     }
-    rotated(nose, scale(axis, 1.0 / sin), sin.atan2(cos))
+    let (axis, angle) = (scale(axis, 1.0 / sin), sin.atan2(cos));
+    (rotated(nose, axis, angle), rotated(top, axis, angle))
 }
 
 /// The bow's World direction.

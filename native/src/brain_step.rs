@@ -340,10 +340,12 @@ fn think_capitals(snapshot: &mut Snapshot, origin: [f64; 3]) {
         capitals,
         ..
     } = snapshot;
+    capitals.think_ns = 0;
     if capitals.entries.is_empty() {
         capitals.answers.clear();
         return;
     }
+    let started = Instant::now();
     let row_of = |body: i64| {
         if touched.contains(&body) {
             return -1;
@@ -351,6 +353,7 @@ fn think_capitals(snapshot: &mut Snapshot, origin: [f64; 3]) {
         HashMap::get(body_rows, &body).map_or(-1, |&r| i64::from(r))
     };
     capital_brain::think_all(capitals, rows, row_of, origin);
+    capitals.think_ns = started.elapsed().as_nanos() as u64;
 }
 
 // Thinks the batch's first `n` items (inputs filled, brains taken from their slots) across the runner's threads and

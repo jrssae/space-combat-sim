@@ -15,7 +15,7 @@ use std::sync::Arc;
 
 use godot::builtin::{Basis, Vector3};
 
-use crate::capital_helm::HelmSpec;
+use crate::capital_helm::{Helm, HelmSpec};
 use crate::rows::{FLAG_DISABLED, FLAG_HULK, FLAG_SHELTERED, Rows, seen_ix};
 use crate::v3::{add, clampf, dist_sq, distance, div_s, length, scale, sub};
 
@@ -282,6 +282,27 @@ pub struct Memory {
     pub thinks: i64,
     /// The age of its last think, so a second job in the same tick (a single think) does not think it again.
     pub thought_at: i64,
+    /// The course it held before its fight (heading, velocity against the World's rest), taken up again once it has no target.
+    pub cruise: Option<(Vector3, Vector3)>,
+}
+
+/// The helm's course a think gives: the bow's heading, the velocity held (World frame) and the way the top should face (zero:
+/// the roll left alone).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Course {
+    pub heading: Vector3,
+    pub velocity: Vector3,
+    pub up: Vector3,
+}
+
+impl Course {
+    fn bow(heading: Vector3, velocity: Vector3) -> Course {
+        Course {
+            heading,
+            velocity,
+            up: Vector3::ZERO,
+        }
+    }
 }
 
 /// One capital in the job: its stamp, spec, status, memory and the place in the stagger.
@@ -294,6 +315,8 @@ pub struct Entry {
     pub spec: Arc<CapitalSpec>,
     pub status: Status,
     pub memory: Memory,
+    /// Its helm as the launch found it (the main thread steps it every tick).
+    pub helm: Helm,
 }
 
 /// A think's answer: what the join writes back to the entry whose stamp it still is.
@@ -302,8 +325,8 @@ pub struct Answer {
     pub body: i64,
     pub stamp: u32,
     pub memory: Memory,
-    /// The helm's heading and velocity (World frame); none on orders (`MODE_HELD`) or with nothing to steer.
-    pub helm: Option<(Vector3, Vector3)>,
+    /// The helm's course; none on orders (`MODE_HELD`) or with nothing to steer.
+    pub helm: Option<Course>,
     pub order: i64,
     pub order_aim: Option<Vector3>,
     pub events: u8,
@@ -322,6 +345,8 @@ pub struct CapitalJob {
     pub answers: Vec<Answer>,
     /// The raiders' faction index, which never attacks a warship (D12.10); none while the core has not seen them.
     pub raiders_ix: Option<u32>,
+    /// How long the job's capital thinks took, ns (a readout the shell writes; the kernel never reads a clock).
+    pub think_ns: u64,
 }
 
 impl CapitalJob {
@@ -448,8 +473,13 @@ fn think_one<F: Fn(i64) -> i64>(
     let attitude = target_row.map(|j| {
         attitude::choose(spec, &memory, &basis, sub(rows.positions[j], position), memory.attitude, t)
     });
-    if let Some((index, _)) = attitude {
+    if let Some((index, _, _)) = attitude {
         memory.attitude = index;
+    }
+    // Into a fight it remembers its course, and out of it takes it up again.
+    let fighting = !matches!(memory.state, STATE_IDLE | STATE_HOLD);
+    if fighting && memory.cruise.is_none() {
+        memory.cruise = Some((e.helm.heading, sub(e.helm.velocity, job.rest)));
     }
     // The helm's course in the World frame (the rows' velocities are against the World's rest).
     answer.helm = match memory.state {
@@ -464,9 +494,9 @@ fn think_one<F: Fn(i64) -> i64>(
             let d = f64::from(length(way));
             let dir = if d > 1.0 { div_s(way, d as f32) } else { attitude::nose(&basis) };
             let speed = clampf(d / t.arrive_s, 0.0, t.approach_mps);
-            Some((dir, add(job.rest, scale(dir, speed as f32))))
+            Some(Course::bow(dir, add(job.rest, scale(dir, speed as f32))))
         }
-        STATE_WITHDRAW => Some((attitude::nose(&basis), own_v)), // its exit is being found: it holds its course
+        STATE_WITHDRAW => Some(Course::bow(attitude::nose(&basis), own_v)), // its exit is being found: it holds its course
         STATE_SCREEN => Some(screen_course(job, e, rows, row_of, r, target_row, &basis, t)),
         STATE_APPROACH | STATE_ENGAGE => {
             let j = target_row.unwrap_or(r);
@@ -480,13 +510,13 @@ fn think_one<F: Fn(i64) -> i64>(
                 clampf((d - hold) / t.arrive_s, -t.approach_mps, t.approach_mps)
             };
             let velocity = add(add(rows.velocities[j], job.rest), scale(dir, closing as f32));
-            let heading = match (memory.state, attitude) {
-                (STATE_ENGAGE, Some((_, heading))) => heading,
-                _ => dir,
-            };
-            Some((heading, velocity))
+            match (memory.state, attitude) {
+                (STATE_ENGAGE, Some((_, heading, up))) => Some(Course { heading, velocity, up }),
+                _ => Some(Course::bow(dir, velocity)),
+            }
         }
-        _ => None, // idle: the helm keeps what it had
+        // Idle: back on the course it had before the fight, else the helm keeps what it had.
+        _ => memory.cruise.take().map(|(heading, v)| Course::bow(heading, add(job.rest, v))),
     };
     // Its heavy weapons take the target (none: they pick their own, fighters included, Q77).
     answer.order = memory.target;
@@ -524,7 +554,7 @@ fn screen_course<F: Fn(i64) -> i64>(
     target_row: Option<usize>,
     basis: &Basis,
     t: &Tuning,
-) -> (Vector3, Vector3) {
+) -> Course {
     let c = row_of(e.status.charge) as usize;
     let charge_at = rows.positions[c];
     let side = match target_row {
@@ -540,14 +570,14 @@ fn screen_course<F: Fn(i64) -> i64>(
     let closing = if inside_band { 0.0 } else { clampf(d / t.arrive_s, 0.0, t.approach_mps) };
     let dir = attitude::unit_or(way, attitude::nose(basis));
     let velocity = add(add(rows.velocities[c], job.rest), scale(dir, closing as f32));
-    let heading = match target_row {
+    match target_row {
         Some(j) => {
             let memory = &e.memory;
-            attitude::choose(&e.spec, memory, basis, sub(rows.positions[j], rows.positions[r]), memory.attitude, t).1
+            let (_, heading, up) = attitude::choose(&e.spec, memory, basis, sub(rows.positions[j], rows.positions[r]), memory.attitude, t);
+            Course { heading, velocity, up }
         }
-        None => attitude::nose(&rows.bases[c]),
-    };
-    (heading, velocity)
+        None => Course::bow(attitude::nose(&rows.bases[c]), velocity),
+    }
 }
 
 // Rows a capital ignores entirely: static rows, mines, sheltered ships, the dead.

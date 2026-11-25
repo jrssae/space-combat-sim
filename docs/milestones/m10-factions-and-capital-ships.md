@@ -768,7 +768,10 @@ fly attack runs on capitals; B10 and B1 run and reported (Q77). Launch (carriers
   half, unless its wing says `press`); raiders never attack a capital with a brain. *Game side:* `CapitalBrains`,
   `CapitalBrainSpec`, `CapitalBrainConsole` (`capbrain`, provider `capital_brain`, `info.md`), `AiContext.capital_abort`,
   `Wing.press`, scenario `wings[].press`. Architecture §22.10 (new), §22.2, §22.6, §22.7 updated.
-  *Tests (staged copy):* see the last fix round below. *Cost* (release, debug Godot): brain 21 us a think = 1.8 us a tick a capital
+  *Tests (staged copy, GUT_SLOW):* Rust 367/367 (24 new: helm 7, brain 21; gun and beam order aims through the existing
+  ones), clippy clean in the touched files; compile check 1 129 scripts clean; GUT 592/592 over 72 files (new
+  `test_capital_brain` 7, `test_capital_brain_threads` 1 with 1 and 6 threads byte for byte, `test_capital_helm_parity` 2; every
+  AI, wing, tier, parity, capital, hulk, beam, gun and interceptor file); the fighters' parity recordings untouched. *Cost* (release, debug Godot): brain 21 us a think = 1.8 us a tick a capital
   at 5 Hz, helm 0.8 us a capital a tick (Q70's budget 8 us); the whole capital flight for 8 Omegas median 97 us, 12 us a capital
   (239 us, 30 us a capital before). `bench_quick` before/after (`reports/perf/t16_before`, `t16_after`): furball 400 / 400 ships,
   spread 500 / 500, battle 75 / 100, all in budget.

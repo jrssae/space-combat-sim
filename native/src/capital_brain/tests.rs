@@ -3,10 +3,10 @@
 use std::collections::HashMap;
 
 use super::*;
-use crate::capital_helm::HelmSpec;
+use crate::capital_helm::{Helm, HelmSpec};
 use crate::rows::{FLAG_HULL_ACTIVE, FLAG_RIGID, ROLE_SURFACE, Surface};
 use crate::surface::from_packed;
-use crate::v3::{dot, normalized};
+use crate::v3::{dot, length, normalized};
 
 const LIVE: u32 = FLAG_RIGID | FLAG_HULL_ACTIVE;
 
@@ -123,6 +123,7 @@ fn entry(spec: CapitalSpec, ordinal: i64) -> Entry {
             ..Default::default()
         },
         memory: Memory::default(),
+        helm: Helm::default(),
     }
 }
 
@@ -136,6 +137,7 @@ fn job(entries: Vec<Entry>) -> CapitalJob {
         rest: Vector3::ZERO,
         answers: Vec::new(),
         raiders_ix: None,
+        think_ns: 0,
     }
 }
 
@@ -169,7 +171,7 @@ fn a_far_hostile_capital_is_approached_bow_on() {
     let a = &think(&mut j, &rows)[0];
     assert_eq!(a.memory.state, STATE_APPROACH);
     assert_eq!(a.order, 2, "its heavy weapons take the target");
-    let (heading, velocity) = a.helm.expect("it steers");
+    let (heading, velocity) = a.helm.map(|c| (c.heading, c.velocity)).expect("it steers");
     assert!(dot(heading, v(1.0, 0.0, 0.0)) > 0.99, "bow on toward the target");
     assert!(velocity.x > 30.0, "closing at its approach speed");
 }
@@ -180,9 +182,22 @@ fn in_range_a_turret_ship_turns_broadside() {
     let mut j = job(vec![entry(broadside(1), 0)]);
     let a = &think(&mut j, &rows)[0];
     assert_eq!(a.memory.state, STATE_ENGAGE);
-    assert!(a.memory.attitude == 1 || a.memory.attitude == 2, "abeam (got {})", a.memory.attitude);
-    let (heading, _) = a.helm.unwrap();
-    assert!(dot(heading, v(0.0, 0.0, -1.0)).abs() < 0.05, "the bow turned square to the target: {heading:?}");
+    // Its flank (or the quarter beside it, where the same four turrets bear and the turn is shorter) to the target.
+    let side = attitude::DIRECTIONS[usize::from(a.memory.attitude)];
+    assert!(side.x.abs() > 0.5 && side.y == 0.0, "a flank's attitude (got {})", a.memory.attitude);
+    let (heading, _) = a.helm.map(|c| (c.heading, c.velocity)).unwrap();
+    assert!(dot(heading, v(0.0, 0.0, -1.0)) < 0.8, "the bow turned off the target: {heading:?}");
+    // Already abeam, it holds there.
+    let mut j = job(vec![entry(broadside(1), 0)]);
+    let abeam = rows_of(&[(1, Vector3::ZERO, 0), (2, v(4000.0, 0.0, 0.0), 1)]);
+    assert_eq!(think(&mut j, &abeam)[0].memory.attitude, 1, "the target abeam to starboard");
+}
+
+#[test]
+fn of_a_flank_and_its_mirror_it_takes_the_nearer() {
+    let mut j = job(vec![entry(broadside(1), 0)]);
+    let port = rows_of(&[(1, Vector3::ZERO, 0), (2, v(-4000.0, 0.0, 0.0), 1)]);
+    assert_eq!(think(&mut j, &port)[0].memory.attitude, 2, "abeam to port: no half turn to bring the other flank round");
 }
 
 #[test]
@@ -192,7 +207,7 @@ fn in_range_a_bow_gun_ship_points_its_bow() {
     let a = &think(&mut j, &rows)[0];
     assert_eq!(a.memory.state, STATE_ENGAGE);
     assert_eq!(a.memory.attitude, 0, "bow-on");
-    let (heading, _) = a.helm.unwrap();
+    let (heading, _) = a.helm.map(|c| (c.heading, c.velocity)).unwrap();
     assert!(dot(heading, v(1.0, 0.0, 0.0)) > 0.99);
 }
 
@@ -203,10 +218,10 @@ fn engage_holds_seven_tenths_of_the_main_weapons_range() {
     let hold = 0.7 * 6000.0;
     let near = rows_of(&[(1, Vector3::ZERO, 0), (2, v(0.0, 0.0, -(hold as f32) + 1500.0), 1)]);
     let a = &think(&mut job(vec![entry(broadside(1), 0)]), &near)[0];
-    assert!(a.helm.unwrap().1.z > 0.0, "too close: it opens the range");
+    assert!(a.helm.map(|c| (c.heading, c.velocity)).unwrap().1.z > 0.0, "too close: it opens the range");
     let far = rows_of(&[(1, Vector3::ZERO, 0), (2, v(0.0, 0.0, -(hold as f32) - 500.0), 1)]);
     let a = &think(&mut job(vec![entry(broadside(1), 0)]), &far)[0];
-    assert!(a.helm.unwrap().1.z < 0.0, "a little far: it closes");
+    assert!(a.helm.map(|c| (c.heading, c.velocity)).unwrap().1.z < 0.0, "a little far: it closes");
 }
 
 #[test]
@@ -299,7 +314,7 @@ fn it_withdraws_below_a_third_of_its_hull_and_fights_on_without_an_exit() {
     j.entries[0].status.exit = EXIT_FOUND;
     j.entries[0].status.exit_at = [0.0, 0.0, 9000.0];
     let a = &think(&mut j, &rows)[0];
-    assert!(dot(a.helm.unwrap().0, v(0.0, 0.0, 1.0)) > 0.99, "toward its exit");
+    assert!(dot(a.helm.map(|c| (c.heading, c.velocity)).unwrap().0, v(0.0, 0.0, 1.0)) > 0.99, "toward its exit");
     // None: it fights on.
     j.entries[0].status.exit = EXIT_NONE;
     assert_eq!(think(&mut j, &rows)[0].memory.state, STATE_ENGAGE);
@@ -351,7 +366,7 @@ fn an_escort_screens_its_charge() {
     j.entries[0].status.charge = 2;
     let a = &think(&mut j, &rows)[0];
     assert_eq!(a.memory.state, STATE_SCREEN);
-    assert!(a.helm.unwrap().1.x < 0.0, "out of the band: it closes on its charge");
+    assert!(a.helm.map(|c| (c.heading, c.velocity)).unwrap().1.x < 0.0, "out of the band: it closes on its charge");
 }
 
 #[test]
@@ -389,4 +404,31 @@ fn bearings_see_the_own_hull_in_the_way() {
     let low = spec(1, vec![mount(v(0.0, 11.0, -100.0), v(0.0, 1.0, 0.0), 120.0, 10.0, 6000.0, MOUNT_TURRET, ROLE_AC)]);
     let bits = attitude::bearings(&low, Some(&hull()))[0];
     assert_eq!(bits & (1 << 8), 0, "down and ahead: through its own hull");
+}
+
+#[test]
+fn a_broadside_attitude_also_sets_the_ships_top() {
+    let rows = rows_of(&[(1, Vector3::ZERO, 0), (2, v(0.0, 0.0, -4000.0), 1)]);
+    let mut j = job(vec![entry(broadside(1), 0)]);
+    let c = think(&mut j, &rows)[0].helm.expect("it steers");
+    assert!(length(c.up) > 0.9, "a flank's attitude holds the roll too");
+    assert!(dot(c.up, c.heading).abs() < 1e-3, "the top square to the bow");
+}
+
+#[test]
+fn out_of_the_fight_it_takes_up_its_course_again() {
+    let mut j = job(vec![entry(broadside(1), 0)]);
+    j.entries[0].helm.heading = v(1.0, 0.0, 0.0);
+    j.entries[0].helm.velocity = v(5.0, 0.0, 0.0);
+    let fight = rows_of(&[(1, Vector3::ZERO, 0), (2, v(0.0, 0.0, -4000.0), 1)]);
+    think(&mut j, &fight);
+    settle(&mut j);
+    assert!(j.entries[0].memory.cruise.is_some(), "it remembered its course");
+    let quiet = rows_of(&[(1, Vector3::ZERO, 0)]);
+    let a = think(&mut j, &quiet)[0].clone();
+    assert_eq!(a.memory.state, STATE_IDLE);
+    let c = a.helm.expect("back on its course");
+    assert_eq!(c.heading, v(1.0, 0.0, 0.0));
+    assert_eq!(c.velocity, v(5.0, 0.0, 0.0));
+    assert!(a.memory.cruise.is_none());
 }

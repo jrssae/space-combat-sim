@@ -24,6 +24,7 @@ fn helm(heading: Vector3, velocity: Vector3) -> Helm {
     Helm {
         heading,
         velocity,
+        up: Vector3::ZERO,
         flipping: false,
     }
 }
@@ -103,4 +104,16 @@ fn no_heading_holds_the_bow_where_it_is() {
     let mut h = helm(BACK, Vector3::ZERO);
     let cmd = command(&s, &mut h, &Basis::IDENTITY, Vector3::ZERO);
     assert!(length(cmd.rot) > 0.0, "dead astern it turns");
+}
+
+#[test]
+fn a_top_to_hold_rolls_the_hull_onto_it_and_none_leaves_the_roll_alone() {
+    let s = spec(true, false);
+    let mut h = helm(FORWARD, Vector3::ZERO);
+    h.up = Vector3::new(1.0, 0.0, 0.0);
+    let cmd = command(&s, &mut h, &Basis::IDENTITY, Vector3::ZERO);
+    assert!(cmd.rot.z.abs() > 0.0, "it rolls toward the top it is told");
+    h.up = Vector3::ZERO;
+    let cmd = command(&s, &mut h, &Basis::IDENTITY, Vector3::ZERO);
+    assert_eq!(cmd.rot.z, 0.0);
 }

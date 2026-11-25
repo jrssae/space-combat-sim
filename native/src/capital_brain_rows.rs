@@ -32,7 +32,6 @@ const CMD_FLAGS: usize = 4;
 // One capital in the table: the brain's entry, its helm, the order its weapons hold and what GDScript is yet to hear.
 struct Row {
     entry: Entry,
-    helm: Helm,
     order: i64,
     order_aim: Option<Vector3>,
     changes: u8,
@@ -48,6 +47,14 @@ pub struct CapitalTable {
     next_stamp: u32,
     answers_applied: i64,
     answers_stale: i64,
+    // The capital thinks' cost so far: jobs that thought, thinks, and their time, ns (readouts).
+    think_jobs: i64,
+    thinks: i64,
+    think_ns: u64,
+    // The helm's cost so far: calls, ships stepped, and their time, ns (readouts).
+    helm_calls: i64,
+    helm_ships: i64,
+    helm_ns: u64,
 }
 
 impl CapitalTable {
@@ -63,7 +70,7 @@ impl CapitalTable {
     /// Every velocity the core holds loses `dv` (a velocity rebase, M6-T05): the helms' too.
     pub fn boost(&mut self, dv: Vector3) {
         for r in &mut self.rows {
-            r.helm.velocity = crate::v3::sub(r.helm.velocity, dv);
+            r.entry.helm.velocity = crate::v3::sub(r.entry.helm.velocity, dv);
         }
     }
 }
@@ -85,6 +92,11 @@ impl ScsSimCore {
     /// A joined job's answers: each lands on its capital when the entry is still the one it was thought for.
     pub(crate) fn take_capital_answers(&mut self, job: &CapitalJob) {
         let t = &mut self.capitals;
+        if !job.answers.is_empty() {
+            t.think_jobs += 1;
+            t.thinks += job.answers.len() as i64;
+            t.think_ns += job.think_ns;
+        }
         for a in &job.answers {
             let Some(i) = t.index_of(a.body).filter(|&i| t.rows[i].entry.stamp == a.stamp) else {
                 t.answers_stale += 1;
@@ -104,10 +116,11 @@ fn apply(row: &mut Row, a: &Answer) {
         row.entry.memory.bearings = bearings;
     }
     if row.entry.status.mode == MODE_AUTO
-        && let Some((heading, velocity)) = a.helm
+        && let Some(course) = a.helm
     {
-        row.helm.heading = heading;
-        row.helm.velocity = velocity;
+        row.entry.helm.heading = course.heading;
+        row.entry.helm.velocity = course.velocity;
+        row.entry.helm.up = course.up;
     }
     if row.order != a.order || row.order_aim != a.order_aim {
         row.order = a.order;
@@ -253,8 +266,8 @@ impl ScsSimCore {
                         spec: Arc::new(spec),
                         status: Status::default(),
                         memory: Memory::default(),
+                        helm: Helm::default(),
                     },
-                    helm: Helm::default(),
                     order: 0,
                     order_aim: None,
                     changes: 0,
@@ -284,12 +297,13 @@ impl ScsSimCore {
         if let Some(i) = self.capitals.index_of(body) {
             let row = &mut self.capitals.rows[i];
             row.entry.status.mode = MODE_HELD;
-            row.helm.heading = if crate::v3::length_squared(heading) > 1e-12 {
+            row.entry.helm.up = Vector3::ZERO;
+            row.entry.helm.heading = if crate::v3::length_squared(heading) > 1e-12 {
                 crate::v3::normalized(heading)
             } else {
                 Vector3::ZERO
             };
-            row.helm.velocity = velocity;
+            row.entry.helm.velocity = velocity;
         }
     }
 
@@ -297,7 +311,7 @@ impl ScsSimCore {
     #[func]
     fn capital_set_helm_velocity(&mut self, body: i64, velocity: Vector3) {
         if let Some(i) = self.capitals.index_of(body) {
-            self.capitals.rows[i].helm.velocity = velocity;
+            self.capitals.rows[i].entry.helm.velocity = velocity;
         }
     }
 
@@ -359,6 +373,7 @@ impl ScsSimCore {
     /// velocity (what `cruise_velocity` mirrors). A body with no helm gets an empty command.
     #[func]
     fn capital_helm_commands(&mut self, bodies: PackedInt64Array, states: PackedVector3Array) -> VarArray {
+        let started = std::time::Instant::now();
         let (b, s) = (bodies.as_slice(), states.as_slice());
         let n = b.len().min(s.len() / 4);
         let mut scalars = PackedFloat64Array::new();
@@ -381,7 +396,7 @@ impl ScsSimCore {
                 let row = &mut self.capitals.rows[i];
                 row.entry.age += 1;
                 let basis = Basis::from_cols(s[4 * k], s[4 * k + 1], s[4 * k + 2]);
-                let cmd = ch::command(&row.entry.spec.helm, &mut row.helm, &basis, s[4 * k + 3]);
+                let cmd = ch::command(&row.entry.spec.helm, &mut row.entry.helm, &basis, s[4 * k + 3]);
                 sc[k * CMD_SCALARS] = cmd.main_right;
                 sc[k * CMD_SCALARS + 1] = cmd.main_left;
                 sc[k * CMD_SCALARS + 2] = cmd.retro_right;
@@ -389,7 +404,7 @@ impl ScsSimCore {
                 ve[k * CMD_VECTORS] = Vector3::new(cmd.strafe_x, cmd.strafe_y, 0.0);
                 ve[k * CMD_VECTORS + 1] = cmd.rot;
                 fl[k * CMD_FLAGS] = u8::from(cmd.brake);
-                vel[k] = row.helm.velocity;
+                vel[k] = row.entry.helm.velocity;
             }
         }
         let mut out = VarArray::new();
@@ -397,6 +412,10 @@ impl ScsSimCore {
         out.push(&vectors.to_variant());
         out.push(&flags.to_variant());
         out.push(&velocities.to_variant());
+        let t = &mut self.capitals;
+        t.helm_calls += 1;
+        t.helm_ships += n as i64;
+        t.helm_ns += started.elapsed().as_nanos() as u64;
         out
     }
 
@@ -406,9 +425,9 @@ impl ScsSimCore {
         let mut out = VarArray::new();
         if let Some(i) = self.capitals.index_of(body) {
             let row = &self.capitals.rows[i];
-            out.push(&row.helm.heading.to_variant());
-            out.push(&row.helm.velocity.to_variant());
-            out.push(&row.helm.flipping.to_variant());
+            out.push(&row.entry.helm.heading.to_variant());
+            out.push(&row.entry.helm.velocity.to_variant());
+            out.push(&row.entry.helm.flipping.to_variant());
             out.push(&row.entry.spec.helm.gravitic.to_variant());
         }
         out
@@ -445,6 +464,7 @@ impl ScsSimCore {
         let mut state = Helm {
             heading,
             velocity,
+            up: Vector3::ZERO,
             flipping,
         };
         let c = ch::command(&spec, &mut state, &basis, current);
@@ -522,10 +542,24 @@ impl ScsSimCore {
         out
     }
 
-    /// Answers applied and dropped as stale so far.
+    /// Readouts so far: answers applied, answers dropped as stale, jobs that thought, thinks, their time (ns), helm calls,
+    /// helms stepped, their time (ns, the packing included).
     #[func]
     fn capital_readouts(&self) -> PackedInt64Array {
-        PackedInt64Array::from([self.capitals.answers_applied, self.capitals.answers_stale].as_slice())
+        let t = &self.capitals;
+        PackedInt64Array::from(
+            [
+                t.answers_applied,
+                t.answers_stale,
+                t.think_jobs,
+                t.thinks,
+                t.think_ns as i64,
+                t.helm_calls,
+                t.helm_ships,
+                t.helm_ns as i64,
+            ]
+            .as_slice(),
+        )
     }
 
     /// A digest of every capital's brain and helm (state, target's row, aim, attitude, heading, velocity, flip, order's row),
@@ -544,13 +578,13 @@ impl ScsSimCore {
             word(u64::from(m.state));
             word(self.row_of_id(m.target) as u64);
             word(self.row_of_id(row.order) as u64);
-            for v in [m.aim.unwrap_or(Vector3::ZERO), row.helm.heading, row.helm.velocity] {
+            for v in [m.aim.unwrap_or(Vector3::ZERO), row.entry.helm.heading, row.entry.helm.velocity] {
                 for c in [v.x, v.y, v.z] {
                     word(u64::from(c.to_bits()));
                 }
             }
             word(u64::from(m.attitude));
-            word(u64::from(row.helm.flipping));
+            word(u64::from(row.entry.helm.flipping));
             word(m.thinks as u64);
         }
         h as i64

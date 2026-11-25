@@ -12,7 +12,7 @@
 use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::{self, Capability, FlightCmd};
-use crate::v3::{col_c, dot, length, length_squared, maxf, minf, neg, sub};
+use crate::v3::{col_c, dot, length, length_squared, maxf, minf, neg, sub, xform_inv};
 
 /// Mid-flip below this much velocity change left, m/s, the helm turns back; above `FLIP_ENTER_MPS` aft it starts a flip.
 pub const FLIP_EXIT_MPS: f64 = 0.5;
@@ -31,11 +31,13 @@ pub struct HelmSpec {
 }
 
 /// What the helm is told and what it remembers: the way the bow should point (World, unit; zero holds the bow where it is),
-/// the velocity to hold (World frame, m/s), and whether a hull with no retros is turned to burn against its motion.
+/// the velocity to hold (World frame, m/s), the way the ship's top should face (World, unit; zero leaves its roll alone, M10-T16:
+/// an attitude that brings a flank's mounts to bear), and whether a hull with no retros is turned to burn against its motion.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Helm {
     pub heading: Vector3,
     pub velocity: Vector3,
+    pub up: Vector3,
     pub flipping: bool,
 }
 
@@ -60,6 +62,9 @@ pub fn command(spec: &HelmSpec, helm: &mut Helm, basis: &Basis, current: Vector3
         nose
     };
     cmd.rot = turn(spec, basis, face);
+    if !helm.flipping && f64::from(length_squared(helm.up)) > 1e-12 {
+        cmd.rot.z = roll(spec, basis, helm.up) as f32;
+    }
     let mut seek = brain_maths::seek(current, helm.velocity, basis, &spec.cap, HORIZON_S, !helm.flipping);
     if !spec.retros {
         seek.retro = 0.0;
@@ -78,6 +83,18 @@ fn turn(spec: &HelmSpec, basis: &Basis, direction: Vector3) -> Vector3 {
     let alpha = minf(f64::from(cap.alpha_max.x), f64::from(cap.alpha_max.y));
     let gain = minf(brain_maths::K_FACE, TURN_MARGIN * (2.0 * maxf(alpha, 1e-9) / angle).sqrt());
     brain_maths::face(basis, direction, cap.rate_max, gain)
+}
+
+// Pilot roll toward `up`, slowed as a turn is so the hull can stop on it.
+fn roll(spec: &HelmSpec, basis: &Basis, up: Vector3) -> f64 {
+    let u_b = xform_inv(basis, up);
+    let angle = f64::from(u_b.x).atan2(f64::from(u_b.y)).abs();
+    if angle < 1e-6 {
+        return 0.0;
+    }
+    let alpha = f64::from(spec.cap.alpha_max.z);
+    let gain = minf(brain_maths::K_FACE, TURN_MARGIN * (2.0 * maxf(alpha, 1e-9) / angle).sqrt());
+    brain_maths::align_roll(basis, up, spec.cap.rate_max, gain)
 }
 
 #[cfg(test)]

@@ -1,7 +1,8 @@
 extends GutTest
 ## Balance fights B10 and B1 (docs/assets-capital.md, "Balance fights"; Q53, Q76). B10: twelve allied Starfuries on engage at
-## will against a lone hostile Omega holding still, none launched (T17), its interceptors working (T13); Q53's bar: the Omega
-## lasts 10 to 15 min and the squadron loses about half. B1: two Omegas broadside on; the bar 4 to 8 min. The real main scene,
+## will, told to press (no abort), flying attack runs (M10-T16) on a lone hostile Omega left to its `capital` brain, none
+## launched (T17), its interceptors working (T13); Q53's bar: the Omega lasts 10 to 15 min and the squadron loses about half.
+## B1: two Omegas starting broadside on 3 km apart, each fought by its brain; the bar 4 to 8 min. The real main scene,
 ## Jolt and the native core at the game's 60 Hz step, sped up. Each fight reports the share of the hostile shots headed for an
 ## Omega that its interceptors took (Q53's anchor: about half the Starfuries' bolts, 40 % of a capital's). No retune with T13
 ## (Q78, Q81): both bars are reported and a miss is left pending until the later rebalance.
