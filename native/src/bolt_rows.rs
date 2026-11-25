@@ -90,6 +90,25 @@ impl ScsSimCore {
         false
     }
 
+    /// Owned bolt `id` takes `hits` interceptor pulses to shoot down (Q81's toughness; a capital gun's shots take theirs at fire
+    /// time); false when there is none.
+    #[func]
+    fn set_bolt_hits(&mut self, id: i64, hits: i64) -> bool {
+        let b = &mut self.bolts;
+        let Some(i) = (0..b.owned).find(|&i| b.ids[i] == id) else {
+            return false;
+        };
+        b.set_hits_left(i, hits.clamp(1, 255) as u8);
+        true
+    }
+
+    /// The interceptor pulses owned bolt `id` still takes, 0 when there is none or it is spent.
+    #[func]
+    fn bolt_hits(&self, id: i64) -> i64 {
+        let b = &self.bolts;
+        (0..b.owned).find(|&i| b.ids[i] == id && !b.spent[i]).map_or(0, |i| i64::from(b.hits_left_of(i)))
+    }
+
     /// `spend_bolt` by the bolt's row in the table (the hit resolver's index).
     #[func]
     fn spend_bolt_row(&mut self, row: i64) -> bool {

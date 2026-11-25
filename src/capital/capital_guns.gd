@@ -9,7 +9,12 @@ extends Node
 ## a missile's or torpedo's warhead then blasts there (`warhead_blast`). A disguised shooter that fires on its transponder's
 ## friend gives itself away (`Transponder.note_shot_at`). A child of `World`.
 ##
-## Console: provider `capital_guns` and command `gun` (`GunConsole`).
+## Interceptor batteries (M10-T13, Q81) are mounts of the same rows: each fires pulses at hostile missiles, torpedoes and bolts
+## headed for its ship or a friendly capital or station (`capital_intercepts.rs`); this node shows each pulse's muzzle flash and
+## the grid's battery sound pitched up, a spark where a pulse meets a shot, and spends a shot down that a node draws.
+##
+## Console: provider `capital_guns` and command `gun` (`GunConsole`); provider `interceptors` and command `intercept`
+## (`InterceptConsole`).
 
 const NODE_NAME: StringName = &"CapitalGuns"
 const NATIVE_CLASS: StringName = &"ScsCapitalGuns"
@@ -17,6 +22,15 @@ const NATIVE_CLASS: StringName = &"ScsCapitalGuns"
 const STATE_FIELDS: Array[String] = ["target", "azimuth", "elevation", "ready_at", "shots", "works", "rate"]
 ## Each warhead's blast row in `BlastTable` (M10-T09), by `WeaponSpec.WARHEAD_*`.
 const WARHEAD_BLASTS: Array[StringName] = [&"", &"missile", &"torpedo"]
+## What a shot down was (`capital_intercepts::SHOT_*`), for the counters.
+const SHOT_KINDS: Array[String] = ["bolt", "heavy", "missile", "torpedo"]
+## A battery's muzzle glow and a meeting's flash, as the station grid's batteries show them (M7-T41).
+const PULSE_GLOW: Color = Color(0.53, 1.0, 2.0)
+const MEET_FLASH_SCALE: float = 0.6
+
+## A battery fired a pulse from `at` (World), or a pulse met a shot at `at` (`color` the shot's): for the sound.
+signal pulse_fired(at: Vector3)
+signal pulse_met(at: Vector3, color: Color)
 
 ## Readouts (wall clock, never gameplay): the last step's cost (and its kernel's alone), the shots since `reset_stats`.
 var step_us: float = 0.0
@@ -24,6 +38,9 @@ var kernel_us: float = 0.0
 var shots: int = 0
 var missiles_launched: int = 0
 var shots_last: int = 0
+## Pulses the batteries fired and shots they brought down (by `SHOT_KINDS`) since `reset_stats`.
+var pulses: int = 0
+var downed: PackedInt64Array = PackedInt64Array([0, 0, 0, 0])
 
 var _rows: Object = null
 var _ships: Array[CapitalShip] = []
@@ -31,7 +48,11 @@ var _ships: Array[CapitalShip] = []
 var _owners: Array[CapitalShip] = []
 var _mounts: Array[Dictionary] = []
 var _console: GunConsole = null
+var _intercept_console: InterceptConsole = null
 var _held: Dictionary = {}  # ship -> true: told to hold its guns' fire
+var _intercepts_held: Dictionary = {}  # ship -> true: its interceptors told to hold
+var _pool: MuzzleFlashPool = null
+var _fx: FxPool = null
 var _links: Dictionary = {}  # ship -> [[signal, callable], ...]: what tells it a ship's mounts changed
 var _hostility := NativeHostility.new()
 
@@ -67,6 +88,8 @@ static func warhead_blast(bolt_id: int) -> StringName:
 func _ready() -> void:
 	_console = GunConsole.new(self)
 	_console.register()
+	_intercept_console = InterceptConsole.new(self)
+	_intercept_console.register()
 
 
 func _exit_tree() -> void:
@@ -76,13 +99,14 @@ func _exit_tree() -> void:
 		sim.capital_guns = null
 
 
-## Takes `ship`'s gun and launcher mounts into the rows (again, after its rotors changed).
+## Takes `ship`'s gun, launcher and interceptor mounts into the rows (again, after its rotors changed).
 func join(ship: CapitalShip) -> void:
 	if ship == null or _native() == null:
 		return
 	if _ships.has(ship):
 		leave(ship)
 	var mounts: Array[Dictionary] = CapitalGunMounts.of_hardpoints(ship.hardpoints(), ship.type_id)
+	mounts.append_array(CapitalGunMounts.interceptors_of(ship.hardpoints(), ship.type_id))
 	if mounts.is_empty():
 		return
 	_ships.append(ship)
@@ -121,17 +145,49 @@ func leave(ship: CapitalShip) -> void:
 			(link[0] as Signal).disconnect(link[1])
 	_links.erase(ship)
 	_held.erase(ship)
+	_intercepts_held.erase(ship)
 
 
-## Pushes whether each of `ship`'s mounts works, and its rate of fire, to the rows.
+## Pushes whether each of `ship`'s mounts works, and its rate of fire, to the rows: a gun held by `hold`, an interceptor by
+## `hold_interceptors`; none of them on a hulk, a wreck or a lost mount or section (no power, no pulses).
 func refresh(ship: CapitalShip) -> void:
 	if not is_instance_valid(ship) or not _ships.has(ship):
 		return
 	var rate: float = ship.damage.fire_rate()
-	var alive: bool = not ship.damageable.hull.destroyed and not _held.has(ship)
+	var alive: bool = not ship.damageable.hull.destroyed
 	for k: int in _owners.size():
 		if _owners[k] == ship:
-			_rows.set_works(k, alive and ship.mount_works(str(_mounts[k]["name"])), rate)
+			var held: bool = _intercepts_held.has(ship) if is_interceptor(k) else _held.has(ship)
+			_rows.set_works(k, alive and not held and ship.mount_works(str(_mounts[k]["name"])), rate)
+
+
+## Whether mount `index` is an interceptor battery.
+func is_interceptor(index: int) -> bool:
+	return index >= 0 and index < _mounts.size() and str(_mounts[index]["kind"]) == "interceptor"
+
+
+## `ship`'s interceptors hold their pulses (`held`), or are free again (the `intercept` console; missions).
+func hold_interceptors(ship: CapitalShip, held: bool) -> void:
+	if held:
+		_intercepts_held[ship] = true
+	else:
+		_intercepts_held.erase(ship)
+	refresh(ship)
+
+
+func interceptors_held(ship: CapitalShip) -> bool:
+	return _intercepts_held.has(ship)
+
+
+## `[pulses fired, pulses that met a shot, bolts down, heavy bolts down, missiles down, torpedoes down, pulses in flight]` since
+## the rows were made.
+func intercept_readouts() -> PackedInt64Array:
+	return _rows.intercept_readouts() if _rows != null else PackedInt64Array([0, 0, 0, 0, 0, 0, 0])
+
+
+## `ship`'s share: `[hostile shots its batteries saw headed for its hull, of those shot down]` since it joined.
+func intercept_share(ship: CapitalShip) -> PackedInt64Array:
+	return _rows.intercept_share(ship.get_instance_id()) if _rows != null and ship != null else PackedInt64Array([0, 0])
 
 
 ## `ship`'s guns and launchers hold their fire (`held`), or are free to fire again: an order for the AI and the missions.
@@ -158,9 +214,17 @@ func ships() -> Array[CapitalShip]:
 	return _ships
 
 
-## Mounts on the rows, every ship's.
+## Mounts on the rows, every ship's (guns, launchers and interceptors).
 func mount_count() -> int:
 	return _mounts.size()
+
+
+## Interceptor batteries on the rows, every ship's.
+func battery_count() -> int:
+	var n: int = 0
+	for m: Dictionary in _mounts:
+		n += 1 if str(m["kind"]) == "interceptor" else 0
+	return n
 
 
 ## Missiles and torpedoes in flight now.
@@ -168,11 +232,20 @@ func missiles_in_flight() -> int:
 	return int(_rows.missile_count()) if _rows != null else 0
 
 
-## The mount indices of `ship`, in its mounts' order.
+## The indices of `ship`'s gun and launcher mounts, in its mounts' order (its interceptors: `interceptors_of`).
 func mounts_of(ship: CapitalShip) -> PackedInt32Array:
 	var out := PackedInt32Array()
 	for k: int in _owners.size():
-		if _owners[k] == ship:
+		if _owners[k] == ship and not is_interceptor(k):
+			out.append(k)
+	return out
+
+
+## The indices of `ship`'s interceptor batteries, in its mounts' order.
+func interceptors_of(ship: CapitalShip) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for k: int in _owners.size():
+		if _owners[k] == ship and is_interceptor(k):
 			out.append(k)
 	return out
 
@@ -208,10 +281,12 @@ func readouts() -> PackedInt64Array:
 func reset_stats() -> void:
 	shots = 0
 	missiles_launched = 0
+	pulses = 0
+	downed = PackedInt64Array([0, 0, 0, 0])
 
 
 ## One tick (from `SimCore.step_now`, after the station turrets and before the bolts move): the rows' step, then each
-## disguised shooter's shot checked against the body it aimed at.
+## disguised shooter's shot checked against the body it aimed at, and the interceptors' pulses and meetings shown.
 func step_now(sim: SimCore, now_s: float, delta: float) -> void:
 	shots_last = 0
 	if _rows == null or _owners.is_empty():
@@ -232,6 +307,50 @@ func step_now(sim: SimCore, now_s: float, delta: float) -> void:
 		var shooter: CapitalShip = _owners[fired[k]]
 		if SimCore.is_disguised(shooter.get_instance_id()):
 			Transponder.note_shot_at(shooter.get_instance_id(), targets[k])
+	if out.size() >= 14:
+		_show_pulses(out[5], out[6], out[7])
+		_show_meetings(sim, out[8], out[9], out[10], out[11], out[12], out[13])
+
+
+# Each pulse a battery fired: a blue-white flash at its muzzle and the battery's sound.
+func _show_pulses(mounts: PackedInt32Array, starts: PackedVector3Array, _barrels: PackedInt32Array) -> void:
+	pulses += mounts.size()
+	for k: int in mounts.size():
+		var ship: CapitalShip = _owners[mounts[k]] if mounts[k] >= 0 and mounts[k] < _owners.size() else null
+		if ship == null or not is_instance_valid(ship):
+			continue
+		if _pool == null or not is_instance_valid(_pool):
+			_pool = MuzzleFlashPool.attach(get_parent())
+		if _pool != null:
+			_pool.trigger(ship, Transform3D(Basis.IDENTITY, ship.to_local(starts[k])), PULSE_GLOW)
+		pulse_fired.emit(starts[k])
+
+
+# Each pulse that met a shot: a small flash and a scatter of sparks in the shot's colour, the sound, and a shot down that a
+# node draws spent (the core's own rows are spent already).
+func _show_meetings(sim: SimCore, _mounts: PackedInt32Array, ids: PackedInt64Array, points: PackedVector3Array,
+		colors: PackedColorArray, down: PackedByteArray, kinds: PackedByteArray) -> void:
+	var world: Node3D = get_parent() as Node3D
+	for k: int in ids.size():
+		if down[k] != 0:
+			downed[clampi(kinds[k], 0, 3)] += 1
+			if ids[k] >= 0:
+				var node := instance_from_id(ids[k]) as Projectile
+				if node != null:
+					node.spend()
+			else:
+				sim.spend_bolt(ids[k])
+		if world == null:
+			continue
+		var flash := ImpactFlash.create(colors[k], 0, MEET_FLASH_SCALE)
+		world.add_child(flash)
+		flash.global_position = points[k]
+		flash.reset_physics_interpolation()
+		if _fx == null or not is_instance_valid(_fx):
+			_fx = world.get_node_or_null(^"Fx") as FxPool
+		if _fx != null:
+			_fx.tint(_fx.burst(FxSpecs.INTERCEPT, points[k], Vector3.UP, Vector3.ZERO), colors[k])
+		pulse_met.emit(points[k], colors[k])
 
 
 func _native() -> Object:

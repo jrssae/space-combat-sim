@@ -640,6 +640,7 @@ func respawn() -> void:
 # Gun sounds and engine hums for every ship, and the combat events (hits, explosions, warnings).
 func _wire_audio() -> void:
 	audio.connect_combat($Combat/HitResolver as HitResolver, director, combatant)
+	audio.watch_capital_guns(CapitalGuns.attach(world))  # the capitals' interceptor pulses (M10-T13)
 	audio.watch_ship(combatant)
 	for pooled: Combatant in ships.all_ships():
 		audio.watch_ship(pooled)

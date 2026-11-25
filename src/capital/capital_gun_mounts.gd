@@ -11,9 +11,11 @@ extends RefCounted
 ##   holds targets in a wider cone (`FIXED_PICK_MARGIN_DEG` more) and fires when its ship's helm brings one onto its line.
 ## - A **launcher** covers a cone round its cells' `forward`: the mount's own `arc_deg`, else half its weapon's, else a
 ##   120 deg for a missile and a fore 45 deg for a torpedo.
+## - An **interceptor** battery (M10-T13, `interceptors_of`) covers the hemisphere over its base's `up` (its elevation range),
+##   fires its barrels in turn at what comes at its ship or a friend, and never at a ship (role `pd`).
 
 ## Numbers `ScsCapitalGuns.add_mount` takes for a weapon.
-const SPEC_LEN: int = 18
+const SPEC_LEN: int = 19
 ## A mount whose traverse is under this is fixed to its axis, deg.
 const FIXED_TRAVERSE_DEG: float = 90.0
 ## A fixed gun's azimuth round its axis turns this fast (it barely moves the barrel near the axis), deg/s.
@@ -23,7 +25,9 @@ const FIXED_PICK_MARGIN_DEG: float = 25.0
 ## A missile cell covers everything above its base and 30 deg below: its rounds climb out and turn onto the target, deg.
 const MISSILE_ARC_HALF_DEG: float = 120.0
 const TORPEDO_ARC_HALF_DEG: float = 45.0
-const ROLES: Array[StringName] = [&"af", &"dual", &"ac"]
+const ROLES: Array[StringName] = [&"af", &"dual", &"ac", &"pd"]
+## An interceptor battery's barrels sit this far out from its pivot when its mount names no radius, m.
+const INTERCEPTOR_BARREL_M: float = 3.0
 const KINDS: Array[String] = ["turret", "missile"]
 
 
@@ -70,6 +74,33 @@ static func of_hardpoints(hardpoints: Dictionary, type_id: StringName) -> Array[
 	return out
 
 
+## Every interceptor mount of `hardpoints` for hull `type_id`, in the file's order, as `of_hardpoints` gives the guns: its base's
+## `up` is the axis, `forward` azimuth 0, the cone its elevation range above the base (the usual 0 to 90: a hemisphere).
+static func interceptors_of(hardpoints: Dictionary, type_id: StringName) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var weapons: Variant = hardpoints.get("weapons", [])
+	if not (weapons is Array):
+		return out
+	for raw: Variant in weapons:
+		var entry: Dictionary = raw if raw is Dictionary else {}
+		if str(entry.get("kind", "")) != "interceptor":
+			continue
+		var weapon: String = str(entry.get("weapon", ""))
+		var spec: WeaponSpec = WeaponSpec.of_weapon(StringName(weapon))
+		if spec == null or spec.role != &"pd":
+			push_warning("CapitalGunMounts: %s's mount %s names %s, which has no interceptor spec" % [type_id, entry.get("name", ""),
+					weapon])
+			continue
+		var lowest: float = float((entry.get("elevation_deg", [0.0, 90.0]) as Array)[0])
+		out.append({"name": str(entry.get("name", "")), "weapon": weapon, "section": str(entry.get("section", "")),
+				"kind": "interceptor", "position": _vec3(entry.get("position"), Vector3.ZERO), "spec": spec,
+				"axis": _vec3(entry.get("up"), Vector3.UP), "zero": _vec3(entry.get("forward"), Vector3.FORWARD),
+				"half_deg": 90.0 - lowest, "pick_half_deg": 90.0 - lowest, "on_axis": false,
+				"barrel_m": float(entry.get("radius_m", INTERCEPTOR_BARREL_M)),
+				"packed": packed(spec, 1.0, spec.turret_traverse_deg_s)})
+	return out
+
+
 ## A launcher's arc, half angle in degrees: the mount's own `arc_deg` (a half angle), else half its weapon's (a full arc), else a
 ## 120 deg for a missile (`MISSILE_ARC_HALF_DEG`) and 45 deg for a torpedo.
 static func launcher_half_deg(entry: Dictionary, weapon: String, spec: WeaponSpec) -> float:
@@ -83,13 +114,13 @@ static func launcher_half_deg(entry: Dictionary, weapon: String, spec: WeaponSpe
 
 ## `spec`'s numbers for the native rows, damage times `scale` and the azimuth turning at `traverse_deg_s`: launcher, role,
 ## damage, barrels, burst shots and spacing, cycle, speed, range, lifetime, hit radius, spread, traverse, elevation rate,
-## guidance gain and turn, warhead, the bolts' look.
+## guidance gain and turn, warhead, the bolts' look, and the interceptor pulses one of its shots takes (`toughness`, Q81).
 static func packed(spec: WeaponSpec, scale: float, traverse_deg_s: float) -> PackedFloat64Array:
 	return PackedFloat64Array([1.0 if spec.warhead != WeaponSpec.WARHEAD_NONE else 0.0, maxi(ROLES.find(spec.role), 0),
 			spec.damage * scale, maxi(spec.barrels, 1), maxi(spec.burst_shots, 1), spec.burst_spacing_s, spec.shot_interval_s,
 			spec.muzzle_speed_mps, spec.turret_range_m, spec.lifetime_s, spec.hit_radius_m, spec.turret_spread_deg,
 			traverse_deg_s, spec.turret_elevation_deg_s, spec.missile_nav_gain, spec.missile_turn_rad_s, spec.warhead,
-			BoltMesh.look_for(spec)])
+			BoltMesh.look_for(spec), maxi(spec.toughness, 1)])
 
 
 static func _vec3(raw: Variant, fallback: Vector3) -> Vector3:

@@ -38,7 +38,7 @@ func after_each() -> void:
 
 
 # A capital of `type` for `faction`, `ahead_m` along the player's nose and `side_m` to its right, its bow along the player's
-# turned by `yaw_deg`, holding still. Its beams hold their fire, so only its guns and launchers are tested.
+# turned by `yaw_deg`, holding still. Its beams and interceptors hold their fire, so only its guns and launchers are tested.
 func _spawn(type: StringName, display_name: String, faction: StringName, ahead_m: float, side_m: float = 0.0,
 		yaw_deg: float = 0.0) -> CapitalShip:
 	var rest: Vector3 = main.world.rest_velocity()
@@ -52,6 +52,7 @@ func _spawn(type: StringName, display_name: String, faction: StringName, ahead_m
 	main.world.spawn(cap, main.world.to_universe(at), basis)
 	cap.set_course(-basis.z, rest)
 	CapitalBeams.of(main.world).hold(cap, true)
+	CapitalGuns.of(main.world).hold_interceptors(cap, true)  # guns and launchers alone (the batteries: test_capital_interceptors)
 	return cap
 
 

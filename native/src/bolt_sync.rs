@@ -219,6 +219,7 @@ impl ScsBoltSync {
             bolts.launched.push(bolt.first_tick);
             bolts.spent.push(false);
             bolts.flown.push(0.0);
+            bolts.hits_left.push(1);
             bolts.draw_slots.push(-1);
         }
         self.known.retain(|_, bolt| bolt.seen == pass);

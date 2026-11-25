@@ -6055,6 +6055,10 @@ src/world/grid_mount_health.gd   GridMountHealth: each mount's own health, worn 
 assets/weapons/grid_*.tres       the light pulse turret, the heavy cannon and the interceptor battery
 ```
 
+The batteries' model (incoming fire, choice, barrels, cover, the pulse sweep) is shared with the capitals' interceptors since
+M10-T13 (`intercept_kernels.rs`, §22.8); `grid_kernels` wraps it with the grid's relations and guarded set, and the grid takes
+the shots' toughness (Q81: a heavy bolt two pulses, a torpedo three).
+
 - **Kinds on the turret rows.** `Mounts.kind` (and `PickMount.kind`) is `grid_kernels::MOUNT_*`: 0 a ship's turret (§18.10,
   unchanged), 1 light pulse, 2 heavy cannon, 3 interceptor battery. `add_turret` mounts kind 0; `add_grid_mount(..., kind)` the
   grid's. A grid mount binds to a big hull's body (the station's frame or drum row: a live hull, not a rigid body); its shot
@@ -7348,7 +7352,7 @@ src/capital/native_hostility.gd     the hostility table by the core's faction in
   usual 10 deg below the base) and slews at its traverse and elevation rates; a **fixed gun** (traverse under 90 deg: the
   Hyperion's bow heavies, the Nova's 12 fixed pulse cannons, Q71) aims only within its gimbal round its `forward` and holds targets in a
   cone 25 deg wider, so the helm can bring one onto its line; a **launcher** covers 120 deg round its cells' axis (its rounds climb
-  out and turn; a torpedo tube 45 deg). Interceptor mounts are T13's, beams T12's.
+  out and turn; a torpedo tube 45 deg). Interceptor mounts are rows of the same table (§22.8), beams T12's.
 - **Pick.** On a staggered beat every 15 ticks: its ship's order (`CapitalGuns.set_order`, for T16) for an anti-capital or
   dual weapon, else the nearest hostile by rank (`rank`: a live hull of its own class first, anti-fighter guns fighters,
   anti-capital guns capitals, dual either; then a live hull of the other class; last a disabled hull or hulk; a torpedo
@@ -7371,7 +7375,7 @@ src/capital/native_hostility.gd     the hostility table by the core's faction in
   under its range; a torpedo's range was its whole flight). Every shot is an owned bolt row (a missile's of the missile kind): the hit sweep lands it like any bolt, a
   capital's by the section its volume names (T08); a missile's or torpedo's warhead blasts there too (`BlastTable` rows `missile`
   and `torpedo`, `CapitalGuns.warhead_blast`). A ship's own bolts and missiles pass through its own rotating sections as through
-  its hull (`Rows::is_part_of`: the sweep's shooter test takes the bodies `named_by` it). Interceptors (the grid's now, T13's later) see missiles as missile-kind bolts.
+  its hull (`Rows::is_part_of`: the sweep's shooter test takes the bodies `named_by` it). Interceptors (the grid's and the capitals', §22.8) see missiles as missile-kind bolts, each shot carrying its weapon's toughness.
 - **Works and the disguise.** `mount_lost`, `section_changed`, `ship_disabled`, `restored` and `destroyed` push each mount's
   `works` and the rate of fire (`fire_rate()`) to the rows; `CapitalGuns.hold` holds a ship's guns. A renegade capital broadcasts
   its faction's transponder from its spawn (Q55; `CapitalShip` calls `disguise_as`), and a disguised shooter's shot at the
@@ -7400,3 +7404,55 @@ src/capital/native_hostility.gd     the hostility table by the core's faction in
   (beyond `tier_radius_m`) fires nothing yet: its guns, beams and launchers would need the far capitals' group rolls
   (`ScsWeaponRows`) fed from its own mounts before T45 drops the stand-ins; renegade capitals show the red X marks
   but not yet red engines (capitals are not on the livery shader).
+
+### 22.8 Interceptors (D12.9; T13, Q81)
+
+```
+native/src/intercept_kernels.rs     the battery model the grid and the capitals share: incoming fire, the choice, the barrels and
+                                    the lay, cover with toughness, the pulse sweep; engine-free (guard test); intercept_kernels/tests.rs
+native/src/capital_intercepts.rs    the capitals' batteries: guarded sets by side, perceived hostility, the tick, counts and shares;
+                                    engine-free (guard test); capital_intercepts/tests.rs
+native/src/capital_gun_rows.rs      + ROLE_PD mounts on ScsCapitalGuns, toughness on every shot, intercept_readouts, intercept_share
+native/src/rows.rs                  + Bolts.hits_left (pulses a shot still takes); bolt_rows.rs set_bolt_hits, bolt_hits
+src/capital/capital_gun_mounts.gd   + interceptors_of: a hull's interceptor mounts; the packed spec carries the toughness
+src/capital/capital_guns.gd         + the batteries' flashes, sparks, sound (pulse_fired, pulse_met), counts, hold_interceptors
+src/capital/intercept_console.gd    the `intercept` command and the `interceptors` provider
+assets/weapons/*_interceptor*.tres  ea_interceptor (4 barrels, 0.25 s), ea_interceptor_pod (2, 0.5 s), drazi_ (2, 0.5 s), brakiri_, isa_
+```
+
+- **One kernel.** The grid's battery logic (§20.3) moved into `intercept_kernels` unchanged: `gather` (the shots in reach
+  whose path meets a guarded hull, a hull time cached per bolt a tick), `choose_by` (a missile first, then the caller's class,
+  then the soonest; the grid passes one class), `fire_battery` (the next ready barrel laid on the lead from its muzzle, the
+  seeded spread, cover and this tick's takes), `pulse_hits_by` (each pulse the first hostile shot its swept sphere touches,
+  found through the hit broad phase's cells; who owns a pulse and who is hostile are the caller's). `grid_kernels` keeps thin
+  wrappers with the grid's true-faction relations and its "every big hull" guarded set, so its tests and recordings stand.
+- **Toughness (Q81).** `Bolts.hits_left` per row, 1 by default (a node's row is read again each tick), set at fire time from the
+  weapon's `toughness` for a capital gun's shot (`GunSpec.toughness`, packed spec index 18): pulse and medium bolts and missiles
+  1, heavy, fixed and kinetic bolts 2, torpedoes 3. A pulse that meets a shot takes one off; the shot is spent at 0. Cover lets
+  as many pulses fly at a shot as it has hits left (`PulseCover` keeps the earliest four meetings); a battery takes a shot again
+  in the same tick only while it needs more. The grid takes toughness too (its meetings report `downed`; `TurretRows` spends
+  only a downed shot).
+- **The guarded set.** Per side (the battery's ship's faction) and tick: every live big hull (a row with a surface: capitals,
+  their rotating sections, the station's frame and drum) its ship perceives as its own side or friendly (`rows::seen_ix`; the
+  relations table carries 2 for friendly). Fighters are never guarded. A bolt's first guarded hull and time are cached per side
+  (`Side::times`), so it is swept once a tick per side; a capital's guided missile or torpedo is judged by its target (guarded:
+  the gap over its speed), not its straight path.
+- **The pick.** A battery (a `ROLE_PD` mount: its base's up the axis, the hemisphere over it) takes, from the shots near its
+  pivot (the cell grid of the tick's shots, sorted to row order), those hostile to what its ship perceives of the shooter
+  (`hostile_to`: a still-disguised shooter's shots and friendly fire are left), within its reach (1 500 m), whose path meets a
+  guarded hull within 6 s; then a missile or torpedo first, then its own hull's shots before its friends', the soonest first;
+  inside its arc, not covered, one its pulse can catch, its line clear of its own hull (`own_hull_blocks`). It fires every
+  `cycle_s / rate` (Q81: 4 a second, the Nova's pods and the Drazi 2) from its barrels in turn (`Battery::row`: side by side at
+  `radius_m`, each recharging in the time all fire once). No pulses without power: a lost mount or section, a hulk, a wreck, or
+  `intercept hold` (`works` false, rate 0). Beams, blasts, rams and mines are never candidates; pulses never hurt a hull.
+- **Order and threads.** `ScsCapitalGuns.step`: the batteries' pulses meet (their own only: `PulseBook.owns`), the batteries fire,
+  the missiles are steered, the guns fire; then the pulses and the shots join the bolt rows. Main thread, mount order, the
+  spread hashed from the mount's id, its pulse count and the tick: 1 and 6 threads fire and meet alike
+  (`test_capital_interceptor_threads`). The grid's batteries step first (in `step_turrets`), each owner sweeping its own pulses.
+- **Counts.** Pulses, pulses that met, shots down by kind (bolt, heavy bolt, missile, torpedo) and each ship's share (hostile
+  shots its batteries saw headed for its own hull, and those shot down); in the guns' digest. Console `intercept
+  [info|hold|free]`, provider `interceptors` (`info.md`).
+- **Looks and sound.** The grid battery's: a blue-white muzzle flash at the pulse's start, a small flash and the `intercept`
+  sparks in the shot's colour where they meet, the turret shot pitched 1.6 (`AudioDirector.watch_capital_guns`).
+- **Known gaps.** Far capitals (tier rows) intercept nothing yet (T85); the grid's and a capital's pulses do not share cover; a
+  capital's battery model has no muzzles of its own (barrels side by side); no retune (Q78, Q81): B1 and B10 report only.

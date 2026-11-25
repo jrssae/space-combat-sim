@@ -1,20 +1,22 @@
-// The core's shell around the capital turrets and launchers (M10-T14, D12.9): GDScript registers each capital's gun and
-// missile mounts once, tells the rows when a mount stops working or the rate of fire changes, and steps them once a tick
-// from `SimCore.step_now`, before the bolts move: the missiles in flight are steered, then every mount aims and fires, its
-// shots added as owned bolt rows that the core's hit sweep lands like any other. The maths is `capital_gun_kernels`,
+// The core's shell around the capital turrets, launchers and interceptor batteries (M10-T14, M10-T13, D12.9): GDScript registers
+// each capital's mounts once, tells the rows when a mount stops working or the rate of fire changes, and steps them once a
+// tick from `SimCore.step_now`, before the bolts move: the interceptors' pulses meet what they meet, the batteries fire, the
+// missiles in flight are steered, then every gun aims and fires, its shots added as owned bolt rows (with their toughness,
+// Q81) that the core's hit sweep lands like any other. The maths is `capital_gun_kernels` and `capital_intercepts`,
 // engine-free.
 // gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
 use crate::capital_gun_kernels::{self as ck, GunSpec, GunWorld, Missile, Mount, Owner, Shot, Tally};
-use crate::grid_kernels::KIND_MISSILE;
+use crate::capital_intercepts::{GuardView, Guards, Met, PulseShot};
+use crate::grid_kernels::{KIND_INTERCEPT, KIND_MISSILE};
 use crate::sim_core::{KIND_BOLT, ScsSimCore};
 
-/// Numbers a weapon packs into for `add_mount`: launcher, role, damage, barrels, burst shots, burst spacing (s), cycle (s),
-/// speed (m/s), range (m), lifetime (s), hit radius (m), spread (deg), traverse (deg/s), elevation (deg/s), nav gain, turn
-/// (rad/s), warhead, look.
-const SPEC_LEN: usize = 18;
+/// Numbers a weapon packs into for `add_mount`: launcher, role (3: an interceptor battery), damage, barrels, burst shots,
+/// burst spacing (s), cycle (s), speed (m/s), range (m), lifetime (s), hit radius (m), spread (deg), traverse (deg/s),
+/// elevation (deg/s), nav gain, turn (rad/s), warhead, look, toughness (the pulses one of its shots takes, Q81).
+const SPEC_LEN: usize = 19;
 
 /// Every capital's gun turrets and launchers as rows with no node, stepped once a tick over the core's rows. Never calls
 /// the engine or `Factions`: the caller passes the hostility table (by the core's faction indices).
@@ -28,7 +30,9 @@ pub struct ScsCapitalGuns {
     owners: Vec<Owner>,
     missiles: Vec<Missile>,
     hostile: Vec<bool>,
+    friendly: Vec<bool>,
     factions: usize,
+    guards: Guards,
     next_id: i64,
     // Per-step scratch, kept between ticks.
     owner_rows: Vec<i32>,
@@ -36,6 +40,9 @@ pub struct ScsCapitalGuns {
     steers: Vec<(usize, Vector3)>,
     tally: Tally,
     scratch: ck::Scratch,
+    pulse_shots: Vec<PulseShot>,
+    mets: Vec<Met>,
+    shooter_rows: Vec<i32>,
     bolts_total: i64,
     missiles_total: i64,
     last_us: f64,
@@ -57,7 +64,7 @@ impl ScsCapitalGuns {
         true
     }
 
-    /// The hostility table, row-major by the core's faction indices (1 hostile): `count` factions square.
+    /// The relations table, row-major by the core's faction indices (1 hostile, 2 friendly, 0 neutral): `count` factions square.
     #[func]
     fn set_hostility(&mut self, count: i64, matrix: PackedByteArray) -> bool {
         let n = usize::try_from(count).unwrap_or(0);
@@ -67,6 +74,7 @@ impl ScsCapitalGuns {
         }
         self.factions = n;
         self.hostile = matrix.as_slice().iter().map(|&b| b == 1).collect();
+        self.friendly = matrix.as_slice().iter().map(|&b| b == 2).collect();
         true
     }
 
@@ -116,7 +124,7 @@ impl ScsCapitalGuns {
         }
         let made = GunSpec {
             launcher: s[0] != 0.0,
-            role: (s[1] as i64).clamp(0, i64::from(ck::ROLE_AC)) as u8,
+            role: (s[1] as i64).clamp(0, i64::from(ck::ROLE_PD)) as u8,
             damage: s[2],
             barrels: s[3].max(1.0) as u32,
             burst_shots: s[4].max(1.0) as u32,
@@ -138,6 +146,7 @@ impl ScsCapitalGuns {
             },
             color: [color.r, color.g, color.b, color.a],
             look: (s[17] as i64).clamp(0, 255) as u8,
+            toughness: (s[18] as i64).clamp(1, 255) as u8,
         };
         self.next_id += 1;
         let mut mount = Mount::new(
@@ -163,6 +172,7 @@ impl ScsCapitalGuns {
     #[func]
     fn remove_owner(&mut self, body: i64) {
         ck::remove_owner(&mut self.mounts, &mut self.owners, &mut self.owner_of, &mut self.missiles, body);
+        self.guards.forget(body);
     }
 
     /// Whether mount `index` works, and its ship's rate of fire (0 to 1).
@@ -238,6 +248,23 @@ impl ScsCapitalGuns {
         )
     }
 
+    /// The interceptors' counts since the rows were made: `[pulses fired, pulses that met a shot, bolts down, heavy bolts down,
+    /// missiles down, torpedoes down, pulses in flight]` (readouts).
+    #[func]
+    fn intercept_readouts(&self) -> PackedInt64Array {
+        let t = &self.guards.tally;
+        PackedInt64Array::from(
+            &[t.pulses, t.met, t.down[0], t.down[1], t.down[2], t.down[3], self.guards.book.pulses.len() as i64][..],
+        )
+    }
+
+    /// Ship `body`'s share: `[hostile shots its batteries saw headed for its own hull, of those shot down]`.
+    #[func]
+    fn intercept_share(&self, body: i64) -> PackedInt64Array {
+        let (seen, down) = self.guards.share_of(body);
+        PackedInt64Array::from(&[seen, down][..])
+    }
+
     /// Wall-clock microseconds of the last step, and of its kernels alone (readouts, never gameplay).
     #[func]
     fn last_us(&self) -> f64 {
@@ -270,6 +297,11 @@ impl ScsCapitalGuns {
             }
             word(m.ready_at.to_bits());
             word(m.shots as u64);
+            word(m.battery.next as u64);
+        }
+        let t = &self.guards.tally;
+        for w in [t.pulses, t.met, t.down[0], t.down[1], t.down[2], t.down[3]] {
+            word(w as u64);
         }
         for missile in &self.missiles {
             word(u64::from(missile.mount));
@@ -278,18 +310,47 @@ impl ScsCapitalGuns {
         h as i64
     }
 
-    /// One tick at sim time `now_s` (from `SimCore.step_now`, after the sync and before the bolts move): the missiles in
-    /// flight steered, then every mount's aim and shots, each shot an owned bolt row (a missile's of the missile kind).
-    /// Returns `[shots' mounts, their starts, their bolt ids, whether each is a missile (bytes), the body each was fired at]`.
+    /// One tick at sim time `now_s` (from `SimCore.step_now`, after the sync and before the bolts move): the interceptors' pulses
+    /// meet what their last move touched, the batteries fire at what comes at their ships and friends, the missiles in flight
+    /// are steered, then every gun aims and fires; each pulse and shot an owned bolt row (a missile's of the missile kind, a
+    /// pulse's of the interceptor kind). Returns `[shots' mounts, their starts, their bolt ids, whether each is a missile
+    /// (bytes), the body each was fired at, pulses' mounts, their starts, their barrels, meetings' mounts (-1 gone), the shots'
+    /// ids, where they met, the shots' colours, whether each went down (bytes), what each was (`capital_intercepts::SHOT_*`)]`.
     #[func]
     fn step(&mut self, now_s: f64, delta: f64) -> VarArray {
         let started = std::time::Instant::now();
         self.shots.clear();
         self.steers.clear();
+        self.pulse_shots.clear();
         let mut out = VarArray::new();
         let Some(mut core) = self.core.clone() else {
             return out;
         };
+        let live = delta.is_finite() && delta > 0.0;
+        // Each bolt's shooter's row, for what the guarding ship perceives of it (Q55): only while there are batteries.
+        let guarding = !self.guards.book.pulses.is_empty() || self.mounts.iter().any(|m| m.spec.role == ck::ROLE_PD);
+        self.shooter_rows.clear();
+        if guarding {
+            let c = core.bind();
+            self.shooter_rows.extend(c.bolts.shooters.iter().map(|&b| i32::try_from(c.row_for_kernel(b)).unwrap_or(-1)));
+        }
+        let kernel_started = std::time::Instant::now();
+        if live && guarding {
+            let mut c = core.bind_mut();
+            let c = &mut *c;
+            self.guards.meet(
+                &self.mounts,
+                &mut c.bolts,
+                &c.rows,
+                &self.shooter_rows,
+                &self.hostile,
+                self.factions,
+                &self.missiles,
+                &mut self.mets,
+            );
+        } else {
+            self.mets.clear();
+        }
         let guard = core.bind();
         self.owner_rows.clear();
         let rows = &guard.rows;
@@ -306,9 +367,24 @@ impl ScsCapitalGuns {
             row_of: |id: i64| usize::try_from(guard.row_for_kernel(id)).ok(),
             rest: guard.frame_rest().velocity,
         };
-        let kernel_started = std::time::Instant::now();
         let tick = guard.syncs();
-        if delta.is_finite() && delta > 0.0 {
+        if live {
+            if guarding {
+                let view = GuardView { friendly: &self.friendly, shooter_rows: &self.shooter_rows };
+                self.guards.step(
+                    &mut self.mounts,
+                    &self.owners,
+                    &self.owner_of,
+                    &world,
+                    &view,
+                    &guard.bolts,
+                    &self.missiles,
+                    now_s,
+                    delta,
+                    tick,
+                    &mut self.pulse_shots,
+                );
+            }
             ck::steer_missiles(&mut self.missiles, &guard.bolts, &world, delta, &mut self.steers);
             ck::step(
                 &mut self.mounts,
@@ -324,20 +400,42 @@ impl ScsCapitalGuns {
             );
         }
         self.kernel_us = kernel_started.elapsed().as_secs_f64() * 1e6;
-        let factions: Vec<u32> = self
-            .shots
-            .iter()
-            .map(|s| {
-                let o = self.owner_of[s.mount as usize] as usize;
-                usize::try_from(self.owner_rows[o]).map_or(0, |r| rows.faction_ix[r])
-            })
-            .collect();
+        let faction_of = |mount: u32| {
+            let o = self.owner_of[mount as usize] as usize;
+            usize::try_from(self.owner_rows[o]).map_or(0, |r| rows.faction_ix[r])
+        };
+        let factions: Vec<u32> = self.shots.iter().map(|s| faction_of(s.mount)).collect();
+        let pulse_factions: Vec<u32> = self.pulse_shots.iter().map(|s| faction_of(s.mount)).collect();
         drop(guard);
         let mut c = core.bind_mut();
         for &(i, v) in &self.steers {
             if i < c.bolts.owned {
                 c.bolts.velocities[i] = v;
             }
+        }
+        let np = self.pulse_shots.len();
+        let mut pulse_mounts = Vec::with_capacity(np);
+        let mut pulse_starts = Vec::with_capacity(np);
+        let mut pulse_barrels = Vec::with_capacity(np);
+        for (k, p) in self.pulse_shots.iter().enumerate() {
+            let m = &self.mounts[p.mount as usize];
+            let spec = m.spec;
+            let id = c.add_owned_bolt(
+                p.start,
+                p.velocity,
+                pulse_factions[k],
+                m.owner,
+                KIND_INTERCEPT,
+                spec.hit_radius_m,
+                0.0,
+                spec.color,
+                spec.look,
+                now_s + spec.lifetime_s,
+            );
+            self.guards.note_pulse(id, p.mount_id, p.target, p.meet_at);
+            pulse_mounts.push(p.mount as i32);
+            pulse_starts.push(p.start);
+            pulse_barrels.push(i32::from(p.barrel));
         }
         let n = self.shots.len();
         let mut mounts = Vec::with_capacity(n);
@@ -360,6 +458,7 @@ impl ScsCapitalGuns {
                 spec.look,
                 now_s + spec.lifetime_s,
             );
+            c.bolts.set_newest_owned_hits(spec.toughness);
             if spec.launcher {
                 self.missiles.push(Missile {
                     bolt: id,
@@ -385,8 +484,23 @@ impl ScsCapitalGuns {
         out.push(&PackedInt64Array::from(ids.as_slice()).to_variant());
         out.push(&PackedByteArray::from(missile.as_slice()).to_variant());
         out.push(&PackedInt64Array::from(targets.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(pulse_mounts.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(pulse_starts.as_slice()).to_variant());
+        out.push(&PackedInt32Array::from(pulse_barrels.as_slice()).to_variant());
+        let mets = &self.mets;
+        let met_mounts: Vec<i32> = mets.iter().map(|m| m.mount).collect();
+        let met_ids: Vec<i64> = mets.iter().map(|m| m.shot).collect();
+        let met_points: Vec<Vector3> = mets.iter().map(|m| m.at).collect();
+        let met_colors: Vec<Color> = mets.iter().map(|m| Color::from_rgba(m.color[0], m.color[1], m.color[2], m.color[3])).collect();
+        let met_down: Vec<u8> = mets.iter().map(|m| u8::from(m.downed)).collect();
+        let met_kinds: Vec<u8> = mets.iter().map(|m| m.kind).collect();
+        out.push(&PackedInt32Array::from(met_mounts.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(met_ids.as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(met_points.as_slice()).to_variant());
+        out.push(&PackedColorArray::from(met_colors.as_slice()).to_variant());
+        out.push(&PackedByteArray::from(met_down.as_slice()).to_variant());
+        out.push(&PackedByteArray::from(met_kinds.as_slice()).to_variant());
         self.last_us = started.elapsed().as_secs_f64() * 1e6;
         out
     }
 }
-

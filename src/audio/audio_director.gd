@@ -364,6 +364,18 @@ func watch_grid(grid: StationGrid) -> void:
 			mount.intercepted.connect(_on_grid_intercept.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind]))
 
 
+## Gives the capitals' interceptor batteries their sound (M10-T13): the grid battery's, at the muzzle for every pulse and at
+## the meeting when a pulse takes a shot.
+func watch_capital_guns(guns: CapitalGuns) -> void:
+	if guns == null:
+		return
+	var kind: StationGrid.Kind = StationGrid.Kind.INTERCEPTOR
+	var sound: Callable = _on_grid_sound.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind])
+	if not guns.pulse_fired.is_connected(sound):
+		guns.pulse_fired.connect(sound)
+		guns.pulse_met.connect(_on_grid_intercept.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind]))
+
+
 func _on_grid_sound(at: Vector3, volume_db: float, pitch: float) -> void:
 	play_shot(&"turret_fire", at, volume_db, pitch * randf_range(0.97, 1.03))
 

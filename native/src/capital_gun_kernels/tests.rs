@@ -75,6 +75,7 @@ fn gun(role: u8) -> GunSpec {
         warhead: WARHEAD_NONE,
         color: [1.0; 4],
         look: 0,
+        toughness: 1,
     }
 }
 

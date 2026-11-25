@@ -62,6 +62,7 @@ func _battle_guns(threads: int) -> Dictionary:
 		var cap: CapitalShip = pair[0]
 		cap.damageable.invulnerable = true
 		CapitalBeams.of(world).hold(cap, true)
+		CapitalGuns.of(world).hold_interceptors(cap, true)  # the guns alone; the batteries: test_capital_interceptor_threads
 		cap.damageable.hit_taken.connect(func(info: HitInfo) -> void: note.call(int(pair[1]), info))
 	var guns: CapitalGuns = CapitalGuns.of(world)
 	guns.reset_stats()

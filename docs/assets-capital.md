@@ -990,11 +990,15 @@ example Omega launches), this section wins.
 | `beam_sustained` | 40 dps while on | 3 s on, 12 s cycle | instant | 7 000 | 3 deg/s sweep | each tick to the first hull under the line |
 | `missile` | 40 + blast | reload 12 s | 350 | 6 000 lock | PN gain 4, 0.6 rad/s, 20 s | M4's guidance; toughness 1 |
 | `torpedo` | 150 + blast | reload 20 s | 250 | 10 000 | 0.15 rad/s, 40 s | capitals only; toughness 3 |
-| `interceptor` | 0 | 4 pulses/s (4 barrels, 1 s recharge) | 2 000 | 1 500 reach | 0.22 deg, 360 deg/s | the grid battery (§20.3) |
+| `interceptor` | 0 | 4 pulses/s (4 barrels, each once a second); the Nova's pods and the Drazi 2/s (Q81) | 2 000 | 1 500 reach | 0.22 deg, 360 deg/s | the grid battery's model, shared (M10-T13, architecture §22.8) |
 
 **Traits:** `kinetic` (an interceptor needs 2 pulses to stop it); `push` was dropped with the push beams (Q56). **Toughness**
 is how many interceptor pulses stop a shot: 1 for fighter and medium bolts and for missiles; 2 for heavy, fixed and
-kinetic bolts; 3 for torpedoes and Narn energy mines. Interceptors never stop beams, blasts or rams.
+kinetic bolts; 3 for torpedoes and Narn energy mines. Interceptors never stop beams, blasts or rams. **As built (M10-T13):** every
+capital bolt, missile and torpedo carries its weapon's toughness (`Bolts.hits_left`); fighter bolts take 1; the grid takes it too.
+A battery guards its own hull and the capitals and stations its ship perceives as friendly, never fighters; it takes missiles and
+torpedoes first, then its own hull's shots before a friend's, the soonest first, and leaves friendly fire and a still-disguised
+shooter's shots alone (Q81).
 
 ### Faction weapons (show names)
 
@@ -1002,7 +1006,7 @@ The numbers are in `loadouts.json` under `weapons`.
 
 | Faction | Ids (kind): show name |
 |---|---|
-| EA | `ea_sweep_beam` (beam_sustained): the Omega's particle beams (TBP: laser batteries), sweeping, drawn red (Q76). `ea_particle_cannon` (beam_pulsed): phased particle cannon, the Hyperion's, drawn red (Q76; the bolts stay orange); `_heavy` 150 dmg, bow +/-10 deg (the Warlock's particle beam cannons). `ea_particle_array` (2 x 50): the Explorer's twin particle beam arrays. `ea_plasma_heavy` (bolt_heavy): heavy plasma pulse cannon. `ea_plasma_medium` (bolt_medium, 18): medium plasma or twin plasma cannon. `ea_pulse_cannon_fixed` (bolt_fixed, 2 barrels x 3-shot bursts of 12 / 3 s, 24 dps, no traverse): the Nova's fixed pulse cannon pods (Q71, Q76: 80 % of an Omega mount). `ea_pulse_cannon_swivel` (bolt_medium, 2 x 3 x 9 / 3 s, 18 dps): its two hangar pods on swivel rings (M10-T14; Q76: 75 % of a fixed pod), their mounts the fixed pods' 2 000 points. `ea_pulse_medium` (bolt_medium, 3 x 30 / 3 s, 30 dps): the Omega's pulse cannon (Q76). `ea_pulse_advanced` (3 x 33 / 3 s): the Warlock's (Q76). `ea_pulse_explorer` (3 x 6 / 3 s, its old 6 dps): the Explorer's (Q54's cut kept). `ea_pulse_light` (bolt_light): pulse discharge cannon. `ea_railgun` (bolt_medium 20, 3 s, 4 000 m/s, kinetic). `ea_missile`, `ea_torpedo` (tubes and silos), `ea_interceptor`, `ea_interceptor_pod` (2 barrels: the Nova's swivelling pods, Q71), `ea_mine` (scenario only) |
+| EA | `ea_sweep_beam` (beam_sustained): the Omega's particle beams (TBP: laser batteries), sweeping, drawn red (Q76). `ea_particle_cannon` (beam_pulsed): phased particle cannon, the Hyperion's, drawn red (Q76; the bolts stay orange); `_heavy` 150 dmg, bow +/-10 deg (the Warlock's particle beam cannons). `ea_particle_array` (2 x 50): the Explorer's twin particle beam arrays. `ea_plasma_heavy` (bolt_heavy): heavy plasma pulse cannon. `ea_plasma_medium` (bolt_medium, 18): medium plasma or twin plasma cannon. `ea_pulse_cannon_fixed` (bolt_fixed, 2 barrels x 3-shot bursts of 12 / 3 s, 24 dps, no traverse): the Nova's fixed pulse cannon pods (Q71, Q76: 80 % of an Omega mount). `ea_pulse_cannon_swivel` (bolt_medium, 2 x 3 x 9 / 3 s, 18 dps): its two hangar pods on swivel rings (M10-T14; Q76: 75 % of a fixed pod), their mounts the fixed pods' 2 000 points. `ea_pulse_medium` (bolt_medium, 3 x 30 / 3 s, 30 dps): the Omega's pulse cannon (Q76). `ea_pulse_advanced` (3 x 33 / 3 s): the Warlock's (Q76). `ea_pulse_explorer` (3 x 6 / 3 s, its old 6 dps): the Explorer's (Q54's cut kept). `ea_pulse_light` (bolt_light): pulse discharge cannon. `ea_railgun` (bolt_medium 20, 3 s, 4 000 m/s, kinetic). `ea_missile`, `ea_torpedo` (tubes and silos), `ea_interceptor` (4 barrels, 0.25 s), `ea_interceptor_pod` (2 barrels, 0.5 s: the Nova's swivelling pods, Q71, Q81), `ea_mine` (scenario only) |
 | Narn | `narn_heavy_laser` (beam_sustained 117 dps, 4 s on, 12 s, fore arc), `narn_twin_particle` (bolt_medium 2 x 8), `narn_light_pulse`, `narn_energy_mine`, `narn_mine` |
 | Centauri | `centauri_plasma_accelerator` (bolt_fixed, 2 barrels), `centauri_battle_laser` (Primus heavy X-ray laser; beam_sustained 67 dps, 3 s on, 10 s), `centauri_ion_cannon` (bolt_medium 2 x 8 / 1.8 s; not kinetic), `centauri_light_particle` (bolt_light 2 x 6), `centauri_missile`, `centauri_guided_mine`, `centauri_mine` |
 | Minbari | `minbari_neutron_cannon` (beam_pulsed 150, 9 km), `minbari_fusion_cannon` (bolt_medium 8 / 1.4 s, 2 500 m/s, 40 deg/s), `minbari_em_pulse` (beam_pulsed 50, mounts only; T04 may change it) |

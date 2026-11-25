@@ -19,8 +19,8 @@ func register() -> void:
 	DebugConsole.registry.register_provider(PROVIDER, ConsoleVars.new({
 		&"ships": {"get": func() -> int: return guns.ships().size(), "type": TYPE_INT,
 				"doc": "Capital ships with guns or launchers"},
-		&"mounts": {"get": func() -> int: return guns.mount_count(), "type": TYPE_INT,
-				"doc": "Gun turrets, fixed guns and launchers on the native rows"},
+		&"mounts": {"get": func() -> int: return guns.mount_count() - guns.battery_count(), "type": TYPE_INT,
+				"doc": "Gun turrets, fixed guns and launchers on the native rows (interceptors: `interceptors.batteries`)"},
 		&"shots": {"get": func() -> int: return guns.shots, "type": TYPE_INT,
 				"doc": "Bolts and missiles the capitals fired since the last reset"},
 		&"missiles": {"get": func() -> int: return guns.missiles_launched, "type": TYPE_INT,

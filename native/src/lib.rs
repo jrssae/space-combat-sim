@@ -48,6 +48,8 @@ mod tier_fire;
 mod grid_kernels;
 mod turret_kernels;
 mod turret_rows;
+// M10-T13: the interceptor batteries the grid and the capitals share, an engine-free kernel.
+mod intercept_kernels;
 
 // M5-T28: the engine voices' ship query, an engine-free kernel and the core's shell around it.
 mod voice_kernels;
@@ -95,3 +97,5 @@ mod beam_rows;
 // M10-T14: the capital turrets and missile launchers, an engine-free kernel and its rows for GDScript.
 mod capital_gun_kernels;
 mod capital_gun_rows;
+// M10-T13: the capitals' interceptor batteries, an engine-free kernel stepped by the capital guns' shell.
+mod capital_intercepts;

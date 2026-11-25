@@ -113,8 +113,8 @@ static func pack_volumes(shapes: Array[HitShape]) -> PackedFloat64Array:
 
 
 ## One tick of every turret (from `SimCore.step_now`, after the cannons and before the bolts move): the relations brought
-## up to date, the core's step, each shot handed to its mount (a battery's pulse too, M7-T41), and each projectile a pulse met
-## spent at once.
+## up to date, the core's step, each shot handed to its mount (a battery's pulse too, M7-T41), and each projectile a pulse
+## brought down spent at once.
 func step(now_s: float, delta: float) -> void:
 	shots_last_tick = 0
 	intercepts_last_tick = 0
@@ -135,9 +135,13 @@ func step(now_s: float, delta: float) -> void:
 	var kill_ids: PackedInt64Array = out[4]
 	var kill_points: PackedVector3Array = out[5]
 	var kill_colors: PackedColorArray = out[6]
-	intercepts_last_tick = kill_slots.size()
+	# A tough shot (Q81) takes several pulses: each meeting shows, only the last brings it down.
+	var downed: PackedByteArray = out[8] if out.size() > 8 else PackedByteArray()
+	intercepts_last_tick = 0
 	for k: int in kill_slots.size():
-		_spend(kill_ids[k])
+		if k >= downed.size() or downed[k] != 0:
+			_spend(kill_ids[k])
+			intercepts_last_tick += 1
 		var mount: TurretMount = _mounts.get(kill_slots[k])
 		if mount != null and is_instance_valid(mount):
 			mount.on_intercepted(kill_points[k], kill_colors[k])

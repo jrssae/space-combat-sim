@@ -149,6 +149,8 @@ pub struct Bolts {
     // How far each bolt has flown since it was fired (M7-T52): its drawn tail is never longer, so it never reaches back
     // behind its muzzle.
     pub flown: Vec<f32>,
+    // Interceptor pulses each shot still takes before it is shot down (M10-T13, Q81: its weapon's toughness); a node's row 1.
+    pub hits_left: Vec<u8>,
     /// How many rows at the front the core owns.
     pub owned: usize,
     // The multimesh instance each owned bolt is drawn in (-1 for none): a bolt keeps its slot for life, so instance k
@@ -289,6 +291,7 @@ impl Clone for Bolts {
             launched,
             spent,
             flown,
+            hits_left,
             owned,
             draw_slots,
             slots_used,
@@ -309,6 +312,7 @@ impl Clone for Bolts {
         self.launched.clone_from(launched);
         self.spent.clone_from(spent);
         self.flown.clone_from(flown);
+        self.hits_left.clone_from(hits_left);
         self.owned = *owned;
         self.draw_slots.clone_from(draw_slots);
         self.slots_used.clone_from(slots_used);
@@ -484,6 +488,7 @@ impl Bolts {
         self.launched.clear();
         self.spent.clear();
         self.flown.clear();
+        self.hits_left.clear();
         self.draw_slots.clear();
         self.slots_used.clear();
         self.keep_scratch.clear();
@@ -549,6 +554,7 @@ impl Bolts {
         self.launched.truncate(n);
         self.spent.truncate(n);
         self.flown.truncate(n);
+        self.hits_left.truncate(n);
         self.draw_slots.truncate(n);
     }
 
@@ -587,6 +593,7 @@ impl Bolts {
         self.launched.insert(at, launched);
         self.spent.insert(at, false);
         self.flown.insert(at, 0.0);
+        self.hits_left.insert(at.min(self.hits_left.len()), 1);
         self.owned += 1;
         at
     }
@@ -620,6 +627,9 @@ impl Bolts {
         compact(&mut self.launched, owned, keep);
         compact(&mut self.spent, owned, keep);
         compact(&mut self.flown, owned, keep);
+        if self.hits_left.len() >= owned {
+            compact(&mut self.hits_left, owned, keep);
+        }
         self.owned = kept;
     }
 }
@@ -661,6 +671,28 @@ impl Rows {
 }
 
 impl Bolts {
+    /// The interceptor pulses bolt `p` still takes (Q81), at least 1; a row with no entry (a test's) takes one.
+    pub fn hits_left_of(&self, p: usize) -> u8 {
+        self.hits_left.get(p).copied().unwrap_or(1).max(1)
+    }
+
+    /// Sets the pulses bolt `p` still takes (0: shot down).
+    pub fn set_hits_left(&mut self, p: usize, n: u8) {
+        if p >= self.hits_left.len() && p < self.ids.len() {
+            self.hits_left.resize(self.ids.len(), 1);
+        }
+        if let Some(h) = self.hits_left.get_mut(p) {
+            *h = n;
+        }
+    }
+
+    /// The newest owned bolt (the one just added) takes `n` pulses to shoot down (its weapon's toughness).
+    pub fn set_newest_owned_hits(&mut self, n: u8) {
+        if self.owned > 0 {
+            self.set_hits_left(self.owned - 1, n.max(1));
+        }
+    }
+
     /// A velocity rebase: every bolt loses `dv`. Its last step stays: that displacement was flown in the old frame.
     pub fn boost(&mut self, dv: Vector3) {
         for v in self.velocities.iter_mut() {

@@ -638,8 +638,22 @@ const TURRET_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::built
 		"use crate::v3::", "use crate::brain_maths::", "use crate::grid_kernels::", "use crate::kernels::contact::"]
 ## The station grid's kinds (M7-T07): the guns' pick, the latch and the interceptors, held to the kernels' rules.
 const GRID_KERNEL_FILE: String = "res://native/src/grid_kernels.rs"
-const GRID_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::kernels::contact::",
-		"use crate::rows::", "use crate::surface;", "use crate::sweep_cells::", "use crate::turret_kernels::", "use crate::v3::"]
+const GRID_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::intercept_kernels::",
+		"use crate::kernels::contact::", "use crate::rows::", "use crate::surface;", "use crate::sweep_cells::",
+		"use crate::turret_kernels::", "use crate::v3::"]
+## The interceptor batteries the grid and the capitals share (M10-T13): held to the kernels' rules; they import the row tables,
+## the surfaces' maths, the broad phase's cells, the turret kernels' frames and the brains' lead only. The grid's shell
+## (`turret_rows.rs`) and the capitals' kernel (`capital_intercepts.rs`) both call it.
+const INTERCEPT_KERNEL_FILE: String = "res://native/src/intercept_kernels.rs"
+const INTERCEPT_KERNEL_USE_ALLOWED: Array[String] = ["use std::collections::", "use godot::builtin::{Basis, Vector3};",
+		"use crate::brain_maths::", "use crate::rows::", "use crate::surface;", "use crate::sweep_cells::",
+		"use crate::turret_kernels::", "use crate::v3::"]
+## The capitals' interceptor batteries (M10-T13): the guarded sets, the perceived hostility and the batteries' tick on the shared
+## model, held to the kernels' rules. The shell (`capital_gun_rows.rs`) is what GDScript reaches.
+const CAPITAL_INTERCEPT_FILE: String = "res://native/src/capital_intercepts.rs"
+const CAPITAL_INTERCEPT_USE_ALLOWED: Array[String] = ["use std::collections::", "use godot::builtin::Vector3;",
+		"use crate::capital_gun_kernels::", "use crate::intercept_kernels::", "use crate::rows::", "use crate::sweep_cells::",
+		"use crate::turret_kernels", "use crate::v3::"]
 ## The docking kernel (M12-T19): held to the kernels' rules; its shell (`dock_rows.rs`) is what GDScript reaches.
 const DOCK_KERNEL_FILE: String = "res://native/src/dock_kernels.rs"
 const DOCK_KERNEL_USER: String = "res://native/src/dock_rows.rs"
@@ -661,7 +675,7 @@ const BEAM_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vec
 const CAPITAL_GUN_KERNEL_FILE: String = "res://native/src/capital_gun_kernels.rs"
 const CAPITAL_GUN_KERNEL_USER: String = "res://native/src/capital_gun_rows.rs"
 const CAPITAL_GUN_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::brain_maths::",
-		"use crate::rows::", "use crate::surface::", "use crate::turret_kernels::", "use crate::v3::", "use crate::weapon_kernels::"]
+		"use crate::intercept_kernels::", "use crate::rows::", "use crate::surface::", "use crate::turret_kernels::", "use crate::v3::", "use crate::weapon_kernels::"]
 ## The engine voices' ship query (M5-T28): the ships near the listener from the rows, held to the kernels' rules; it imports
 ## the row tables and the vector maths only. The shell (`voice_rows.rs`) is what reaches it.
 const VOICE_KERNEL_FILE: String = "res://native/src/voice_kernels.rs"
@@ -739,6 +753,17 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	assert_true(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_USER).contains("use crate::capital_gun_kernels"),
 			"the shell reads the capital gun kernel")
 	assert_false(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_FILE).contains("static mut"), "no shared state in the capital gun kernel")
+	violations.append_array(_engine_free_violations(INTERCEPT_KERNEL_FILE, KERNEL_FORBIDDEN, INTERCEPT_KERNEL_USE_ALLOWED))
+	violations.append_array(_engine_free_violations(CAPITAL_INTERCEPT_FILE, KERNEL_FORBIDDEN, CAPITAL_INTERCEPT_USE_ALLOWED))
+	for path: String in [INTERCEPT_KERNEL_FILE, CAPITAL_INTERCEPT_FILE]:
+		assert_false(FileAccess.get_file_as_string(path).contains("static mut"), "no shared state in %s" % path.get_file())
+	# One battery model for both (Q81): the grid's shell and the capitals' kernel fire through the same function.
+	assert_true(FileAccess.get_file_as_string("res://native/src/turret_rows.rs").contains("ik::fire_battery("),
+			"the grid's batteries fire through the shared kernel")
+	assert_true(FileAccess.get_file_as_string(CAPITAL_INTERCEPT_FILE).contains("ik::fire_battery("),
+			"the capitals' batteries fire through the shared kernel")
+	assert_true(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_USER).contains("use crate::capital_intercepts"),
+			"the capital guns' shell steps the interceptors")
 	assert_false(FileAccess.get_file_as_string(DOCK_KERNEL_FILE).contains("static mut"), "no shared state in the docking kernel")
 	assert_true(FileAccess.get_file_as_string(RAM_TRACKER_USER).contains("use crate::ram_tracker::"), "the shell reads the ram tracker")
 	assert_true(FileAccess.get_file_as_string(VOICE_KERNEL_FILE).contains("pub fn ships_near("), "the voice kernel holds ships_near")

@@ -8,16 +8,19 @@
 use godot::builtin::{Basis, Vector3};
 
 use crate::brain_maths::solve;
+use crate::intercept_kernels::Battery;
 use crate::rows::{Bolts, FLAG_DISABLED, FLAG_HULK, FLAG_HULL_ACTIVE, FLAG_SHELTERED, FLAG_TIER, Rows, Surface};
 use crate::surface::{enters_from_outside, into_body};
 use crate::turret_kernels::{self as tk, Gun, LINE_LIFT_M};
 use crate::v3::{add, cross, dist_sq, dot, length, normalized, scale, sub, xform, xform_inv};
 use crate::weapon_kernels::steer;
 
-/// A weapon's role (`loadouts.json`): anti-fighter, dual, anti-capital.
+/// A weapon's role (`loadouts.json`): anti-fighter, dual, anti-capital, and point defence (an interceptor battery, M10-T13: it
+/// never fires at a ship; `capital_intercepts` steps it).
 pub const ROLE_AF: u8 = 0;
 pub const ROLE_DUAL: u8 = 1;
 pub const ROLE_AC: u8 = 2;
+pub const ROLE_PD: u8 = 3;
 /// A launched round's warhead: a bolt has none; a missile's and a torpedo's blast where they strike (T09's rows).
 pub const WARHEAD_NONE: u8 = 0;
 pub const WARHEAD_MISSILE: u8 = 1;
@@ -76,11 +79,13 @@ pub struct GunSpec {
     pub warhead: u8,
     pub color: [f32; 4],
     pub look: u8,
+    /// Interceptor pulses one of its shots takes to shoot down (Q81: 1, 2 or 3).
+    pub toughness: u8,
 }
 
 impl GunSpec {
-    // The turret kernels' gun for the lead, the slew and the gate.
-    fn gun(&self) -> Gun {
+    /// The turret kernels' gun for the lead, the slew and the gate.
+    pub fn gun(&self) -> Gun {
         Gun {
             muzzle_speed: self.speed_mps,
             interval_s: self.cycle_s,
@@ -144,6 +149,8 @@ pub struct Mount {
     /// Ticks until it looks for a target again.
     pub pick_wait: u32,
     pub shots: i64,
+    /// An interceptor's barrels in turn (M10-T13); a gun's is unused.
+    pub battery: Battery,
 }
 
 impl Mount {
@@ -191,6 +198,7 @@ impl Mount {
             burst_started_s: 0.0,
             pick_wait: 0,
             shots: 0,
+            battery: Battery::row(spec.barrels as usize, barrel_m.max(0.0), spec.cycle_s),
         }
     }
 
@@ -278,6 +286,9 @@ pub fn step<F: Fn(i64) -> Option<usize>>(
     tally: &mut Tally,
 ) {
     for (i, m) in mounts.iter_mut().enumerate() {
+        if m.spec.role == ROLE_PD {
+            continue; // an interceptor: `capital_intercepts::Guards::step`
+        }
         let o = owner_of[i] as usize;
         let Some(owner) = owners.get(o) else {
             continue;
@@ -636,8 +647,8 @@ fn target_velocity<F: Fn(i64) -> Option<usize>>(world: &GunWorld<'_, F>, j: usiz
     }
 }
 
-// Whether row `j` is a hull in play: active (not a tier row) and not a mine.
-fn live_hull(rows: &Rows, j: usize) -> bool {
+/// Whether row `j` is a hull in play: active (not a tier row) and not a mine.
+pub fn live_hull(rows: &Rows, j: usize) -> bool {
     let flags = rows.flags[j];
     flags & FLAG_HULL_ACTIVE != 0 && flags & FLAG_TIER == 0 && !rows.is_mine[j]
 }
@@ -649,8 +660,8 @@ fn line_from(m: &Mount, pivot: Vector3, up: Vector3) -> Vector3 {
     add(pivot, scale(up, lift as f32))
 }
 
-// Whether the line from `from` to `to` enters one of the ship's own hulls (its hull and rotating sections) from outside.
-fn own_hull_blocks<F: Fn(i64) -> Option<usize>>(world: &GunWorld<'_, F>, owner: &Owner, from: Vector3, to: Vector3) -> bool {
+/// Whether the line from `from` to `to` enters one of the ship's own hulls (its hull and rotating sections) from outside.
+pub fn own_hull_blocks<F: Fn(i64) -> Option<usize>>(world: &GunWorld<'_, F>, owner: &Owner, from: Vector3, to: Vector3) -> bool {
     owner.bodies.iter().any(|&b| {
         let Some(k) = (world.row_of)(b) else {
             return false;

@@ -1,18 +1,17 @@
 // The core's shell around the defensive turrets (M5-T21, D61): mounts bound to their ships' rows, the attacker memory,
 // the main-thread step (aim, fire gate, shot as an owned bolt row) and the picks handed over at the AI job's join. Every
 // engine type stays here; the maths is `turret_kernels`, engine-free.
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::time::Instant;
 
 use godot::prelude::*;
 
-use crate::brain_maths::solve;
 use crate::grid_kernels::{
-    self as gk, Battery, Incoming, KIND_INTERCEPT, KIND_MISSILE, Latch, MOUNT_HEAVY, MOUNT_INTERCEPTOR, MOUNT_LIGHT,
-    MOUNT_TURRET, PulseHit, PulseScratch,
+    self as gk, KIND_INTERCEPT, KIND_MISSILE, Latch, MOUNT_HEAVY, MOUNT_INTERCEPTOR, MOUNT_LIGHT, MOUNT_TURRET,
 };
+use crate::intercept_kernels::{self as ik, Battery, Incoming, PulseBook, PulseHit, PulseScratch};
 use crate::sim_core::{KIND_BOLT, ScsSimCore};
-use crate::v3::{add, scale, sub};
+use crate::v3::{add, scale};
 use crate::turret_kernels::{
     self as tk, Gun, Hulls, Memory, Mounts, PickJob, REL_NEUTRAL,
 };
@@ -54,33 +53,24 @@ pub struct TurretState {
     // The interceptors' scratch: candidates, the bolts taken this tick, each bolt's time to the hull this tick, the big
     // hulls' rows and their bodies.
     incoming: Vec<Incoming>,
-    taken: Vec<bool>,
+    taken: Vec<u8>,
     hull_times: Vec<f64>,
     surface_rows: Vec<usize>,
     surface_bodies: Vec<i64>,
     /// Each interceptor battery's barrels by slot (M7-T41); none for the other kinds.
     pub batteries: Vec<Option<Battery>>,
-    // The batteries' pulses in flight by bolt id: who fired each, at what and when its lead said it would meet it.
-    pulses: HashMap<i64, Pulse>,
-    // This tick's targets with a pulse on the way, and the earliest meeting each expects.
-    cover: HashMap<i64, f64>,
-    live_pulses: HashSet<i64>,
+    // The batteries' pulses in flight by bolt id (who fired each, at what, when its lead said it would meet it) and this tick's
+    // cover from them.
+    book: PulseBook,
     pulse_scratch: PulseScratch,
     pulse_hits: Vec<PulseHit>,
     // Pulses the batteries fired (a readout).
     grid_pulses: i64,
 }
 
-// A battery's pulse in flight (M7-T41).
-#[derive(Clone, Copy)]
-struct Pulse {
-    slot: usize,
-    target: i64,
-    meet_at: f64,
-}
-
 /// What the batteries did in a tick (M7-T41): the pulses fired (slot, muzzle, bolt id, barrel) and the projectiles they met (slot of
-/// the battery that fired the pulse, -1 when it is gone; the projectile's id; where they met; its colour).
+/// the battery that fired the pulse, -1 when it is gone; the projectile's id; where they met; its colour; whether that downed it,
+/// Q81's toughness).
 #[derive(Default)]
 struct Interceptions {
     shot_slots: Vec<i32>,
@@ -91,6 +81,7 @@ struct Interceptions {
     kill_ids: Vec<i64>,
     kill_points: Vec<Vector3>,
     kill_colors: Vec<Color>,
+    kill_downed: Vec<u8>,
 }
 
 impl TurretState {
@@ -567,7 +558,7 @@ impl ScsSimCore {
     /// the barrel's tip; then the station grid's interceptor pulses meet what they meet and the batteries fire new ones at
     /// what is coming at the hull (M7-T07, M7-T41). Returns `[slots that fired (the guns', then the batteries'), the shots'
     /// starts, their bolt ids, the batteries whose pulses met a projectile, the projectiles' ids, where they met, the
-    /// projectiles' colours, each shot's barrel (-1 for a gun)]`.
+    /// projectiles' colours, each shot's barrel (-1 for a gun), whether each meeting downed its projectile (bytes, Q81)]`.
     #[func]
     fn step_turrets(&mut self, now_s: f64, delta: f64) -> VarArray {
         let started = Instant::now();
@@ -699,6 +690,7 @@ impl ScsSimCore {
         out.push(&PackedVector3Array::from(i.kill_points.as_slice()).to_variant());
         out.push(&PackedColorArray::from(i.kill_colors.as_slice()).to_variant());
         out.push(&PackedInt32Array::from(barrels.as_slice()).to_variant());
+        out.push(&PackedByteArray::from(i.kill_downed.as_slice()).to_variant());
         out
     }
 
@@ -868,12 +860,11 @@ impl ScsSimCore {
         bodies
     }
 
-    // The interceptor batteries' tick (D75, M7-T41). First the pulses in flight meet what their last move touched (both spent).
-    // Then each battery looks at the hostile missiles and pulse bolts within its reach whose path meets the hull (any such shot
-    // sets the grid weapons free against its side: it was fired at the station), and when its next barrel is ready fires a
-    // pulse at one it can reach (inside its arc, not behind the hull, not already covered by a pulse that gets there before it
-    // hits, and one the pulse can catch): a missile first, then the one that hits soonest. The pulse leaves the barrel's
-    // muzzle on a lead course from there, thrown off by a spread hashed from the battery, its shot count and the tick.
+    // The interceptor batteries' tick (D75, M7-T41, on the shared battery model of M10-T13). First the pulses in flight meet what
+    // their last move touched. Then each battery looks at the hostile missiles and pulse bolts within its reach whose path meets
+    // the hull (any such shot sets the grid weapons free against its side: it was fired at the station), and when its next
+    // barrel is ready fires a pulse at one it can reach (`intercept_kernels::fire_battery`): a missile first, then the one that
+    // hits soonest, inside its arc, not behind the hull and not already covered by enough pulses for its toughness.
     fn step_interceptors(
         &mut self,
         m: &mut Mounts,
@@ -890,19 +881,19 @@ impl ScsSimCore {
         if surface_rows.is_empty() {
             return out;
         }
-        self.pulse_cover(now_s);
+        self.turrets.book.refresh(&self.bolts, now_s);
         let mut incoming = std::mem::take(&mut self.turrets.incoming);
         let mut taken = std::mem::take(&mut self.turrets.taken);
         taken.clear();
-        taken.resize(self.bolts.ids.len(), false);
+        taken.resize(self.bolts.ids.len(), 0);
         let mut hull_times = std::mem::take(&mut self.turrets.hull_times);
         hull_times.clear();
-        hull_times.resize(self.bolts.ids.len(), gk::NOT_SWEPT);
+        hull_times.resize(self.bolts.ids.len(), ik::NOT_SWEPT);
         let relations = std::mem::take(&mut self.turrets.relations);
-        let mut cover = std::mem::take(&mut self.turrets.cover);
+        let mut book = std::mem::take(&mut self.turrets.book);
         let stride = self.turrets.stride;
         // New pulses join the rows after the loop: adding a row moves the rows the loop indexes.
-        let mut fired: Vec<(usize, usize, Vector3, Vector3, i64, f64)> = Vec::new();
+        let mut fired: Vec<(usize, ik::Fired)> = Vec::new();
         for s in 0..m.taken.len() {
             if !m.taken[s] || !m.live[s] || m.out[s] || m.kind[s] != MOUNT_INTERCEPTOR {
                 continue;
@@ -938,69 +929,44 @@ impl ScsSimCore {
                 continue;
             }
             let gun = m.gun[s];
-            let mount_velocity = gk::mount_velocity(&self.rows, own, f.pivot);
-            let trunnion = gk::muzzle_point(&f, m.azimuth[s], m.elevation[s], battery.trunnion, Vector3::ZERO);
-            let bolts = &self.bolts;
-            // A pulse does not move on its launch tick: it is led to where the target will be when it starts to fly.
-            let lead_from = |from: Vector3, p: usize| {
-                let ahead = add(bolts.positions[p], scale(bolts.velocities[p], delta as f32));
-                solve(from, mount_velocity, ahead, bolts.velocities[p], gun.muzzle_speed, gun.lifetime_s)
+            let rows = &self.rows;
+            let mut at = ik::BatteryAt {
+                velocity: gk::mount_velocity(rows, own, f.pivot),
+                frame: f,
+                min_elevation: m.min_elevation[s],
+                azimuth: m.azimuth[s],
+                elevation: m.elevation[s],
+                battery: &mut battery,
+                gun: &gun,
+                lane: m.id[s].wrapping_mul(1 << 20).wrapping_add(m.shots[s]),
             };
-            let pick = gk::choose_in_reach_if(
-                &self.rows,
-                surface_rows,
-                bolts,
-                &f,
-                m.min_elevation[s],
+            let shot = ik::fire_battery(
+                &mut at,
+                &self.bolts,
                 &incoming,
-                &taken,
-                |c| {
-                    let p = c.bolt as usize;
-                    let covered = cover.get(&bolts.ids[p]).is_some_and(|&meet| meet <= now_s + c.hit_in_s);
-                    !covered && lead_from(trunnion, p).ok
-                },
+                &mut book.cover,
+                &mut taken,
+                |_| 0,
+                |from, to| !gk::line_blocked(rows, surface_rows, from, to),
+                now_s,
+                delta,
+                tick,
             );
-            let Some(pick) = pick else {
+            let Some(shot) = shot else {
                 continue;
             };
-            let p = pick.bolt as usize;
-            taken[p] = true;
-            let barrel = battery.fire(now_s);
-            let shot = gk::battery_shot(
-                &f,
-                &gk::Barrel {
-                    min_elevation: m.min_elevation[s],
-                    azimuth: m.azimuth[s],
-                    trunnion: battery.trunnion,
-                    muzzle: battery.muzzles[barrel],
-                },
-                gun.muzzle_speed,
-                {
-                    let lead = lead_from(trunnion, p);
-                    (lead.aim_dir, lead.t)
-                },
-                |from| Some(lead_from(from, p)).filter(|l| l.ok).map(|l| (l.aim_dir, l.t)),
-            );
-            let (muzzle, flight_s) = (shot.muzzle, shot.flight_s);
-            let direction =
-                tk::spread(shot.aim, gun.spread_rad, m.id[s].wrapping_mul(1 << 20).wrapping_add(m.shots[s]), tick);
-            let velocity = add(mount_velocity, scale(direction, gun.muzzle_speed as f32));
-            let meet_at = now_s + delta + flight_s;
-            let target = bolts.ids[p];
-            let earliest = cover.entry(target).or_insert(meet_at);
-            *earliest = earliest.min(meet_at);
             self.turrets.batteries[s] = Some(battery);
             m.ready_at[s] = now_s + gun.interval_s;
             m.shots[s] += 1;
             m.azimuth[s] = shot.azimuth;
             m.elevation[s] = shot.elevation;
-            fired.push((s, barrel, muzzle, velocity, target, meet_at));
+            fired.push((s, shot));
         }
-        for (s, barrel, muzzle, velocity, target, meet_at) in fired {
+        for (s, shot) in fired {
             let gun = m.gun[s];
             let id = self.add_owned_bolt(
-                muzzle,
-                velocity,
+                shot.muzzle,
+                shot.velocity,
                 m.faction_ix[s],
                 m.body[s],
                 KIND_INTERCEPT,
@@ -1010,68 +976,56 @@ impl ScsSimCore {
                 gun.look,
                 now_s + gun.lifetime_s,
             );
-            self.turrets.pulses.insert(id, Pulse { slot: s, target, meet_at });
+            book.pulses.insert(id, ik::Pulse { battery: s as i64, target: shot.target, meet_at: shot.meet_at });
             self.turrets.grid_pulses += 1;
             out.shot_slots.push(s as i32);
-            out.shot_starts.push(muzzle);
+            out.shot_starts.push(shot.muzzle);
             out.shot_ids.push(id);
-            out.shot_barrels.push(barrel as i32);
+            out.shot_barrels.push(shot.barrel as i32);
         }
         self.turrets.relations = relations;
-        self.turrets.cover = cover;
+        self.turrets.book = book;
         self.turrets.incoming = incoming;
         self.turrets.taken = taken;
         self.turrets.hull_times = hull_times;
         out
     }
 
-    // The pulses that met a projectile along the bolts' last move (M7-T41): both spent, the projectile reported with the battery
-    // that fired the pulse, where they met and the projectile's colour (its flash and spark).
+    // The grid's pulses that met a shot along the bolts' last move (M7-T41): the pulse spent, the shot one hit fewer (spent at
+    // none left, Q81), reported with the battery that fired the pulse, where they met, the shot's colour (its flash and spark)
+    // and whether it went down. Only the grid's own pulses: a capital's meet in its own step (`capital_gun_rows`).
     fn meet_pulses(&mut self, out: &mut Interceptions) {
         let mut hits = std::mem::take(&mut self.turrets.pulse_hits);
         let mut scratch = std::mem::take(&mut self.turrets.pulse_scratch);
-        gk::pulse_hits(&self.bolts, &self.turrets.relations, self.turrets.stride, &mut scratch, &mut hits);
+        {
+            let (b, t) = (&self.bolts, &self.turrets);
+            ik::pulse_hits_by(
+                b,
+                |p| t.book.owns(b.ids[p]),
+                |p, q| tk::relation(&t.relations, t.stride, b.faction_ix[p], b.faction_ix[q]) == tk::REL_HOSTILE,
+                &mut scratch,
+                &mut hits,
+            );
+        }
         for h in &hits {
             let (p, q) = (h.pulse as usize, h.target as usize);
-            let b = &mut self.bolts;
-            let step = b.last_steps[p];
-            let at = add(sub(b.positions[p], step), scale(step, h.t as f32));
-            b.spent[p] = true;
-            b.spent[q] = true;
-            let slot = self.turrets.pulses.get(&b.ids[p]).map_or(-1, |info| info.slot as i32);
-            self.turrets.grid_intercepts += 1;
-            self.turrets.grid_missile_intercepts += i64::from(b.kinds[q] == KIND_MISSILE);
+            let b = &self.bolts;
+            let at = ik::meeting_point(b, h);
+            let slot = self.turrets.book.pulses.get(&b.ids[p]).map_or(-1, |info| info.battery as i32);
+            if h.downed {
+                self.turrets.grid_intercepts += 1;
+                self.turrets.grid_missile_intercepts += i64::from(b.kinds[q] == KIND_MISSILE);
+            }
             let c = b.colors[q];
             out.kill_slots.push(slot);
             out.kill_ids.push(b.ids[q]);
             out.kill_points.push(at);
             out.kill_colors.push(Color::from_rgba(c[0], c[1], c[2], c[3]));
+            out.kill_downed.push(u8::from(h.downed));
         }
+        ik::apply_hits(&mut self.bolts, &hits);
         self.turrets.pulse_hits = hits;
         self.turrets.pulse_scratch = scratch;
-    }
-
-    // The pulses still flying and, for each target, the earliest meeting a pulse on its way expects (M7-T41). A pulse past its
-    // meeting by `COVER_SLACK_S` missed: its target is free to be shot at again. Records of pulses gone are dropped.
-    fn pulse_cover(&mut self, now_s: f64) {
-        let t = &mut self.turrets;
-        t.cover.clear();
-        t.live_pulses.clear();
-        let b = &self.bolts;
-        for p in 0..b.owned {
-            if b.kinds[p] != KIND_INTERCEPT || b.spent[p] {
-                continue;
-            }
-            t.live_pulses.insert(b.ids[p]);
-            if let Some(info) = t.pulses.get(&b.ids[p])
-                && now_s <= info.meet_at + gk::COVER_SLACK_S
-            {
-                let earliest = t.cover.entry(info.target).or_insert(info.meet_at);
-                *earliest = earliest.min(info.meet_at);
-            }
-        }
-        let live = &t.live_pulses;
-        t.pulses.retain(|id, _| live.contains(id));
     }
 
     // A landed hit sets the grid weapons free against the shooter's side when the victim is the station or a friendly

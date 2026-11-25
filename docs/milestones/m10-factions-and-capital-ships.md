@@ -708,6 +708,37 @@ toughness); `src/capital/capital_gun_mounts.gd` (`interceptor` kind), `capital_g
   capital's taken) and Q77's bars; misses stay pending.
 - Cost (release): per battery per tick, idle and engaged; 4 Omegas a side broadside. GPU shot (H).
 - Open for T85: far capitals' interceptors (the stand-ins' far rolls) until T45.
+- **Done (2026-11-25, awaiting the maintainer).** *One kernel:* the grid's battery model moved into the engine-free
+  `native/src/intercept_kernels.rs` (gather, choose, fire a battery, cover, the pulse sweep through the hit broad phase's cells);
+  `grid_kernels.rs` keeps thin wrappers, so the grid's tests and recordings stand. *Capitals:* `native/src/capital_intercepts.rs`
+  steps every `ROLE_PD` mount on `ScsCapitalGuns` before the guns (pulses meet, then batteries fire): guarded set per side (own
+  hull, friendly capitals and stations as the ship perceives them, never fighters), a guided missile judged by its target,
+  missiles and torpedoes first, own hull before friends, soonest first; friendly fire and a still-disguised shooter's shots left
+  alone; no pulse from a lost mount, a hulk or `hold`. 4 pulses a second a mount, the Nova's pods 2 (`ea_interceptor_pod` 0.5 s).
+  *Toughness:* `Bolts.hits_left`, set from the weapon's `toughness` when a capital gun fires (a heavy bolt 2, a torpedo 3); the
+  grid takes it too (`test_grid_toughness`). *Game side:* `CapitalGunMounts.interceptors_of`, `CapitalGuns` flashes, sparks,
+  counts and `hold_interceptors`, the grid's sound pitched up (`AudioDirector.watch_capital_guns`), console `intercept
+  [info|hold|free]` and provider `interceptors` (`src/capital/intercept_console.gd`, `info.md`); `ea_interceptor`, `drazi_`,
+  `brakiri_`, `isa_interceptor.tres` added; architecture §22.8, §20.3 and `docs/assets-capital.md` updated.
+  *Tests (staged copy, GUT_SLOW):* Rust 339/339 (10 new in `capital_intercepts`, 5 in `intercept_kernels`, the grid's unchanged);
+  compile check 1 122 scripts clean; GUT: the new `test_capital_interceptors` (missile salvo and torpedo down, part of a
+  Starfury flight's bolts taken, a beam never, a lost battery and a hulk silent, the Nova's four pods, the console),
+  `test_capital_interceptor_threads` (1 and 6 threads byte for byte) and the grid and parity files all pass; full suite
+  (in three parts after a timeout) 5 131 tests, 0 failing, 26 pending (balance and real-renderer tests); the only failures were
+  `test_organic_test_hull_asset`, whose asset was not built in the copy: built there, 6/6. `test_capital_gun_threads` now holds the batteries so it measures the guns alone.
+  *Balance (GUT_BALANCE, reported only, Q78 and Q81; both stay pending):* **B1** (two Omegas): 764, 784 and 784 s, winner at
+  13-19 %, the interceptors take 88-89 % of each side's shots (bar 240-480 s; was 144-146 s before T13). **B10** (12 Starfuries
+  on an Omega): the squadron is lost in 84-99 s, the Omega at 93-95 %, the interceptors take 33-47 % of the Starfuries' shots
+  (Q53's anchor: about half). Against Q53's shares, the Starfuries' figure is close; a capital's is about double the 40 %.
+  *Cost (release):* 4 Omegas a side broadside (64 batteries, 208 mounts, about 880 shots in play): the guns' step with the
+  batteries free median 149 us (p99 520), held 51 us (p99 187), so about 100 us a tick for 64 engaged batteries (about 1.5 us
+  each); `bench_quick` furball, spread and battle stay in budget before and after (`reports/perf/t13_before`, `t13_after`).
+  *GPU (H):* the real renderer at 960x540 ran 59-60 FPS, 266 draw calls, VRAM 2.7 GB used; an Omega astern of a renegade
+  Omega turned broadside: 72 pulses, 62 met, 44 shots down in 40 s (`references/screenshots/M10-T13 interceptors/`); the look
+  is the maintainer's. *Found while testing (for the maintainer):* shots coming straight up an Omega's stern meet its side
+  batteries at the edge of their arcs with the hull in the way, so end-on they take almost nothing (2 pulses against 28 shots
+  in 30 s, both Omegas in line); broadside they work as above. *Open:* far capitals intercept nothing until T85; the grid's and
+  a capital's pulses do not share cover.
 
 ### M10-T87 Our own Starfury gun sound (Q82)
 

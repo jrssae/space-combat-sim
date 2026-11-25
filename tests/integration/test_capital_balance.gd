@@ -1,9 +1,10 @@
 extends GutTest
 ## Balance fights B10 and B1 (docs/assets-capital.md, "Balance fights"; Q53, Q76). B10: twelve allied Starfuries on engage at
-## will against a lone hostile Omega holding still, none launched (T17) and no interceptors yet (T13); Q53's bar: the Omega
+## will against a lone hostile Omega holding still, none launched (T17), its interceptors working (T13); Q53's bar: the Omega
 ## lasts 10 to 15 min and the squadron loses about half. B1: two Omegas broadside on; the bar 4 to 8 min. The real main scene,
-## Jolt and the native core at the game's 60 Hz step, sped up. Until T13's interceptors stop the bolts (Q76) both bars are
-## reported and a miss is left pending, since the interceptors are what makes a capital last.
+## Jolt and the native core at the game's 60 Hz step, sped up. Each fight reports the share of the hostile shots headed for an
+## Omega that its interceptors took (Q53's anchor: about half the Starfuries' bolts, 40 % of a capital's). No retune with T13
+## (Q78, Q81): both bars are reported and a miss is left pending until the later rebalance.
 
 const SCENARIO_PATH: String = "res://tests/fixtures/scenarios/capital_balance.json"
 const DUEL_PATH: String = "res://tests/fixtures/scenarios/capital_duel.json"
@@ -20,8 +21,8 @@ const LOST: Vector2i = Vector2i(4, 8)
 const DUEL_GAP_M: float = 3000.0
 const DUEL_LIMIT_S: float = 900.0
 const DUEL_LASTS_S: Vector2 = Vector2(240.0, 480.0)
-## Flip when T13 lands: the bars are then asserted.
-const INTERCEPTORS_BUILT: bool = false
+## Flip when the capitals are rebalanced (after T13, Q78 and Q81): the bars are then asserted.
+const BARS_ASSERTED: bool = false
 
 var _rate_backup: int = 60
 var _scale_backup: float = 1.0
@@ -89,7 +90,8 @@ func _spawn_omega(main: Main, faction: StringName = Factions.RAIDERS, title: Str
 	return cap
 
 
-# One fight: [seconds the Omega lasted (LIMIT_S when it held), Starfuries lost, its hull share left, damage from the squadron].
+# One fight: [seconds the Omega lasted (LIMIT_S when it held), Starfuries lost, its hull share left, damage from the squadron,
+# the hostile shots its batteries saw headed for it, and of those shot down].
 func _fight(seed_value: int) -> Array:
 	var main: Main = await _launch(seed_value)
 	var omega: CapitalShip = _spawn_omega(main)
@@ -130,13 +132,24 @@ func _fight(seed_value: int) -> Array:
 	var lasted: float = SimClock.now() - t0
 	var lost: int = start - main.ships.alive(ShipPool.ALLY_TYPE).size()
 	var left: float = omega.damageable.hull.fraction() if is_instance_valid(omega) else 0.0
+	var share: PackedInt64Array = _share(main, omega)
 	rates.sort()
 	var rate_text: String = "none" if rates.is_empty() else "median %.1f, p25 %.1f, p75 %.1f deg/s (%d)" % [rates[rates.size() / 2],
 			rates[rates.size() / 4], rates[rates.size() * 3 / 4], rates.size()]
 	gut.p("  seed %d marks: %s; squadron shots %d; its damage taken by cause and hit: %s; Starfuries 1-3 km off swing round the Omega at %s" % [
 			seed_value, ", ".join(marks), shots[0], by_kind, rate_text])
 	await _close(main)
-	return [lasted, lost, left, taken[0]]
+	return [lasted, lost, left, taken[0], share[0], share[1]]
+
+
+# `cap`'s interceptors' share: [hostile shots seen headed for its hull, of those shot down].
+func _share(main: Main, cap: CapitalShip) -> PackedInt64Array:
+	var guns: CapitalGuns = CapitalGuns.of(main.world)
+	return guns.intercept_share(cap) if guns != null and is_instance_valid(cap) else PackedInt64Array([0, 0])
+
+
+func _pct(share: PackedInt64Array) -> float:
+	return 100.0 * float(share[1]) / float(share[0]) if share[0] > 0 else 0.0
 
 
 # How fast each Starfury 1 to 3 km from the Omega swings round it, deg/s: what its turrets must traverse to follow.
@@ -157,7 +170,8 @@ func test_twelve_starfuries_take_a_lone_omega_in_ten_to_fifteen_minutes_losing_a
 		var r: Array = await _fight(seed_value)
 		if r.is_empty():
 			return
-		lines.append("seed %d: %.0f s, %d lost, Omega at %.0f %%, %.0f taken" % [seed_value, r[0], r[1], 100.0 * float(r[2]), r[3]])
+		lines.append("seed %d: %.0f s, %d lost, Omega at %.0f %%, %.0f taken, interceptors took %d of %d (%.0f %%)" % [seed_value,
+				r[0], r[1], 100.0 * float(r[2]), r[3], r[5], r[4], _pct(PackedInt64Array([r[4], r[5]]))])
 		if float(r[0]) >= LASTS_S.x and float(r[0]) <= LASTS_S.y and int(r[1]) >= LOST.x and int(r[1]) <= LOST.y:
 			in_bar += 1
 	gut.p("B10: " + "; ".join(lines))
@@ -165,7 +179,8 @@ func test_twelve_starfuries_take_a_lone_omega_in_ten_to_fifteen_minutes_losing_a
 			LOST.x, LOST.y, SEEDS.size(), "; ".join(lines)])
 
 
-# One duel: [seconds until one Omega was out (DUEL_LIMIT_S when neither), the winner's hull share, the loser's].
+# One duel: [seconds until one Omega was out (DUEL_LIMIT_S when neither), the winner's hull share, the loser's, and each Omega's
+# interceptors' share of the shots headed for it (ours, theirs)].
 func _duel(seed_value: int) -> Array:
 	var main: Main = await _launch(seed_value, DUEL_PATH)
 	var ours: CapitalShip = _spawn_omega(main, Factions.EARTH_ALLIANCE, "Omega", OMEGA_AHEAD_M)
@@ -182,8 +197,9 @@ func _duel(seed_value: int) -> Array:
 	var lasted: float = SimClock.now() - t0
 	var a: float = ours.damageable.hull.fraction() if _fighting(ours) else 0.0
 	var b: float = theirs.damageable.hull.fraction() if _fighting(theirs) else 0.0
+	var shares: Array = [_share(main, ours), _share(main, theirs)]
 	await _close(main)
-	return [lasted, maxf(a, b), minf(a, b)]
+	return [lasted, maxf(a, b), minf(a, b), shares[0], shares[1]]
 
 
 # Whether `cap` is still in the fight: there, not destroyed and not disabled.
@@ -191,14 +207,14 @@ func _fighting(cap: CapitalShip) -> bool:
 	return is_instance_valid(cap) and cap.damageable.hull.hp > 0.0 and not cap.is_hulk()
 
 
-# Passes, or until T13 leaves a miss pending with the numbers (the interceptors are what makes a capital last, Q76).
+# Passes, or until the rebalance leaves a miss pending with the numbers (no retune with T13, Q78 and Q81).
 func _judge(met: bool, text: String) -> void:
 	if met:
 		assert_true(true, text)
-	elif INTERCEPTORS_BUILT:
+	elif BARS_ASSERTED:
 		assert_true(false, text)
 	else:
-		pending("until T13's interceptors: " + text)
+		pending("until the capitals' rebalance (Q78, Q81): " + text)
 
 
 func test_two_omegas_fight_for_four_to_eight_minutes() -> void:
@@ -208,8 +224,8 @@ func test_two_omegas_fight_for_four_to_eight_minutes() -> void:
 		var r: Array = await _duel(seed_value)
 		if r.is_empty():
 			return
-		lines.append("seed %d: %.0f s, winner at %.0f %%, loser at %.0f %%" % [seed_value, r[0], 100.0 * float(r[1]),
-				100.0 * float(r[2])])
+		lines.append("seed %d: %.0f s, winner at %.0f %%, loser at %.0f %%, interceptors took %.0f %% and %.0f %%" % [seed_value,
+				r[0], 100.0 * float(r[1]), 100.0 * float(r[2]), _pct(r[3]), _pct(r[4])])
 		if float(r[0]) >= DUEL_LASTS_S.x and float(r[0]) <= DUEL_LASTS_S.y:
 			in_bar += 1
 	gut.p("B1: " + "; ".join(lines))

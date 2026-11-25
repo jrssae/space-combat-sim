@@ -605,6 +605,17 @@ func add_bolt(at: Vector3, velocity: Vector3, faction: StringName, shooter_id: i
 			BoltMesh.look_for(weapon), weapon.lifetime_s, now_s))
 
 
+## Owned bolt `id` takes `hits` interceptor pulses to shoot down (Q81's toughness: tests and scripted shots; a capital gun's
+## shots take their weapon's at fire time); false when there is none.
+func set_bolt_hits(id: int, hits: int) -> bool:
+	return core != null and bool(core.set_bolt_hits(id, hits))
+
+
+## The interceptor pulses owned bolt `id` still takes, 0 when it is gone.
+func bolt_hits(id: int) -> int:
+	return int(core.bolt_hits(id)) if core != null else 0
+
+
 ## Spends the owned bolt `id` (an interceptor shot it down); false when there is none.
 func spend_bolt(id: int) -> bool:
 	return core != null and bool(core.spend_bolt(id))
