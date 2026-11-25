@@ -1,8 +1,8 @@
 class_name CapitalSubsystems
 extends RefCounted
 ## What a pilot can pick on a capital ship (M10-T18, Q17; by kind since M10-T65, Q60): its bridge, reactor, engines, launch bays
-## and each kind of weapon mount, never one part alone. Picking a kind aims at the nearest of its parts that still stands, kept
-## until it is lost and then picked again, until none is left. Read from the ship's `CapitalDamage`. Pure. An entry is
+## and each kind of weapon mount, never one part alone. Picking a kind aims at the nearest of its parts that still stands, picked
+## again as parts are lost or the pilot moves, until none is left. Read from the ship's `CapitalDamage`. Pure. An entry is
 ##     {key, group, label, state, fraction, works, point, part, live, total}
 ## where `key` is the kind ("engines", "turrets", ...), `part` the part aimed at (`engine:engine_top_r`, `mount:turret_3`, or a
 ## section's name; "" when none stands), `state` and `fraction` that part's (a `CapitalSection.state_name`, or "destroyed"),
@@ -26,16 +26,15 @@ const STATE_LOST: String = "destroyed"
 const WHOLE_LABEL: String = "WHOLE SHIP"
 
 
-## One entry per kind `damage`'s ship has, in ring order, each aimed at the part `held` names for it (kind -> part key) while
-## that part stands, else at its standing part nearest `from_point` (body frame).
-static func list(damage: CapitalDamage, from_point: Vector3 = Vector3.ZERO, held: Dictionary = {}) -> Array[Dictionary]:
+## One entry per kind `damage`'s ship has, in ring order, each aimed at its standing part nearest `from_point` (body frame).
+static func list(damage: CapitalDamage, from_point: Vector3 = Vector3.ZERO) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if damage == null:
 		return out
 	for group: String in GROUPS:
 		var parts: Array[Dictionary] = parts_of(damage, group)
 		if not parts.is_empty():
-			out.append(_entry(group, parts, from_point, str(held.get(group, ""))))
+			out.append(_entry(group, parts, from_point))
 	return out
 
 
@@ -93,8 +92,16 @@ static func state_text(entry: Dictionary) -> String:
 	return "%s %d%%" % [String(entry["state"]).to_upper(), roundi(float(entry["fraction"]) * 100.0)]
 
 
-# A kind's entry, aimed at the held part while it stands, else at the standing part nearest `from_point`.
-static func _entry(group: String, parts: Array[Dictionary], from_point: Vector3, held: String) -> Dictionary:
+## "TURRET 3": the aimed part as the target box names it; "" for a kind of one part (its label says it) or with none standing.
+static func part_label(entry: Dictionary) -> String:
+	var part: String = str(entry.get("part", ""))
+	if part.is_empty() or int(entry.get("total", 1)) <= 1:
+		return ""
+	return part.substr(part.find(":") + 1).replace("_", " ").to_upper()
+
+
+# A kind's entry, aimed at the standing part nearest `from_point`.
+static func _entry(group: String, parts: Array[Dictionary], from_point: Vector3) -> Dictionary:
 	var aimed: Dictionary = {}
 	var live: int = 0
 	var best_d: float = INF
@@ -102,9 +109,6 @@ static func _entry(group: String, parts: Array[Dictionary], from_point: Vector3,
 		if not bool(p["standing"]):
 			continue
 		live += 1
-		if p["part"] == held:
-			best_d = -1.0
-			aimed = p
 		var d: float = from_point.distance_squared_to(p["point"])
 		if d < best_d:
 			best_d = d

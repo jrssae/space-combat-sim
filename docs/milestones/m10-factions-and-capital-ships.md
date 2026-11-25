@@ -249,11 +249,14 @@ Out:
 - The ship is **disabled** (D12.7) when power or control is gone and no explosive section has blown; it is **destroyed**
   (D12.8) when a reactor, magazine or fuel section blows.
 - Subsystems are targetable (Q17).
-- **Rules (T03, Q53).** No armour. Sections share the hull by a template per role (docs/assets-capital.md, "Weapons and loadouts (T03)"). A magazine or fuel
-  section at 0 blows (destroyed); a reactor at 0 shuts down (disabled) and blows after another 50 % of its points; a
-  lost bridge releases the brain (last orders at half rate of fire), disabled only with the reactor or every engine
-  gone too. Hits on a lost section pass half on to the nearest live structure. Mounts have their own points (light
-  300 to beam emitter 2 500); a mount's damage counts against its section, and it dies with it.
+- **Rules (T03, Q53; T65, Q72).** No armour. Sections share the hull by a template per role (docs/assets-capital.md, "Weapons and loadouts (T03)").
+  Only the part a shot hits takes its damage: a subsystem (a mount, an engine, a bay, the bridge or reactor section) takes the
+  full damage and the hull half; any other hit lowers its section and the hull; a lost section's hits go to the hull. A
+  magazine, fuel or reactor section at 0 blows (destroyed). The bridge at 0 or the hull below 10 % makes a hulk with no power
+  (Vorlon and Shadow ships explode instead). Mounts have their own points (light 300 to beam emitter 2 500), engines and
+  bays 1 500 each (placeholders); each dies with its section. Stations take the same (Babylon 5 included, always
+  destructible). *(Before T65: a reactor shut down first and blew after another 50 %, a lost bridge left last orders at half
+  rate of fire, and a lost section passed half on to the nearest live one.)*
 
 ### D12.6 The blast model
 
@@ -387,7 +390,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T65 | E | Subsystems targeted by kind: the nearest still-active part of a weapons, engines or bays kind, no single-part picks (Q60); and Q72's damage rules: only the part hit takes the damage (a subsystem the full, the hull half), plain hull hits are hull damage, a lost section's hits go to the hull, the reactor at 0 % explodes, the bridge at 0 % or the hull below 10 % makes a hulk with no power (lights, weapons, launches and docking off), Vorlon and Shadow ships explode instead; capitals and stations, Babylon 5 included | T18 | Opus | in progress |
 | T66 | A | Fidelity checks: slice sweeps, front-face depth maps, STL against STL and screenshot sheets (`tools/refview/fidelity.py`, Q61) | - | Sonnet | done |
 | T67 | A | Nova bow face from T66 (the Omega's moves to T68): each generator kept separate (Q62), the open-frame bow, the octagonal launch bay in place of the red square, face slice gates >= 0.90 and a depth-diff limit, the Omega's hull-letter placement on the Nova (Q61, Q62) | T66 | Fable | in progress |
-| T68 | A | Omega rebuilt on the new 4-part kit (Q63): assemble the kit into one reference, sheet to the maintainer, re-measure (silhouettes, sections, T66 sweeps and bow depth map), open-frame bow and octagonal bay (Q62), the drum in the kit's pose | T66 | Fable | not started |
+| T68 | A | Omega rebuilt on the new 4-part kit (Q63). **First, a model review (maintainer 2026-11-25):** compare the Omega STLs we have (the 4-part kit `EA Omega head_x1.stl`, `middle_x1`, `rear_x1`, `outerrotate_x2`, and `EA Omega (lacking detail).stl`) with the Agamemnon model (an Omega-class destroyer; its author and source to be recorded) in `references/Agamemnon_B5_FBX/`: `Agamemnon.fbx` and `Textures/` (grey, purple and red base colours, hull-plate bump, scratch patterns, warning stripes; `Agamemnon_B5_FBX.zip` is the original download; never committed, never shipped, `DISCLAIMER.md`): its licence and terms, top, side and front silhouette IoU and L/W/H at the same length, per-part sections with `tools/refview` (bow, launch bay, drum, spine, engines), detail the STLs lack, what its textures show of the paint and markings; a short report with a recommendation (build from the kit as planned, use the model as a second reference, or build from the model); the build reference changes only with the maintainer's OK. Then: assemble the kit into one reference, sheet to the maintainer, re-measure (silhouettes, sections, T66 sweeps and bow depth map), open-frame bow and octagonal bay (Q62), the drum in the kit's pose | T66 | Fable | not started |
 | T69 | F | Re-size the small EA craft (Q65): `ea_construction_tender` to 8 m, `ea_atmo_shuttle` (Kestrel) to 29 m, `ea_shuttle` (crew shuttle) to 38 m; check each STL's proportions still hold (90 % rule at the new length), ShipSpecs (mass, thrust, hull points by size), hardpoints, collision, the docks and bays that hold them, the ship line-up spacing, docs/assets-capital.md and the catalogue page | T55, T57 | Sonnet | done |
 | T70 | E | Clearance: the resized EA craft through B5's main docking bay (crew shuttle, Kestrel, tender) | T69 | Sonnet | done |
 | T71 | F | Re-size the Panama (Q66): `ea_panama` scaled uniformly to 20 m tall (about 124 x 31 x 20 m, scale 0.69), as T69 did for the small craft: the 90 % rule at the new size, ShipSpec (mass, thrust, hull points), hardpoints, collision and chunks, its docks and routes (B5's bay, civilian traffic), the line-up, docs and the catalogue page | T69 | Opus | done |
@@ -405,6 +408,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T83 | G | Godot 4.8 evaluation (Q75): when 4.8 is released, list what it brings and what it would cost to move (texture streaming, contact shadows, `Trail3D`, multi-bounce ambient occlusion, and the rest), measured on a scratch copy on the maintainer's GPU (fps, draw calls, VRAM, the visual change); a report with a recommendation; no switch without the maintainer's OK (`scripts/setup_godot.sh` pins the version) | - | Opus | not started |
 | T84 | A | Hyperion follow-up (Q75): the conning tower's dome and forward dish taken from `references/EA Hyperion Class Heavy Cruiser.stl`, in plain medium grey metal (no mosaic, no seams); the conning tower's underside carries **two gun turrets** as that STL has them, replacing the two cylinders with badly placed turrets; the midship's vertically facing turrets removed (not in the model); the **beam weapons sit in the stubby side wings**, the mid-bow flank pods (Q77; a small recessed opening in each for the emitter), and the **nose antenna array holds no weapons** (maintainer 2026-11-24); loadout and hardpoints updated; a report explaining each remaining gun and weapon's place and capability (arc, range, damage, target kind); the 90 % rule and sections kept; look sheet; tests | T22 | Opus | not started |
 | T85 | D | Far capitals fire (found in T14's review): a real capital beyond the 10 km tier radius fires nothing, since the far group's rolls serve only the stand-ins; feed real capitals' mounts (guns, missiles, beams) into the low-attention tier's fire, native, 1 and 6 threads identical, parity kept, the disguise respected (Q55); before T45 removes the stand-ins | T14 | Opus | not started |
+| T86 | G | Babylon 5 Classic model review (maintainer 2026-11-24): the "Babylon 5 Classic" model offered for download by Chris Kuhn (artist/modeler) in https://www.facebook.com/100063622114904/posts/2433942860027157/ (the post needs a logged-in browser). The maintainer downloaded it to `references/Babylon5_Station_FBX/`: `Babylon5FBX.fbx` and its textures in `Textures/` (colour and specular maps per part: base assembly, chassis, Cobra bay, cylinder accessories, main cylinder, reactor, solar panels with a glass mask; `Babylon5_Station_FBX.zip` is the original download). Find its licence and terms (the post, any readme); compare it with `references/EA Babylon 5 Station.stl` and today's generator (silhouettes, per-part sections with `tools/refview`, detail the STL lacks, and what its textures show of the hull's paint and markings for our procedural textures); a short report with a recommendation: use it as a new reference in `references/` (never committed, never shipped, `DISCLAIMER.md`), as a second reference beside the STL, or not at all; nothing changes without the maintainer's OK; before T82 rebuilds the station at its new size | - | Opus | not started |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -438,7 +442,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T30 | F | Drazi Stormfalcon | T19, T62 | Fable | not started |
 | T31 | F | Brakiri Avioki cruiser | T19, T62 | Fable | not started |
 | T32 | F | Vree Xill | T19, T62 | Fable | not started |
-| T33 | F | ISA White Star | T19, T06, T62 | Fable | not started |
+| T33 | F | ISA White Star. **First, a model review (maintainer 2026-11-25):** the "White Star" model offered for download by Chris Kuhn (artist/modeler) in https://www.facebook.com/share/p/1ChAVAnDbf/ (the post needs a logged-in browser). The maintainer downloaded it to `references/WhiteStar Chris Kuhn/`: `White_Star_FBX.fbx`, two renders (`Render_1.jpg`, `Render_2.jpg`) and `Textures/` (colour, specular and bump maps, `White_Star_Classic_Texture.jpg`, an unused grey-purple mask); never committed, never shipped (`DISCLAIMER.md`). Find its licence and terms; compare it with `references/ISA Whitestar 266m.stl` (top, side and front silhouette IoU and L/W/H at the same length, per-part sections with `tools/refview`, detail the STL lacks, what its textures show of the paint and the veined hull for `HexColours`); a short report with a recommendation (build from the STL as planned, use the model as a second reference, or build from the model) before the generator is written; the build reference changes only with the maintainer's OK | T19, T06, T62 | Fable | not started |
 | T34 | F | ISA Victory-class destroyer | T33 | Fable | not started |
 | T35 | F | Shadow battlecrab | T06, T19, T62 | Fable | not started |
 | T36 | F | Vorlon destroyer, 131 m, with its petals (Q49) | T06, T19, T62 | Fable | not started |
@@ -644,6 +648,40 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 - **Input:** the X long-press cycle (T18 follow-up) steps through kinds, not parts; key 9 the same; parity kept.
 - **Done when:** GUT tests for the kind list, the nearest-active pick and re-pick, and the fallback; the menu and box
   screenshots; T18's Done notes point here.
+- **Done (2026-11-24, awaiting the maintainer).** *Kinds (Q60).* `CapitalSubsystems.list` gives one entry a kind (bridge, reactor,
+  engines, bays, turrets with the interceptors, beams, missiles; mines are no target), each aimed at its standing part nearest the
+  pilot, picked again on every read (a part lost or a nearer one moves the aim), with `live`/`total` and the part (`part_label`).
+  The menu's second ring is WHOLE SHIP plus the kinds (TURRETS over "23 of 24 working"), no ring of members; X's long press
+  and key 9 step through kinds (`cycled`, parity unchanged). The box line reads `TURRETS 23/24  INTERCEPTOR STERN R  INTACT 100%`;
+  a kind with none left stays picked, shows `MISSILES 0/2  DESTROYED 0%` dim with no marker, and the guns lead the whole ship.
+  `targeting.subsystem` takes a kind (a part key is refused), `targeting.subsystems` lists kind, live/total, part aimed at, state.
+  *Damage (Q72).* `CapitalDamage` lands a hit on what it strikes: a mount, an engine (`CapitalPart`, nozzle plus radius) or a bay
+  (mouth) within reach, or the bridge/reactor section, takes it in full and the hull half (`subsystem_hull_share` 0.5); any other
+  hit lowers its section and the hull; a lost section's hits go to the hull (no pass-on). The reactor (and magazine, fuel) at 0
+  blows at once; the bridge at 0 or the hull below `hulk_below` 0.1 makes a hulk: `has_power()` false, so no mount fires, no bay
+  works, doors stay put (`set_bay_door` refuses), the hull's lights and every bay lamp (T72's included, `BayDoorNode.set_power`)
+  go out; Vorlon and Shadow hulls explode instead (T10's `never_hulk`). `is_disabled` stays the one disabled flag. Engines and
+  bays have 1 500 points each (placeholders, `section_damage`). `capital damage` takes engines and bays; `capital disable` takes
+  the bridge out (scuttles a hull with none). *Stations.* `StationDamage` runs the same rules on Babylon 5 (hull 55 000 = 11
+  sections x 5 000; `command` is its bridge, `reactor` its reactor, `station_damage.babylon5`); only the nearest grid mount in
+  reach takes a hit (`GridMountHealth.nearest`). No power: grid off (`StationGrid.set_powered`), lights, bay and grid lamps and
+  hull glow out, launches, docking, the dock offer and civilian traffic refused. Destroyed: `DestructionDirector.station_destroyed`
+  draws and sets off its blast (dreadnought reactor row; the wreck stays, no break-up), and `MissionApi.station_destroyed` ends the
+  mission lost ("station destroyed") unless a script sets `needs_station = false`. *Babylon 5 in the missions:* nothing protected
+  it before (its hulls were invulnerable in code, not by a mission flag); now every mission run by `MissionRunner` (the tutorial,
+  `civilian_escort`) fails on its loss; no script opts out. The tutorial's raid targets the station: its fought-raid balance test
+  now asserts B5 keeps power and prints its state (this run: hull 55 000/55 000, the grid and the wing kept the raiders off).
+  *Balance effects (for the maintainer):* a bolt on a mount now takes half off the hull instead of its section's points, so
+  B10 (12 Starfuries on an Omega) leaves the Omega at 89-91 % (was 84-85 %), and with no reactor overload B1 (Omega duel) ends
+  in 144-146 s, winner at 11-13 % (was 180-189 s, 29-31 %); both stay pending until T13. The grid raid's bolts land mostly on
+  the mounts, so B5's sections show 0.1-3 % (bar 3 %, was 4-10 %): that bar is now pending for review, and
+  `test_station_grid_balance` measures the station's hull instead of its sections' sum (interceptors proof: 3.1 times).
+  Tests (staged copy, GUT_SLOW): compile check 1 118 scripts clean; 94 affected files 954 tests, then the 6 failures (old reactor
+  and pass-on rules in `test_capital_damage`, `test_hulk_threads`, `test_station_grid`, one test fixture) fixed and their files
+  rerun with the tutorial's: 13 files 115/115; balance (`balance_suite.txt` and `test_capital_balance`, GUT_BALANCE): 34 tests,
+  27 passed, 4 pending (the dogfight and sandbox reviews, B10 and B1 until T13), 3 fixed and rerun (grid balance and the fought
+  raid: 15 passed, 1 pending). Screenshots: `references/screenshots/M10-T65 kind targeting/` (menu kinds, box on turrets,
+  engines, missiles destroyed, bridge).
 
 ### M10-T02 Factions as data
 
@@ -1037,6 +1075,8 @@ parity green.
   rings, `test_hud_subsystem` 5, `test_capital_subsystem_targeting` 5 on the Omega; the input map, adapter, parity, profile, target
   menu, preview and HUD files green); compile check 1 085 scripts clean. Screenshots: `references/screenshots/M10-T18 subsystems/`.
   **Follow-up (maintainer):** subsystem cycling moved off L3 (free look only again) to a long press of X: `HoldInteract` gained `cycle_ok`/`cycled` (0.5 s, repeats each 0.5 s; a tap of X now toggles auto-track on the release while a capital with subsystems is targeted; never while an interaction, an autopilot abort or the opening's skip holds X). Shift and Mouse 4 do the same; key 9 stays.
+  **Superseded by T65 (Q60):** the second level now lists kinds only (no ring of members), each aimed at its nearest standing
+  part; see "M10-T65" for the as-built.
   **Open (superseded above):** the pad's L3 was shared with free look; subsystem points are those of the rotating pieces at rest (a drum turret is
   marked where it sits at rest); engines and bays use their section's centre; no subsystem on a mine; destroyed subsystems stay
   selectable (the point still exists).

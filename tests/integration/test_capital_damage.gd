@@ -1,9 +1,9 @@
 extends GutTest
-## Damage by section on the Omega in the real main scene (M10-T08, D12.5, AC8's first clause): the player's bolts land on the
-## section of the surface volume the core's sweep entered, and its points and the hull's go down together; engines lost take
-## their nozzles off the flight step and their mounts with them; the reactor shut down disables the hull, which winds down and
-## then drifts (M10-T10), and blows on its overload; a magazine at 0 blows and the destruction director takes the ship; the console lists and hurts
-## sections.
+## Damage by what is hit on the Omega in the real main scene (M10-T08, D12.5, AC8's first clause; M10-T65, Q72): the player's
+## bolts land on the section of the surface volume the core's sweep entered, and its points and the hull's go down together;
+## engines lost take their nozzles off the flight step and their mounts with them; the bridge lost leaves a hulk with no power,
+## which winds down and then drifts (M10-T10); the reactor at 0 blows it at once; a mount shot off hurts only itself and the hull;
+## a magazine at 0 blows and the destruction director takes the ship; the console lists and hurts sections.
 
 const TYPE: StringName = &"ea_omega"
 const SPEED_UP: float = 4.0
@@ -103,7 +103,7 @@ func test_bolts_land_on_the_section_of_the_volume_the_core_swept() -> void:
 	assert_lt(cap.damageable.hull.hp, cap.spec.hull_max)
 
 
-func test_engines_lost_take_their_nozzles_and_a_dead_reactor_leaves_a_drifting_hull() -> void:
+func test_engines_lost_take_their_nozzles_a_lost_bridge_leaves_a_drifting_hulk_and_the_reactor_blows_it() -> void:
 	var cap: CapitalShip = _spawn_broadside(Factions.EARTH_ALLIANCE, 4000.0)
 	if cap == null:
 		return
@@ -121,12 +121,16 @@ func test_engines_lost_take_their_nozzles_and_a_dead_reactor_leaves_a_drifting_h
 	assert_false(cap.mount_works("interceptor_stern_r"), "the engine's interceptor went with it")
 	assert_true(cap.mount_works("interceptor_stern_l"))
 	assert_almost_eq(cap.damage.thrust_fraction(), 0.5, 1e-6)
-	out = _run("capital damage reactor 4200")
+	var hull_before: float = cap.damageable.hull.hp
+	out = _run("capital damage bridge 1500")
 	assert_true(out.ok, out.error)
-	assert_eq(cap.damage.sections["reactor"].state, CapitalSection.State.DISABLED, "the reactor shut down")
-	assert_eq(disabled, [true], "power gone: disabled")
-	assert_false(cap.mount_works("beam_aft_top_r"), "the reactor's beams are gone")
-	assert_false(cap.mount_works("plasma_top_1"), "and nothing fires without power")
+	assert_eq(cap.damage.sections["bridge"].state, CapitalSection.State.DISABLED, "the bridge is lost")
+	assert_almost_eq(hull_before - cap.damageable.hull.hp, 750.0, 0.01, "a subsystem hit: the hull takes half (Q72)")
+	assert_eq(disabled, [true], "no bridge: a hulk")
+	assert_true(cap.damage.is_disabled)
+	assert_false(cap.mount_works("beam_aft_top_r"), "no power: nothing fires")
+	assert_false(cap.mount_works("plasma_top_1"))
+	assert_true(cap.damage.live_bays().is_empty(), "nothing launches or docks")
 	assert_eq(cap.hulk_stages.stage, HulkStages.Stage.POWER_LOST, "it winds down in stages (M10-T10)")
 	await _fly(cap.hulk_stages.cold_s + 0.5, func() -> bool: return cap.hulk_stages.is_cold())
 	assert_true(cap.hulk_stages.is_cold())
@@ -139,10 +143,10 @@ func test_engines_lost_take_their_nozzles_and_a_dead_reactor_leaves_a_drifting_h
 	assert_false(cap.damageable.hull.destroyed)
 	var destroyed: Array[CapitalBody] = []
 	main.director.capital_destroyed.connect(func(c: CapitalBody, _info: HitInfo) -> void: destroyed.append(c))
-	assert_true(_run("capital damage reactor 2000").ok)
-	assert_false(cap.damage.is_destroyed, "below its overload")
-	assert_true(_run("capital damage reactor 200").ok)
-	assert_eq(cap.damage.blown, "reactor", "it blew after another half of its points")
+	assert_true(_run("capital damage reactor 4100").ok)
+	assert_false(cap.damage.is_destroyed, "the reactor still holds")
+	assert_true(_run("capital damage reactor 100").ok)
+	assert_eq(cap.damage.blown, "reactor", "the reactor at 0 blows it at once (no shut-down stage)")
 	assert_true(cap.damageable.hull.destroyed, "the hull with it")
 	await wait_physics_frames(2)
 	assert_eq(destroyed, [cap] as Array[CapitalBody], "the destruction director took its death")
@@ -157,8 +161,9 @@ func test_a_magazine_at_zero_blows_and_the_ship_is_destroyed() -> void:
 	main.director.capital_destroyed.connect(func(c: CapitalBody, _info: HitInfo) -> void: destroyed.append(c))
 	assert_true(_run("capital damage missile_top 1300").ok, "the battery over the magazine")
 	assert_eq(cap.damage.live_mounts().size(), cap.damage.mounts.size() - 1, "shot off at its 1 200 points")
-	assert_eq(cap.damage.sections["magazine"].state, CapitalSection.State.DAMAGED, "its points counted against the magazine")
-	assert_true(_run("capital damage magazine 2000").ok)
+	assert_eq(cap.damage.sections["magazine"].state, CapitalSection.State.INTACT, "only the part hit takes it (Q72)")
+	assert_almost_eq(cap.damageable.hull.hp, cap.spec.hull_max - 650.0, 0.01, "the hull half of it")
+	assert_true(_run("capital damage magazine 3000").ok)
 	assert_eq(cap.damage.blown, "magazine")
 	assert_true(cap.damageable.hull.destroyed)
 	await wait_physics_frames(2)
@@ -175,7 +180,7 @@ func test_the_console_lists_and_heals_the_sections() -> void:
 	assert_true(_run("capital damage bow 3000").ok)
 	var listed: ConsoleResult = _run("capital sections")
 	assert_true(listed.ok, listed.error)
-	assert_eq(listed.lines.size(), cap.damage.sections.size() + 1, "a line a section and one for the ship")
+	assert_eq(listed.lines.size(), cap.damage.sections.size() + 2, "a line a section, the hull's and one for the ship")
 	assert_string_contains("\n".join(listed.lines), "bow (structure) disabled")
 	assert_string_contains("\n".join(listed.lines), "bays 0/1")
 	assert_eq(DebugConsole.registry.read("capital.bays").get("value"), "0/1")

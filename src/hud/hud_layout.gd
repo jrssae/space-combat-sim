@@ -259,12 +259,16 @@ static func _target(input: HudInput, f: HudFrame) -> void:
 			f.lead_tof_s = float(lead["t"])
 
 
-# The picked subsystem's line, its state colour and its marker on the hull (M10-T18).
+# The picked kind's line (its count standing, the part aimed at and its state), its state colour and its marker on the hull
+# (M10-T18; by kind, M10-T65). A kind with none left has no marker: the guns lead the whole ship.
 static func _subsystem(input: HudInput, f: HudFrame, t: TargetReadout) -> void:
 	var sub: Dictionary = t.subsystem
-	f.subsystem_line = "%s  %s" % [sub["label"], CapitalSubsystems.state_text(sub)]
+	var part: String = CapitalSubsystems.part_label(sub)
+	f.subsystem_line = "%s  %s%s" % [sub["label"], part + "  " if not part.is_empty() else "", CapitalSubsystems.state_text(sub)]
 	f.subsystem_fraction = float(sub["fraction"])
 	f.subsystem_color = hull_color(f.subsystem_fraction) if bool(sub["works"]) else Factions.UNIDENTIFIED_COLOR
+	if not bool(sub["works"]):
+		return
 	var shown: Dictionary = project(input, t.aim_position())
 	if bool(shown["in_front"]) and on_screen(input, shown["pos"]):
 		f.subsystem_marker_visible = true

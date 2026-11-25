@@ -380,6 +380,10 @@ func test_a_fought_raid_ends_in_the_debrief() -> void:
 	await _wait_for("the carrier's step", func() -> bool: return _api().step_name() == &"defense", 6000)
 	await _wait_for("the debrief step", func() -> bool: return _api().step_name() == &"debrief", 60000)
 	assert_true(_journal_has("scramble alpha 11"), "the wing launched at the alarm")
+	var station: Station = main.far_props.station
+	assert_true(station.has_power(), "Babylon 5 rides out the raid with power (M10-T65: it is destructible now)")
+	var station_state: String = station.damage.describe()
 	await _wait_for("the debrief screen", func() -> bool: return _debrief() != null, 6000)
 	assert_true(bool(Game.flow.last_result["success"]))
-	print("fought raid: %.0f s, %s" % [float(Game.flow.last_result["time_s"]), " | ".join(_debrief().model.extra_lines)])
+	print("fought raid: %.0f s, %s; station %s" % [float(Game.flow.last_result["time_s"]), " | ".join(_debrief().model.extra_lines),
+			station_state])

@@ -144,7 +144,8 @@ func _open_subsystems(picked: Dictionary) -> bool:
 	for entry: Dictionary in found:
 		var pick: Dictionary = picked.duplicate()
 		pick["subsystem"] = entry["key"]
-		entries.append({"label": entry["label"], "sub": _kind_sub(entry), "color": _state_color(entry, color), "payload": pick})
+		var label: String = CapitalSubsystems.GROUP_LABELS[entry["key"]]  # the count is the sub line's: a slice has no room for both
+		entries.append({"label": label, "sub": _kind_sub(entry), "color": _state_color(entry, color), "payload": pick})
 	radial.push("%s · %s" % [HEADING, str(picked["label"])], entries, color)
 	return true
 

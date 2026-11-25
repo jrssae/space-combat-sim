@@ -4775,17 +4775,20 @@ latches for the player's selection until it changes. `Targetable.role` (ship, ci
 it is set anew (`mission:<serial>`, `route:NAV n`); `Hud.final_input` lets the director settle the frame's waypoint after
 the mission's part. `HudInput.waypoint_id` marks the waypoint's radar contact.
 
-**Subsystems (M10-T18, Q17).** Picking an identified capital on a ship ring opens a third ring instead of targeting it: WHOLE SHIP,
-then BRIDGE, REACTOR, ENGINES, LAUNCH BAYS, TURRETS, BEAM EMITTERS and MISSILES for the groups it has (at most eight slices).
-A group of one is picked at once; a group of several opens its members (the first eight, nearest the pilot first), each with its
-state and points. `CapitalSubsystems` (pure, `src/targeting/`) lists them from the ship's `CapitalDamage` (`list`, `cycled`,
-`state_text`); `TargetMenu.subsystems_of` is the director's source (empty for an unidentified hull, so a disguised or far
-contact gives nothing away); `select` returns `subsystem` (a key, "" for the whole ship). `TargetingController.subsystem_key`
-holds the pick (cleared when the selection changes; `select_subsystem`, `cycle_subsystem`; `subsystem_next` on a long press of X (`HoldInteract`, only when no interaction or abort is on offer) or key 9).
-`selected_readout()` then carries `subsystem` and `aim_offset`: the HUD's lead, the target box's subsystem line (name, state,
-points), its marker on the hull and the ship's auto-track all use `aim_position()`. A subsystem sits at its mount, or at the centre of
-its section's box (engines and bays), with the rotating pieces at rest, so a turret on the drum is marked where it sits when the
-drum is at rest.
+**Subsystems (M10-T18, Q17; by kind since M10-T65, Q60).** Picking an identified capital on a ship ring opens a third ring
+instead of targeting it: WHOLE SHIP, then BRIDGE, REACTOR, ENGINES, LAUNCH BAYS, TURRETS, BEAM EMITTERS and MISSILES for the
+kinds it has (at most eight slices), each picked at once: a kind, never one part (ENGINES over "3 of 4 working"). A kind aims
+at its standing part nearest the pilot, picked again every read, so a lost part or a nearer one moves the aim; with none left the
+kind shows destroyed and the aim falls back to the whole ship. `CapitalSubsystems` (pure, `src/targeting/`) lists them from
+the ship's `CapitalDamage` (`list`, `parts_of`, `cycled`, `state_text`, `part_label`); `TargetMenu.subsystems_of` is the
+director's source (empty for an unidentified hull, so a disguised or far contact gives nothing away); `select` returns
+`subsystem` (a kind, "" for the whole ship). `TargetingController.subsystem_key` holds the kind and `subsystem_part` the part
+aimed at (cleared when the selection changes; `select_subsystem`, `cycle_subsystem`; `subsystem_next` on a long press of X
+(`HoldInteract`, only when no interaction or abort is on offer) or key 9 steps through kinds). `selected_readout()` then carries
+`subsystem` and `aim_offset`: the HUD's lead, the target box's subsystem line (kind with its count standing, the part aimed at,
+its state and points), its marker on the hull and the ship's auto-track all use `aim_position()`. A part sits at its mount, an
+engine's nozzle or a bay's mouth (else its section's box centre), with the rotating pieces at rest, so a turret on the drum is
+marked where it sits when the drum is at rest.
 
 **Cost.** Opening: 0.28 ms with 10 candidates, 2.56 ms with 304 (the list is most of it). Closed: nothing per tick.
 
@@ -5897,9 +5900,18 @@ native/src/surface_rows.rs       ScsSimCore.set_surface / set_surface_owner / cl
     Every other row's arithmetic is unchanged (parity recordings green); the surfaces travel with the rows into the AI job.
 - **Damage (Q5).** A hit's point in its piece's frame picks the damage section whose box holds it (`StationSections.section_at`);
   the section's health falls (`StationSections.SECTION_HEALTH`, 5 000 each since T07's fix round, first 20 000), the `DamageZones` layout `STATION` shows each section's
-  own share and `Silhouette.set_station_sections` draws them side on; `Station.section_lost` fires once per section. The hulls are
-  invulnerable: the station is never destroyed or disabled. Only the repair crew (`Station.repair_section`, §20.9) and
-  `station heal` give health back.
+  own share and `Silhouette.set_station_sections` draws them side on; `Station.section_lost` fires once per section. Only the
+  repair crew (`Station.repair_section`, §20.9) and `station heal` give health back.
+- **Babylon 5's damage (M10-T65, Q72).** The capitals' rules on the station (`StationDamage`, pure): both pieces' `Damageable`s
+  share one hull (`Station.hull`, the sections' points together, 55 000) and route their hits by what they strike. The nearest
+  live grid mount within its radius (`GridMountHealth.nearest`) or the `command` (bridge) or `reactor` section takes the full
+  damage and the hull half; any other hit lowers its section and the hull; a lost section's hits go to the hull. The reactor at
+  0 or the hull at 0 destroys the station (`Station.station_destroyed`; the destruction director draws and sets off its blast,
+  `station_damage.babylon5.blast`; the wreck stays, no break-up yet), and a mission that needs it (`MissionApi.needs_station`,
+  default true) ends lost ("station destroyed"). The command section at 0 or the hull below 10 % leaves a hulk. With no power
+  (`Station.has_power`) its grid stays off (`StationGrid.set_powered`), its lights, bay and grid lamps and hull glow go out, and
+  launches, docking and civilian traffic refuse. No mission flag protects it. Section kinds and the blast row are in
+  `data/capitals/capitals.json` `station_damage`.
 - **Marker.** `BABYLON 5`, `earth_alliance`, kind `PROP`, broadcasting to 1 000 km (the AI hears it, M3-T17).
 - **Cost.** Jolt's physics stage with a fighter in the tunnel, along the spine and along the drum: +11 to +31 us a tick on a quiet
   machine (one and six core threads), +43 to +91 us under load (`test_station_jolt_cost`, slow); T05's 192 shapes a piece stand.
@@ -7055,19 +7067,21 @@ src/capital/capital_hulk_lights.gd CapitalHulkLights: one disabled ship's own gl
   collides with, the fire lane and avoidance go round it, the brains range to it. A bolt's hit is named by the section of the
   volume the core's sweep entered first (`hit_bolts` returns it per pair, T08; `HitInfo.volume`), a ram's by its point
   (`CapitalSections.section_at`); `section_hit` says which.
-- **Damage by section (T08, D12.5, Q53).** No armour: each section holds its `hull_share` of the hull's points, and the
-  `Damageable`'s `hit_router` (the hull's and each rotor's) sends every hit to `CapitalDamage`, the hull's total falling with
-  the sections'. A hit within reach of a live weapon mount (10 m, or its barrel's length) also takes the mount's own points
-  (Q53's table by weapon kind, `data/capitals/capitals.json` `mount_hit_points`). A section at 0 is lost (`disabled`) with what
-  its hardpoints name: mounts, bays, engines. Magazine or fuel at 0 blows (`destroyed`), and the hull goes with it, so the
-  destruction director takes the death; a reactor at 0 shuts down (power 0: the ship is disabled) and blows after another 50 %
-  of its points; below half its points it gives half power. A lost bridge leaves last orders at half the rate of fire and
-  disables only with every engine gone too. A hit on a lost section passes half on to the nearest live section, as does damage
-  past a section's last point. The rules are `section_damage` in the same file. Effects: an engine lost or a power stage refits
-  the drive (`CapitalPropulsion.live_layout`: the live engines' nozzles at their thrust as built, an engine left alone on one
-  side listed on both, scaled by the power), a disabled hull winds down and drifts (§22.5); `mount_works`, `bay_works`,
-  `damage.fire_rate()` and the signals `section_changed`, `mount_lost`, `ship_disabled` are what T09 to T18 build on. All of it
-  runs per event in GDScript (about 6 us a hit); the native change is the sweep's volume column.
+- **Damage by what is hit (T08, D12.5, Q53; T65, Q72).** No armour: each section holds its `hull_share` of the hull's points,
+  and the `Damageable`'s `hit_router` (the hull's and each rotor's) sends every hit to `CapitalDamage`. Only the part hit takes
+  it: a live weapon mount within reach (10 m, or its barrel's length), an engine's nozzle or a bay's mouth (`CapitalPart`, their
+  own points: `mount_hit_points`, `engine_hit_points`, `bay_hit_points`), or the bridge or reactor section itself, takes the full
+  damage and the hull's total `subsystem_hull_share` (half) of it; any other hit lowers the section it lands in and the total; a
+  lost section's hits go to the total alone. A section at 0 is lost (`disabled`) with what its hardpoints name. A magazine, fuel
+  or reactor section at 0 blows (`destroyed`, no shut-down stage), and the hull goes with it, so the destruction director takes
+  the death; below half its points a reactor gives half power. The bridge at 0 or the total below `hulk_below` (10 %) makes a
+  hulk with no power (`has_power`: nothing fires, launches or docks; its lights and bay lamps go out; §22.5), and a Vorlon or
+  Shadow hull explodes instead (`CapitalData.never_hulk`). The rules are `section_damage` in the same file; a station takes
+  the same (`StationDamage`, §20.1 "Babylon 5's damage"). Effects: an engine lost or a power stage refits the drive
+  (`CapitalPropulsion.live_layout`: the live engines' nozzles at their thrust as built, an engine left alone on one side listed
+  on both, scaled by the power); `mount_works`, `bay_works`, `damage.fire_rate()`, `damage.is_disabled` (the one source of
+  disabled status) and the signals `section_changed`, `mount_lost`, `part_lost`, `disabled`, `blew` are what T09 to T18 build
+  on. All of it runs per event in GDScript (about 6 us a hit); the native change is the sweep's volume column.
 - **The tier.** A capital beyond the radius is a capital row (§17.14) holding `cruise_velocity`, the velocity its helm holds;
   parked, hull and rotors leave Jolt and the flight step; promoted, it comes back where its row is with the rotors placed.
 - **Jump points.** `can_open_jump_point` per hull type (Q22; the test cruiser can, as a test hull); `open_own_point(pool)` opens

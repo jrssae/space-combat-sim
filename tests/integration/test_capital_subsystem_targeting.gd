@@ -1,7 +1,8 @@
 extends GutTest
-## Subsystems as targets on the Omega in the real main scene (M10-T18, Q17, AC12): the target menu's subsystem rings pick one, the
-## pad's and keyboard's `subsystem_next` cycles them, the readout names it with its state and its point, the guns' lead and
-## auto-track aim at that point, a new target clears it, and a hit on it shows in the state.
+## Subsystems as targets on the Omega in the real main scene (M10-T18, Q17, AC12; by kind since M10-T65, Q60): the target menu's
+## subsystem ring picks a kind, the pad's and keyboard's `subsystem_next` cycles the kinds, the readout names the kind and the
+## part aimed at with its state and its point, the guns' lead and auto-track aim at that point, a kind with none left falls
+## back to the whole ship, a new target clears it, and a hit on it shows in the state.
 
 const TYPE: StringName = &"ea_omega"
 const RENEGADES: StringName = &"renegades"
@@ -54,20 +55,25 @@ func _press(action: StringName) -> void:
 	await wait_physics_frames(2)
 
 
-func test_the_pads_button_and_the_keys_cycle_through_every_subsystem_and_back_to_the_whole_ship() -> void:
+func test_the_pads_button_and_the_keys_cycle_through_every_kind_and_back_to_the_whole_ship() -> void:
 	if cap == null:
 		return
 	var targeting: TargetingController = main.ship.targeting
 	assert_eq(targeting.selected_capital(), cap, "an identified capital")
 	var entries: Array[Dictionary] = targeting.subsystem_entries()
-	assert_gt(entries.size(), 10, "the Omega has a bridge, reactor, engines, bays and many mounts")
+	var kinds: Array[String] = []
+	for entry: Dictionary in entries:
+		kinds.append(str(entry["key"]))
+	for kind: String in [CapitalSubsystems.BRIDGE, CapitalSubsystems.REACTOR, CapitalSubsystems.ENGINES, CapitalSubsystems.TURRETS]:
+		assert_has(kinds, kind, "the Omega's kinds, one entry each (Q60)")
+	assert_lte(entries.size(), CapitalSubsystems.GROUPS.size(), "kinds only, never one part")
 	assert_eq(targeting.subsystem_key, "")
 	var seen: Array[String] = []
 	for i: int in entries.size():
 		await _press(InputAdapter.SUBSYSTEM_NEXT)
 		seen.append(targeting.subsystem_key)
 	assert_eq(seen.size(), entries.size())
-	assert_false(seen.has(""), "each press names a subsystem")
+	assert_eq(seen, kinds, "each press names the next kind, in ring order")
 	assert_eq(seen.size(), Array(seen).filter(func(k: String) -> bool: return not k.is_empty()).size())
 	await _press(InputAdapter.SUBSYSTEM_NEXT)
 	assert_eq(targeting.subsystem_key, "", "after the last: the whole ship")
@@ -80,16 +86,14 @@ func test_the_readout_names_the_subsystem_and_the_guns_lead_it() -> void:
 	var whole: TargetReadout = targeting.selected_readout()
 	assert_true(whole.subsystem.is_empty())
 	assert_eq(whole.aim_position(), whole.position)
-	var mount: String = ""
-	for entry: Dictionary in targeting.subsystem_entries():
-		if entry["group"] == CapitalSubsystems.TURRETS:
-			mount = entry["key"]
-			break
-	assert_true(targeting.select_subsystem(mount))
+	var kind: String = CapitalSubsystems.TURRETS
+	assert_true(targeting.select_subsystem(kind))
 	var picked: TargetReadout = targeting.selected_readout()
-	assert_eq(picked.subsystem["key"], mount)
+	assert_eq(picked.subsystem["key"], kind)
 	assert_eq(picked.subsystem["state"], "intact")
-	var expected: Vector3 = cap.global_transform * (CapitalSubsystems.find(targeting.subsystem_entries(), mount)["point"] as Vector3)
+	assert_true(str(picked.subsystem["part"]).begins_with("mount:"), "aimed at one of its turrets")
+	assert_eq(targeting.subsystem_part, picked.subsystem["part"])
+	var expected: Vector3 = cap.global_transform * (CapitalSubsystems.find(targeting.subsystem_entries(), kind)["point"] as Vector3)
 	assert_almost_eq(picked.aim_position(), expected, Vector3.ONE * 0.01)
 	assert_gt(picked.aim_offset.length(), 1.0, "a turret is not at the centre")
 	# The ship's auto-track leads the subsystem: its lead offset points off the hull's centre line.
@@ -99,11 +103,34 @@ func test_the_readout_names_the_subsystem_and_the_guns_lead_it() -> void:
 	assert_gt((lead_aimed - lead_centre).length(), 1.0, "the lead moved with the aim point")
 
 
+func test_a_kind_moves_to_the_next_part_as_parts_go_and_falls_back_to_the_whole_ship() -> void:
+	if cap == null:
+		return
+	var targeting: TargetingController = main.ship.targeting
+	assert_true(targeting.select_subsystem(CapitalSubsystems.BEAMS))
+	var first: String = str(targeting.selected_readout().subsystem["part"])
+	cap.damage.hit_part(first, cap.damage.part_of(first).get(&"hp"))
+	var next: TargetReadout = targeting.selected_readout()
+	var total: int = int(next.subsystem["total"])
+	if total > 1:
+		assert_ne(str(next.subsystem["part"]), first, "the lost emitter is passed over for the nearest one left")
+		assert_eq(int(next.subsystem["live"]), total - 1)
+	for name: String in cap.damage.mounts:
+		var m: CapitalMount = cap.damage.mounts[name]
+		if CapitalSubsystems.MOUNT_GROUPS.get(m.kind, "") == CapitalSubsystems.BEAMS and m.alive:
+			cap.damage.hit_mount(name, m.hp)
+	var gone: TargetReadout = targeting.selected_readout()
+	assert_eq(targeting.subsystem_key, CapitalSubsystems.BEAMS, "the kind stays picked")
+	assert_eq(gone.subsystem["state"], CapitalSubsystems.STATE_LOST, "shown destroyed")
+	assert_false(gone.subsystem["works"])
+	assert_eq(gone.aim_position(), gone.position, "the aim falls back to the whole ship")
+
+
 func test_a_hit_on_the_subsystem_shows_in_its_state_and_a_new_target_clears_it() -> void:
 	if cap == null:
 		return
 	var targeting: TargetingController = main.ship.targeting
-	assert_true(targeting.select_subsystem("bridge:bridge"))
+	assert_true(targeting.select_subsystem("bridge"))
 	assert_eq(targeting.selected_readout().subsystem["state"], "intact")
 	assert_true(DebugConsole.registry.execute_tokens(["capital", "damage", "bridge", "100"]).ok)
 	assert_eq(targeting.selected_readout().subsystem["state"], "damaged")
@@ -118,14 +145,14 @@ func test_the_console_sets_and_lists_subsystems() -> void:
 	if cap == null:
 		return
 	var targeting: TargetingController = main.ship.targeting
-	assert_true(DebugConsole.registry.execute_tokens(["set", "targeting.subsystem", "reactor:reactor"]).ok)
-	assert_eq(targeting.subsystem_key, "reactor:reactor")
-	assert_false(DebugConsole.registry.execute_tokens(["set", "targeting.subsystem", "mount:nope"]).ok)
+	assert_true(DebugConsole.registry.execute_tokens(["set", "targeting.subsystem", "reactor"]).ok)
+	assert_eq(targeting.subsystem_key, "reactor")
+	assert_false(DebugConsole.registry.execute_tokens(["set", "targeting.subsystem", "mount:turret_1"]).ok, "no single part (Q60)")
 	assert_true(DebugConsole.registry.execute_tokens(["set", "targeting.subsystem", "whole"]).ok)
 	assert_eq(targeting.subsystem_key, "")
 
 
-func test_the_target_menu_picks_a_subsystem_through_its_rings() -> void:
+func test_the_target_menu_picks_a_kind_from_its_ring() -> void:
 	if cap == null:
 		return
 	var director: TargetMenuDirector = main.target_menu
@@ -152,11 +179,11 @@ func test_the_target_menu_picks_a_subsystem_through_its_rings() -> void:
 	for i: int in director.menu.radial.slice_count():
 		if str(director.menu.radial.slots()[i]["label"]) == "REACTOR":
 			slice = i
-	assert_gte(slice, 0, "the reactor is a group of its own")
+	assert_gte(slice, 0, "the reactor is a kind of its own")
 	director.menu.radial.set_highlight(slice)
 	director.select()
 	await wait_physics_frames(2)
 	assert_false(director.is_open())
 	assert_eq(main.ship.targeting.selected_id(), cap.targetable.get_instance_id())
-	assert_eq(main.ship.targeting.subsystem_key, "reactor:reactor")
+	assert_eq(main.ship.targeting.subsystem_key, "reactor")
 	assert_false(get_tree().paused)

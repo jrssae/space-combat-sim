@@ -1,7 +1,7 @@
 extends GutTest
 ## `CapitalSubsystems` (M10-T18, Q17; by kind since M10-T65, Q60), pure: what a pilot can pick on a capital, one entry a kind in
-## ring order, aimed at the nearest part still standing and kept until it is lost; the cycle through them and back to the whole
-## ship; and the target menu's subsystem ring built on it.
+## ring order, aimed at the nearest part still standing (picked again when it is lost or another is nearer, until none is
+## left); the cycle through them and back to the whole ship; and the target menu's subsystem ring built on it.
 
 const HULL: float = 10000.0
 const LAYOUT: Array = [
@@ -30,6 +30,12 @@ func _damage() -> CapitalDamage:
 				{"name": "eng_l", "section": "engine_l", "share": 0.5, "position": [-10.0, 0.0, 599.0], "radius_m": 5.0}],
 	}
 	return CapitalDamage.build(sections, hardpoints, HULL)
+
+
+# Takes mount `name` off with a hit of its own points (a lost mount stays lost).
+func _shoot_off(d: CapitalDamage, name: String) -> void:
+	if d.mounts[name].alive:
+		d.hit_mount(name, d.mounts[name].hp)
 
 
 func _keys(entries: Array[Dictionary]) -> Array[String]:
@@ -65,22 +71,35 @@ func test_a_kind_aims_at_its_nearest_standing_part() -> void:
 	assert_eq(bays["part"], "bay:bay_2", "a bay placed nowhere sits at its section's centre: nearer the pilot here")
 
 
-func test_the_part_aimed_at_is_kept_until_it_is_lost_then_the_nearest_left_until_none() -> void:
+func test_the_aim_is_picked_again_when_the_part_is_lost_or_another_is_nearer_until_none_is_left() -> void:
 	var d: CapitalDamage = _damage()
-	var from := Vector3(0.0, 20.0, 95.0)
-	var held: Dictionary = {"turrets": "mount:turret_2"}
-	assert_eq(CapitalSubsystems.find(CapitalSubsystems.list(d, from, held), "turrets")["part"], "mount:turret_2", "kept while it stands")
-	d.hit_mount("turret_2", 1.0e6)
-	var turrets: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d, from, held), "turrets")
-	assert_eq(turrets["part"], "mount:turret_9", "lost: the nearest left")
+	var from := Vector3(0.0, 20.0, 22.0)
+	assert_eq(CapitalSubsystems.find(CapitalSubsystems.list(d, from), "turrets")["part"], "mount:turret_2")
+	_shoot_off(d, "turret_2")
+	var turrets: Dictionary = CapitalSubsystems.find(CapitalSubsystems.list(d, from), "turrets")
+	assert_eq(turrets["part"], "mount:turret_3", "lost: the nearest left")
 	assert_eq([turrets["live"], turrets["total"]], [10, 11])
+	assert_eq(turrets["label"], "TURRETS 10/11")
+	assert_eq(CapitalSubsystems.find(CapitalSubsystems.list(d, Vector3(0.0, 20.0, 80.0)), "turrets")["part"], "mount:turret_8",
+			"the pilot moved: a nearer one")
 	for i: int in 10:
-		d.hit_mount("turret_%d" % i, 1.0e6)
-	d.hit_mount("dome", 1.0e6)
-	turrets = CapitalSubsystems.find(CapitalSubsystems.list(d, from, held), "turrets")
+		_shoot_off(d, "turret_%d" % i)
+	turrets = CapitalSubsystems.find(CapitalSubsystems.list(d, from), "turrets")
+	assert_eq(turrets["part"], "mount:dome", "the last one standing, wherever it is")
+	_shoot_off(d, "dome")
+	turrets = CapitalSubsystems.find(CapitalSubsystems.list(d, from), "turrets")
 	assert_false(turrets["works"], "none left")
 	assert_eq(turrets["part"], "")
-	assert_eq(turrets["state"], CapitalSubsystems.STATE_LOST)
+	assert_eq(turrets["state"], CapitalSubsystems.STATE_LOST, "the kind shows destroyed")
+	assert_eq(turrets["label"], "TURRETS 0/11")
+	assert_eq(CapitalSubsystems.part_label(turrets), "", "no part to name")
+
+
+func test_the_box_names_the_part_aimed_at_for_a_kind_of_several() -> void:
+	var entries: Array[Dictionary] = CapitalSubsystems.list(_damage(), Vector3(0.0, 20.0, 22.0))
+	assert_eq(CapitalSubsystems.part_label(CapitalSubsystems.find(entries, "turrets")), "TURRET 2")
+	assert_eq(CapitalSubsystems.part_label(CapitalSubsystems.find(entries, "engines")), "ENG R")
+	assert_eq(CapitalSubsystems.part_label(CapitalSubsystems.find(entries, "bridge")), "", "a kind of one part: its label says it")
 
 
 func test_states_and_health_follow_the_damage_model() -> void:
@@ -156,7 +175,7 @@ func test_picking_a_capital_opens_its_subsystem_ring_with_the_whole_ship_first()
 	var labels: Array[String] = []
 	for slot: Dictionary in menu.radial.slots():
 		labels.append(str(slot["label"]))
-	assert_eq(labels, ["WHOLE SHIP", "BRIDGE", "REACTOR", "ENGINES 2/2", "LAUNCH BAYS 2/2", "TURRETS 11/11", "BEAM EMITTERS"] as Array[String])
+	assert_eq(labels, ["WHOLE SHIP", "BRIDGE", "REACTOR", "ENGINES", "LAUNCH BAYS", "TURRETS", "BEAM EMITTERS"] as Array[String])
 	assert_eq(menu.radial.slice_count(), 7, "one slice per entry")
 	menu.radial.set_highlight(0)
 	var pick: Dictionary = menu.select()

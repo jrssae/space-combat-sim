@@ -353,6 +353,21 @@ func test_the_player_lost_ends_in_failure() -> void:
 	assert_eq(api.result["reason"], "player destroyed")
 
 
+func test_losing_the_station_fails_the_mission() -> void:
+	_start(ThreeSteps.new())
+	api.station_destroyed()
+	assert_true(api.has_ended(), "Babylon 5 is always destructible: a mission that needs it is lost (M10-T65, Q72)")
+	assert_false(bool(api.result["success"]))
+	assert_eq(api.result["reason"], "station destroyed")
+
+
+func test_a_script_that_lets_the_station_fall_goes_on_without_it() -> void:
+	_start(ThreeSteps.new())
+	api.needs_station = false
+	api.station_destroyed()
+	assert_false(api.has_ended(), "a story that lets it fall goes on")
+
+
 func test_the_result_carries_the_objectives_and_the_time() -> void:
 	_start(ThreeSteps.new())
 	_ticks(30)

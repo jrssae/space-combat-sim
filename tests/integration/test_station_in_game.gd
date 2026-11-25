@@ -289,6 +289,30 @@ func test_a_lost_section_says_so_once_and_the_station_goes_on() -> void:
 	assert_eq(station.sections.health[cargo], StationSections.SECTION_HEALTH)
 
 
+func test_the_command_section_lost_leaves_a_dark_hulk_and_the_reactor_lost_destroys_it() -> void:
+	await _start()
+	var lost_station: Array[Station] = []
+	main.director.station_destroyed.connect(func(s: Station) -> void: lost_station.append(s))
+	var command: int = station.sections.index_of("command")
+	station.damage_section(command, StationSections.SECTION_HEALTH)
+	assert_true(station.damage.is_disabled, "the bridge at 0: a hulk (Q72)")
+	assert_false(station.has_power())
+	assert_false(station.grid.is_on(), "no power: its grid is off")
+	assert_false(station.station_lights.shown, "its lights are out")
+	assert_string_contains(main.launches.launch_wing("alpha"), "no power", "nothing launches")
+	assert_string_contains(main.docking.player_refusal(), "no power", "nothing docks")
+	assert_true(lost_station.is_empty(), "a hulk, not destroyed")
+	station.heal()
+	assert_true(station.has_power() and station.grid.is_on() and station.station_lights.shown, "whole again with power")
+	DebugConsole.flags.invulnerable = true  # the player rides out the reactor's blast
+	var reactor: int = station.sections.index_of("reactor")
+	station.damage_section(reactor, StationSections.SECTION_HEALTH)
+	assert_true(station.is_destroyed(), "the reactor at 0 destroys it: no mission flag protects it")
+	assert_eq(lost_station, [station] as Array[Station], "its blast is drawn once")
+	assert_eq(station.hull.hp, 0.0)
+	station.heal()
+
+
 func test_the_ai_hears_the_station_out_to_about_1000_km() -> void:
 	await _start(2)
 	for row: Array in [[900000.0, true], [1100000.0, false]]:

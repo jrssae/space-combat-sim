@@ -85,10 +85,10 @@ func _omega(world: WorldFrame, display_name: String, at: Vector3) -> CapitalShip
 	return cap
 
 
-# Shuts its reactor down as a hit would (god mode never applies to it).
+# Takes its bridge out as a hit would, leaving a hulk (M10-T65, Q72; god mode never applies to it).
 func _disable(cap: CapitalShip) -> void:
 	for s: CapitalSection in cap.damage.sections.values():
-		if s.kind == CapitalSection.REACTOR:
+		if s.kind == CapitalSection.BRIDGE:
 			var info := HitInfo.new(cap.get_instance_id(), 0, &"", s.hp, cap.global_transform * s.box.get_center(), Vector3.ZERO, 0.0,
 					HitInfo.CAUSE_CONSOLE)
 			info.set_meta(CapitalShip.SECTION_META, s.name)

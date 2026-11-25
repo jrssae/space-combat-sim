@@ -326,16 +326,18 @@ func test_a_mount_worn_down_by_hits_near_it_is_knocked_out_until_repaired() -> v
 	assert_gt(int(scene.state(l9)["shots"]), 0, "L9 fires while whole")
 	var entry: Dictionary = station.hardpoints.mount("L9")
 	var whole: float = _health_total()
+	var hull_whole: float = station.hull.hp
 	var knocked: Array[String] = []
 	station.grid.mount_knocked_out.connect(func(n: String) -> void: knocked.append(n))
-	# Hits on the hull beside L9, as the hit resolver lands them: the section takes them and the mount wears down.
+	# Hits on the hull beside L9, as the hit resolver lands them: the mount wears down, the hull half as much (M10-T65, Q72).
 	for i: int in 3:
 		var info := HitInfo.new(station.get_instance_id(), raider.ship.get_instance_id(), Factions.RAIDERS, 120.0,
 				station.to_world((entry["position"] as Vector3) + Vector3(5.0, -3.0, 0.0), StationHardpoints.FRAME),
 				Vector3.UP, 300.0)
 		station.frame_hull.apply_hit(info)
 	assert_eq(knocked, ["L9"] as Array[String], "L9 knocked out once")
-	assert_lt(_health_total(), whole - 359.0, "its section took the hits too")
+	assert_eq(_health_total(), whole, "only the part hit takes it: its section none")
+	assert_almost_eq(station.hull.hp, hull_whole - 180.0, 1e-3, "the hull half of each hit")
 	assert_true(l9.knocked_out)
 	assert_true(bool(scene.sim.core.turret_out(l9.slot())), "the core holds it out")
 	assert_true(String(DebugConsole.registry.read("grid.knocked_out")["value"]).contains("L9 KNOCKED OUT"), "the provider says so")

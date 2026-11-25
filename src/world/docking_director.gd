@@ -962,8 +962,8 @@ func _watch_wing() -> void:
 
 # Control offers the bay once to a player whose hull has fallen below the offer's threshold (D79 beat 13).
 func _watch_offer() -> void:
-	if main == null or not main.player_alive or main.combatant == null or plan == null and not _ready_plan().is_empty():
-		return
+	if main == null or not main.player_alive or main.combatant == null or not _ready_plan().is_empty():
+		return  # no bay to offer (a station with no power takes nobody in)
 	var hull: float = main.combatant.damageable.hull.fraction()
 	if hull >= offer_hull_below:
 		_offer_armed = true
