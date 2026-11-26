@@ -35,7 +35,7 @@ PLANES: dict[str, list[SectionPlane]] = {
     "tankage": [_z("tank_r", z, (0.0, 45.0, -150.0, -58.0), outline=True) for z in (250.0, 280.0)],
     "retro_thrusters": [_z("retro_r", z, (5.0, 35.0, -130.0, -60.0), relief=True) for z in (200.0, 240.0)],
     "command_section": [_z("command", z, (-80.0, 80.0, -75.0, 100.0), outline=True) for z in (300.0, 340.0)],
-    "forward_spine": [_z("spine_fore", z, SPINE, outline=True) for z in (440.0, 455.0, 500.0)],
+    "forward_spine": [_z("spine_fore", z, SPINE, outline=True) for z in (400.0, 470.0, 522.0)],
     "collars": [_z("collar", z, (-100.0, 100.0, -100.0, 100.0)) for z in (545.0, 890.0)],
     "drum_arms": [*(_z("arm_top", z, ARM_TOP, outline=True) for z in (620.0, 717.0, 820.0)),
                   *(_z("arm_low", z, ARM_LOW, outline=True) for z in (620.0, 717.0, 820.0))],

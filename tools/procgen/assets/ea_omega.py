@@ -69,6 +69,7 @@ SECTIONS = (
 PIECES = (cap.PieceSpec(cap.HULL_PIECE, ATLAS_PX), cap.PieceSpec("drum", ATLAS_PX, om.DRUM_PIVOT, (0.0, 0.0, 1.0), DRUM_SPIN_RAD_S))
 MAGAZINE_Z = (om.AFT_SPINE_Z[0], om.MAGAZINE_END_Z)
 
+PLASMA_Z = (440.0, 505.0)  # the heavy plasma turrets' places along the forward spine
 TURRET_ARC = (-10.0, 90.0)  # T: a 200 degree cone round the mount's up
 HEMISPHERE_DEG = 90.0
 PULSE, PLASMA, BEAM, MISSILE, INTERCEPTOR = "ea_pulse_medium", "ea_plasma_heavy", "ea_sweep_beam", "ea_missile", "ea_interceptor"
@@ -98,7 +99,9 @@ def weapon_modules(s: Style) -> list[cp.Module]:
     def add(section: str, m: cp.Module, side: str = cp.CENTRE) -> None:
         out.append(m.in_section(section).on_side(side))
 
-    for k, z in enumerate((388.0, 474.0)):
+    # The heavies stand aft of the shields' ends and clear of the forward pulse ring's line, so the forward quarter is theirs too
+    # (M10-T68: at 388 and 474 m the rebuilt shields and the pulse turrets hid a target 50 degrees off the bow).
+    for k, z in enumerate(PLASMA_Z):
         add("spine_fore", _turret(f"plasma_top_{k + 1}", (0.0, 57.0, z), UP, 24.0, PLASMA, s, (12.0, 9.0)))
         add("spine_fore", _turret(f"plasma_low_{k + 1}", (0.0, -57.0, z), DOWN, 24.0, PLASMA, s, (12.0, 9.0)))
     for tag, section, z in (("fore", "spine_fore", 420.0), ("mid", "magazine", 1030.0), ("aft", "spine_aft", 1135.0)):

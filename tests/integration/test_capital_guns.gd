@@ -286,7 +286,9 @@ func test_only_the_renegade_that_fires_is_revealed_and_engaged() -> void:
 func test_a_disabled_capital_is_engaged_only_when_nothing_live_is_in_reach() -> void:
 	var omega: CapitalShip = _spawn(&"ea_omega", "EAS Agamemnon", Factions.EARTH_ALLIANCE, 3000.0)
 	var live: CapitalShip = _spawn(&"ea_omega", "Raider A", Factions.RAIDERS, 3000.0, 3000.0)
-	var hulk: CapitalShip = _spawn(&"ea_omega", "Raider B", Factions.RAIDERS, 5600.0, 3000.0)
+	# The hulk beyond the live raider on its bearing, so every mount that sees the one sees the other (M10-T68: the rebuilt hull lets
+	# the port turrets see over the spine to the forward quarter, where the hulk stood before, but not down to the raider abeam).
+	var hulk: CapitalShip = _spawn(&"ea_omega", "Raider B", Factions.RAIDERS, 3000.0, 5600.0)
 	if omega == null or live == null or hulk == null:
 		return
 	_guns().hold(live, true)

@@ -468,7 +468,8 @@ Twelve sections: `bow`, `bridge`, `fuel` (the reactant tanks under the command b
 `hangar_r` and `hangar_l`, `magazine`, `spine_aft`, `reactor` (the engine housing), `engine_r` and `engine_l`; blast
 energies on the fuel, magazine and reactor. Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 
-- 4 `ea_plasma_heavy` turrets on the forward spine's centre line (two above, two below), 24 m (the maintainer, 2026-11-21);
+- 4 `ea_plasma_heavy` turrets on the forward spine's centre line (two above, two below), 24 m (the maintainer, 2026-11-21), at 440 and
+  505 m: aft of the shields' ends and clear of the forward pulse ring, so the forward quarter is theirs too (M10-T68);
 - 12 `ea_pulse_medium` turrets on the spines' ears, in three rings of four (the kit's corner pods at 420, 1 030 and 1 135 m);
 - 6 `ea_sweep_beam` emitters: one on each shield's pod covering the fore hemisphere, four on the reactor cage's corner plates the aft;
 - 2 `ea_missile` batteries on the aft spine over the magazine;
