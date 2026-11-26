@@ -77,10 +77,13 @@ func _fly(seconds: float, done: Callable = Callable()) -> void:
 
 
 # The painted letters on `cap`'s shields (or, with `faction_marks`, the faction-only marks): one node per shield, each showing `letter`'s cell of the glyph atlas.
+# M10-T68: the name, the emblem and the warning stickers are marks too; the letters are the `mark_initial_*` nodes.
 func _letters(cap: CapitalShip, faction_marks: bool = false) -> Array[HullMarkNode]:
 	var out: Array[HullMarkNode] = []
 	for node: Node in cap.hull_piece.get_children():
-		if node is HullMarkNode and (node as HullMarkNode).only_faction.is_empty() != faction_marks:
+		if not node is HullMarkNode or (node as HullMarkNode).only_faction.is_empty() == faction_marks:
+			continue
+		if faction_marks or String(node.name).begins_with("MarkMarkInitial"):
 			out.append(node)
 	return out
 

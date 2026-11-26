@@ -1,4 +1,4 @@
-"""Painted and lit hull decals (M10-T22): the Earth Alliance emblem and the floods' pools of light. The pools are baked into a hull's
+"""Painted and lit hull decals (M10-T22): the Earth Alliance emblem, warning stickers (M10-T68) and the floods' pools of light. The pools are baked into a hull's
 maps; the emblem is drawn by the game as a sharp decal from its own image (:func:`write_images`), lit as the pools light the hull.
 
 The emblem is drawn here from scratch (Q64), close to the maintainer's reference (``references/ships/earth_alliance_emblem_reference.png``,
@@ -93,7 +93,24 @@ def emblem_image(width_px: int = IMAGE_PX) -> np.ndarray:
     return np.round(np.clip(out, 0.0, 255.0)).astype(np.uint8)
 
 
-IMAGES: dict[str, Callable[[], np.ndarray]] = {EMBLEM: emblem_image}
+HAZARD = "hazard_stripes"  # a warning sticker's key (M10-T68: the Omega's, as the Agamemnon's style reference shows them)
+HAZARD_YELLOW, HAZARD_BLACK = (232, 188, 24), (24, 22, 20)
+HAZARD_PX, HAZARD_ASPECT, HAZARD_STRIPES = 512, 4.0, 8  # its width in texels, width over height, black and yellow stripe pairs along it
+
+
+def hazard_image(width_px: int = HAZARD_PX) -> np.ndarray:
+    """A warning sticker as an 8-bit sRGB RGBA image: black and yellow stripes at 45 degrees, ``HAZARD_STRIPES`` pairs along its
+    width, a thin black edge, opaque."""
+    height_px = round(width_px / HAZARD_ASPECT)
+    j, i = np.meshgrid(np.arange(width_px) + 0.5, np.arange(height_px) + 0.5)
+    pitch = width_px / HAZARD_STRIPES
+    yellow = ((j + i) % pitch) < 0.5 * pitch
+    edge = (i < 0.06 * height_px) | (i > 0.94 * height_px)
+    rgb = np.where((yellow & ~edge)[..., None], np.asarray(HAZARD_YELLOW, dtype=float), np.asarray(HAZARD_BLACK, dtype=float))
+    return np.concatenate([rgb, np.full(rgb.shape[:2] + (1,), 255.0)], axis=2).astype(np.uint8)
+
+
+IMAGES: dict[str, Callable[[], np.ndarray]] = {EMBLEM: emblem_image, HAZARD: hazard_image}
 
 
 def _to_linear(c: np.ndarray) -> np.ndarray:

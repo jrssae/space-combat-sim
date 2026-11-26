@@ -23,9 +23,13 @@ against the reference, which has it at -45 degrees), and ``spacing``, ``atlas_px
 
 from __future__ import annotations
 
+import dataclasses
 import math
 
+import numpy as np
+
 from ..core import capital as cap
+from ..core import collision as col
 from ..core.context import AssetOutputs, BuildContext
 from ..core.geometry import rotation_z
 from ..parts import capital as cp
@@ -34,8 +38,11 @@ from ..parts import capital_solids as cs
 from ..parts import capital_weapons as weapons
 from ..parts import ea_omega as om
 from ..parts import ea_omega_bow as bow
+from ..parts import ea_omega_marks as marks
+from ..parts.capital_flush import set_back_flush_parts
 from ..styles import Style
-from ..styles.ea_capital import DEFAULT_LOOK, ea_capital
+from ..styles.ea_capital import DEFAULT_LOOK
+from ..styles.ea_omega import ea_omega as ea_omega_style
 
 ASSET_ID = "ea_omega"
 GENERATOR_VERSION = 1
@@ -44,7 +51,6 @@ LENGTH_M = om.LENGTH_M
 DRUM_SPIN_RAD_S = 0.1  # about a third of a g at the arms' bodies, a turn a minute as the show's
 REST_DRUM_DEG = 90.0  # the rotating section at rest: its arms up and down, the kit's pose (M10-T68)
 ATLAS_PX = 4096
-FINISH = "soft"  # the Hyperion's skin in the fleet's colours (Q64, M10-T68)
 
 # Blast energies (docs/assets-capital.md, "Sections, mounts and blasts": 5e6 J a point of D0; a capital's rows).
 BLAST_J = {"magazine": 5.0e6 * 1800.0, "fuel": 5.0e6 * 1200.0, "reactor": 5.0e6 * 4500.0}
@@ -78,7 +84,11 @@ def _turret(name: str, at: tuple[float, float, float], up: tuple[float, float, f
     y0, y1 = sorted((at[1], at[1] + sign * tall))
     base = cs.box("pedestal", (at[0] - half, y0, at[2] - half), (at[0] + half, y1, at[2] + half), s, om.DARK, skin=cp.SKIN_FITTING)
     gun = weapons.turret_mount(name, size, s, elevation_deg=TURRET_ARC).mounted((at[0], at[1] + sign * tall, at[2]), up)
-    return cs.compound(name, [gun, base]).with_params(weapon=weapon)
+    turret = cs.compound(name, [gun, base]).with_params(weapon=weapon)
+    # The pedestal in the turret's body hull (one shape fewer a mount, for the hull's shape budget); the barrels keep theirs.
+    body, *rest = gun.shapes
+    joined = col.hull(f"{name}_0", np.concatenate([body.points, base.shapes[0].points]))
+    return dataclasses.replace(turret, shapes=(joined, *(q.renamed(f"{name}_{k + 1}") for k, q in enumerate(rest))))
 
 
 def weapon_modules(s: Style) -> list[cp.Module]:
@@ -92,8 +102,8 @@ def weapon_modules(s: Style) -> list[cp.Module]:
         add("spine_fore", _turret(f"plasma_top_{k + 1}", (0.0, 57.0, z), UP, 24.0, PLASMA, s, (12.0, 9.0)))
         add("spine_fore", _turret(f"plasma_low_{k + 1}", (0.0, -57.0, z), DOWN, 24.0, PLASMA, s, (12.0, 9.0)))
     for tag, section, z in (("fore", "spine_fore", 420.0), ("mid", "magazine", 1030.0), ("aft", "spine_aft", 1135.0)):
-        add(section, _turret(f"pulse_{tag}_top_r", (46.0, 60.0, z), UP, 20.0, PULSE, s, (16.0, 6.0)), cp.RIGHT)
-        add(section, _turret(f"pulse_{tag}_low_r", (46.0, -60.0, z), DOWN, 20.0, PULSE, s, (16.0, 6.0)), cp.RIGHT)
+        add(section, _turret(f"pulse_{tag}_top_r", (46.0, 60.0, z), UP, 20.0, PULSE, s, (10.0, 6.0)), cp.RIGHT)
+        add(section, _turret(f"pulse_{tag}_low_r", (46.0, -60.0, z), DOWN, 20.0, PULSE, s, (10.0, 6.0)), cp.RIGHT)
 
     # The beams: fore on the shields' pods, aft on the skirt's corners at its stern edge.
     fore = weapons.beam_emitter("beam_fore_r", 34.0, s, arc_deg=HEMISPHERE_DEG).mounted((88.0, 0.0, 226.0), RIGHT)
@@ -138,15 +148,15 @@ def _drum(s: Style, deg: float) -> list[cp.Module]:
 
 
 def style(look: str = DEFAULT_LOOK) -> cap.CapitalStyle:
-    """The fleet's look in the soft finish (Q64): the Hyperion's skin in the Omega's colours, the bay lined in grey metal."""
-    return ea_capital(look, finish=FINISH)
+    """The fleet's look in the Agamemnon pattern (Q98, ``styles/ea_omega.py``), the bay lined in grey metal."""
+    return ea_omega_style(look)
 
 
 def modules(look: str = DEFAULT_LOOK, drum_deg: float = REST_DRUM_DEG) -> list[cp.Module]:
     """Every module in its place and section (centre modules and the starboard one of each pair)."""
     s = style(look).style
     aft_a, aft_b = (om.AFT_SPINE_Z[0], MAGAZINE_Z[1]), (MAGAZINE_Z[1], om.AFT_SPINE_Z[1])
-    return [
+    return set_back_flush_parts([_with_marks(m) for m in [
         *om.shields(s), *om.command_block(s), *bow.bay(s), *bow.decks(s), *bow.under_bay(s), *om.aerials(s),
         *om.spine(s, "spine_fore", "spine_fore", om.FORE_SPINE_Z, strakes=((471.0, om.FORE_SPINE_Z[1]),)),
         om.spine_block(s, "spine_fore_block", "spine_fore", (494.0, om.FORE_SPINE_Z[1]), 55.0),
@@ -159,8 +169,24 @@ def modules(look: str = DEFAULT_LOOK, drum_deg: float = REST_DRUM_DEG) -> list[c
         om.spine_block(s, "spine_aft_block", "spine_aft", (1196.0, aft_b[1]), 62.0),
         *om.housing(s, "reactor"), *om.tail(s, "reactor"),
         om.engine(s, "engine_top_r", "engine_r", 1.0), om.engine(s, "engine_low_r", "engine_r", -1.0), *om.engine_frame(s, "engine_r"),
-        *weapon_modules(s), *light_modules(),
-    ]  # fmt: skip
+        *weapon_modules(s), *light_modules(), *marks.lamps(s), *marks.red_fittings(),
+    ]])  # fmt: skip
+
+
+def _with_marks(m: cp.Module) -> cp.Module:
+    """The parts that wear paint marks: the starboard shield's vertical panel its name and emblem, the spine blocks their warning
+    stickers (``parts/ea_omega_marks.py``)."""
+    (fore, fore_x, fore_z, _), (aft, aft_x, aft_z, _) = marks.STICKERS
+    extra = {"shield_mid_r": (marks.name_mark(), marks.emblem_mark()), "spine_fore_block": marks.stickers(fore, fore_x, fore_z),
+             "spine_aft_block": marks.stickers(aft, aft_x, aft_z)}
+    if m.name not in extra:
+        return m
+    return dataclasses.replace(m, hardpoints=(*m.hardpoints, *extra[m.name]))
+
+
+def markings(look: str = DEFAULT_LOOK) -> tuple:
+    """What the hull's maps bake beyond the plating: the floods' pools and the big plates' edge band."""
+    return (*marks.flood_pools(), *marks.bands(modules(look), style(look).style.materials["hull"].albedo))
 
 
 def spec(look: str = DEFAULT_LOOK, drum_deg: float = REST_DRUM_DEG) -> cap.CapitalSpec:
@@ -174,7 +200,10 @@ def spec(look: str = DEFAULT_LOOK, drum_deg: float = REST_DRUM_DEG) -> cap.Capit
         bridge=cap.Pose((0.0, 0.0, 180.0)),
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=1500.0, mouth_radius_m=450.0),
-        notes=("the renegades' red X marks (M10-T02) are `mark` hardpoints with `only_faction`: the game draws them on a renegade ship",),
+        notes=("the renegades' red X marks (M10-T02) are `mark` hardpoints with `only_faction`: the game draws them on a renegade ship",
+               "the floods' pools of light and the big plates' darker edge band are baked into the hull's maps; the name, the Earth Alliance "
+               "emblem and the warning stickers are marks the game draws sharp (M10-T68)"),
+        markings=markings(look),
     )
 
 

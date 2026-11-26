@@ -431,24 +431,36 @@ over by its cradle. The `jump_point` anchor is where it opens the point it leave
 - The decks' sheen: square-on to the sun a deck shows one bright highlight; the plating stays readable beside it.
 - VRAM and frame cost on the target GPU (the sheets were shot on oscar's R9 280X).
 
-## `ea_omega` (M10-T21)
+## `ea_omega` (M10-T21; rebuilt on the four-part kit in M10-T68)
 
-`tools/procgen/assets/ea_omega.py` on `parts/ea_omega.py` (the structure, measured off the reference), the capital parts
-library, `parts/capital_solids.py` and `styles/ea_capital.py`. The shape is described in `docs/design-references.md`, "EA
-Omega-class destroyer". Earth Alliance only; the renegades fly it with their marking (M10-T02, not built here: the style's
-`livery` hook stays unused).
+`tools/procgen/assets/ea_omega.py` on `parts/ea_omega.py` (the structure), `parts/ea_omega_bow.py` (the open-frame bow),
+`parts/ea_omega_marks.py` (paint and lamps), the capital parts library, `parts/capital_solids.py` and `styles/ea_capital.py`. The
+shape is described in `docs/design-references.md`, "EA Omega-class destroyer". Earth Alliance only; the renegades fly it with
+their marking (M10-T02).
+
+**References (M10-T68, Q63).** The build reference is the four-part print kit (thing:4225115: `references/EA Omega head_x1.stl`,
+`middle_x1`, `rear_x1`, `outerrotate_x2`), assembled by `tools/refview/kit.py` from `tools/refview/kits/ea_omega.json` into
+`references/EA Omega kit assembled.{stl,npy}` (gitignored; `python3 -m tools.refview.kit build ea_omega`): the parts join flush on a
+3.6 mm spine rod, the arms glue to the hub's two plain faces (so at rest they stand up and down), sockets plugged and the arms'
+sealed hollows dropped; at **16.876 m a millimetre** (the body, shield front to nozzle exits, matched to the other models; the
+maintainer, 2026-11-26) with the stern at 1 714.3 m and the kit's short printed probe run forward to the bow's tip. The second
+reference, for detail and paint, is the Agamemnon model (`references/Agamemnon_B5_FBX/`, by **Chris Kuhn** (artist/modeler),
+**Creative Commons, per the maintainer**; no file names the variant, and a similar model on Sketchfab is not the source): a
+style reference only, nothing copied or sampled, never committed or shipped (`DISCLAIMER.md`). The old whole-ship STL
+(`EA Omega (lacking detail).stl`) was used for the kit's layout only.
 
 ### Measurements
 
 | | |
 |---|---|
-| Reference | `EA Omega Destroyer.stl`, mapping `--right=+y --up=+z --aft=+x`; the drum is turned 45 degrees in the file (`drum_deg -45` builds it so for the compare) |
-| Length | **1 714.3 m** (T01) |
-| Span, height | 474.6 m, 545.3 m with the drum turned as the reference's (474 x 545); 620 x 478 m at rest, the arms to port and starboard |
-| Pieces | `hull` and `drum`, the rotating section (555 to 879 m from the boom's tip), on its own 4 096 px atlas, turning at 0.1 rad/s about the spine's axis (about a third of a g at the arms' bodies) |
-| Triangles | 12 016 (budget 100 000) |
-| Texture sets | 109.3 MB high, 29.3 MB low (budget 109.3 and 29.3: two 4 096 px atlases); measured 110 MB high and 30 MB low on the RX 6950 XT (model sheet, against the empty scene) |
-| Mass (informational) | 1 053 kt from the skin's area at 260 kg/m2; the `ShipSpec` takes it (1.05e9 kg) |
+| Reference | the assembled kit (above), in the generator's frame |
+| Length | **1 714.3 m** (T01), probe tip to the blades' edges |
+| Span, height | 206 m, 616 m: the drum's arms across and their reach up and down (at rest) |
+| Pieces | `hull` and `drum`, the rotating section (562 to 875 m from the probe's tip), on its own 4 096 px atlas, turning at 0.1 rad/s about the spine's axis; at rest its arms stand up and down (the kit's pose; `drum_deg` turns it, 0 puts them to port and starboard) |
+| Triangles | 17 858 (budget 100 000) |
+| Collision | 398 shapes over all sections (the maintainer's bar: under 400), coverage 1.0 within 1 m, no shape more than 2.2 m off the skin |
+| Texture sets | two 4 096 px atlases: 109.3 MB high, 29.3 MB low |
+| Mass (informational) | from the skin's area at 260 kg/m2; the `ShipSpec` keeps 1.05e9 kg |
 
 ### Sections and hardpoints
 
@@ -457,18 +469,18 @@ Twelve sections: `bow`, `bridge`, `fuel` (the reactant tanks under the command b
 energies on the fuel, magazine and reactor. Mounts as `data/capitals/loadouts.json` (T03, Q53), each naming its `weapon`:
 
 - 4 `ea_plasma_heavy` turrets on the forward spine's centre line (two above, two below), 24 m (the maintainer, 2026-11-21);
-- 12 `ea_pulse_medium` turrets on the spines' corners, in three rings of four;
-- 6 `ea_sweep_beam` emitters: one on each shield's pod covering the fore hemisphere, four on the skirt's corners the aft;
+- 12 `ea_pulse_medium` turrets on the spines' ears, in three rings of four (the kit's corner pods at 420, 1 030 and 1 135 m);
+- 6 `ea_sweep_beam` emitters: one on each shield's pod covering the fore hemisphere, four on the reactor cage's corner plates the aft;
 - 2 `ea_missile` batteries on the aft spine over the magazine;
 - 8 `ea_interceptor` domes along the flanks;
-- one launch bay facing the bow (the maintainer, 2026-11-21: one bay, on the command block's fore face just above the two oval
-  retro thrusters), in the `bow` section: the reference's octagonal hall, a 74 by 34 m mouth (fillets in its corners make it an
-  octagon) at 182 m, the hall 134 m deep, its housing standing out of the head as the reference's tube
-  (`parts/ea_omega.fore_bay`); `craft` `starfury_ally`, `capacity` 32. The bridge's window moved up the head's face, above the
-  bay. The drum's rims carry no bays: a panelled band runs round their outer faces. Nothing of the hull stands ahead of the
+- one launch bay facing the bow (the maintainer, 2026-11-21) above the two oval retro thrusters, in the `bow` section: the kit's
+  octagonal mouth, 72 by 35 m (fillets in its corners make it an octagon) at 188 m, in a proud octagonal frame with a wedge fin
+  each side out to the shield (Q62); the hall 134 m deep through the command block, lined in Babylon 5's grey bay metal and lit
+  red from inside, no glowing rim and no door (Q64; `launch_bay(metal=True, rim=False)`); `craft` `starfury_ally`, `capacity` 32.
+  The kit's hall is a print's shallow 58 m; the build's keeps room for its Starfuries. Nothing of the hull stands ahead of the
   mouth (`test_the_launch_path_ahead_of_the_bay_is_clear`), so T17's launches leave straight ahead;
-- the two oval retro thrusters under the reactant spheres: open nozzles from 168 m to their dark throats at 258 m, as the
-  reference's (`parts/ea_omega.retro_nozzle`, which the Nova shares);
+- the two oval retro thrusters under the reactant tanks: the kit's shallow nozzles from 168 m to their dark throats at 196 m, in
+  their housings (`parts/ea_omega.retro_nozzle`, which the Nova shares), struts out to the shields;
 - running lights (red to port, green to starboard, white on the roof, red-orange beacons at the keel and the stern), the
   four engines in a square, and a jump anchor 1 500 m ahead with a 450 m mouth.
 
@@ -481,36 +493,41 @@ station's: `BAY_RED` for the strips (1.6 at the mouth, as the station's mouth fr
 (`bay_light`, `bay_light_deep`, `bay_lamp`, `bay_hall`) come with `styles/ea_capital.bay_light_materials`, which the
 Hyperion, Nova, Warlock and Explorer get with the style.
 
-### Fidelity (Q10)
+### Fidelity (Q10, M10-T68): the 90 % rule against the assembled kit
 
-```
-.venv/bin/python3 -I tools/refview/compare.py "references/EA Omega Destroyer.stl" ea_omega --length 1714.3 --right=+y --up=+z --aft=+x
-```
+`tools/procgen/tests/test_ea_omega.py` (`OmegaSectionTests`, skipped where the kit's mesh is not built) and
+`parts/ea_omega_fidelity.py`:
 
-(built with `drum_deg -45`, as the reference has its drum).
-
-| View | IoU | | Dimension | Mesh / STL |
+| View | IoU | | Dimension | Build / kit |
 |---|---|---|---|---|
-| top | 0.969 | | length | 1.000 (1 714.3 / 1 714.3 m) |
-| side | 0.939 | | width | 1.001 (474.6 / 473.9 m) |
-| front | 0.923 | | height | 1.000 (545.3 / 545.1 m) |
+| top | 0.958 | | length | 1.033 (the probe run forward to 0 m; the kit's prints from 55 m) |
+| side | 0.952 | | width | 0.982 |
+| front | 0.956 | | height | 0.999 |
 
-(Re-scored with the forward bay, 2026-11-21; the build before it scores the same, so the 0.950 and 0.930 first written here
-were an earlier build's.)
+**Per-part sections**, 37 planes, every one at 0.90 or over, no exemptions (lowest 0.901, the retro nozzle as the bow sees it at
+240 m): the bow face (its frame, tanks and nozzles, 190 and 210 m), the bow block, the bay (its frame's octagon at 196 m and its
+mouth by relief at 240 m, ahead of the kit's back wall), the tankage, the retro thrusters, the command section, both spines (planes
+clear of the gun mounts, which the kit does not carry), the collars, each drum arm and the hub, the engine housing and its reactor
+cage, and the engines (five planes from the nacelles' cradles to the bells). Most planes compare outlines: the kit's parts are
+printed hollow and its faces carry greebles the plating paints.
 
-**Per-part sections** (`parts/ea_omega_fidelity.py`, `tools/refview/sections.py`; `test_ea_omega.py` holds them): the bow
-block, the forward bay, the tankage (its forward plane by outline: the reference's tanks are open shells there), the retro
-thrusters, the command section, both spines, the collars, each drum arm and the hub (turned back 45 degrees, each in its own
-window), the engine housing and the engines, 35 planes, every one at 0.90 or over (lowest 0.909, the retro nozzle at 200 m);
-no exemptions. The bay's hall runs through the bow block and the command section, and the reference's hall is open shells its
-winding fills, so the bow block's planes and the command section's at 300 m compare outlines (0.986) and the hall is judged by
-relief, as the bow sees its mouth (0.962 at 250 and 300 m); the retro nozzles likewise (0.909, 0.911).
+**The bow face** (T66's sweeps, as the Nova's, with the build's hall scored as closed at the kit's 244 m wall): the z sweep
+(182 to 450 m, every 4 m) means 0.930 and every slice of the bow and command section is at 0.90 or over; the slices under it are
+the spine's turret mounts (374 to 438 m). The x cuts by face depth mean 0.915 (the shields' outer edges and the deck blocks round
+the bay at 0.80 to 0.88), the y cuts 0.935 (the keel's tip under 0.90). The front depth map: 55 % within 2 m, 5.9 m mean
+difference (floors 0.55 and 6.0 m in `FACE_DEPTH`).
 
-### Surface: look A, show grey with a rust face (the maintainer, 2026-11-21)
+### Surface (M10-T68): the Agamemnon pattern and layout
 
-From three options (B, station grey and clean; C, dark gunmetal with an ochre face): a mottled blue-grey plate mosaic
-(18 x 9 m plates cut twice, frames every 30 m), dark recessed bands, the command section's fore face rust ochre, black
-window rows, blue-white engine throats.
+The Agamemnon pattern (Q98, `styles/ea_omega.py` on the shared `styles/patch_skin.PatchSkin`): the soft finish's greys wandering in
+tone over big plates, darker patches at three sizes, a few proud plates and fine scratches, no seam lines; the bay lined in grey
+bay metal. Paint and lamps
+(`parts/ea_omega_marks.py`, after the show's stills and the Agamemnon's layout): the ship's name in black on a light grey board
+high on each shield's vertical panel, the Earth Alliance emblem under it aft of the beam pod, each lit by a flood on a bracket
+whose pool is baked; the name letter low on the leaning panel (T21); a darker edge band round the shields, collars, reactor cage
+and roof; rows of red-lit fittings along the spines' flanges; red beacons at the dorsal mast's, keel mast's and probe's tips;
+black and yellow warning stickers (`core/hull_decals.HAZARD`, drawn in code) on the spine blocks beside the collars and the
+housing; the nacelles' rings in the look's rust paint (the Agamemnon's red-orange engines, toned to the stills).
 
 ### In the game
 

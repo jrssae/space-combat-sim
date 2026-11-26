@@ -126,7 +126,8 @@ func test_an_omega_beams_a_hostile_hull_ahead_from_its_fore_emitters_by_section(
 	assert_eq(shooters.keys(), [omega.get_instance_id()], "the Omega is the shooter")
 	assert_false(sections.has(""), "every hit named by its section")
 	# Its brain sweeps them onto a vital spot they can reach (M10-T16), else the nearest part: here the bridge, else the bow.
-	assert_true(sections.has("bridge") or sections.has("bow"), "the beams land on the bridge or the bow it faces: %s" % [sections.keys()])
+	# M10-T68: the open-frame bow's reactant tanks stand at its face, so the fuel section is in the line too.
+	assert_true(sections.has("bridge") or sections.has("bow") or sections.has("fuel"), "the beams land on the bow it faces: %s" % [sections.keys()])
 	assert_eq(seen_firing.keys().size(), 2, "only the fore emitters cover a hull dead ahead: %s" % [seen_firing.keys()])
 	assert_true(seen_firing.has("beam_fore_r") and seen_firing.has("beam_fore_l"))
 	# 40 dps an emitter while on, landed a tick's share at a time (the sped-up ticks are still 1/60 s of sim time).
@@ -172,16 +173,17 @@ func test_an_omega_leaves_a_disguised_renegade_alone_until_its_beam_gives_it_awa
 		return
 	omega.damageable.invulnerable = true
 	renegade.damageable.invulnerable = true
+	# Only beams here: neither ship's guns fire (M10-T14), so the renegade's beam is what gives it away; and the renegade holds its fire
+	# first, from before its disguise goes on (M10-T68: the rebuilt hull gives its guns a clear line from the first tick).
+	for ship: CapitalShip in [omega, renegade]:
+		CapitalGuns.of(main.world).hold(ship, true)
+	_beams().hold(renegade, true)
 	renegade.targetable.disguise_as(Factions.EARTH_ALLIANCE)
 	await wait_physics_frames(2)
 	assert_true(renegade.targetable.is_disguised())
 	var on_renegade: Array = _log_beams(renegade)
 	var on_omega: Array = _log_beams(omega)
-	# Only beams here: neither ship's guns fire (M10-T14), so the renegade's beam is what gives it away.
-	for ship: CapitalShip in [omega, renegade]:
-		CapitalGuns.of(main.world).hold(ship, true)
-	# The renegade holds its fire first: the Omega takes it for a friend.
-	_beams().hold(renegade, true)
+	# The Omega takes it for a friend.
 	await _fly(4.0)
 	assert_eq(on_renegade.size(), 0, "the Omega leaves the hull broadcasting Earth Alliance alone")
 	_beams().hold(renegade, false)

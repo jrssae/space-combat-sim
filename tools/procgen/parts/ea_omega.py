@@ -228,6 +228,10 @@ def aerials(s: Style) -> list[cp.Module]:
                (207.0, 7.0), (207.0, 0.0)]
     boom = cs.round_body("sensor_boom", (*boom_at, 0.0), (*boom_at, 207.0), profile, s, s.material("hull_dark"), sides=10,
                          creases={2, 3, 4, 5, 6, 7, 8, 9, 10}, skin=cp.SKIN_FITTING)
+    # The probe's thin front as one hull; the bulbs and the thick root a hull each.
+    start, axis = np.array([*boom_at, 0.0]), np.array([0.0, 0.0, 1.0])
+    steps = [((0.0, 2.0), (93.0, 2.0)), *zip(profile[4:10], profile[5:11], strict=False)]
+    boom = dataclasses.replace(boom, shapes=tuple(col.hull(f"sensor_boom_{k}", col.prism_points(start, axis, [a, b], 10)) for k, (a, b) in enumerate(steps)))
     out = [_put("bow", boom, cp.LONE),
            _put("bridge", cs.rod("mast_dorsal", (0.0, 62.0, 240.0), (0.0, 170.0, 240.0), 1.7, s)),
            _put("bow", cs.rod("mast_ventral_a", (0.0, -205.0, 229.0), (0.0, -308.0, 229.0), 1.2, s)),
@@ -406,8 +410,8 @@ def engine(s: Style, name: str, section: str, up: float) -> cp.Module:
     profile = [(0.0, 0.0), (0.0, 26.0), (at(1470.0), 26.0), (at(1490.0), 32.5), (at(1504.0), 33.0), (at(1506.0), 27.5), (at(1522.0), 27.5),
                (at(1526.0), 32.0), (at(1546.0), 28.0), (at(1566.0), 23.0), (at(1584.0), 22.0), (at(1588.0), 21.0), (length, 19.5), (length, 16.5),
                (length - 24.0, 11.0), (length - 24.0, 0.0)]
-    hull, dark, metal, glow = s.material("hull"), s.material("hull_dark"), s.material("nozzle"), s.material("nozzle_throat")
-    mats = [dark, hull, hull, dark, dark, dark, hull, hull, hull, metal, metal, metal, metal, glow, glow]
+    hull, dark, metal, glow, rust = (s.material(r) for r in ("hull", "hull_dark", "nozzle", "nozzle_throat", "stripe"))
+    mats = [dark, hull, hull, rust, dark, dark, hull, rust, hull, metal, metal, metal, metal, glow, glow]  # the rings in the face's rust paint
     body = cs.round_body(f"{name}_body", (x, y, z0), (x, y, ENGINE_MOUTH_Z), profile, s, mats, sides=20, creases=set(range(1, 15)),
                          skin=cp.SKIN_FITTING, hollow_from=13)
     # A few hulls follow the nacelle (the drum, the rings, the waist, the taper, the bell; the bore an open ring), so a side's

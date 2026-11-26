@@ -152,12 +152,12 @@ def under_bay(s: Style) -> list[cp.Module]:
     out.append(_put("fuel", cs.box("keel_front", *KEEL_FRONT, s, DARK)))
     out.append(_put("fuel", cs.box("beam_post_r", *BEAM_POSTS, s, DARK), cp.RIGHT))
     out.append(_put("bridge", cs.prism("command_keel_plate", KEEL_PLATE, COMMAND_Z[0] + 2.0, 334.0, s, DECKED)))
-    for k, (x, y) in enumerate(KEEL_DOMES):  # the kit has them on the starboard side only
-        r, (z0, z1) = KEEL_DOME_R, KEEL_DOME_Z
-        cap = [(r * (1.0 - np.cos(a)), r * np.sin(a)) for a in np.linspace(0.0, 0.5 * np.pi, 5)]
-        dome = cs.round_body(f"keel_dome_{k + 1}", (x, y, z0), (x, y, z1), [(0.0, 0.0), *cap[1:], (z1 - z0, r), (z1 - z0, 0.0)], s, s.material("hull_dark"),
-                             sides=10, skin=cp.SKIN_FITTING)
-        out.append(_put("bow", dataclasses.replace(dome, shapes=(col.hull(dome.name, dome.part.mesh.vertices),)), cp.LONE))
+    r, (z0, z1) = KEEL_DOME_R, KEEL_DOME_Z
+    cap = [(r * (1.0 - np.cos(a)), r * np.sin(a)) for a in np.linspace(0.0, 0.5 * np.pi, 5)]
+    domes = [cs.round_body(f"keel_dome_{k + 1}", (x, y, z0), (x, y, z1), [(0.0, 0.0), *cap[1:], (z1 - z0, r), (z1 - z0, 0.0)], s, s.material("hull_dark"),
+                           sides=10, skin=cp.SKIN_FITTING) for k, (x, y) in enumerate(KEEL_DOMES)]  # the kit has them on the starboard side only
+    pair = cs.compound("keel_domes", domes)
+    out.append(_put("bow", dataclasses.replace(pair, shapes=(col.hull(pair.name, pair.part.mesh.vertices),)), cp.LONE))
     keel = cs.box("keel_block", *KEEL_BLOCK, s, DARK)
     post = cs.box("keel_post", *KEEL_POST, s, DARK)
     # One hull each, so the bow's shapes stay inside the section's budget.

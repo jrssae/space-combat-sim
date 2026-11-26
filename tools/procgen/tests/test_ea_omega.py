@@ -33,7 +33,7 @@ from tools.refview.sections import PASS_IOU, section_score
 
 ROOT = Path(__file__).resolve().parents[3]
 KIT = ROOT / "references" / fid.KIT
-TEST_OPTIONS = {"atlas_px": 512, "detail_px": 128}  # the default sample spacing: the coverage check needs it
+TEST_OPTIONS = {"atlas_px": 1024, "detail_px": 128}  # the default sample spacing: the coverage check needs it; the fittings' charts need 1 024 px
 LENGTH, SPAN, HEIGHT = 1714.3, 206.0, 616.0  # T01's length; the drum's arms across and their reach up and down (at rest)
 SHAPE_BUDGET = 400  # the hull's collision shapes, all sections (the maintainer, M10-T68)
 SECTIONS = ("bow", "bridge", "fuel", "spine_fore", "drum_hub", "hangar_r", "hangar_l", "magazine", "spine_aft", "reactor",
@@ -122,7 +122,8 @@ class OmegaBuildTests(unittest.TestCase):
         for e in self.hp["engines"]:
             self.assertAlmostEqual(self.authored(e["position"])[2], eo.om.ENGINE_MOUTH_Z, places=3)
         roles = sorted(light["role"] for light in self.hp["lights"])
-        self.assertEqual(roles, ["bay"] * BAYS + ["beacon", "beacon", "port", "starboard", "top"], "and one red light in each bay")
+        self.assertEqual(roles, ["bay"] * BAYS + ["beacon"] * 5 + ["flood"] * 4 + ["port", "starboard", "top"],
+                         "one red light in each bay, beacons at the keel, the stern and the three tips, a flood under each name and emblem")
         bay_lights = {light["name"]: light for light in self.hp["lights"] if light["role"] == "bay"}
         for bay in self.hp["bays"]:
             light = bay_lights[f"{bay['name']}_light"]
@@ -133,7 +134,9 @@ class OmegaBuildTests(unittest.TestCase):
 
     def test_each_shield_wears_the_name_letter_on_its_lower_panel(self) -> None:
         marks = {m["name"]: m for m in self.hp["marks"]}
-        self.assertEqual(sorted(marks), ["mark_initial_l", "mark_initial_r", "mark_x_l", "mark_x_r", "mark_x_roof"])
+        stickers = [f"mark_sticker_{block}_{tag}_{side}" for block in ("aft", "fore") for tag in ("low", "top") for side in ("l", "r")]
+        self.assertEqual(sorted(marks), sorted(["mark_emblem_l", "mark_emblem_r", "mark_initial_l", "mark_initial_r", "mark_name_l", "mark_name_r",
+                                                 *stickers, "mark_x_l", "mark_x_r", "mark_x_roof"]))
         right, left = marks["mark_initial_r"], marks["mark_initial_l"]
         self.assertEqual((right["text"], right["section"], right["height_m"]), ("initial", "bow", eo.om.MARK_HEIGHT_M))
         self.assertGreater(right["normal"][0], 0.9, "the starboard letter faces outward")
@@ -146,8 +149,20 @@ class OmegaBuildTests(unittest.TestCase):
         self.assertTrue((self.dir / atlas["file"]).is_file())
         self.assertTrue((self.dir / (atlas["file"] + ".import")).is_file())
 
+    def test_the_paint_after_the_stills_and_the_agamemnon(self) -> None:
+        """M10-T68: the name on its board high on each shield's vertical panel, the emblem under it, the warning stickers as
+        pictures, the floods' pools and the plates' edge band baked."""
+        marks = {m["name"]: m for m in self.hp["marks"]}
+        name, emblem = marks["mark_name_r"], marks["mark_emblem_r"]
+        self.assertEqual(name["text"], "name")
+        self.assertGreater(self.authored(name["position"])[1], self.authored(emblem["position"])[1], "the name above the emblem")
+        self.assertGreater(name["normal"][0], 0.9)
+        self.assertEqual(emblem["image"].endswith(".png"), True)
+        self.assertTrue(all(m["image"].endswith(".png") for k, m in marks.items() if "sticker" in k))
+        self.assertTrue((self.dir / "ea_omega_hazard_stripes.png").is_file())
+
     def test_the_renegades_red_x_marks_are_for_renegades_only(self) -> None:
-        xs = [m for m in self.hp["marks"] if m["text"] == "X"]
+        xs = [m for m in self.hp["marks"] if m.get("text") == "X"]
         self.assertEqual(len(xs), 3, "one on each shield and one on the roof")
         for m in xs:
             self.assertEqual(m["only_faction"], "renegades")
@@ -163,7 +178,7 @@ class OmegaBuildTests(unittest.TestCase):
         self.assertEqual([p.atlas_px for p in eo.PIECES], [4096, 4096])
         high, low = texture_mb([4096, 4096], 1024), low_set_mb([4096, 4096], 1024)
         self.assertEqual(over_budget("capital", budget["triangles"], high, low), [])
-        self.assertAlmostEqual(budget["texture_mb"], texture_mb([512, 512], 128), places=2, msg="this build's")
+        self.assertAlmostEqual(budget["texture_mb"], texture_mb([1024, 1024], 0), places=2, msg="this build's: the Agamemnon pattern has no near tile (Q98)")
 
 
 class OmegaSpecTests(unittest.TestCase):
