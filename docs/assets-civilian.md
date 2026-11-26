@@ -751,7 +751,8 @@ traffic do not draw them, so older scenarios' seeded picks stay as they were; a 
 `tools/procgen/assets/centauri_shuttle.py` and `assets/minbari_flyer.py`, parts in `tools/procgen/parts/centauri_shuttle.py` and
 `parts/minbari_flyer.py`, looks in `tools/procgen/styles/centauri_shuttle.py` and `styles/minbari_flyer.py`, built through the
 shuttles' `build_craft` (`assets/ea_shuttles.py`). Both are **small craft** (M10 Q38): one 2 048 px atlas, the low texture set a
-mip level down. Unarmed. Option `look` (`a`, `b`, `c`) picks the surface option; until the maintainer chooses, `a` is built.
+mip level down. The shuttle wears its chosen look (Q89); the Flyer wears `p1`, the bluer of the three patterns
+the maintainer was shown (Q90), its only look. The shuttle is unarmed; the Flyer gets two plasma guns in stage 2 (Q91).
 
 **Stage 1 as built (2026-11-25, seed 42).** Generators, looks and the 90 % compare; collision, docking, `ShipSpec`s and catalogue
 entries come in stage 2 with the chosen looks.
@@ -759,7 +760,7 @@ entries come in stage 2 with the chosen looks.
 | | `centauri_shuttle` | `minbari_flyer` |
 |---|---|---|
 | Size (L x W x H) | 36.00 x 51.96 x 13.47 m | 40.00 x 18.46 x 8.20 m (Q67's length; T01 had 29.19) |
-| Triangles (budget 30 000) | 1 794 | 7 596 |
+| Triangles (budget 30 000) | 3 774 (1 794 without the wing lamps) | 7 596 |
 | Texel | 3.4 cm | 3.5 cm |
 | Texture memory, high / low set (budget 16.0 / 6.0 MB) | 13.3 / 3.3 MB | 13.3 / 3.3 MB |
 | Video memory on the GPU, high set (RX 6950 XT, sheet run) | about 13 MB | about 14 MB |
@@ -768,26 +769,30 @@ entries come in stage 2 with the chosen looks.
 
 | Craft | Parts (authored frame: x to starboard, y up, z aft from the nose, x and y on the reference's box centre) |
 |---|---|
-| `centauri_shuttle` | A flat delta body lofted with hard edges through 12 stations: flat deck faces from the centre line to a blunt rim, a keel that bulges a little at half width, deeper aft (y -2.8 at the nose, -5.75 at the stern face, z 33.6); the half width grows from 2 m to 9 m at z 20.5 and on to 15 m along the wing roots. On it: a spine from z 6.3 to 34.8 with the canopy on its first runs and a gold crown; a blister either side (x 3.66, 12 m long); five louvres either side at z 29.4 to 33.8 with gold tops. Under the stern a keel pod (y -5.9) on a strut; one nozzle either side of it (x 3.3, y -2.28, radius 2, exit z 35.5). The wings: eight sections from x 11.5 inside the body to the tips at x 26 and y 6.6, the leading edge swept from z 23.6 to 32, the trailing edge at z 35.5 to 36; gold leading edges. |
+| `centauri_shuttle` | A flat delta body lofted with hard edges through 12 stations: flat deck faces from the centre line to a blunt rim, a keel that bulges a little at half width, deeper aft (y -2.8 at the nose, -5.75 at the stern face, z 33.6); the half width grows from 2 m to 9 m at z 20.5 and on to 15 m along the wing roots. On it: a spine from z 6.3 to 34.8 with the canopy on its first runs; a blister either side (x 3.66, 12 m long); five louvres either side at z 29.4 to 33.8 with gold tops. Under the stern a keel pod (y -5.9) on a strut; one nozzle either side of it (x 3.3, y -2.28, radius 2, exit z 35.5). The wings: eight sections from x 11.5 inside the body to the tips at x 26 and y 6.6, the leading edge swept from z 23.6 to 32, the trailing edge at z 35.5 to 36; gold leading edges; nine round lamps (radius 0.28 m) along each trailing edge, for a style with a `running_light` finish. |
 | `minbari_flyer` | Smooth lofts of ellipses (Q47). A round fuselage (radius 3.05 at z 8 to 10, 0.85 from z 28 to 35, the tail spike to z 39.6), its nose a ring of 12 petals; a pod either side (x 3.8, z 3.3 to 18.4), a thin web from it to a tall blade at x 8.15 (4.1 m above and below its middle at z 4, a diamond with hollow sides in section) with a lobe at its root and two intake pods on its front; a flat strake along each flank from z 18 to 33 with a rod at x 1.3 to the tail; four waist pods (x 2.25, y 1.0, z 22 to 30); the crossbar (z 30 to 34.7, 16.6 m across) with a spindle at each tip (x 8.3, z 29.3 to 40, 3.6 m above and below), its tail glowing from z 37, and a forward tube. |
 
 **The references differ from T01's descriptions.** The Centauri shuttle's STL has no tail fin: the tall swept shape in its side
 view is the upswept wing tip. It carries one large nozzle either side of the keel. The Flyer's blades and spindles are diamonds in
 section, wide at their middle and thin at their edges.
 
-**Looks (stage 1, for the maintainer's choice).** Sheets in `references/screenshots/M10-T58 Centauri shuttle and Minbari Flyer/`:
-`centauri_shuttle_option_sheet.png`, `minbari_flyer_option_sheet.png` (each look at 15 or 12 m lit and dark, 5 m with the high and
-the low set), `*_look_sheet.png` (look A at 50 and 500 m, top, side, front, 5 m dark), `compare/` (the overlays).
+**Looks.** Sheets in `references/screenshots/M10-T58 Centauri shuttle and Minbari Flyer/`.
 
-- **Centauri shuttle (Q83):** no panel mosaic; a solid paint with small patches a few shades darker at two or three sizes, as
-  the Agamemnon model's textures are painted (a style reference only), in Centauri purple; gold on the spine's crown, the louvres
-  and the wings' leading edges; the nozzles glow pink-white. **A**, show plum (#6E3466) with sparse patches and warm gold;
-  **B**, Centauri violet (#5A3A86) with denser patches and pale gold; **C**, deep maroon (#5A2346) with heavy dark patches and
-  bright gold.
-- **Minbari Flyer (Q45):** the hexagonal grid (1.2 m cells, each its own shade, kept in the low set; seams in the full set) on a
-  glossy, lightly metallic paint, under long streaks along the hull; the spindles' tails glow cold blue-white. **A**, the show's
-  blue-violet (#6A68AE) with pale lavender streaks; **B**, pale lavender (#B0ACD8) with violet streaks; **C**, deep blue (#3C4496)
-  with azure streaks.
+- **Centauri shuttle: D2, chosen by the maintainer (2026-11-25, Q89).** Violet #7540B0 (machinery #3A1F60), between the earlier,
+  too dark "Centauri violet" #5A3A86 and the too bright #8A44D0, with a touch of the stills' magenta. Q83's skin as a soft mottle:
+  darker clouds at 6, 2.4 and 0.9 m (seeded noise, the edges blended; no plates, no seam lines). Gold (#DEBA60) on the deck: three
+  lines across it and one along each side, 44 small panels of mixed size, a crest of our own either side of the spine (a ring open
+  at the top round a rising crescent and a spike, on a bar); a 0.5 m brass strip (#B8913E) down the middle of the violet spine;
+  gold on the louvres' tops and the wings' leading edges. Nine round lamps glow red with an orange tinge (#FF3418) along each
+  wing's trailing edge, readable at 60 m; the nozzles glow pink-white. Option sheet of the last round:
+  `centauri_shuttle_option_sheet.png`; D2's views: `shots/centauri_shuttle_d2_top.png`, `_d2_60m.png`.
+- **Minbari Flyer: pattern P1, accepted by the maintainer (2026-11-25, Q90).** The hexagonal grid (Q45) on every surface; a
+  low-gloss pale grey-blue body (#A4C4F2); a dark blue line running lengthwise, meandering a little, only on the fuselage, the two
+  pods and across the crossbar; thick, uneven curved bands branching from it (and, without a line, on the waist pods, webs and
+  strakes) towards the lobe's edges, tapering and fading, each a violet purple core (#7A3CB6) inside a blue outline about 2.2 m
+  wide at the root that fades into the body (`assets/minbari_flyer_pattern.py`); the blades and spindles darker blue under the
+  same bands, their outboard faces bright blue with purple bands; a soft mottled blue glow under the crossbar from 16 overlapping
+  pools of light. Sheet: `minbari_flyer_p1_round3_sheet.png`.
 
 ```
 .venv/bin/python3 -I tools/refview/compare.py references/Centauri_Shuttle.stl centauri_shuttle --length 36 --right=+y --up=+z --aft=+x

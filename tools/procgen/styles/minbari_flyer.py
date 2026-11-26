@@ -1,12 +1,16 @@
 """The Minbari Flyer's looks (M10-T58; docs/design-references.md, "Minbari Flyer").
 
-Semi-organic (Q47) under the Minbari's hexagonal grid (Q45): fine seams on regular hexagons, each cell its own shade and
-sheen, over a lightly metallic, glossy paint that reads as iridescent. On top of it the show's mottling: long soft streaks
-running along the hull, paler or deeper than the base. The tails of the crossbar's spindles glow, the Flyer's drive.
+Semi-organic (Q47) under the Minbari's hexagonal grid (Q45), kept subtle: fine seams on regular hexagons, each cell a shade
+of its own, on a low-gloss paint so the pale hull keeps its colour in full light. Over it the pattern the maintainer set
+(2026-11-25, M10 Q90), read off the fan orthos, the painted miniature and the show stills in
+``references/show/m10/minbari_flyer/`` (gitignored): a pale body; on the main lobes a dark blue line running lengthwise
+(the small ones go without), with
+thick curved bands branching from it towards the lobe's edges, tapering and fading out, each a purple core inside a blue
+outline that fades into the body; no straight edge or corner anywhere. The blades and spindles are a darker blue with the
+same bands, their outboard faces a clear bright blue. A soft, mottled blue glow lights the panel under the crossbar; the
+spindles' tails glow, the Flyer's drive.
 
-Three looks (``a``, ``b``, ``c``): ``a`` the show's blue-violet with pale lavender streaks, ``b`` pale lavender-white with
-violet streaks (the docked Flyer in the first still), ``c`` a deep blue with bright azure streaks. Colours are sRGB read
-off the stills in ``references/show/m10/minbari_flyer/`` (gitignored), lifted out of the stills' shadow.
+One look, ``p1``: the bluer of the three the maintainer was shown (2026-11-25).
 """
 
 from __future__ import annotations
@@ -18,21 +22,29 @@ from ..core.geometry import Material
 from . import Style
 from .ea_civilian import lin
 
-OPTIONS: tuple[str, ...] = ("a", "b", "c")
-DEFAULT_OPTION = "a"
+OPTIONS: tuple[str, ...] = ("p1",)
+DEFAULT_OPTION = "p1"
 GLOW_SRGB = 0xA8C8FF  # a cold blue-white
 
 
 @dataclass(frozen=True)
 class Look:
-    """One surface option: the style, the hexagons' size and shade, and the streak colours with the share each covers."""
+    """One surface option: the style (the pale body), the hexagons' size and shade, the dark blue of the lines, the purple of
+    the bands' cores, the blue of their outlines, the darker blue of the fins and the bright blue of their outboard faces, and
+    the under-panel's glow (sRGB) and strength."""
 
     name: str
     title: str
     style: Style
     hex_m: float
     hex_tone: float
-    streaks: tuple[tuple[int, float], ...]
+    dark: int
+    purple: int
+    band_blue: int
+    fins: int
+    fin_outer: int
+    panel_glow: int = 0x52B4FF
+    glow_strength: float = 10.0
 
 
 def _style(name: str, hull: int, panel: int, dark: int, metallic: float) -> Style:
@@ -54,16 +66,10 @@ def _style(name: str, hull: int, panel: int, dark: int, metallic: float) -> Styl
         "rcs": Material(f"{name}_rcs", capture_albedo(dark), metallic=0.5),
     }
     return Style(name=name, materials=mats, panel_size_m=1.2, hatch_fraction=0.0, panel_tint_jitter=0.0, edge_wear=0.0, streaks=0.0,
-                 grime=0.03, extra={"bare_metal": 0.0, "smudge": 0.0, "speckle": 0.02, "paint_roughness": 0.3, "rivets": 0.0})
+                 grime=0.03, extra={"bare_metal": 0.0, "smudge": 0.0, "speckle": 0.02, "paint_roughness": 0.6, "rivets": 0.0})
 
 
 def looks() -> dict[str, Look]:
-    """The Flyer's three options."""
-    return {
-        "a": Look("a", "A: show blue-violet, pale lavender streaks", _style("minbari_flyer_a", 0x6A68AE, 0x5E5AA0, 0x2A2448, 0.35),
-                  1.2, 0.08, ((0xC4C2EC, 0.36), (0x3E3270, 0.26))),
-        "b": Look("b", "B: pale lavender, violet streaks", _style("minbari_flyer_b", 0xB0ACD8, 0x9E99CC, 0x3A3060, 0.3),
-                  1.2, 0.07, ((0x6250A8, 0.38), (0xE4E2F8, 0.2))),
-        "c": Look("c", "C: deep blue, azure streaks", _style("minbari_flyer_c", 0x3C4496, 0x343A86, 0x1A1C40, 0.45),
-                  1.0, 0.09, ((0x5FA6F0, 0.32), (0x8A84D8, 0.24))),
-    }  # fmt: skip
+    """The Flyer's look."""
+    return {"p1": Look("p1", "P1", _style("minbari_flyer_p1", 0xA4C4F2, 0x94B6EA, 0x1E2C66, 0.12), 1.2, 0.04, 0x24389E, 0x7A3CB6,
+                       0x3668EC, 0x2A3CA0, 0x3E6EE0)}  # fmt: skip

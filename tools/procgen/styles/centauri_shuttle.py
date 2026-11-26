@@ -1,49 +1,43 @@
 """The Centauri shuttle's looks (M10-T58; docs/design-references.md, "Centauri shuttle").
 
-The skin is the maintainer's choice for this hull (2026-11-25, M10 Q83): no panel mosaic, but one solid paint with small
-patches a few shades darker scattered over it, at two or three sizes and overlapping, in the manner of the Agamemnon
-model's textures, shifted into the Centauri's purple. The pattern is generated here; nothing is taken from those files.
-Gold picks out the spine's crown, the louvres and the wings' leading edges, as on the show's craft; the nozzles glow
-the pink-white of Centauri drives.
+The skin is the maintainer's (2026-11-25, M10 Q83): no panel mosaic but one solid violet with darker patches, in the
+manner of the Agamemnon model's textures (a style reference only; nothing is taken from those files), here a soft mottle
+of darker clouds at three sizes. Gold as the stills show it: lines and small panels over the upper hull, a narrow brass
+strip down the violet spine, a Centauri-style crest either side of it (drawn here, no copied logo), the louvres' tops and
+the wings' leading edges; round red lamps along the wings' trailing edges; the nozzles glow the pink-white of Centauri
+drives.
 
-Three looks (``a``, ``b``, ``c``) vary within that one style: the purple's hue and depth, how many patches there are and
-how dark, and the gold. Colours are sRGB read off the stills in ``references/show/m10/centauri_shuttle/`` (gitignored),
-lifted out of the stills' shadow.
+The maintainer chose option D2 (2026-11-25): a violet (#7540B0) between the earlier, too dark "Centauri violet" (#5A3A86)
+and the too bright #8A44D0, with a touch of the stills' magenta; machinery #3A1F60, gold #DEBA60. Colours are sRGB read off
+the stills in ``references/show/m10/centauri_shuttle/`` (gitignored), lifted out of the stills' shadow.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ..core.color import capture_albedo
 from ..core.geometry import Material
 from . import Style
 from .ea_civilian import lin
 
-OPTIONS: tuple[str, ...] = ("a", "b", "c")
-DEFAULT_OPTION = "a"
 GLOW_SRGB = 0xFFB8E0  # the pink-white of the Centauri drives (styles/centauri.py)
 WINDOW_SRGB = 0x1A1530
-
-
-@dataclass(frozen=True)
-class PatchLayer:
-    """One size of patch: the field it is cut from (m), how many of the cut plates are painted, and the shades
-    ``(share, how much darker)`` they take."""
-
-    cell: tuple[float, float]
-    scatter: float
-    tiers: tuple[tuple[float, float], ...]
+RUNNING_LIGHT_SRGB = 0xFF3418  # the lamps along the trailing edges in the stills: red with an orange tinge
+BRASS_SRGB = 0xB8913E  # the strip down the spine
 
 
 @dataclass(frozen=True)
 class Look:
-    """One surface option: the style and the patches painted over its solid colour."""
+    """One surface option: the style and its ``mottle``, soft darker clouds ``(size m, how much of the hull, how much
+    darker)``. Every look carries the gold (lines, panels, crests, the spine's ``spine_strip_m`` wide brass strip) and, through
+    the style's ``running_light`` finish, the lamps along each wing's trailing edge."""
 
     name: str
     title: str
     style: Style
-    patches: tuple[PatchLayer, ...]
+    mottle: tuple[tuple[float, float, float], ...]
+    spine_strip_m: float = 0.5
 
 
 def _style(name: str, hull: int, dark: int, gold: int) -> Style:
@@ -69,18 +63,13 @@ def _style(name: str, hull: int, dark: int, gold: int) -> Style:
                  streaks=0.03, grime=0.04, extra={"bare_metal": 0.0, "smudge": 0.05, "speckle": 0.05, "paint_roughness": 0.5, "rivets": 0.0})
 
 
-def looks() -> dict[str, Look]:
-    """The shuttle's three options."""
-    return {
-        "a": Look("a", "A: show plum, sparse patches, warm gold",
-                  _style("centauri_shuttle_a", 0x6E3466, 0x3A1C36, 0xB8954E),
-                  (PatchLayer((3.2, 2.0), 0.35, ((0.7, 0.1), (0.3, 0.18))), PatchLayer((1.1, 0.7), 0.3, ((0.8, 0.08), (0.2, 0.15))))),
-        "b": Look("b", "B: Centauri violet, denser patches, pale gold",
-                  _style("centauri_shuttle_b", 0x5A3A86, 0x2E2050, 0xD2B470),
-                  (PatchLayer((3.2, 2.0), 0.5, ((0.6, 0.11), (0.4, 0.2))), PatchLayer((1.1, 0.7), 0.45, ((0.7, 0.09), (0.3, 0.17))),
-                   PatchLayer((0.5, 0.35), 0.3, ((1.0, 0.1),)))),
-        "c": Look("c", "C: deep maroon, heavy dark patches, bright gold",
-                  _style("centauri_shuttle_c", 0x5A2346, 0x2C1022, 0xD9A93A),
-                  (PatchLayer((3.6, 2.2), 0.55, ((0.5, 0.14), (0.5, 0.26))), PatchLayer((1.2, 0.8), 0.5, ((0.6, 0.12), (0.4, 0.22))),
-                   PatchLayer((0.5, 0.35), 0.35, ((1.0, 0.1),)))),
-    }  # fmt: skip
+def _lit(style: Style, colour: int) -> Style:
+    """The style with a ``running_light`` finish: a lamp glowing ``colour``, bright enough to read at a hundred metres."""
+    lamp = Material(f"{style.name}_running_light", capture_albedo(colour), emissive=lin(colour), emissive_strength=8.0)
+    return replace(style, materials={**style.materials, "running_light": lamp})
+
+
+MOTTLE = ((6.0, 0.45, 0.1), (2.4, 0.4, 0.12), (0.9, 0.3, 0.07))
+
+
+SHUTTLE_LOOK = Look("d2", "D2: violet #7540B0", _lit(_style("centauri_shuttle", 0x7540B0, 0x3A1F60, 0xDEBA60), RUNNING_LIGHT_SRGB), MOTTLE)

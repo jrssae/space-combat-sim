@@ -86,7 +86,7 @@ def deck_y(x: float, z: float) -> float:
 
 def body_pieces(style: Style) -> list[Piece]:
     """The delta body and the spine with its canopy."""
-    hull, panel, dark, glass, stripe = (style.material(r) for r in ("hull", "hull_panel", "hull_dark", "canopy_glass", "stripe"))
+    hull, panel, dark, glass = (style.material(r) for r in ("hull", "hull_panel", "hull_dark", "canopy_glass"))
     rings = [np.array([[0.0, NOSE_Y, 0.0]] * 8)] + [body_ring(*s) for s in BODY_STATIONS]
     paints = [hull, hull, panel, hull, hull, panel, hull, hull]
     body = faceted(rings, paints, cap_end=dark)
@@ -99,9 +99,9 @@ def body_pieces(style: Style) -> list[Piece]:
         return np.array([[x, y, z] for x, y in pts])
 
     spine_rings = [spine_ring(*s) for s in SPINE_STATIONS]
-    spine_paints = [[hull, stripe, hull, hull, None, hull] for _ in SPINE_STATIONS[1:]]
+    spine_paints = [[hull, hull, hull, hull, hull, None] for _ in SPINE_STATIONS[1:]]  # the foot is buried
     for k in range(CANOPY_SEGMENTS):
-        spine_paints[k] = [glass, glass, glass, hull, None, hull]
+        spine_paints[k] = [glass, glass, glass, glass, glass, None]
     spine = faceted(spine_rings, spine_paints, cap_start=hull, cap_end=dark)
     return [
         piece("body", "body", body, 60000.0, solid=loft_solid(2, [body_ring(*s) for s in BODY_STATIONS]), collision=boxes,
@@ -168,6 +168,27 @@ def wing_ring(x: float, lead_z: float, lead_y: float, trail_z: float, trail_y: f
                      [x, lead_y + 0.3 * half, lead_z]])
 
 
+LIGHTS = 9  # running lights along each wing's trailing edge, for a style that has them
+LIGHT_R = 0.28
+
+
+def running_lights(style: Style) -> list[Mesh]:
+    """Round lamps standing half proud on the wing's upper face just ahead of its trailing edge, when the style names a
+    ``running_light`` finish (the show's red-orange row); none otherwise."""
+    if "running_light" not in style.materials:
+        return []
+    lamp = style.material("running_light")
+    inner, outer = wing_ring(*WING_STATIONS[1]), wing_ring(*WING_STATIONS[-2])
+    out = []
+    for t in np.linspace(0.04, 0.96, LIGHTS):
+        trail = inner[2] + t * (outer[2] - inner[2])
+        upper = inner[3] + t * (outer[3] - inner[3])
+        at = trail + 0.45 / float(np.linalg.norm(upper - trail)) * (upper - trail)
+        profile = [(-LIGHT_R * np.cos(a), LIGHT_R * np.sin(a)) for a in np.linspace(0.0, np.pi, 7)]
+        out.append(lathe(profile, 10, lamp).translated(at))
+    return out
+
+
 def wing_pieces(style: Style) -> list[Piece]:
     """The starboard wing, from inside the body's aft corner up to its tip."""
     hull, panel, stripe = style.material("hull"), style.material("hull_panel"), style.material("stripe")
@@ -182,7 +203,8 @@ def wing_pieces(style: Style) -> list[Piece]:
         n /= np.linalg.norm(n)
         boxes.append(box_of(run, f"span{k}", np.column_stack([u, n, np.cross(u, n)])))
     tip = WING_STATIONS[-1]
-    return [piece("wing_r", "wing_r", mesh, 5000.0, RIGHT, collision=boxes, fine=0.7,
+    lights = running_lights(style)
+    return [piece("wing_r", "wing_r", [mesh, *lights], 5000.0, RIGHT, collision=boxes, fine=0.7,
                   anchors={"tip": Anchor((tip[0], 0.5 * (tip[2] + tip[4]), 0.5 * (tip[1] + tip[3])), (1.0, 0.0, 0.0)),
                            "joint": Anchor((13.0, -1.6, 29.0))})]
 
