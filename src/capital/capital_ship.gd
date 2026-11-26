@@ -466,6 +466,7 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 		entries.append(Station.volume_entry(v))
 	damageable.setup(entries, spec.hull_max, faction)
 	damageable.hit_taken.connect(_on_hit)
+	damageable.hits_landed.connect(_on_hits_landed)
 	_packed_volumes = Station.pack_volumes(volumes)
 	_packed_hulls = Station.pack_hulls(shapes, volumes)
 
@@ -576,6 +577,23 @@ func _register_surfaces() -> void:
 		_core.set_surface(rotor.get_instance_id(), rotor.packed_volumes, rotor.packed_hulls, 0.0)
 		_core.set_surface_owner(rotor.get_instance_id(), get_instance_id(), false)
 		_check_volume_count(rotor.piece_name, rotor.get_instance_id())
+	_set_landing()
+
+
+# How the beams' batch lands on the hull and each rotor (M10-T75): by this ship's sections, each piece's surface volumes named
+# by their sections' slots, a rotor's hits at its pivot (a rotor passes its summaries on to the hull's, as every signal).
+func _set_landing() -> void:
+	damageable.set_landing(Damageable.LANDING_CAPITAL, damage.ledger, 0, _volume_slots(CapitalSections.HULL))
+	for rotor: CapitalRotor in rotors:
+		if rotor.hull != null:
+			rotor.hull.set_landing(Damageable.LANDING_CAPITAL, damage.ledger, 0, _volume_slots(rotor.piece_name), rotor.pivot)
+
+
+func _volume_slots(piece: String) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	for section: String in _volume_sections.get(piece, PackedStringArray()):
+		out.append(damage.section_slot(section))
+	return out
 
 
 # The core drops a volume that is not finite, which would shift the sweep's volume numbers: that body's hits are then named by
@@ -593,6 +611,13 @@ func _on_hit(info: HitInfo) -> void:
 	last_section = str(info.get_meta(SECTION_META))
 	section_hits[last_section] = int(section_hits.get(last_section, 0)) + 1
 	section_hit.emit(last_section, info)
+
+
+# A tick's beam hits (M10-T75): each counted on its section, as `_on_hit` counts a hit.
+func _on_hits_landed(summary: HitSummary) -> void:
+	for slot: int in summary.sections:
+		last_section = damage.section_name(slot)
+		section_hits[last_section] = int(section_hits.get(last_section, 0)) + 1
 
 
 # Names the section a hit landed on, by the surface volume the core's sweep entered when it gives one (a bolt), else by the

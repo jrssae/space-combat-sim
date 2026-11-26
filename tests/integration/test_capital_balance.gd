@@ -100,6 +100,7 @@ func _fight(seed_value: int) -> Array:
 		return []
 	var taken: Array[float] = [0.0]
 	omega.damageable.damaged.connect(func(_info: HitInfo, applied: float) -> void: taken[0] += applied)
+	omega.damageable.hits_landed.connect(func(summary: HitSummary) -> void: taken[0] += summary.applied)  # beams (M10-T75)
 	Engine.physics_ticks_per_second = roundi(60.0 * SPEED_UP)
 	Engine.time_scale = SPEED_UP
 	Engine.max_physics_steps_per_frame = maxi(_steps_backup, roundi(SPEED_UP))
@@ -112,6 +113,8 @@ func _fight(seed_value: int) -> Array:
 		c.damageable.damaged.connect(func(info: HitInfo, applied: float) -> void:
 			var key: String = "%s %.0f" % [info.cause, info.damage if info.cause != &"beam" else 0.0]
 			by_kind[key] = float(by_kind.get(key, 0.0)) + applied)
+		c.damageable.hits_landed.connect(func(summary: HitSummary) -> void:  # a tick's beam hits (M10-T75)
+			by_kind["beam 0"] = float(by_kind.get("beam 0", 0.0)) + summary.applied)
 	var t0: float = SimClock.now()
 	var marks: PackedStringArray = []
 	var next_mark: float = 120.0

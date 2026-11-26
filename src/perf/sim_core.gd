@@ -814,11 +814,18 @@ func _watch(node: Node) -> void:
 		var body_id: int = body.get_instance_id()
 		hull.destroyed.connect(_on_hull_destroyed.bind(body_id))
 		hull.damaged.connect(_on_hull_damaged.bind(hull, body_id))
+		hull.hits_landed.connect(_on_hull_hits_landed.bind(hull, body_id))
 		hull.restored.connect(_on_hull_restored.bind(hull, body_id))
 
 
 func _on_hull_damaged(_info: HitInfo, _applied: float, hull: Damageable, body_id: int) -> void:
 	if core != null:
+		core.note_hull(body_id, hull.hull.hp, hull.hull.max_hp)
+
+
+# A tick's beam hits (M10-T75): the hull column as a hit's `damaged` leaves it.
+func _on_hull_hits_landed(summary: HitSummary, hull: Damageable, body_id: int) -> void:
+	if core != null and summary.applied > 0.0:
 		core.note_hull(body_id, hull.hull.hp, hull.hull.max_hp)
 
 

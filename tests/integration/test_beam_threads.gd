@@ -34,7 +34,8 @@ func test_two_omegas_across_a_seeded_battle_land_the_same_beams_with_one_thread_
 
 
 # The seeded battle with `threads` threads and an Earth Alliance and a raider Omega either side of its first fight, facing
-# each other: every beam hit as [the hull's place in the battle (-1, -2 the Omegas), the tick, damage, point].
+# each other: every beam hit as [the hull's place in the battle (-1, -2 the Omegas), the tick, damage, point], from the beams'
+# native hit log.
 func _battle_beams(threads: int) -> Array:
 	Settings.set_value(&"perf_threads", threads)
 	var fight: Dictionary = await SeededBattle.start(self)
@@ -45,24 +46,23 @@ func _battle_beams(threads: int) -> Array:
 	var a: CapitalShip = _omega(world, Factions.EARTH_ALLIANCE, "Omega A", centre + Vector3(0.0, 0.0, GAP_M), Basis.IDENTITY)
 	var b: CapitalShip = _omega(world, Factions.RAIDERS, "Omega B", centre - Vector3(0.0, 0.0, GAP_M), Basis(Vector3.UP, PI))
 	var log: Array = []
-	var tick: Array[int] = [0]
-	for c: Combatant in ships:
-		c.damageable.hit_taken.connect(func(info: HitInfo) -> void:
-			if info.cause == HitInfo.CAUSE_BEAM:
-				log.append([index_of.get(info.target_id, -3), tick[0], info.damage, info.point]))
+	var who: Dictionary = {}
 	for pair: Array in [[a, -1], [b, -2]]:
 		var cap: CapitalShip = pair[0]
 		cap.damageable.invulnerable = true
-		cap.damageable.hit_taken.connect(func(info: HitInfo) -> void:
-			if info.cause == HitInfo.CAUSE_BEAM:
-				log.append([pair[1], tick[0], info.damage, info.point]))
+		who[cap.damageable.get_instance_id()] = pair[1]
+		for rotor: CapitalRotor in cap.rotors:
+			who[rotor.hull.get_instance_id()] = pair[1]
 	var beams: CapitalBeams = CapitalBeams.of(world)
+	beams.set_hit_log(true)  # the beams' native hit log (M10-T75: they land in one batch a tick, with no `hit_taken` a hit)
 	var cost: Array[float] = []
 	var kernel: Array[float] = []
 	var landing: Array[float] = []
 	for t: int in TICKS:
-		tick[0] = t
 		await get_tree().physics_frame
+		for e: Array in beams.hit_log():
+			log.append([who.get(int(e[0]), index_of.get(int(e[1]), -3)), t, e[3], e[5]])
+		beams.set_hit_log(true)
 		if beams != null:
 			cost.append(beams.step_us)
 			kernel.append(beams.kernel_us)

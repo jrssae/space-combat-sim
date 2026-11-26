@@ -461,8 +461,14 @@ func _build_damage() -> void:
 	hull = HullHealth.new(damage.hull_max)
 	if frame_hull != null:
 		frame_hull.hull = hull
+		frame_hull.set_landing(Damageable.LANDING_STATION, damage.ledger, sections.body_code(StationHardpoints.FRAME))
+		if not frame_hull.hits_landed.is_connected(_on_hits_landed):
+			frame_hull.hits_landed.connect(_on_hits_landed)
 	if drum_hull != null:
 		drum_hull.hull = hull
+		drum_hull.set_landing(Damageable.LANDING_STATION, damage.ledger, sections.body_code(StationHardpoints.DRUM))
+		if not drum_hull.hits_landed.is_connected(_on_hits_landed):
+			drum_hull.hits_landed.connect(_on_hits_landed)
 
 
 ## Its death blast and where it goes off (World frame), `[BlastSpec, Vector3]`: the table's row for its class and kind
@@ -558,6 +564,21 @@ func _take_hull(amount: float) -> float:
 	if hull == null:
 		return 0.0
 	return hull.apply(hull.hp if damage.is_destroyed else amount)
+
+
+# A tick's beam hits on either piece (M10-T75): each section's lost points on the HUD's zones as `_note_section` records a
+# hit's, and the signal once a section.
+func _on_hits_landed(summary: HitSummary) -> void:
+	var told: Dictionary = {}
+	var at: PackedInt32Array = summary.zones
+	var amounts: PackedFloat64Array = summary.zone_amounts
+	for k: int in at.size():
+		var index: int = at[k]
+		if frame_hull != null:
+			frame_hull.zones.record_zone(index, amounts[k])
+		told[index] = true
+	for index: int in told:
+		section_damaged.emit(index, String(sections.sections[index]["name"]), sections.health[index])
 
 
 # A section's points fell from `before`: the HUD's zone and the signal.

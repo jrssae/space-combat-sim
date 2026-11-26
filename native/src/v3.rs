@@ -140,6 +140,30 @@ pub fn xform_inv(b: &Basis, v: Vector3) -> Vector3 {
     Vector3::new(dot(col_a(b), v), dot(col_b(b), v), dot(col_c(b), v))
 }
 
+/// `Transform3D(b, origin).affine_inverse() * p`, as the engine inverts (cofactors and one reciprocal of the determinant,
+/// M10-T75) and then transforms: a World point in a body's own frame, the bits GDScript gets.
+pub fn affine_inverse_xform(b: &Basis, origin: Vector3, p: Vector3) -> Vector3 {
+    let at = |row: usize, col: usize| {
+        let v = b.rows[row];
+        match col {
+            0 => v.x,
+            1 => v.y,
+            _ => v.z,
+        }
+    };
+    let cofac = |r1: usize, c1: usize, r2: usize, c2: usize| at(r1, c1) * at(r2, c2) - at(r1, c2) * at(r2, c1);
+    let co = [cofac(1, 1, 2, 2), cofac(1, 2, 2, 0), cofac(1, 0, 2, 1)];
+    let det = at(0, 0) * co[0] + at(0, 1) * co[1] + at(0, 2) * co[2];
+    let s = 1.0f32 / det;
+    let inv = Basis::from_rows(
+        Vector3::new(co[0] * s, cofac(0, 2, 2, 1) * s, cofac(0, 1, 1, 2) * s),
+        Vector3::new(co[1] * s, cofac(0, 0, 2, 2) * s, cofac(0, 2, 1, 0) * s),
+        Vector3::new(co[2] * s, cofac(0, 1, 2, 0) * s, cofac(0, 0, 1, 1) * s),
+    );
+    let o = xform(&inv, neg(origin));
+    add(xform(&inv, p), o)
+}
+
 /// The basis columns: `basis.x`, `basis.y` and `basis.z` as GDScript reads them.
 pub fn col_a(b: &Basis) -> Vector3 {
     Vector3::new(b.rows[0].x, b.rows[1].x, b.rows[2].x)

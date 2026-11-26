@@ -29,6 +29,7 @@ var id: int = -1
 func _init(p_max_hp: float = 100.0) -> void:
 	var capacity: float = p_max_hp if p_max_hp >= MIN_MAX_HP else MIN_MAX_HP  # the comparison is false for NaN, so NaN is caught
 	id = int(DamageStore.store.hull_add(capacity))
+	DamageStore.adopt(DamageStore.ON_HULL, id, self)
 	var was: bool = DamageStore.quiet
 	DamageStore.quiet = true
 	max_hp = capacity
@@ -39,6 +40,7 @@ func _init(p_max_hp: float = 100.0) -> void:
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE and id >= 0 and DamageStore.store != null:
 		DamageStore.store.hull_free(id)
+		DamageStore.forget(DamageStore.ON_HULL, id)
 
 
 ## Removes up to `amount` points and returns what was actually removed: never more than the remaining `hp`, and 0

@@ -698,10 +698,16 @@ impl ScsSimCore {
     /// an attacker of its victim for `MEMORY_S`. Nothing is kept while no turret is mounted.
     #[func]
     fn note_attackers(&mut self, victims: PackedInt64Array, shooters: PackedInt64Array, now_s: f64) {
+        let pairs: Vec<(i64, i64)> = victims.as_slice().iter().copied().zip(shooters.as_slice().iter().copied()).collect();
+        self.note_attacker_pairs(&pairs, now_s);
+    }
+
+    /// `note_attackers` for `(victim, shooter)` pairs in order (M10-T75: the beams' batch, natively).
+    pub(crate) fn note_attacker_pairs(&mut self, pairs: &[(i64, i64)], now_s: f64) {
         if self.turrets.mounts.count() == 0 {
             return;
         }
-        for (&victim, &shooter) in victims.as_slice().iter().zip(shooters.as_slice()) {
+        for &(victim, shooter) in pairs {
             self.latch_on_hit(victim, shooter);
             let t = &mut self.turrets;
             let civilian = t.civilians.contains(&victim);

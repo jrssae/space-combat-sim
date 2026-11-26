@@ -247,6 +247,7 @@ func _notification(what: int) -> void:
 func _ready() -> void:
 	if combatant != null and combatant.damageable != null:
 		combatant.damageable.hit_taken.connect(_on_hit_taken)
+		combatant.damageable.hits_landed.connect(_on_hits_landed)
 
 
 func _physics_process(delta: float) -> void:
@@ -768,12 +769,22 @@ func _keep_lists() -> Array:
 
 
 func _on_hit_taken(info: HitInfo) -> void:
+	_note_hit(info.cause if info != null else &"", info.shooter_id if info != null else 0)
+
+
+# A tick's beam hits (M10-T75): remembered as their last hit would be, its shooter the attacker.
+func _on_hits_landed(summary: HitSummary) -> void:
+	_note_hit(summary.cause, summary.last_shooter)
+
+
+# A hit by `shooter_id` for `cause`: the driver wakes, and the attacker and the time are remembered.
+func _note_hit(cause: StringName, shooter_id: int) -> void:
 	_woken = true  # a hit is answered on the next tick, far or near
 	last_hit_s = SimClock.now()
-	if info != null and info.cause == HitInfo.CAUSE_BOLT:
+	if cause == HitInfo.CAUSE_BOLT:
 		last_bolt_hit_s = last_hit_s
-	if info != null and info.shooter_id != 0 and is_instance_id_valid(info.shooter_id):
-		var shooter := instance_from_id(info.shooter_id) as Node
+	if shooter_id != 0 and is_instance_id_valid(shooter_id):
+		var shooter := instance_from_id(shooter_id) as Node
 		var marker := shooter.get_node_or_null(^"Targetable") as Targetable if shooter != null else null
 		# A body that fires for another's marker (the station's drum, M7-T10) names it.
 		if marker == null and shooter != null and shooter.has_meta(Targetable.SPEAKS_FOR):

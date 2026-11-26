@@ -4,10 +4,12 @@ extends Node
 ## beams with no node per shot. A ship's emitters join with it (`BeamMounts` reads its hardpoints and weapon specs) and leave
 ## with it; when a mount is lost, a section falls, the ship is disabled or made whole, its emitters' state is pushed to the rows.
 ## Each tick, after the core's sync, the rows step every emitter (charge, fire, cool; targets by what the ship perceives) and
-## this lands their hits through each target's `Damageable` (cause `beam`, a capital's on the section its surface volume
-## names, friend or foe stopping the line, damage only where a bolt of its side could hurt) and hands the lines to `BeamDraw`.
-## A hit on its own side's friend reveals a disguised shooter (`Transponder.note_hit`). A child of `World`, after the flight and
-## before the hit resolver.
+## land their hits in one native batch on the damage store (M10-T75, Q70, Q94: cause `beam`, a capital's on the section its
+## surface volume names, the station by section and grid mount, friend or foe stopping the line, damage only where a bolt of
+## its side could hurt; a hit on its own side's friend reveals a disguised shooter). This takes the batch's writes onto the
+## damage copies, raises its events (sections, parts, hulks, blasts, kills) once each and hands each damaged ship one summary
+## a tick (`Damageable.hits_landed`); a hit that raises an event ends a batch, so it is answered before the next lands. The
+## lines go to `BeamDraw`. A child of `World`, after the flight and before the hit resolver.
 ##
 ## Console: provider `beams` and command `beam` (`BeamConsole`).
 
@@ -18,11 +20,14 @@ const PRIORITY: int = HitResolver.LATE_PRIORITY - 5
 const PHASE_FIRING: int = 2
 const PHASE_COOLING: int = 3
 
-## Readouts (wall clock, never gameplay): the native step's cost (and its kernel's alone), the landing's, and the hits since
-## `reset_stats`.
+## Readouts (wall clock, never gameplay): the native step's cost (and its kernel's alone), the landing's (the batches' own
+## `land_native_us` within it), the batches a tick, the hits GDScript had to land itself, and the hits since `reset_stats`.
 var step_us: float = 0.0
 var kernel_us: float = 0.0
 var land_us: int = 0
+var land_native_us: float = 0.0
+var batches_last: int = 0
+var deferred: int = 0
 var hits: int = 0
 var damage_landed: float = 0.0
 ## Beams drawn on the last tick (sustained ones on, pulses fired).
@@ -83,6 +88,7 @@ func join(ship: CapitalShip) -> void:
 	for rotor: CapitalRotor in ship.rotors:
 		bodies.append(rotor.get_instance_id())
 	_rows.add_owner(ship.get_instance_id(), bodies)
+	_rows.set_owner_faction(ship.get_instance_id(), ship.faction)
 	for m: Dictionary in mounts:
 		var index: int = int(_rows.add_beam(ship.get_instance_id(), m["position"], m["forward"], m["arc_half_deg"], m["packed"]))
 		if index < 0:
@@ -179,10 +185,33 @@ func ready_now(ship: CapitalShip) -> int:
 	return int(_rows.ready_now(ship.get_instance_id())) if _rows != null and ship != null else 0
 
 
+## Keeps every landed beam hit from now on (true), or stops and forgets them: the tests' native hit log (M10-T75).
+func set_hit_log(on: bool) -> void:
+	if _native() != null:
+		_rows.set_hit_log(on)
+
+
+## How many hits the log holds.
+func hit_log_size() -> int:
+	return int(_rows.hit_log_size()) if _rows != null else 0
+
+
+## The logged hits, each `[the Damageable hit, the body hit, the shooter, damage, points removed, point]`, in landing order.
+func hit_log() -> Array:
+	var out: Array = []
+	if _rows == null:
+		return out
+	var raw: Array = _rows.hit_log()
+	for k: int in (raw[0] as PackedInt64Array).size():
+		out.append([raw[0][k], raw[1][k], raw[2][k], raw[3][k], raw[4][k], raw[5][k]])
+	return out
+
+
 func reset_stats() -> void:
 	hits = 0
 	damage_landed = 0.0
 	land_us = 0
+	deferred = 0
 
 
 func _physics_process(delta: float) -> void:
@@ -204,35 +233,95 @@ func _physics_process(delta: float) -> void:
 	land_us = Time.get_ticks_usec() - started
 
 
-# The step's hits, in its order: each through its hull's Damageable when a bolt of the shooter's side could hurt it.
+# The step's hits, in its order, in native batches on the damage store: each batch's writes onto the copies, its events with
+# their signals, its summaries, a kill's `destroyed`, the disguises it gave away, and a hit it left to land here.
 func _land(out: Array) -> void:
-	var emitters: PackedInt32Array = out[0]
-	var hull_ids: PackedInt64Array = out[1]
-	var body_ids: PackedInt64Array = out[2]
-	var points: PackedVector3Array = out[3]
-	var volumes: PackedInt32Array = out[4]
-	var damage: PackedFloat64Array = out[5]
+	var count: int = (out[0] as PackedInt32Array).size()
+	batches_last = 0
+	land_native_us = 0.0
+	if count == 0:
+		return
 	var friendly_fire: bool = bool(Settings.get_value(&"friendly_fire"))
+	var god_mode: bool = DebugConsole.flags.invulnerable
+	var now: float = SimClock.now()
 	var sim: SimCore = SimCore.for_tree(get_tree())
-	for k: int in emitters.size():
-		var shooter: CapitalShip = _owners[emitters[k]]
-		var damageable: Damageable = BlastResolver.hurtable(hull_ids[k])
-		if damageable == null or not is_instance_valid(shooter):
-			continue
-		if not damageable.can_be_hit_by(shooter.faction, friendly_fire):
-			continue  # the line stops on a hull its side may not hurt
-		var shooter_id: int = shooter.get_instance_id()
-		var from: Vector3 = shooter.global_transform * (_mounts[emitters[k]]["position"] as Vector3)
-		var facing: Vector3 = from - points[k]
-		var info := HitInfo.new(body_ids[k], shooter_id, shooter.faction, damage[k], points[k],
-				facing.normalized() if facing.length_squared() > 1e-12 else Vector3.ZERO, 0.0, HitInfo.CAUSE_BEAM)
-		info.volume = volumes[k]
-		if sim != null:
-			sim.note_hit(info.target_id, shooter_id)  # the turrets' attacker memory (M5-T21)
-		Transponder.note_hit(shooter_id, damageable)  # a disguised shooter that hit its own side's friend is found out
-		damageable.apply_hit(info)
-		hits += 1
-		damage_landed += damage[k]
+	var names: Array = []  # the core's factions, read once a tick when a summary needs them
+	var at: int = 0
+	while at < count:
+		var got: Array = _rows.land(at, now, friendly_fire, god_mode)
+		if got.is_empty():
+			return
+		batches_last += 1
+		for shooter_id: int in got[5] as PackedInt64Array:
+			var marker: Targetable = Targetable.of(instance_from_id(shooter_id) as Node) if is_instance_id_valid(shooter_id) else null
+			if marker != null:
+				marker.reveal()  # a disguised shooter that hit its own side's friend is found out
+		DamageStore.take_writes(got[1])
+		DamageStore.apply(got[2])
+		var cols: Array = got[3]
+		var targets: PackedInt64Array = cols[0]
+		if not targets.is_empty() and names.is_empty() and sim != null:
+			names = sim.core.factions()
+		for k: int in targets.size():
+			var hull: Damageable = instance_from_id(targets[k]) as Damageable if is_instance_id_valid(targets[k]) else null
+			if hull != null:
+				hull.land_summary(HitSummary.from_columns(cols, k, names))
+		var kill: Dictionary = got[4]
+		if not kill.is_empty():
+			_announce_kill(kill)
+		hits += int(got[7])
+		damage_landed += float(got[8])
+		var left: int = int(got[6])
+		if left >= 0:
+			deferred += 1
+			_land_one(out, left)
+		at = int(got[0])
+	land_native_us = float(_rows.land_us())
+
+
+# The hit that destroyed its hull: its `destroyed`, with the hit as a bolt's would carry it.
+func _announce_kill(kill: Dictionary) -> void:
+	var hull: Damageable = instance_from_id(int(kill["target"])) as Damageable if is_instance_id_valid(int(kill["target"])) else null
+	if hull == null:
+		return
+	var info: HitInfo = _info(int(kill["beam"]), int(kill["body"]), float(kill["damage"]), kill["point"] as Vector3)
+	info.volume = int(kill["volume"])
+	info.applied = float(kill["applied"])
+	hull.destroyed.emit(info)
+
+
+# A hit the batch left to GDScript (a hull it holds no landing for, a capital volume it cannot name): through its
+# `Damageable` when a bolt of the shooter's side could hurt it, as every hit landed before the batch (M10-T12).
+func _land_one(out: Array, k: int) -> void:
+	var emitter: int = (out[0] as PackedInt32Array)[k]
+	var shooter: CapitalShip = _owners[emitter]
+	var damageable: Damageable = BlastResolver.hurtable((out[1] as PackedInt64Array)[k])
+	if damageable == null or not is_instance_valid(shooter):
+		return
+	damageable.push_landing()  # the batch lands on it from now on
+	if not damageable.can_be_hit_by(shooter.faction, bool(Settings.get_value(&"friendly_fire"))):
+		return  # the line stops on a hull its side may not hurt
+	var info: HitInfo = _info(emitter, (out[2] as PackedInt64Array)[k], (out[5] as PackedFloat64Array)[k],
+			(out[3] as PackedVector3Array)[k])
+	info.volume = (out[4] as PackedInt32Array)[k]
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	if sim != null:
+		sim.note_hit(info.target_id, info.shooter_id)  # the turrets' attacker memory (M5-T21)
+	Transponder.note_hit(info.shooter_id, damageable)
+	damageable.apply_hit(info)
+	hits += 1
+	damage_landed += info.damage
+
+
+# Emitter `emitter`'s hit on body `body_id` at `point` as a `HitInfo` (cause `beam`, facing back along the beam).
+func _info(emitter: int, body_id: int, damage: float, point: Vector3) -> HitInfo:
+	var shooter: CapitalShip = _owners[emitter]
+	var from: Vector3 = shooter.global_transform * (_mounts[emitter]["position"] as Vector3) if is_instance_valid(shooter) \
+			else point
+	var facing: Vector3 = from - point
+	return HitInfo.new(body_id, shooter.get_instance_id() if is_instance_valid(shooter) else 0,
+			shooter.faction if is_instance_valid(shooter) else &"", damage, point,
+			facing.normalized() if facing.length_squared() > 1e-12 else Vector3.ZERO, 0.0, HitInfo.CAUSE_BEAM)
 
 
 # The step's lines to `BeamDraw`: the sustained beams on now, and each pulse just fired.
@@ -265,4 +354,5 @@ func _native() -> Object:
 		_rows = NativeLib.instantiate(NATIVE_CLASS)
 		if _rows != null:
 			_rows.attach_core(sim.core)
+			_rows.attach_store(DamageStore.store)
 	return _rows

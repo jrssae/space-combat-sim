@@ -24,11 +24,20 @@ signal destroyed(info: HitInfo)
 signal restored
 ## The hit volumes changed in play (`set_volumes`: cargo pods mounted or taken off, M5-T16).
 signal volumes_changed
+## A tick's beam hits on this ship, landed in one native batch (M10-T75, Q94): instead of a `hit_taken` and a `damaged` a hit,
+## one summary a tick with every attacker, the damage and the sections hit.
+signal hits_landed(summary: HitSummary)
 
 const GROUP: StringName = &"damageable"
 
-var faction: StringName = Factions.NEUTRAL
-var hull: HullHealth = HullHealth.new()
+var faction: StringName = Factions.NEUTRAL:
+	set(value):
+		faction = value
+		push_landing()
+var hull: HullHealth = HullHealth.new():
+	set(value):
+		hull = value
+		push_landing()
 ## Where the damage landed, by main component (the HUD's silhouettes).
 var zones: DamageZones = DamageZones.new()
 var shapes: Array[HitShape] = []
@@ -52,16 +61,25 @@ var ram_lethal_dv_mps: float = 18.0
 var ram_mass_kg: float = 0.0
 ## True for something that any bolt hurts whatever its faction (a nav buoy: neutral to everyone, yet shootable). Bolts of its
 ## own faction still pass through.
-var hit_by_anyone: bool = false
+var hit_by_anyone: bool = false:
+	set(value):
+		hit_by_anyone = value
+		push_landing()
 ## True for a big hull that a bolt it does not take damage from still stops on (M7-T07, maintainer: the station, whose grid fires
 ## many bolts close to its hull); the bolt is spent with no damage.
 var stops_friendly_bolts: bool = false
 ## True for the player's hull: `debug.invulnerable` stops its damage.
-var respects_god_mode: bool = false
+var respects_god_mode: bool = false:
+	set(value):
+		respects_god_mode = value
+		push_landing()
 ## True for a hull nothing damages, god-mode style but for any ship (M3-T09: the instructor, from its scenario spawn's
 ## `invulnerable`). Hits still arrive (`hit_taken`); only the console's `kill` gets through, as it does through god mode.
 ## The pool clears it on every acquire.
-var invulnerable: bool = false
+var invulnerable: bool = false:
+	set(value):
+		invulnerable = value
+		push_landing()
 ## A hull that takes damage by section (a capital, M10-T08) routes each hit here instead of straight to `hull`: it is called
 ## with the `HitInfo`, removes the points itself (from `hull` too) and returns how many it removed. Empty for every other ship.
 var hit_router: Callable = Callable()
@@ -71,6 +89,12 @@ var hull_scale: float = 1.0
 ## life does not land on the next (M4-T22 fix round 1).
 var life: int = 0
 
+## How a beam batch lands here (M10-T75): `LANDING_PLAIN` (the hull whole), `LANDING_CAPITAL` or `LANDING_STATION` (by the
+## ledger's sections), set by the capital, its rotors and the station (`set_landing`).
+const LANDING_PLAIN: int = 0
+const LANDING_CAPITAL: int = 1
+const LANDING_STATION: int = 2
+
 var _base_shapes: Array[HitShape] = []  # as built, before `hull_scale`
 var _whole_volumes: Array[ConvexSweep.Convex] = []  # the ram volumes, bounds and radii of the whole hull
 var _whole_cores: Array[ConvexSweep.Convex] = []
@@ -78,14 +102,57 @@ var _whole_bounds: AABB = AABB()
 var _whole_radius: float = 0.0
 var _whole_core: float = 0.0
 var _whole_dirty: bool = true
+var _landing: Array = [LANDING_PLAIN, -1, 0, PackedInt32Array(), Vector3.ZERO, null]  # route, ledger, body, volumes, offset, summary
 
 
 func _init() -> void:
 	add_to_group(GROUP)
 
 
+func _ready() -> void:
+	push_landing()  # its ship is known now: whether it is the player's
+
+
 func _exit_tree() -> void:
 	DebugConsole.registry.unregister_owner(self)
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and DamageStore.store != null:
+		DamageStore.store.target_free(get_instance_id())
+
+
+## How the beams' batch lands here (M10-T75): by route `route` on ledger `ledger` (a capital's or the station's), the station
+## body `body`, a capital piece's section slots by surface volume and the piece's offset at rest, its summaries going to
+## `summary` (null: here).
+func set_landing(route: int, ledger: int, body: int = 0, volumes := PackedInt32Array(), offset := Vector3.ZERO,
+		summary: Damageable = null) -> void:
+	_landing = [route, ledger, body, volumes, offset, summary]
+	push_landing()
+
+
+## Tells the damage store how the beams' batch lands here: the hull, the route, the flags and the faction as they are now.
+func push_landing() -> void:
+	if DamageStore.store == null or hull == null or zones == null:
+		return
+	var ship := get_parent() as Ship
+	var flags: int = (1 if invulnerable else 0) | (2 if respects_god_mode else 0) | (4 if hit_by_anyone else 0) \
+			| (8 if ship != null and ship.console_owner else 0)
+	var summary: Damageable = _landing[5]
+	DamageStore.store.target_set(get_instance_id(), hull.id, summary.get_instance_id() if is_instance_valid(summary) \
+			else get_instance_id(), faction, _landing[0], _landing[1], _landing[2], _landing[3], _landing[4], zones.layout, flags)
+
+
+## A tick's beam hits on this ship (the batch's summary, `CapitalBeams`): the zones a fighter's silhouette shows, then the
+## summary to whoever listens.
+func land_summary(summary: HitSummary) -> void:
+	if int(_landing[0]) == LANDING_PLAIN:
+		var at: PackedInt32Array = summary.zones
+		if not at.is_empty():
+			var amounts: PackedFloat64Array = summary.zone_amounts
+			for k: int in at.size():
+				zones.record_zone(at[k], amounts[k])
+	hits_landed.emit(summary)
 
 
 ## The Damageable among `owner`'s children, or null.
@@ -107,6 +174,7 @@ func setup(collision: Array[Dictionary], hull_max: float, p_faction: StringName,
 	hull = HullHealth.new(hull_max)
 	zones = DamageZones.new(DamageZones.layout_from_name(damage_layout))
 	set_volumes(collision)
+	push_landing()
 	DebugConsole.registry.unregister_owner(self)
 	if register_console:
 		_register_console()

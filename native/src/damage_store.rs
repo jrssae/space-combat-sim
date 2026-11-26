@@ -6,6 +6,7 @@
 // A hit's damage is tested as GDScript tests it, `not (damage > 0.0)`, so NaN is no damage.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
 pub mod capital;
+pub mod landing;
 pub mod station;
 
 use godot::builtin::Vector3;

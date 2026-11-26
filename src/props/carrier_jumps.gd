@@ -129,6 +129,7 @@ func prepare(count: int, cls: StringName = DEFAULT_CLASS) -> void:
 		if cap.dock != null:
 			cap.dock.launched.connect(_on_launched)
 			cap.damageable.damaged.connect(_on_carrier_hit.bind(cap))
+			cap.damageable.hits_landed.connect(_on_carrier_beamed.bind(cap))
 
 
 ## The class `faction`'s raids come behind: the strike carrier for the raiders, a cruiser otherwise.
@@ -529,6 +530,29 @@ func _on_carrier_hit(info: HitInfo, _applied: float, cap: CapitalStandin) -> voi
 		return
 	run.attacked_at_s = SimClock.now()
 	run.attacker_id = info.shooter_id
+
+
+# A tick's beam hits on a carrier at work (M10-T75): an attack when an enemy's took points, the attacker the last hit's
+# shooter when it is an enemy, else the last enemy to hit it.
+func _on_carrier_beamed(summary: HitSummary, cap: CapitalStandin) -> void:
+	var run: CarrierRun = run_of(cap)
+	if run == null or not (summary.applied > 0.0):
+		return
+	var attacker: int = 0
+	var last: int = summary.last_shooter
+	if Factions.is_hostile(run.faction, summary.faction_of(last)):
+		attacker = last
+	else:
+		var ids: PackedInt64Array = summary.attackers
+		var sides: Array[StringName] = summary.factions
+		for k: int in range(ids.size() - 1, -1, -1):
+			if Factions.is_hostile(run.faction, sides[k]):
+				attacker = ids[k]
+				break
+	if attacker == 0:
+		return
+	run.attacked_at_s = SimClock.now()
+	run.attacker_id = attacker
 
 
 # Cornered (under attack with its drive empty), the carrier throws every docked fighter out at once and turns round those

@@ -76,26 +76,28 @@ static func make(p_sections: StationSections, p_mounts: GridMountHealth, section
 	var grid: int = p_mounts.register(p_sections.body_codes) if p_mounts != null else -1
 	out.ledger = int(DamageStore.store.station_add(at, grid, codes, PackedFloat64Array([out._share, out._hulk_below,
 			out._shutdown_at]), out.hull_max))
+	DamageStore.adopt(DamageStore.ON_STATION, out.ledger, out)
 	return out
 
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE and ledger >= 0 and DamageStore.store != null:
 		DamageStore.store.station_free(ledger)
+		DamageStore.forget(DamageStore.ON_STATION, ledger)
 
 
 ## A hit of `damage` at `local` in `body`'s frame (`StationHardpoints.FRAME` or `DRUM`). Returns the hull points it removed.
 func hit(body: String, local: Vector3, damage: float) -> float:
 	if is_destroyed or not (damage > 0.0):
 		return 0.0
-	return _replay(DamageStore.store.station_hit(ledger, sections.body_code(body), local, damage))
+	return replay(DamageStore.store.station_hit(ledger, sections.body_code(body), local, damage))
 
 
 ## A hit of `damage` on section `index` itself, no mount struck (the console's). Returns the hull points removed.
 func hit_section(index: int, damage: float) -> float:
 	if is_destroyed or not (damage > 0.0) or index < 0 or index >= sections.count():
 		return 0.0
-	return _replay(DamageStore.store.station_hit_section(ledger, index, damage))
+	return replay(DamageStore.store.station_hit_section(ledger, index, damage))
 
 
 func has_power() -> bool:
@@ -133,9 +135,9 @@ func describe() -> String:
 	return "%s, hull %.0f/%.0f" % [state, hull_hp, hull_max]
 
 
-# Takes the store's answer onto the copy in its order (sections, grid mounts, the hull), raising each signal where the rules
-# raised it; returns its result.
-func _replay(out: PackedFloat64Array) -> float:
+## Takes the store's answer onto the copy in its order (sections, grid mounts, the hull), raising each signal where the rules
+## raised it; returns its result (a call's, or a beam batch's entries through `DamageStore.apply`).
+func replay(out: PackedFloat64Array) -> float:
 	var was: bool = DamageStore.quiet
 	var i: int = 1
 	while i < out.size():
@@ -170,6 +172,21 @@ func _replay(out: PackedFloat64Array) -> float:
 				destroyed.emit(blown)
 	DamageStore.quiet = was
 	return out[0] if not out.is_empty() else 0.0
+
+
+## The writes of a beam batch (`DamageStore.take_writes`): entries `from` to `to` of `entries`, six numbers each, no events.
+func take_writes(entries: PackedFloat64Array, from: int, to: int) -> void:
+	var was: bool = DamageStore.quiet
+	DamageStore.quiet = true
+	for i: int in range(from, to, DamageStore.OUT_WIDTH):
+		var code: int = int(entries[i + 2])
+		if code == DamageStore.ST_SEC_HEALTH:
+			sections.health[int(entries[i + 3])] = entries[i + 4]
+		elif code == DamageStore.ST_MOUNT_HEALTH:
+			mounts.health[int(entries[i + 3])] = entries[i + 4]
+		elif code == DamageStore.ST_HULL_HP:
+			hull_hp = entries[i + 3]
+	DamageStore.quiet = was
 
 
 func _push() -> void:

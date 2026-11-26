@@ -161,9 +161,7 @@ func test_part_of_a_starfury_flights_linked_bolts_is_taken_and_a_beam_never() ->
 	_guns().hold(ours, true)
 	CapitalBeams.of(main.world).hold(ours, false)
 	var beamed: Array[int] = [0]
-	raider.section_hit.connect(func(_section: String, info: HitInfo) -> void:
-		if info.cause == &"beam":
-			beamed[0] += 1)
+	raider.damageable.hits_landed.connect(func(summary: HitSummary) -> void: beamed[0] += summary.hits)  # a tick's beams (M10-T75)
 	var met: int = int(_guns().intercept_readouts()[1])
 	await _fly(30.0, func() -> bool: return beamed[0] > 3)
 	assert_gt(beamed[0], 0, "the beams reach the raider's hull")

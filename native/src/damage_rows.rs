@@ -6,7 +6,10 @@
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
+use std::collections::HashMap;
+
 use crate::damage_store::capital::{self as cap, Capital, Part, Rules, Section};
+use crate::damage_store::landing::Target;
 use crate::damage_store::station::{self as st, GridMounts, Station, StationSections};
 use crate::damage_store::{DamageStore, Hull, Log};
 
@@ -23,8 +26,17 @@ const RULES_LEN: usize = 5;
 pub struct ScsDamageStore {
     base: Base<RefCounted>,
     pub store: DamageStore,
+    /// How a batch lands on each `Damageable` (by instance id), and its faction by name.
+    pub targets: HashMap<i64, Target>,
+    pub target_factions: HashMap<i64, StringName>,
     log: Log,
 }
+
+/// A target's flags for `target_set`.
+const TARGET_INVULNERABLE: i64 = 1;
+const TARGET_GOD_MODE: i64 = 2;
+const TARGET_ANYONE: i64 = 4;
+const TARGET_PLAYER: i64 = 8;
 
 fn vec3(s: &[f64], at: usize) -> Vector3 {
     Vector3::new(s[at] as f32, s[at + 1] as f32, s[at + 2] as f32)
@@ -469,6 +481,79 @@ impl ScsDamageStore {
             s.destroyed = destroyed;
             s.blown = blown;
         }
+    }
+
+    // --- Targets: how the beams' batch lands on each `Damageable` ---
+
+    /// `Damageable` `id`'s landing: its hull, the `Damageable` its summary goes to, its faction, its route (plain 0, capital 1,
+    /// station 2) and ledger, its station body, a capital piece's sections by surface volume, the piece's offset at rest, its
+    /// silhouette layout and flags (invulnerable 1, god mode applies 2, hit by anyone 4, the player 8).
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn target_set(
+        &mut self,
+        id: i64,
+        hull: i64,
+        summary: i64,
+        faction: StringName,
+        route: i64,
+        ledger: i64,
+        station_body: i64,
+        volume_sections: PackedInt32Array,
+        rest_offset: Vector3,
+        layout: i64,
+        flags: i64,
+    ) {
+        self.targets.insert(
+            id,
+            Target {
+                hull,
+                summary,
+                route: route as u8,
+                ledger,
+                station_body: station_body as i32,
+                volume_sections: volume_sections.as_slice().to_vec(),
+                rest_offset,
+                layout: layout as u8,
+                invulnerable: flags & TARGET_INVULNERABLE != 0,
+                respects_god_mode: flags & TARGET_GOD_MODE != 0,
+                hit_by_anyone: flags & TARGET_ANYONE != 0,
+                is_player: flags & TARGET_PLAYER != 0,
+            },
+        );
+        self.target_factions.insert(id, faction);
+    }
+
+    #[func]
+    fn target_free(&mut self, id: i64) {
+        self.targets.remove(&id);
+        self.target_factions.remove(&id);
+    }
+
+    #[func]
+    fn target_count(&self) -> i64 {
+        self.targets.len() as i64
+    }
+
+    /// `Damageable` `id`'s landing as held: `[hull, summary, route, ledger, station body, volumes, layout, flags]`, empty
+    /// for none (the tests').
+    #[func]
+    fn target_state(&self, id: i64) -> PackedInt64Array {
+        self.targets.get(&id).map_or_else(PackedInt64Array::new, |t| {
+            let flags = i64::from(t.invulnerable) | i64::from(t.respects_god_mode) << 1 | i64::from(t.hit_by_anyone) << 2
+                | i64::from(t.is_player) << 3;
+            PackedInt64Array::from(
+                [t.hull, t.summary, i64::from(t.route), t.ledger, i64::from(t.station_body), t.volume_sections.len() as i64,
+                        i64::from(t.layout), flags]
+                .as_slice(),
+            )
+        })
+    }
+
+    /// `xform.affine_inverse() * point` by the store's own maths (the test of its bits against the engine's).
+    #[func]
+    fn probe_to_local(xform: Transform3D, point: Vector3) -> Vector3 {
+        crate::v3::affine_inverse_xform(&xform.basis, xform.origin, point)
     }
 
     /// The log codes GDScript replays, by name, so the two sides cannot drift.

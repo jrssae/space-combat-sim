@@ -819,6 +819,42 @@ fly attack runs on capitals; B10 and B1 run and reported (Q77). Launch (carriers
   (`capitals[]`) are spawned on orders (Hold), so a mission frees one with `release_helm()` (no scenario key yet); the squadron's
   abort counts losses from its peak strength, not only those to a capital.
 
+### M10-T75 Beam hit landing in Rust (Q70, Q94)
+
+**Goal.** The per-tick beam hits land in one native batch instead of one GDScript call a hit (Q70), on one native damage store that
+owns every hull's, section's and part's points (Q94, option A), with the events raised to GDScript once each.
+
+- **Done (2026-11-25, awaiting the maintainer).** *Recordings first* (e9da37e0, from the GDScript paths): the damage rules on seeded
+  runs of hits, aimed hits, repairs, heals, scuttles, restores and direct writes on three synthetic capitals, a station and hulls
+  (`damage_rules.json`, `test_damage_rules_parity`), and two Omegas with their sections nearly spent beaming each other across the
+  seeded battle, its fighters crossing the lines (`beam_landing.json`, `test_beam_landing_parity`: 1 171 hits, 24 events: sections
+  damaged and lost, four mounts and a bay with the bow, fighters killed). *The store* (7f6d6a80): `native/src/damage_store.rs`
+  (engine-free: `capital.rs` the Q72/Q78 rules, `station.rs` Babylon 5's sections, grid mounts and rules), shell `damage_rows.rs`
+  (`ScsDamageStore`, required by `NativeLib`); `HullHealth`, `CapitalDamage` (and its sections, mounts, parts), `StationSections`,
+  `GridMountHealth` and `StationDamage` keep their API as read-only copies, each call replaying the store's write log with its
+  signals in the rules' order, direct writes through setters; bolts, rams, blasts and the console land through it one call a hit.
+  The grid hears of a knocked-out mount through `StationDamage.mount_out` (`StationGrid.knock_out`). Both recordings match bit for
+  bit. *The batch* (this commit): `damage_store/landing.rs` and `ScsBeamRows.land`: the tick's beam hits in step order on the store
+  (side and friendly fire, god mode, invulnerable, a capital by its volume's section and the part there, the station by section and
+  grid mount, a fighter's silhouette zone, the point in the body's frame by the engine's maths bit for bit, the turrets' attacker
+  memory natively, a disguised shooter's reveal); writes coalesced by ledger, events, and one `HitSummary` a damaged `Damageable` a
+  tick (`hits_landed`: every attacker in first-hit order with their factions, the last shooter, hits, damage, points removed, each
+  hit's section, the zones) read by the AI driver's attacker memory (the last hit's shooter), `CarrierJumps` (the last enemy),
+  `CapitalShip.section_hits`, the HUD zones and the core's hull column; a rotor passes its summary to the hull's. A hit that raises
+  an event (section state, part lost, drive, hulk, blast, kill, reveal) ends a batch, so it is answered (the kill's `destroyed`
+  and its death blast) before the next hit lands, as hit by hit. A hull with no landing or a volume with no section is left to the
+  old per-hit path (`deferred`, 0 in the recordings). Tests read the native hit log (`CapitalBeams.set_hit_log`). Console provider
+  `beams` adds `land_native_us`, `batches`, `deferred` (`info.md`). Architecture §15.4 (the store, the batch) and §22.6.
+  *Cost* (`test_beam_cost`, new slow file: 16 Omegas in pairs bow to bow beside the seeded battle, 32 sustained beams on capitals,
+  debug Godot, release library, HEAD and the batch run alternately on the same loaded machine): landing with the drawing 833 to 870 us
+  a tick before (26 to 27 us a hit), 261 to 283 us after (8.2 to 8.8 us a hit); of it the native batch about 48 us (1.5 us a hit), the copies'
+  writes about 70 us, the 16 summaries and their listeners about 105 us, the drawing about 30 us. The rest is GDScript per damaged ship
+  (copies and listeners), no longer per hit. `bench_quick`: furball 400 / 400 ships, spread 500 / 500, battle 75 / 75 (`reports/perf/t75_before`, `t75_after`), all in budget.
+  *Tests (staged copies).* Rust 409/409 (new: `damage_store` 16, the store 11 and the batch 5), clippy clean in the touched files; compile check 1 160 scripts clean; piece one (the store, its staged copy): GUT 920 tests over 103 damage, hull, capital, station, AI, tier and parity files, 0 failed (15 pending: balance and slow-gated); piece two (the batch, GUT_SLOW): 977 tests over 107 files, 1 failure (`test_capital_interceptors` counted beams by `section_hit`; it reads the summary now, 5/5), then on the final staged copy 148/148 over 19 beam, damage, capital, station, guard and cost files (`test_damage_store` 4, `test_beam_landing_parity` 1, `test_beam_threads` 1 with 1 and 6 threads byte for byte, 1 171 hits). The fighters' parity recordings are untouched. `test_capital_balance` (balance-gated) only reads the summaries now as well, compile-checked, not run.
+- **Open for the maintainer.** Beam hits raise no `hit_taken`/`damaged` a hit any more (Q94); a listener that needs every hit reads
+  the summary. A capital volume the core dropped (non-finite) is landed by the old per-hit path. The GDScript side now costs per
+  damaged ship a tick (about 10 us in debug Godot); T76's blasts can reuse the store and the batch's summaries.
+
 ### M10-T87 Our own Starfury gun sound (Q82)
 
 - **Goal:** the Starfury's shot made by our own synthesis (`tools/procgen/assets/sfx_combat.py`, `core/audio`), sounding very close to

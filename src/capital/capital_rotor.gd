@@ -74,6 +74,7 @@ func _ready() -> void:
 		capital.damageable.hit_taken.emit(info))
 	hull.damaged.connect(func(info: HitInfo, applied: float) -> void: capital.damageable.damaged.emit(info, applied))
 	hull.destroyed.connect(func(info: HitInfo) -> void: capital.damageable.destroyed.emit(info))
+	hull.hits_landed.connect(func(summary: HitSummary) -> void: capital.damageable.hits_landed.emit(summary))
 
 
 ## Where the rotor stands with the hull at `hull_xform` and turned by `turn`, World frame.

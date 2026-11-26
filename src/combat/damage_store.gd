@@ -39,10 +39,67 @@ const PART_ENGINE: int = 1
 const PART_BAY: int = 2
 const PART_SECTION: int = 3
 
+## What a batch's entry is about (`damage_store::landing`): a hull, a capital's ledger, a station's; entries are six numbers.
+const ON_HULL: int = 0
+const ON_CAPITAL: int = 1
+const ON_STATION: int = 2
+const OUT_WIDTH: int = 6
+
 ## The process's one store (`ScsDamageStore`).
 static var store: Object = NativeLib.instantiate(NATIVE_CLASS)
 ## True while a copy takes a value from the store: its setters then write the copy alone.
 static var quiet: bool = false
+
+# The copies by their ledger's handle and kind (weakly: a copy freed is forgotten), so a batch's writes reach them.
+static var _copies: Array[Dictionary] = [{}, {}, {}]
+
+
+## Copy `copy` holds ledger `ledger` of kind `on` (`ON_HULL`, `ON_CAPITAL`, `ON_STATION`).
+static func adopt(on: int, ledger: int, copy: Object) -> void:
+	if ledger >= 0:
+		_copies[on][ledger] = weakref(copy)
+
+
+static func forget(on: int, ledger: int) -> void:
+	_copies[on].erase(ledger)
+
+
+## A batch's entries (`OUT_WIDTH` numbers each) onto the copies in order, each copy raising its signals where an entry is an
+## event (`CapitalBeams`).
+static func apply(entries: PackedFloat64Array) -> void:
+	var i: int = 0
+	while i + OUT_WIDTH <= entries.size():
+		var on: int = int(entries[i])
+		var ref: WeakRef = _copies[on].get(int(entries[i + 1]))
+		var copy: Object = ref.get_ref() if ref != null else null
+		if copy != null:
+			if on == ON_HULL:
+				(copy as HullHealth).take(entries[i + 3], entries[i + 4] != 0.0, entries[i + 5] != 0.0)
+			else:
+				copy.call(&"replay", PackedFloat64Array([0.0, entries[i + 2], entries[i + 3], entries[i + 4], entries[i + 5]]))
+		i += OUT_WIDTH
+
+
+## A batch's coalesced writes (`OUT_WIDTH` numbers each, grouped by ledger) onto the copies: no event among them, so each
+## ledger's run goes to its copy in one call.
+static func take_writes(entries: PackedFloat64Array) -> void:
+	var i: int = 0
+	var n: int = entries.size()
+	while i + OUT_WIDTH <= n:
+		var on: int = int(entries[i])
+		var ledger: int = int(entries[i + 1])
+		var j: int = i + OUT_WIDTH
+		while j + OUT_WIDTH <= n and int(entries[j]) == on and int(entries[j + 1]) == ledger:
+			j += OUT_WIDTH
+		var ref: WeakRef = _copies[on].get(ledger)
+		var copy: Object = ref.get_ref() if ref != null else null
+		if copy is HullHealth:
+			(copy as HullHealth).take(entries[j - 3], entries[j - 2] != 0.0, entries[j - 1] != 0.0)
+		elif copy is CapitalDamage:
+			(copy as CapitalDamage).take_writes(entries, i, j)
+		elif copy is StationDamage:
+			(copy as StationDamage).take_writes(entries, i, j)
+		i = j
 
 
 ## Hull points the store still holds by kind: hulls, capitals, station sections, grid mounts, stations (a leak shows here).

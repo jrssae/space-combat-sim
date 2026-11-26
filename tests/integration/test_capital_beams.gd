@@ -73,12 +73,13 @@ func _beams() -> CapitalBeams:
 	return CapitalBeams.of(main.world)
 
 
-# Every beam hit `target` takes, logged as [the shooter's emitter mount, the section, the damage].
+# Every beam hit `target` takes, logged as [the shooter, the section, the damage], from each tick's summary (M10-T75: the
+# beams land in one native batch a tick; each of its hits names its section, and every hit here carries the same share).
 func _log_beams(target: CapitalShip) -> Array:
 	var log: Array = []
-	target.section_hit.connect(func(section: String, info: HitInfo) -> void:
-		if info.cause == HitInfo.CAUSE_BEAM:
-			log.append([info.shooter_id, section, info.damage]))
+	target.damageable.hits_landed.connect(func(summary: HitSummary) -> void:
+		for slot: int in summary.sections:
+			log.append([summary.last_shooter, target.damage.section_name(slot), summary.damage / float(summary.hits)]))
 	return log
 
 

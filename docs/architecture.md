@@ -1658,6 +1658,38 @@ player ship + selected target + active camera -> HudLayout (InterceptMath) -> Hu
 - Starting values (tune in (H)): Starfury hull 300, pulse bolt 10; Delta-V hull 60, raider bolt 6. A raider dies
   to 6 hits, the player to 50.
 
+- **The damage store (M10-T75, Q70, Q94).** Every hull's, section's and part's points live in one native store
+  (`native/src/damage_store.rs`, engine-free: `capital.rs` the capitals' Q72/Q78 rules, `station.rs` Babylon 5's sections, grid
+  mounts and rules, `landing.rs` the beams' batch; the shell `damage_rows.rs`, `ScsDamageStore`, one a process as
+  `DamageStore.store`). `HullHealth`, `CapitalDamage` (with its `CapitalSection`, `CapitalMount`, `CapitalPart`),
+  `StationSections`, `GridMountHealth` and `StationDamage` register a ledger there and keep read-only copies: each call that
+  changes points (`apply`, `hit`, `hit_part`, `scuttle`, `damage`, `wear`, `heal`, `repair`, `restore`) runs the rules natively
+  and answers with its result and a write log (four numbers an entry), which the copy replays in order, raising its signals
+  (`section_changed`, `mount_lost`, `part_lost`, `drive_changed`, `disabled`, `blew`, `lost`, a mount knocked out through
+  `StationDamage.mount_out`, `destroyed`) where the log says, so a listener sees the state as the rules left it at that point.
+  A direct write to a copy's field (a test, the console: `hp`, `state`, `alive`, `health`, the flags) goes through its setter
+  to the store (`DamageStore.quiet` keeps the replay's own writes off it). Bolts, rams, blasts, the console and every other
+  source land one call a hit through `Damageable.apply_hit` as before; the rules are op for op the GDScript ones, recorded before
+  the move (`tests/fixtures/parity/damage_rules.json`, `test_damage_rules_parity`, bit for bit).
+- **The beams' batch.** Each `Damageable` tells the store how a beam lands on it (`push_landing`, on setup, ready and every
+  change of its faction, hull, flags; `set_landing` from the capital, its rotors and the station: route plain, capital by its
+  piece's surface volumes' section slots and the rotor's pivot, or station by body). `ScsBeamRows.land` lands a tick's beam
+  hits in step order on the store, as the GDScript landing did hit by hit: a hull its side may hurt (friendly fire, hit by
+  anyone), god mode and invulnerable hulls taking the hit but no points, a capital on its volume's section and the part there, the
+  station by section and grid mount, a fighter's points on its silhouette zone; the point in the hit body's frame by the
+  engine's own maths (`v3::affine_inverse_xform`, bit for bit, `test_damage_store`), the turrets' attacker memory natively
+  (`note_attacker_pairs`), a disguised shooter's reveal. It hands back the writes coalesced by ledger (`DamageStore.take_writes`),
+  the events, and one `HitSummary` a damaged `Damageable` (`hits_landed`: every attacker in the order each first hit, their
+  factions, the last shooter, hits, damage and points removed, the last point, each hit's section slot, the zones; the fields
+  read the batch's columns when asked) instead of a `hit_taken` and a `damaged` a hit. The AI driver's attacker memory (the last
+  hit's shooter), `CarrierJumps` (the last enemy), `CapitalShip.section_hits`, the HUD zones (`Damageable.land_summary`,
+  `Station._on_hits_landed`) and the core's hull column (`SimCore`) read it; a rotor passes its summary to the hull's. A hit
+  that raises an event (a section's state, a part lost, the drive, a hulk, a blast, a kill, a reveal) ends the batch: GDScript
+  takes the writes, replays its events, emits the summaries and the kill's `destroyed` (a `HitInfo` as before), and the next
+  batch lands the rest, so a death blast lands before the next beam hit as it did. A hull with no landing, or a capital volume
+  with no section, is left to GDScript (`CapitalBeams._land_one`, the old path; `deferred` counts them, 0 in the recordings).
+  Tests read the beams' native hit log (`CapitalBeams.set_hit_log`, `hit_log`). Cost: see §22.6.
+
 ### 15.5 Hit detection
 
 Per projectile P (this tick it moved from `p1 - step` to `p1`; `step = P.last_step`) and per active `Damageable` D
@@ -7309,11 +7341,11 @@ assets/weapons/<id>.tres     a WeaponSpec per capital beam weapon of data/capita
   section, as a bolt's does), any other on 0.7 of its bounding sphere; its own ship's bodies (hull and rotors) never stop it; mines
   and sheltered ships do not. `surface::sweep` now skips a volume the segment cannot reach before the best entry so far (same answers,
   about a third less work on a long line along a hull).
-- **Landing** (`CapitalBeams`, main thread, priority 195: after the flight, before the hit resolver). Each hit in the step's order
-  through the hull's `Damageable` (`BlastResolver.hurtable`: in play or in the tier) with cause `beam` and `HitInfo.volume`, so a
-  capital's lands on that volume's section through `CapitalDamage`; friend or foe stops the line, but only a hull a bolt of the
-  shooter's side could hurt takes damage (`can_be_hit_by`, friendly fire). The turrets' attacker memory (`SimCore.note_hit`) and
-  the disguise (`Transponder.note_hit`: a renegade's beam on Earth Alliance gives it away) as for a bolt.
+- **Landing** (`CapitalBeams`, main thread, priority 195: after the flight, before the hit resolver). The step's hits land in one
+  native batch on the damage store (M10-T75, §15.4 "The beams' batch"): in the step's order, cause `beam`, a capital's on its
+  surface volume's section; friend or foe stops the line, but only a hull a bolt of the shooter's side could hurt takes damage
+  (friendly fire); the turrets' attacker memory and the disguise (a renegade's beam on Earth Alliance gives it away) as for a
+  bolt. Each damaged ship gets one `HitSummary` a tick (`Damageable.hits_landed`), not a `hit_taken` a hit; events end a batch.
 - **Works.** A lost mount, a lost section, a disabled (hulk) or destroyed ship stops its beams: `mount_lost`, `section_changed`,
   `ship_disabled`, `restored` and `destroyed` push each emitter's `works` and the rate to the rows. `CapitalBeams.hold(ship, held)`
   holds a ship's fire (an order for the AI and the missions). A ship out of the rows (parked in a pool) holds its state; a far ship in
@@ -7327,7 +7359,11 @@ assets/weapons/<id>.tres     a WeaponSpec per capital beam weapon of data/capita
 - **Cost** (release library, debug Godot, beside the seeded battle's 106 rows, Omega pairs 3.2 km apart beaming each other): the
   native step about 4 us per firing beam (12 emitters, 4 firing: 18 us; 96 emitters, 32 firing: 127 us), mostly the line through
   the target's surface volumes; an idle emitter well under 1 us. Landing in GDScript about 6 to 9 us per hit (a sustained beam lands
-  every tick): 93 us with 4 beams on, 302 us with 32. On the maintainer's GPU (Forward+) beams add two draw calls.
+  every tick): 93 us with 4 beams on, 302 us with 32. On the maintainer's GPU (Forward+) beams add two draw calls. **T75**
+  (`test_beam_cost`: 16 Omegas in pairs bow to bow beside the seeded battle, 32 sustained beams on capitals, debug Godot,
+  release library, the same machine and load): the landing with the drawing 833 to 870 us a tick before the batch (26 to 27 us a
+  hit, Q72's rules in GDScript), 261 to 283 us after (8.2 to 8.8 us a hit); of it the native batch about 48 us (1.5 us a hit), the copies' writes
+  about 70 us, the 16 summaries and their listeners about 105 us, the drawing about 30 us.
 - **Console.** Command `beam [info|fire [player|selection|<capital name>]|clear]` on the `capital` command's focus; provider `beams`;
   `capital spawn <type>:<faction>` spawns a capital for another side (`info.md`).
 - **Tests.** Rust `beam_kernels::tests` (a pulse charges, lands once, cools; a sustained beam's ticks and dps; the first hull on the

@@ -30,6 +30,12 @@ func register() -> void:
 				"doc": "Wall-clock cost of the last tick's native beam step, us (a readout)"},
 		&"land_us": {"get": func() -> int: return beams.land_us, "type": TYPE_INT,
 				"doc": "Wall-clock cost of landing and handing over the last tick's beams, us (a readout)"},
+		&"land_native_us": {"get": func() -> float: return beams.land_native_us, "type": TYPE_FLOAT,
+				"doc": "Of land_us, the native batches' own cost, us (M10-T75; a readout)"},
+		&"batches": {"get": func() -> int: return beams.batches_last, "type": TYPE_INT,
+				"doc": "Native landing batches on the last tick (one, plus one a hit that raised an event)"},
+		&"deferred": {"get": func() -> int: return beams.deferred, "type": TYPE_INT,
+				"doc": "Hits the batch left to GDScript since the last reset (a hull with no landing; should stay 0)"},
 		&"focus": {"get": func() -> String: return "; ".join(_describe(_focused())),
 				"doc": "The focused capital's emitters: mount, phase, seconds left, target, working"},
 	}), beams)

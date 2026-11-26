@@ -123,6 +123,7 @@ static func from_entries(entries: Dictionary, hardpoints: Dictionary, p_hull_max
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_PREDELETE and ledger >= 0 and DamageStore.store != null:
 		DamageStore.store.capital_free(ledger)
+		DamageStore.forget(DamageStore.ON_CAPITAL, ledger)
 		for s: CapitalSection in _section_list:
 			s.ledger = -1
 		for list: Array in [_mount_list, _engine_list, _bay_list]:
@@ -137,7 +138,7 @@ func hit(section_name: String, point: Vector3, damage: float) -> float:
 		return 0.0
 	var at: Array = _slots.get(section_name, [])
 	var section: int = int(at[1]) if not at.is_empty() and int(at[0]) == DamageStore.PART_SECTION else -1
-	return _replay(DamageStore.store.capital_hit(ledger, section, point, damage))
+	return replay(DamageStore.store.capital_hit(ledger, section, point, damage))
 
 
 ## A hit of `damage` on subsystem `key` itself (`mount:<name>`, `engine:<name>`, `bay:<name>`, or a section's name: the
@@ -148,7 +149,7 @@ func hit_part(key: String, damage: float) -> float:
 	var at: Array = _slots.get(key, [])
 	if at.is_empty():
 		return 0.0
-	return _replay(DamageStore.store.capital_hit_part(ledger, int(at[0]), int(at[1]), damage))
+	return replay(DamageStore.store.capital_hit_part(ledger, int(at[0]), int(at[1]), damage))
 
 
 ## A hit of `damage` on mount `mount_name` itself.
@@ -349,7 +350,7 @@ func describe() -> PackedStringArray:
 func scuttle() -> bool:
 	if is_disabled or is_destroyed:
 		return false
-	return _replay(DamageStore.store.capital_scuttle(ledger)) != 0.0
+	return replay(DamageStore.store.capital_scuttle(ledger)) != 0.0
 
 
 # Registers the ledger with the damage store: the rules, then each section, mount, engine and bay in manifest and hardpoint
@@ -382,6 +383,7 @@ func _register() -> void:
 					p.get(&"max_hp"), p.get(&"hp"), 1.0 if p.get(&"alive") else 0.0])
 		packs.append(pack)
 	ledger = int(DamageStore.store.capital_add(rules, packed, packs[0], packs[1], packs[2], hull_max))
+	DamageStore.adopt(DamageStore.ON_CAPITAL, ledger, self)
 	for s: CapitalSection in _section_list:
 		s.ledger = ledger
 	for list: Array in [_mount_list, _engine_list, _bay_list]:
@@ -402,6 +404,17 @@ static func _kind_code(kind: String) -> int:
 	return 0
 
 
+## The store's slot of section `section_name`, -1 for one it does not hold (the beams' batch names sections by slot).
+func section_slot(section_name: String) -> int:
+	var at: Array = _slots.get(section_name, [])
+	return int(at[1]) if not at.is_empty() and int(at[0]) == DamageStore.PART_SECTION else -1
+
+
+## The section at store slot `slot`, "" for none.
+func section_name(slot: int) -> String:
+	return _order[slot] if slot >= 0 and slot < _order.size() else ""
+
+
 # The part in list `list` at `slot`.
 func _part(list: int, slot: int) -> Object:
 	match list:
@@ -412,8 +425,9 @@ func _part(list: int, slot: int) -> Object:
 	return _mount_list[slot]
 
 
-# Takes the store's answer onto the copy in its order, raising each signal where the rules raised it; returns its result.
-func _replay(out: PackedFloat64Array) -> float:
+## Takes the store's answer onto the copy in its order, raising each signal where the rules raised it; returns its result
+## (a call's, or a beam batch's entries through `DamageStore.apply`).
+func replay(out: PackedFloat64Array) -> float:
 	var was: bool = DamageStore.quiet
 	var i: int = 1
 	while i < out.size():
@@ -459,6 +473,29 @@ func _replay(out: PackedFloat64Array) -> float:
 				blew.emit(blown)
 	DamageStore.quiet = was
 	return out[0] if not out.is_empty() else 0.0
+
+
+## The writes of a beam batch (`DamageStore.take_writes`): entries `from` to `to` of `entries`, six numbers each, no events.
+func take_writes(entries: PackedFloat64Array, from: int, to: int) -> void:
+	var was: bool = DamageStore.quiet
+	DamageStore.quiet = true
+	for i: int in range(from, to, DamageStore.OUT_WIDTH):
+		var code: int = int(entries[i + 2])
+		if code == DamageStore.SEC_HP:
+			_section_list[int(entries[i + 3])].hp = entries[i + 4]
+		elif code == DamageStore.HULL_HP:
+			hull_hp = entries[i + 3]
+		elif code == DamageStore.PART_HP:
+			var list: int = int(entries[i + 3])
+			if list == DamageStore.PART_MOUNT:
+				_mount_list[int(entries[i + 4])].hp = entries[i + 5]
+			elif list == DamageStore.PART_ENGINE:
+				_engine_list[int(entries[i + 4])].hp = entries[i + 5]
+			else:
+				_bay_list[int(entries[i + 4])].hp = entries[i + 5]
+		elif code == DamageStore.SEC_STATE:
+			_section_list[int(entries[i + 3])].state = int(entries[i + 4]) as CapitalSection.State
+	DamageStore.quiet = was
 
 
 func _push(code: int, value: float) -> void:

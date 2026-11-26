@@ -214,3 +214,159 @@ fn the_store_hands_out_slots_again_once_freed() {
     assert_eq!(store.hulls.live(), 2);
     assert_eq!(store.hulls.get(b as i64).map(|h| h.max_hp), Some(20.0));
 }
+
+mod landing_tests {
+    use std::collections::HashMap;
+
+    use godot::builtin::Vector3;
+
+    use super::super::landing::{self as dl, Ctx, LandHit, LandOut, Target};
+    use super::super::{DamageStore, Hull};
+    use super::ship;
+
+    // Two factions: 0 and 1 hostile, each friendly to itself.
+    const RELATION: [u8; 4] = [2, 1, 1, 2];
+
+    fn ctx() -> Ctx<'static> {
+        Ctx {
+            friendly_fire: false,
+            god_mode: false,
+            relation: &RELATION,
+            factions: 2,
+        }
+    }
+
+    fn hit(target: i64, damage: f64, shooter: i64) -> LandHit {
+        LandHit {
+            target,
+            body: target + 100,
+            shooter,
+            shooter_faction: 0,
+            target_faction: Some(1),
+            disguise: None,
+            damage,
+            point: Vector3::new(0.0, 0.0, 0.0),
+            volume: -1,
+            local: Some(Vector3::new(3.0, 1.0, 0.0)),
+        }
+    }
+
+    fn fighter(store: &mut DamageStore, hp: f64) -> Target {
+        Target {
+            hull: store.hulls.add(Hull::new(hp)) as i64,
+            summary: 0,
+            layout: dl::LAYOUT_X_FIGHTER,
+            ..Target::default()
+        }
+    }
+
+    #[test]
+    fn plain_hits_land_in_one_batch_with_one_summary_a_ship_and_every_attacker() {
+        let mut store = DamageStore::default();
+        let mut targets = HashMap::new();
+        let mut t = fighter(&mut store, 100.0);
+        t.summary = 7;
+        targets.insert(7, t);
+        let hits = [hit(7, 10.0, 1), hit(7, 10.0, 2), hit(7, 10.0, 1)];
+        let mut out = LandOut::default();
+        assert_eq!(dl::land(&mut store, &targets, &hits, 0, &ctx(), &mut out), 3);
+        assert_eq!(out.summaries.len(), 1);
+        let s = &out.summaries[0];
+        assert_eq!(s.attackers, vec![1, 2], "every attacker, in the order each first hit");
+        assert_eq!(s.last_shooter, 1);
+        assert_eq!((s.hits, s.damage, s.applied), (3, 30.0, 30.0));
+        assert_eq!(s.zones, vec![(2, 10.0); 3], "the upper right arm each time");
+        assert_eq!(out.sync.len(), dl::OUT_WIDTH, "one coalesced write: the hull's last points");
+        assert_eq!(out.sync[3], 70.0);
+        assert_eq!(out.attackers.len(), 3);
+    }
+
+    #[test]
+    fn a_kill_ends_the_batch_and_a_dead_hull_takes_no_more() {
+        let mut store = DamageStore::default();
+        let mut targets = HashMap::new();
+        targets.insert(7, fighter(&mut store, 15.0));
+        let hits = [hit(7, 10.0, 1), hit(7, 10.0, 1), hit(7, 10.0, 1)];
+        let mut out = LandOut::default();
+        let next = dl::land(&mut store, &targets, &hits, 0, &ctx(), &mut out);
+        assert_eq!(next, 2, "the killing hit ends the batch");
+        assert_eq!(out.kill, Some((1, 5.0, -1)));
+        let next = dl::land(&mut store, &targets, &hits, next, &ctx(), &mut out);
+        assert_eq!(next, 3);
+        assert_eq!(out.hits, 0, "a dead hull takes no more");
+    }
+
+    #[test]
+    fn a_hull_its_side_may_not_hurt_takes_nothing_and_god_mode_takes_the_hit_but_no_points() {
+        let mut store = DamageStore::default();
+        let mut targets = HashMap::new();
+        let mut t = fighter(&mut store, 100.0);
+        t.respects_god_mode = true;
+        targets.insert(7, t);
+        let mut friend = hit(7, 10.0, 1);
+        friend.target_faction = Some(0);
+        let mut out = LandOut::default();
+        dl::land(&mut store, &targets, &[friend], 0, &ctx(), &mut out);
+        assert_eq!(out.hits, 0);
+        let god = Ctx { god_mode: true, ..ctx() };
+        dl::land(&mut store, &targets, &[hit(7, 10.0, 1)], 0, &god, &mut out);
+        assert_eq!(out.hits, 1);
+        assert_eq!(out.summaries[0].applied, 0.0);
+    }
+
+    #[test]
+    fn an_unknown_target_or_volume_is_left_to_gdscript_and_a_disguised_shooter_is_found_out_once() {
+        let mut store = DamageStore::default();
+        let mut targets = HashMap::new();
+        let mut out = LandOut::default();
+        assert_eq!(dl::land(&mut store, &targets, &[hit(9, 1.0, 1)], 0, &ctx(), &mut out), 1);
+        assert_eq!(out.deferred, Some(0));
+        let mut t = fighter(&mut store, 100.0);
+        t.is_player = true;
+        targets.insert(7, t);
+        let mut masked = hit(7, 1.0, 1);
+        masked.disguise = Some(1);
+        let next = dl::land(&mut store, &targets, &[masked, masked], 0, &ctx(), &mut out);
+        assert_eq!((next, out.reveals.clone()), (1, vec![1]), "a hit on the player gives it away and ends the batch");
+    }
+
+    #[test]
+    fn a_capital_hit_lands_by_its_volumes_section_and_a_lost_section_ends_the_batch() {
+        let mut store = DamageStore::default();
+        let hull = store.hulls.add(Hull::new(10_000.0)) as i64;
+        let ledger = store.capitals.add(ship()) as i64;
+        let mut targets = HashMap::new();
+        targets.insert(
+            5,
+            Target {
+                hull,
+                summary: 5,
+                route: dl::ROUTE_CAPITAL,
+                ledger,
+                volume_sections: vec![0, 2],
+                ..Target::default()
+            },
+        );
+        let mut on_bow = hit(5, 100.0, 1);
+        on_bow.volume = 0;
+        on_bow.local = Some(Vector3::new(0.0, -15.0, 10.0));
+        let mut out = LandOut::default();
+        assert_eq!(dl::land(&mut store, &targets, &[on_bow, on_bow], 0, &ctx(), &mut out), 1, "damaged: an event");
+        assert_eq!(out.summaries[0].sections, vec![0]);
+        assert_eq!(dl::land(&mut store, &targets, &[on_bow, on_bow], 1, &ctx(), &mut out), 2);
+        assert_eq!(store.capitals.get(ledger).map(|c| c.sections[0].hp), Some(1800.0));
+        assert_eq!(store.hulls.get(hull).map(|h| h.hp), Some(9800.0), "the hull takes the section's points");
+        let mut magazine = on_bow;
+        magazine.volume = 1;
+        magazine.damage = 2000.0;
+        magazine.local = Some(Vector3::new(0.0, 0.0, 250.0));
+        dl::land(&mut store, &targets, &[magazine], 0, &ctx(), &mut out);
+        assert!(out.kill.is_some(), "the magazine blew: the whole hull goes");
+        assert_eq!(store.hulls.get(hull).map(|h| h.hp), Some(0.0));
+        let mut stray = on_bow;
+        stray.volume = 4;
+        targets.get_mut(&5).unwrap().hull = store.hulls.add(Hull::new(10.0)) as i64;
+        dl::land(&mut store, &targets, &[stray], 0, &ctx(), &mut out);
+        assert_eq!(out.deferred, Some(0), "a volume it cannot name");
+    }
+}
