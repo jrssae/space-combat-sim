@@ -7484,7 +7484,9 @@ data/capitals/capitals.json                `capital_brain`: the brain's numbers,
 
 - **The helm** (Q70). One per capital in the core's table (`ScsSimCore.capital_add`, from `CapitalBrainSpec`): a heading, a
   velocity and, for an attitude off the bow, the top to roll onto; a reaction hull with retros or a gravitic one pushes along every
-  axis with its bow held, one with none flips to burn against its motion (T07's rules, op for op). `CapitalFlight` hands every
+  axis with its bow held, one with none flips to burn against its motion (T07's rules, op for op). It keeps the hull level (its
+  top rolled back onto the World's up square to the bow) unless told a top, and flies a half turn about the hull's own up, not as
+  a loop (fix round 2: T07's helm left a hull told 180 degrees rolled 90; only the parity probe flies without levelling). `CapitalFlight` hands every
   ship's basis and velocity to `capital_helm_commands` once a tick and flies the commands it gives (`cruise_velocity` mirrors the
   helm's velocity for the tier); a disabled hull's is shaped by its wind-down in GDScript. `set_course` is orders: the helm holds
   them and the brain stops steering (Hold) until `release_helm`. A velocity rebase boosts the helms with the rows.

@@ -268,7 +268,10 @@ impl ScsSimCore {
                         spec: Arc::new(spec),
                         status: Status::default(),
                         memory: Memory::default(),
-                        helm: Helm::default(),
+                        helm: Helm {
+                            level: true,
+                            ..Default::default()
+                        },
                     },
                     order: 0,
                     order_aim: None,
@@ -475,6 +478,7 @@ impl ScsSimCore {
             heading,
             velocity,
             up: Vector3::ZERO,
+            level: false,
             flipping,
         };
         let c = ch::command(&spec, &mut state, &basis, current);

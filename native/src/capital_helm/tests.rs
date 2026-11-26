@@ -2,7 +2,7 @@
 // with no retros and turns back, coasts down a small slowing, slides a gravitic hull, paces a turn to its torque.
 use super::*;
 
-use crate::v3::{BACK, FORWARD, length};
+use crate::v3::{BACK, FORWARD, UP, col_b, col_c, dot, length, neg, normalized, scale, sub};
 
 // A 300 m test hull's helm: 2 m/s^2 mains, 0.1 m/s^2 RCS, 4 deg/s turns, 0.01 rad/s^2 torque.
 fn spec(retros: bool, gravitic: bool) -> HelmSpec {
@@ -25,6 +25,7 @@ fn helm(heading: Vector3, velocity: Vector3) -> Helm {
         heading,
         velocity,
         up: Vector3::ZERO,
+        level: false,
         flipping: false,
     }
 }
@@ -116,4 +117,43 @@ fn a_top_to_hold_rolls_the_hull_onto_it_and_none_leaves_the_roll_alone() {
     h.up = Vector3::ZERO;
     let cmd = command(&s, &mut h, &Basis::IDENTITY, Vector3::ZERO);
     assert_eq!(cmd.rot.z, 0.0);
+}
+
+// The hull turned by `cmd` for `dt` seconds at its asked rates (an ideal assist): the toy the turn tests fly.
+fn fly(basis: Basis, cmd: &FlightCmd, rate: Vector3, dt: f32) -> Basis {
+    let w = Vector3::new(cmd.rot.x * rate.x, -cmd.rot.y * rate.y, -cmd.rot.z * rate.z);
+    if length(w) < 1e-9 {
+        return basis;
+    }
+    (basis * Basis::from_axis_angle(normalized(w), length(w) * dt)).orthonormalized()
+}
+
+// The roll off level about the bow, deg.
+fn roll_deg(basis: &Basis) -> f32 {
+    let nose = neg(col_c(basis));
+    let level = normalized(sub(UP, scale(nose, dot(nose, UP))));
+    dot(col_b(basis), level).clamp(-1.0, 1.0).acos().to_degrees()
+}
+
+#[test]
+fn a_half_turn_is_a_level_turn_and_a_rolled_hull_comes_back_level() {
+    let s = spec(true, false);
+    let mut h = helm(BACK, Vector3::ZERO);
+    h.level = true;
+    let cmd = command(&s, &mut h, &Basis::IDENTITY, Vector3::ZERO);
+    assert!(cmd.rot.y.abs() > 0.0 && cmd.rot.x == 0.0, "dead astern it yaws, it does not loop: {:?}", cmd.rot);
+    // Rolled 90 degrees and told a half turn, it turns and settles level.
+    let mut basis = Basis::from_axis_angle(FORWARD, std::f32::consts::FRAC_PI_2);
+    let heading = BACK;
+    h.heading = heading;
+    for _ in 0..40000 {
+        let cmd = command(&s, &mut h, &basis, Vector3::ZERO);
+        basis = fly(basis, &cmd, s.cap.rate_max, 0.05);
+    }
+    assert!(dot(neg(col_c(&basis)), heading) > 0.999, "on its heading");
+    assert!(roll_deg(&basis) < 2.0, "and level ({} deg)", roll_deg(&basis));
+    // T07's helm (no levelling, the parity probe) leaves the roll alone.
+    let mut old = helm(FORWARD, Vector3::ZERO);
+    let rolled = Basis::from_axis_angle(FORWARD, 0.5);
+    assert_eq!(command(&s, &mut old, &rolled, Vector3::ZERO).rot.z, 0.0);
 }

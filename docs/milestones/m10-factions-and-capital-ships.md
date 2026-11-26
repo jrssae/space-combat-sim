@@ -806,6 +806,14 @@ fly attack runs on capitals; B10 and B1 run and reported (Q77). Launch (carriers
   106 s, the Omega at 98, 93, 98 %: with no capital in reach its brain names no aim). **B1** now runs to the 900 s limit on all
   three seeds, the Omegas at 88 to 91 % and 81 % (was 105 s): their fire now goes to a vital part their lines reach or the
   nearest section, no longer to the magazine at the centre.
+- **Fix round 2 (the T17 agent's screenshots: `capital helm 0 180` left the Nova rolled about 90 degrees).** Cause: told a
+  heading dead astern, the helm (T07's rule, kept op for op) turned the bow toward it with no roll control, and a dead-astern
+  turn goes over the top, so the hull ended rolled 90 degrees (headless: Nova and Omega at 180 degrees, roll 90.0, pitched 45 on
+  the way; 90 degrees either side stayed level). Fix in `capital_helm.rs`: a levelling helm (every ship's; the parity probe of
+  T07's helm keeps the old rule) rolls the hull's top onto the World's up square to its bow whenever it is not told another top,
+  and turns a half turn about its own up first. `test_capital_helm_turns` (new): the Nova and the Omega told 90, 180 and -90
+  degrees settle on their heading within 2 degrees and level within 3, pitching under 10 on the way; Rust
+  `a_half_turn_is_a_level_turn_and_a_rolled_hull_comes_back_level`. The parity recording still matches.
 - **Open for the maintainer.** A capital in the tier thinks but flies its last cruise (the tier's capital law); scenario capitals
   (`capitals[]`) are spawned on orders (Hold), so a mission frees one with `release_helm()` (no scenario key yet); the squadron's
   abort counts losses from its peak strength, not only those to a capital.
