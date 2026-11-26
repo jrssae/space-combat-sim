@@ -16,6 +16,14 @@ var _steps_backup: int = 8
 var _radius_backup: float = 10000.0
 
 
+func before_all() -> void:
+	CapitalHangar.stocked_on_spawn = false  # its capitals are alone here: their hangars stay empty (M10-T17)
+
+
+func after_all() -> void:
+	CapitalHangar.stocked_on_spawn = true
+
+
 func before_each() -> void:
 	get_tree().paused = false
 	_rate_backup = Engine.physics_ticks_per_second

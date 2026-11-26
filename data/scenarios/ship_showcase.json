@@ -13,9 +13,9 @@
  "pools": {"saturn_8_transport": 1, "saturn_8_tanker": 1, "saturn_4_transport": 1, "saturn_4_tanker": 1, "saturn_3_freighter": 1, "skylark_transport": 1, "narn_transport": 1, "centauri_brezebel": 1, "brakiri_bokmai": 2, "raider_fighter": 3, "starfury_ally": 3, "ea_thunderbolt": 3, "ea_panama": 1, "ea_construction_tender": 1, "ea_shuttle": 1, "ea_atmo_shuttle": 1},
  "capitals": [
   {"type": "raider_strike_carrier", "name": "RAIDER STRIKE CARRIER", "offset": [2000, -1200, -2800], "forward": [0, 0, -1], "standin": true},
-  {"type": "ea_omega", "offset": [4000, -1200, -3957], "forward": [0, 0, -1]},
-  {"type": "ea_nova", "offset": [4000, -1200, -5865], "forward": [0, 0, -1]},
-  {"type": "ea_hyperion", "offset": [4000, -1200, -7428], "forward": [0, 0, -1]}],
+  {"type": "ea_omega", "hangar": false, "offset": [4000, -1200, -3957], "forward": [0, 0, -1]},
+  {"type": "ea_nova", "hangar": false, "offset": [4000, -1200, -5865], "forward": [0, 0, -1]},
+  {"type": "ea_hyperion", "hangar": false, "offset": [4000, -1200, -7428], "forward": [0, 0, -1]}],
  "spawns": [
   {"type": "saturn_8_transport", "name": "SATURN 8 TRANSPORT", "anchor": "origin", "offset": [1000, -1200, -2729], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},
   {"type": "saturn_8_tanker", "name": "SATURN 8 TANKER", "anchor": "origin", "offset": [1000, -1200, -3107], "forward": [0, 0, -1], "invulnerable": true, "behaviour": {"type": "idle", "hold": true}},

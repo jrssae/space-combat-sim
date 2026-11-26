@@ -12,7 +12,7 @@ func _bay(name: String, extra: Dictionary) -> Dictionary:
 
 func test_the_hulls_wings_are_data() -> void:
 	assert_eq(HangarRules.options(&"ea_nova")["wings"], [12, 12], "the Nova launches two wings of 12 (Q73)")
-	assert_eq(HangarRules.options(&"ea_omega")["wings"], [32], "the Omega its 32 at once")
+	assert_eq(HangarRules.options(&"ea_omega")["wings"], [8, 8, 8, 8], "the Omega four wings of 8 (the maintainer, 2026-11-26)")
 	assert_eq(HangarRules.options(&"ea_hyperion")["wings"], [6], "the Hyperion its 6")
 	var nova: Dictionary = HangarRules.options(&"ea_nova")
 	for key: String in HangarRules.DEFAULTS:
@@ -60,18 +60,20 @@ func test_wings_take_their_factions_callsigns_in_turn() -> void:
 	assert_false(HangarRules.callsign(&"narn", 0).is_empty(), "a faction with none takes the default")
 
 
-func test_a_lift_bay_has_its_lanes_side_by_side_on_the_lift() -> void:
+func test_a_lift_bay_has_two_rows_of_three_on_the_lift() -> void:
 	var lift := _bay("bay_fore", {"elevator": [0.0, -9.0, -420.0], "elevator_travel_m": 30.0, "recovers": true})
 	var c: CarrierCradles = BayBerths.of({"bays": [lift]}, HangarRules.options(&"ea_nova"))
-	assert_eq(c.count(), 3, "three abreast on the lift")
+	assert_eq(c.count(), 6, "two rows of three abreast on the lift: six craft a trip")
 	for i: int in c.count():
+		var front: bool = i < 3
+		var run_in: float = 50.0 + (-7.0 if front else 7.0)  # the rows 14 m apart round the lift's point
 		assert_almost_eq(c.positions[i].y, -9.0, 1e-4, "on the floor, a third of the mouth under the exit")
-		assert_almost_eq(c.positions[i].z, -420.0, 1e-4, "at the lift")
+		assert_almost_eq(c.positions[i].z, -470.0 + run_in, 1e-4, "on the lift, %s row" % ("front" if front else "back"))
 		assert_almost_eq(c.lift_m[i], 30.0, 1e-4)
 		assert_true(c.out_axes[i].is_equal_approx(Vector3.FORWARD), "out of the mouth")
 		assert_true((-c.bases[i].z).is_equal_approx(Vector3.FORWARD), "nose out")
-		assert_almost_eq(c.launch_m[i], 50.0 + 40.0, 1e-3, "from the lift past the mouth")
-		assert_almost_eq(c.approach_m[i], 50.0 + 60.0, 1e-3, "and back in from outside it")
+		assert_almost_eq(c.launch_m[i], run_in + 40.0, 1e-3, "from the lift past the mouth")
+		assert_almost_eq(c.approach_m[i], run_in + 60.0, 1e-3, "and back in from outside it")
 	assert_almost_eq(c.positions[2].x - c.positions[0].x, 40.0, 1e-3, "20 m apart")
 
 
@@ -127,8 +129,15 @@ func test_a_lift_sinks_for_a_trip_rises_with_it_and_takes_craft_down() -> void:
 
 
 func test_a_scenario_capital_may_carry_its_loadouts_craft() -> void:
-	var read: Variant = ScenarioLoader._capitals([{"type": "ea_nova", "hangar": true}, {"type": "ea_omega"}], "test")
+	var read: Variant = ScenarioLoader._capitals([{"type": "ea_nova", "hangar": false}, {"type": "ea_omega"}], "test")
 	assert_true(read is Array, str(read))
 	if read is Array:
-		assert_true(bool((read as Array)[0]["hangar"]), "stocked from its loadout at load")
-		assert_false(bool((read as Array)[1]["hangar"]), "an empty hangar unless it says so")
+		assert_false(bool((read as Array)[0]["hangar"]), "a parked line-up ship opts out")
+		assert_true(bool((read as Array)[1]["hangar"]), "full by default")
+	var showcase: Dictionary = ScenarioLoader.load("res://data/scenarios/ship_showcase.json")
+	var carriers: int = 0
+	for entry: Dictionary in showcase.get("capitals", []):
+		if not bool(entry["standin"]) and String(entry["type"]).begins_with("ea_") and String(entry["type"]) != "ea_asimov":
+			carriers += 1
+			assert_false(bool(entry["hangar"]), "the showcase's parked %s launches nothing" % entry["type"])
+	assert_gt(carriers, 0, "the line-up has its carriers")

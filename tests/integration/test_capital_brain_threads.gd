@@ -11,6 +11,14 @@ const GAP_M: float = 2600.0
 var _threads_backup: Variant = null
 
 
+func before_all() -> void:
+	CapitalHangar.stocked_on_spawn = false  # its capitals are alone here: their hangars stay empty (M10-T17)
+
+
+func after_all() -> void:
+	CapitalHangar.stocked_on_spawn = true
+
+
 func before_each() -> void:
 	_threads_backup = Settings.get_value(&"perf_threads")
 

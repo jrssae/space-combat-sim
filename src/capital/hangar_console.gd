@@ -2,13 +2,13 @@ class_name HangarConsole
 extends RefCounted
 ## The `hangars` provider and the `hangar` command (M10-T17): the capital carriers' hangars, on the `capital` command's focus.
 ## `hangar` shows its stock, wings, bays, doors and lifts; `stock` fills it from its loadout (and the pool with it), `launch
-## [type] [n]` sends craft out (no type: its next wing), `recall` calls them home, `jump` calls them home and leaves after its
+## [type] [n]` sends craft out (carriers spawn full; `empty` empties one) (no type: its next wing), `recall` calls them home, `jump` calls them home and leaves after its
 ## wait, `auto on|off` lets it launch on its own or not, `door <bay> open|shut` drives a door by hand, `fold <ship name>`
 ## folds or spreads a shuttle's wings.
 
 const PROVIDER: StringName = &"hangars"
 const COMMAND: StringName = &"hangar"
-const ACTIONS: Array[StringName] = [&"info", &"list", &"stock", &"launch", &"recall", &"jump", &"auto", &"door", &"fold"]
+const ACTIONS: Array[StringName] = [&"info", &"list", &"stock", &"empty", &"launch", &"recall", &"jump", &"auto", &"door", &"fold"]
 
 var brains: CapitalBrains = null
 
@@ -39,7 +39,7 @@ func register() -> void:
 		&"focus": {"get": func() -> String: return "; ".join(_describe(_focused())), "doc": "The focused carrier's hangar"},
 	}), brains)
 	DebugConsole.registry.register_command(ConsoleCommand.new(COMMAND,
-			"Carrier hangars (M10-T17): info, list, stock, launch [type|wing] [n], recall, jump, auto on|off, door <bay> open|shut, fold <ship name> (on the capital command's focus)",
+			"Carrier hangars (M10-T17): info, list, stock, empty, launch [type|wing] [n], recall, jump, auto on|off, door <bay> open|shut, fold <ship name> (on the capital command's focus)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"what"),
 			ConsoleArg.string_optional(&"how")]), _cmd, brains)
 
@@ -68,6 +68,9 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 		&"stock":
 			var n: int = h.stock_from_loadout()
 			return ConsoleResult.line("%s: %d craft aboard (%d built into the pool)" % [label, n, h.prepare_pool()])
+		&"empty":
+			h.empty()
+			return ConsoleResult.line("%s: hangar emptied" % label)
 		&"launch":
 			if what.is_empty() or what == "wing":
 				return ConsoleResult.line("%s launches a wing of %d" % [label, h.launch_wing()])

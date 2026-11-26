@@ -15,7 +15,8 @@ extends Node3D
 ## M10-T17: a capital carrier's bays are flown the same way (`CapitalHangar` extends this node; its cradles are `BayBerths`):
 ## a launch runs out of the mouth (from a lift first, in the Nova), a recall is drawn in through it once `capture_gate` lets it
 ## (its door open, its wings folded), and a craft drawn into a bay with a lift waits on the floor until `begin_lower`. Bay craft
-## are not drawn by the dock: once docked they go back to their pool (`take_from`).
+## are not drawn by the dock: once docked they go back to their pool (`take_from`). With `native_bodies` the rows read and place
+## the craft's bodies themselves (`ScsDockRows.step_bodies`): this node only hears their events and steers the craft flying home.
 
 ## A fighter left its cradle and flies on its own again.
 signal launched(ship: Ship)
@@ -63,6 +64,11 @@ var lost_docked: int = 0
 var launch_gap_s: float = LAUNCH_GAP_S
 ## `func(ship: Ship, cradle: int) -> bool`: whether a returning craft at its approach point may be drawn in now (none: always).
 var capture_gate: Callable = Callable()
+## The rows place the craft's bodies in native code (M10-T17, a capital's hangar); off for a raider carrier's pads.
+var native_bodies: bool = false
+## Bays only: how many held craft each bay has (launching, coming back or drawn in), by bay name.
+var held_in_bay: Dictionary = {}
+var _shell_m: float = -1.0  # the radius a craft flying home keeps from the carrier, m (native rows; found once)
 
 var _rows: ScsDockRows = ScsDockRows.new()
 var _held: Dictionary = {}  # the ship's instance id -> {ship, cradle, driver, capability, tier_exempt}
@@ -311,7 +317,10 @@ func _physics_process(delta: float) -> void:
 	if not _queue.is_empty() and _since_launch_s >= launch_gap_s:
 		_launch(_queue.pop_front())
 	if not _held.is_empty():  # every row is a held ship's
-		_step_rows(delta)
+		if native_bodies:
+			_step_bodies(delta)
+		else:
+			_step_rows(delta)
 	set_physics_process(not _queue.is_empty() or not _held.is_empty())
 
 
@@ -358,29 +367,88 @@ func _step_rows(delta: float) -> void:
 			var offset: Vector3 = ship.global_position - body.global_position
 			var far: float = clampf((offset.length() - TURN_FRAME_M) / TURN_FRAME_M, 0.0, 1.0)
 			_steer(ship, entry["capability"], vel[i] - body.angular_velocity.cross(offset) * far, -basis.z)
-			if events[i] == EVENT_AT_APPROACH and _may_capture(ship, entry):
-				entry["flying"] = false
-				ship.add_collision_exception_with(body)
-				var inverse: Transform3D = body.global_transform.affine_inverse()
-				_rows.begin_capture(key, inverse * ship.global_position, (inverse.basis * ship.global_basis).orthonormalized())
+			if events[i] == EVENT_AT_APPROACH:
+				_approach_event(key, entry, body)
 			continue
 		ship.global_transform = Transform3D(basis, at[i])
 		ship.linear_velocity = vel[i]
 		ship.angular_velocity = body.angular_velocity
-		if events[i] == EVENT_RELEASED:
-			launches += 1
-			cradles.set_state(int(entry["cradle"]), CarrierCradles.State.FREE)
-			_let_go(key, false)
-			launched.emit(ship)
-		elif events[i] == EVENT_DOCKED:
-			dockings += 1
-			ship.remove_collision_exception_with(body)
-			_settle(ship, int(entry["cradle"]))  # reads the hold's tier exemption before it lets the hold go
-			docked.emit(ship)
-		elif events[i] == EVENT_LIFTED:
-			lifted.emit(ship, int(entry["cradle"]))
-		elif events[i] == EVENT_IN_BAY:
-			in_bay.emit(ship, int(entry["cradle"]))
+		_placed_event(key, events[i])
+
+
+# One tick of a hangar's rows in native code: the rows place the bodies they hold; this steers the craft flying home and
+# handles the events.
+func _step_bodies(delta: float) -> void:
+	if not has_power():
+		abandon()  # the carrier went dark: a docking under way aborts at once (Q78)
+		if _held.is_empty():
+			return
+	var body: RigidBody3D = carrier()
+	if _shell_m < 0.0:
+		var hull: Damageable = Damageable.of(body)  # a search of the hull's children: once
+		_shell_m = (hull.bounding_radius if hull != null else 0.0) + SHELL_MARGIN_M
+	var out: Array = _rows.step_bodies(delta, body.get_rid(), _shell_m)
+	if out.size() < 4:
+		return
+	var keys: PackedInt64Array = out[1]
+	var vel: PackedVector3Array = out[2]
+	var noses: PackedVector3Array = out[3]
+	for i: int in keys.size():
+		var entry: Dictionary = _held.get(keys[i], {})
+		var ship: Ship = entry.get("ship") as Ship
+		if is_instance_valid(ship):
+			var offset: Vector3 = ship.global_position - body.global_position
+			var far: float = clampf((offset.length() - TURN_FRAME_M) / TURN_FRAME_M, 0.0, 1.0)
+			_steer(ship, entry["capability"], vel[i] - body.angular_velocity.cross(offset) * far, noses[i])
+	var pairs: PackedInt64Array = out[0]
+	for k: int in range(0, pairs.size(), 2):
+		var key: int = pairs[k]
+		var entry: Dictionary = _held.get(key, {})
+		if entry.is_empty() or not is_instance_valid(entry["ship"]):
+			continue
+		if int(pairs[k + 1]) == EVENT_AT_APPROACH:
+			_approach_event(key, entry, body)
+		else:
+			_placed_event(key, int(pairs[k + 1]))
+
+
+## Lets go of every held craft that died or left play on the way (a hangar calls this a couple of times a second; the
+## native rows do not look at the ships).
+func drop_gone_rows() -> void:
+	for key: int in _held.keys():
+		var gone: Ship = _held[key].get("ship") as Ship
+		if not is_instance_valid(gone) or not gone.is_inside_tree() or not gone.is_visible_in_tree() or JumpCapability.is_destroyed(gone):
+			_let_go(key, true)
+
+
+# A returning craft at its approach point: drawn in once the bay and its gate let it.
+func _approach_event(key: int, entry: Dictionary, body: RigidBody3D) -> void:
+	var ship: Ship = entry["ship"]
+	if not bool(entry["flying"]) or not _may_capture(ship, entry):
+		return
+	entry["flying"] = false
+	ship.add_collision_exception_with(body)
+	var inverse: Transform3D = body.global_transform.affine_inverse()
+	_rows.begin_capture(key, inverse * ship.global_position, (inverse.basis * ship.global_basis).orthonormalized())
+
+
+# What a placed craft's row ended in this tick: let go, docked, lifted to the floor or waiting in its bay.
+func _placed_event(key: int, event: int) -> void:
+	var entry: Dictionary = _held[key]
+	var ship: Ship = entry["ship"]
+	if event == EVENT_RELEASED:
+		launches += 1
+		_let_go(key, false)  # frees its cradle unless it gave up its claim already (a lift's lane)
+		launched.emit(ship)
+	elif event == EVENT_DOCKED:
+		dockings += 1
+		ship.remove_collision_exception_with(carrier())
+		_settle(ship, int(entry["cradle"]))  # reads the hold's tier exemption before it lets the hold go
+		docked.emit(ship)
+	elif event == EVENT_LIFTED:
+		lifted.emit(ship, int(entry["cradle"]))
+	elif event == EVENT_IN_BAY:
+		in_bay.emit(ship, int(entry["cradle"]))
 
 
 # Whether a returning ship at its approach point is drawn in now: a bay's lane must be free and is kept from then on, and the
@@ -405,6 +473,23 @@ func _steer(ship: Ship, capability: ShipCapability, wanted: Vector3, course: Vec
 		cmd.rot = PilotSteering.face(ship.global_basis, nose, capability.rate_max_rad)
 	PilotSteering.apply_seek(cmd, PilotSteering.seek(ship.linear_velocity, wanted, ship.global_basis, capability))
 	ship.set_flight_command(cmd)
+
+
+# Keeps the count of held craft per bay (bays only).
+func _count_in_bay(index: int, change: int) -> void:
+	if cradles.is_bays():
+		var bay: String = cradles.bays[index]
+		held_in_bay[bay] = int(held_in_bay.get(bay, 0)) + change
+
+
+## Gives up cradle `index`'s claim for `ship` without letting the craft go (a lift's lane, free for the next trip once its
+## craft is up on the floor).
+func free_lane(ship: Ship) -> void:
+	var entry: Dictionary = _held.get(ship.get_instance_id(), {}) if ship != null else {}
+	if entry.is_empty() or not bool(entry.get("owns", true)):
+		return
+	entry["owns"] = false
+	cradles.set_state(int(entry["cradle"]), CarrierCradles.State.FREE)
 
 
 # Brings the fighter on cradle `index` back into play there and starts its launch.
@@ -436,9 +521,11 @@ func _add_row(ship: Ship, phase: int, index: int) -> void:
 	var key: int = ship.get_instance_id()
 	if not cradles.is_bays():
 		_rows.add(key, phase, cradles.positions[index], cradles.bases[index], cradles.approach_m[index], _rest)
-		return
-	_rows.add_bay(key, phase, cradles.positions[index], cradles.bases[index], cradles.out_axes[index], cradles.approach_m[index],
-			cradles.launch_m[index], cradles.lift_m[index], rest_of(ship))
+	else:
+		_rows.add_bay(key, phase, cradles.positions[index], cradles.bases[index], cradles.out_axes[index], cradles.approach_m[index],
+				cradles.launch_m[index], cradles.lift_m[index], rest_of(ship))
+	if native_bodies:
+		_rows.set_body(key, ship.get_rid(), (_held[key]["capability"] as ShipCapability).a_main)
 
 
 # Takes `ship`'s pilot out of the loop and keeps cradle `index` for it (a bay's lane only once it is drawn in).
@@ -453,12 +540,15 @@ func _hold(ship: Ship, index: int, returning: bool) -> void:
 			driver.combatant.apply_commands(FlightCommand.new(), CombatCommand.new())
 	_held[ship.get_instance_id()] = {"ship": ship, "cradle": index, "returning": returning, "flying": returning, "owns": owns,
 			"capability": ShipCapability.from_spec(ship.spec, ship.get_layout()), "tier_exempt": ship.tier_exempt}
+	_count_in_bay(index, 1)
 	ship.tier_exempt = true
 
 
 # `ship` sits on cradle `index` from now on: out of play, drawn by the dock.
 func _settle(ship: Ship, index: int) -> void:
 	var tier_exempt: bool = bool((_held.get(ship.get_instance_id(), {}) as Dictionary).get("tier_exempt", false))
+	if _held.has(ship.get_instance_id()):
+		_count_in_bay(int(_held[ship.get_instance_id()]["cradle"]), -1)
 	_held.erase(ship.get_instance_id())
 	_rows.remove(ship.get_instance_id())
 	_on_cradle[index] = ship
@@ -480,6 +570,7 @@ func _let_go(key: int, failed: bool) -> void:
 	_rows.remove(key)
 	if entry.is_empty():
 		return
+	_count_in_bay(int(entry["cradle"]), -1)
 	if bool(entry.get("owns", true)):
 		cradles.set_state(int(entry["cradle"]), CarrierCradles.State.FREE)
 	var ship: Ship = entry["ship"] as Ship

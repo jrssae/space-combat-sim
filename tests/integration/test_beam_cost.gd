@@ -13,6 +13,14 @@ const SPACING_M: float = 2500.0
 
 
 # A slow file (M4-T36, Q58): runs with GUT_SLOW=1 (the full run and CI), skipped in focused runs.
+func before_all() -> void:
+	CapitalHangar.stocked_on_spawn = false  # its capitals are alone here: their hangars stay empty (M10-T17)
+
+
+func after_all() -> void:
+	CapitalHangar.stocked_on_spawn = true
+
+
 @warning_ignore("untyped_declaration")  # GutTest declares it untyped
 func should_skip_script():
 	return SlowTests.skip_reason()

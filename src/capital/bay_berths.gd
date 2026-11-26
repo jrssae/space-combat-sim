@@ -5,7 +5,8 @@ extends RefCounted
 ##
 ## A bay is a hall behind a mouth (`exit`, `forward`, `up`, `mouth_m`, `depth_m`); its floor lies a third of the mouth's height
 ## under the exit point (as `InteriorZones` reads the hall). Each bay gives one cradle per lane, every craft nose out of the
-## mouth: a bay with a lift (`elevator`, `elevator_travel_m`: the Nova) has `elevator_abreast` lanes side by side on the lift; a
+## mouth: a bay with a lift (`elevator`, `elevator_travel_m`: the Nova) has `elevator_abreast` lanes side by side in `elevator_rows`
+## rows on the lift (round its point, `elevator_row_gap_m` apart along the hall); a
 ## big hall without one (the Omega) has `lanes` lanes at the back of the hall; a bay with `berths` (the Hyperion's shuttle bay)
 ## that many mid-hall; any other bay one, mid-hall (the Hyperion's single-fury bays).
 
@@ -49,9 +50,13 @@ static func lanes_of(bay: Dictionary, options: Dictionary) -> Array[Dictionary]:
 	var capacity: int = maxi(int(bay.get("capacity", 1)), 1)
 	var lift_m: float = float(bay.get("elevator_travel_m", 0.0)) if bay.has("elevator") else 0.0
 	var count: int = 1
+	var rows: int = 1
+	var row_gap: float = 0.0
 	var run_in: float = 0.5 * depth
 	if lift_m > 0.0:
 		count = mini(maxi(int(options.get("elevator_abreast", 3)), 1), capacity)
+		rows = clampi(int(options.get("elevator_rows", 1)), 1, maxi(capacity / count, 1))
+		row_gap = float(options.get("elevator_row_gap_m", 14.0))
 		run_in = (_vec(bay.get("exit"), Vector3.ZERO) - _vec(bay.get("elevator"), Vector3.ZERO)).dot(forward)
 	elif bay.has("berths"):
 		count = mini(maxi(int(bay["berths"]), 1), capacity)
@@ -60,9 +65,11 @@ static func lanes_of(bay: Dictionary, options: Dictionary) -> Array[Dictionary]:
 		run_in = maxf(depth - BACK_GAP_M, 0.5 * depth)
 	var spacing: float = minf(LANE_SPACING_M, float(mouth[0]) / float(count))
 	var out: Array[Dictionary] = []
-	for k: int in count:
-		var across: float = (float(k) - 0.5 * float(count - 1)) * spacing
-		out.append({"at": floor_at - forward * run_in + right * across, "lift_m": lift_m, "run_in_m": run_in})
+	for r: int in rows:
+		var back: float = (float(r) - 0.5 * float(rows - 1)) * row_gap  # the rows round the lift's point, front row first
+		for k: int in count:
+			var across: float = (float(k) - 0.5 * float(count - 1)) * spacing
+			out.append({"at": floor_at - forward * (run_in + back) + right * across, "lift_m": lift_m, "run_in_m": run_in + back})
 	return out
 
 

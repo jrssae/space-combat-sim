@@ -14,7 +14,9 @@ const DEFAULTS: Dictionary = {
 	"wait_s": 90.0,  # before a jump it waits this long for its craft, then leaves the rest
 	"launch_gap_s": 0.8,  # between two craft leaving one bay
 	"lanes": 3,  # craft side by side at the back of a big hall
-	"elevator_abreast": 3,  # craft a lift carries a trip
+	"elevator_abreast": 3,  # craft side by side on a lift
+	"elevator_rows": 2,  # and rows of them a trip,
+	"elevator_row_gap_m": 14.0,  # this far apart along the hall
 	"approach_m": 60.0,  # a returning craft is taken in this far outside the mouth
 	"clear_m": 40.0,  # a launch lets go this far past the mouth
 	"door_lead_m": 1500.0,  # a door opens for a returning craft this far out

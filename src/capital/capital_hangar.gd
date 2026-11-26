@@ -4,15 +4,18 @@ extends CarrierDock
 ## its faction's, and recovered as the raider carrier recovers its own (Q25 to Q30). A child of the `CapitalShip`; the dock it
 ## extends flies the craft out of and into the bays on the native rows (`ScsDockRows`), and this node decides.
 ##
-## - **Stock.** Counts by craft type (`stock`), filled from the loadout (`stock_from_loadout`) by whoever spawns the ship for
-##   play (a scenario, the console); a bare `CapitalShip.create` carries none. A craft only exists while it is out: it is taken
-##   from the pool to launch and given back when it docks.
+## - **Stock.** Counts by craft type (`stock`): its loadout's craft (`stock_from_loadout`) from the moment it is made, unless
+##   `stocked_on_spawn` is off (a test's lone capital) or it is emptied (`empty`: a parked line-up ship). Once it is in play the
+##   pool gets the stock's worth of ships. A craft only exists while it is out: taken from the pool to launch, given back when
+##   it docks.
 ## - **Wings** (`HangarRules`): the first wing goes when the brain sees a hostile within reach (`on_threat`), the next once the
-##   threat has grown or the wings out have lost a share of theirs (the Nova's two wings of 12). While the hangar launches,
-##   its brain holds the ship's course (the Launch state).
+##   threat has grown or the wings out have lost a share of theirs (the Nova's two of 12, the Omega's four of 8). While the
+##   hangar launches, its brain holds the ship's course (the Launch state).
+## - **Per tick** the dock's rows run in native code and place the bodies they hold (`native_bodies`); this node's tick only
+##   steps its bays' doors and lifts while they work, and sleeps once nobody is out and every bay is at rest.
 ## - **Bays.** A bay with a roll-up door (the Hyperion's) opens it only for its own craft's launch or recovery, then shuts it.
-##   A bay with a lift (the Nova's) sinks it empty, brings a trip of craft up and sends them out, and takes craft drawn in back
-##   down (`BayElevator`, drawn by `BayElevatorNode`). A big hall (the Omega's) launches from lanes at its back. A shuttle that
+##   A bay with a lift (the Nova's) sinks it empty, brings a trip of craft up (two rows of three) and sends them out, sinking for
+##   the next once they have run clear, and takes craft drawn in back down (`BayElevator`, drawn by `BayElevatorNode`). A big hall (the Omega's) launches from lanes at its back. A shuttle that
 ##   folds its wings (`WingFoldNode`) folds them before it enters and spreads them once it has left.
 ## - **Recovery.** Every craft out is called home once nothing hostile has been within reach for a while, a badly hurt one
 ##   alone, and all of them before a jump: the jump waits a time for them (`ready_to_jump`), then leaves the rest.
@@ -31,6 +34,14 @@ const DECIDE_S: float = 0.5
 const DOOR_IDLE_S: float = 3.0
 ## Craft drawn onto a lift wait this long for others before it takes them down, s.
 const LIFT_GATHER_S: float = 2.0
+## A lift sinks for its next trip this long after its last trip reached the floor: its craft have run clear of it by then, s.
+const LIFT_CLEAR_S: float = 1.5
+## How often the bays' doors, queues and lifts are looked at, s (the lifts' own motion is stepped every tick).
+const PUMP_S: float = 0.1
+
+## Whether a carrier comes into play with its loadout's craft aboard (M10-T17, the maintainer: full by default). A test or a
+## balance fight with a lone capital turns it off for its run (and back on after) to keep that capital's hangar empty.
+static var stocked_on_spawn: bool = true
 ## A bay launches nothing while a craft coming home is this near its approach point, m.
 const RETURN_CLEAR_M: float = 400.0
 
@@ -69,6 +80,12 @@ var _out: Dictionary = {}  # ship instance id -> {ship, combatant, type}
 var _decide_s: float = 0.0
 var _launching: bool = false
 var _fought: bool = false  # a hostile came within reach since everyone was last home
+var _clock_s: float = 0.0  # the hangar's own time while awake, for its lifts' cycle
+var _pump_s: float = 0.0
+var _moving: Array[BayElevator] = []  # the lifts on the move, stepped every tick
+var _lift_bay: Dictionary = {}  # lift -> its bay
+var _pool_ready: bool = false
+var _prepared: Dictionary = {}  # craft type -> ships this hangar has built into the pool
 
 
 ## A hangar for `p_ship` from its bays and its hull's options; null when no bay takes craft. Call before it enters the tree.
@@ -84,14 +101,18 @@ static func make(p_ship: CapitalShip) -> CapitalHangar:
 	made.setup(berths)
 	made.launch_gap_s = float(opts["launch_gap_s"])
 	made.capture_gate = made._may_enter
+	made.native_bodies = true
 	for i: int in berths.count():
 		var bay: String = berths.bays[i]
 		if not made._bays.has(bay):
 			made._bays[bay] = {"queue": [], "since_s": INF, "idle_s": 0.0, "lift": null, "aboard": [], "gather_s": 0.0,
-					"cradles": []}
+					"cradles": [], "lifted_at": -INF}
 		(made._bays[bay]["cradles"] as Array).append(i)
 		if berths.lift_m[i] > 0.0 and made._bays[bay]["lift"] == null:
 			made._bays[bay]["lift"] = BayElevator.new()
+			made._lift_bay[made._bays[bay]["lift"]] = bay
+	if stocked_on_spawn:
+		made.stock_from_loadout()
 	return made
 
 
@@ -109,7 +130,9 @@ func _ready() -> void:
 	if hull != null:
 		hull.destroyed.connect(_on_hull_destroyed)
 	_add_lift_nodes()
+	lifted.connect(_on_lifted)
 	set_physics_process(true)
+	_prepare_when_placed.call_deferred()
 
 
 ## Fills the hangar with the loadout's craft (`loadouts.json` `launches`) that its bays take and the catalogue has, up to the
@@ -129,14 +152,25 @@ func stock_from_loadout() -> int:
 	return total
 
 
-## Makes sure the ship pool can field the stock: adds that many ships of each type to it. Returns how many were built.
+## Empties the hangar: nothing aboard or queued (a lone capital in a test or a balance fight; `hangar empty`).
+func empty() -> void:
+	_clear_queues()
+	stock.clear()
+
+
+## Makes sure the ship pool can field the stock: adds ships of each type to it up to the most this hangar has carried. Returns
+## how many were built.
 func prepare_pool() -> int:
 	var pool: ShipPool = ShipPool.for_tree(get_tree()) if is_inside_tree() else null
 	if pool == null:
 		return 0
+	_pool_ready = true
 	var built: int = 0
 	for type: Variant in stock:
-		built += pool.prepare(type, int(stock[type]))
+		var more: int = int(stock[type]) - int(_prepared.get(type, 0))
+		if more > 0:
+			built += pool.prepare(type, more)
+			_prepared[type] = int(stock[type])
 	return built
 
 
@@ -269,19 +303,25 @@ func craft_out() -> Array[Dictionary]:
 
 func _physics_process(delta: float) -> void:
 	var t0: int = Time.get_ticks_usec()
+	_clock_s += delta
 	super._physics_process(delta)
 	set_physics_process(true)
-	for bay: String in _bays:
-		_pump(bay, delta)
-	_decide_s += delta
-	if _decide_s >= DECIDE_S:
-		_decide(_decide_s)
-		_decide_s = 0.0
-	if _out.is_empty() and _held.is_empty() and queued_count() == 0 and _all_idle():
-		# Nobody out, nothing to send, every bay at rest: it sleeps until a threat, an order or a stock wakes it.
-		_all_home()
-		_push_launching()
-		set_physics_process(false)
+	for lift: BayElevator in _moving:
+		_advance_lift(lift, delta)  # every tick: a lift moves in step with the rows it carries
+	_pump_s += delta
+	if _pump_s >= PUMP_S:
+		for bay: String in _bays:
+			_pump(bay, _pump_s)
+		_pump_s = 0.0
+		_decide_s += PUMP_S
+		if _decide_s >= DECIDE_S:
+			_decide(_decide_s)
+			_decide_s = 0.0
+		if _out.is_empty() and _held.is_empty() and queued_count() == 0 and _all_idle():
+			# Nobody out, nothing to send, every bay at rest: it sleeps until a threat, an order or a stock wakes it.
+			_all_home()
+			_push_launching()
+			set_physics_process(false)
 	ticks += 1
 	tick_us += float(Time.get_ticks_usec() - t0)
 
@@ -290,6 +330,7 @@ func _physics_process(delta: float) -> void:
 func _wake() -> void:
 	set_physics_process(true)
 	_decide_s = DECIDE_S
+	_pump_s = PUMP_S
 
 
 # Everyone is home: the next fight starts with the first wing again.
@@ -313,6 +354,7 @@ func _all_idle() -> bool:
 
 # The wings and the recovery, a couple of times a second.
 func _decide(dt: float) -> void:
+	drop_gone_rows()
 	_drop_gone()
 	if not has_power():
 		_clear_queues()
@@ -349,7 +391,8 @@ func _pump(bay: String, delta: float) -> void:
 	var queue: Array = state["queue"]
 	var door: BayDoorNode = door_of(bay)
 	var lift: BayElevator = state["lift"]
-	if queue.is_empty() and _held.is_empty() and (door == null or door.amount <= 0.0) and (lift == null or lift.is_free()):
+	if queue.is_empty() and int(held_in_bay.get(bay, 0)) == 0 and (door == null or door.amount <= 0.0) \
+			and (lift == null or lift.is_free()):
 		return  # at rest
 	if not queue.is_empty() and (not has_power() or not ship.bay_works(bay)):
 		refused += queue.size()
@@ -378,17 +421,31 @@ func _pump(bay: String, delta: float) -> void:
 			return
 
 
-# A lift bay: it sinks empty for a trip, rises with up to a craft a lane, and takes craft drawn in down in a group.
-func _pump_lift(bay: String, state: Dictionary, lift: BayElevator, delta: float, door_ready: bool) -> void:
+# One tick of a moving lift: down on the deck it takes its trip aboard and rises with it the same tick, so the lift and the
+# craft's rows move together.
+func _advance_lift(lift: BayElevator, delta: float) -> void:
 	var ended: int = lift.advance(delta)
-	var queue: Array = state["queue"]
-	var aboard: Array = state["aboard"]
 	if ended == BayElevator.State.DOWN:
+		var state: Dictionary = _bays[_lift_bay[lift]]
+		var queue: Array = state["queue"]
 		for i: int in state["cradles"]:
 			if not queue.is_empty() and cradles.takes(i, queue[0]):
 				_send(queue.pop_front(), i)
 		lift.rise()
-		return
+	elif lift.is_free():
+		_moving.erase(lift)
+
+
+# Starts a lift moving (`move` is its fetch or lower): it is stepped every tick until it is back at the floor.
+func _start_lift(lift: BayElevator, move: Callable) -> void:
+	if bool(move.call()) and not _moving.has(lift):
+		_moving.append(lift)
+
+
+# A lift bay at rest: it sinks empty for a trip, and takes craft drawn in down in a group.
+func _pump_lift(bay: String, state: Dictionary, lift: BayElevator, delta: float, door_ready: bool) -> void:
+	var queue: Array = state["queue"]
+	var aboard: Array = state["aboard"]
 	if not lift.is_free():
 		return
 	if not aboard.is_empty():
@@ -398,10 +455,19 @@ func _pump_lift(bay: String, state: Dictionary, lift: BayElevator, delta: float,
 			for craft: Ship in aboard:
 				begin_lower(craft)
 			aboard.clear()
-			lift.lower()
+			_start_lift(lift, lift.lower)
 		return
-	if not queue.is_empty() and door_ready and not _bay_busy(bay) and not _returning_near(bay):
-		lift.fetch()
+	if not queue.is_empty() and door_ready and _clock_s - float(state["lifted_at"]) >= LIFT_CLEAR_S and _lanes_free(state) \
+			and not _returning_near(bay):
+		_start_lift(lift, lift.fetch)
+
+
+# Whether every lane of a bay is free: nothing launching from it or drawn into it holds one.
+func _lanes_free(state: Dictionary) -> bool:
+	for i: int in state["cradles"]:
+		if cradles.states[i] != CarrierCradles.State.FREE:
+			return false
+	return true
 
 
 # Takes a craft of `type` from the pool and sends it out of cradle `index`; it goes back to stock when none can come.
@@ -463,7 +529,7 @@ static func _give_faction(c: Combatant, faction: StringName) -> void:
 
 # Queues one craft of `type` in the bay that takes it with the shortest queue and still works; out of stock with it.
 func _queue_one(type: StringName) -> bool:
-	if not has_power() or int(stock.get(type, 0)) <= 0:
+	if not has_power() or int(stock.get(type, 0)) <= 0 or ShipPool.for_tree(get_tree()) == null:
 		return false
 	var best: String = ""
 	for bay: String in _bays:
@@ -524,6 +590,8 @@ func _may_enter(craft: Ship, index: int) -> bool:
 
 # Whether a craft of the bay is launching, coming in, or close enough on its way back that the door should be open.
 func _bay_busy(bay: String) -> bool:
+	if int(held_in_bay.get(bay, 0)) == 0:
+		return false
 	var lead_m: float = float(options["door_lead_m"])
 	for entry: Dictionary in _held.values():
 		var i: int = int(entry["cradle"])
@@ -540,6 +608,8 @@ func _bay_busy(bay: String) -> bool:
 
 # Whether a craft coming home to `bay` is near its mouth: its launches wait, so nothing leaves into a craft waiting to come in.
 func _returning_near(bay: String) -> bool:
+	if int(held_in_bay.get(bay, 0)) == 0:
+		return false
 	for entry: Dictionary in _held.values():
 		var i: int = int(entry["cradle"])
 		if cradles.bays[i] != bay or not bool(entry["returning"]):
@@ -619,10 +689,12 @@ func _add_lift_nodes() -> void:
 			continue
 		var forward: Vector3 = BayBerths._vec(bay.get("forward"), Vector3.FORWARD).normalized()
 		var up: Vector3 = BayBerths._vec(bay.get("up"), Vector3.UP).normalized()
-		var lanes: int = (_bays[str(bay["name"])]["cradles"] as Array).size()
-		var width: float = minf(BayBerths.LANE_SPACING_M * float(lanes), float((bay.get("mouth_m", [60.0]) as Array)[0]) - 2.0)
+		var abreast: int = int(options.get("elevator_abreast", 3))
+		var rows: int = maxi((_bays[str(bay["name"])]["cradles"] as Array).size() / maxi(abreast, 1), 1)
+		var width: float = minf(BayBerths.LANE_SPACING_M * float(abreast), float((bay.get("mouth_m", [60.0]) as Array)[0]) - 2.0)
+		var length: float = float(options.get("elevator_row_gap_m", 14.0)) * float(rows) + 2.0
 		var basis := Basis(forward.cross(up).normalized(), up, -forward)
-		add_child(BayElevatorNode.create(lift, BayBerths._vec(bay.get("elevator"), Vector3.ZERO), basis, Vector2(width, 16.0),
+		add_child(BayElevatorNode.create(lift, BayBerths._vec(bay.get("elevator"), Vector3.ZERO), basis, Vector2(width, length),
 				float(bay.get("elevator_travel_m", 30.0))))
 
 
@@ -630,6 +702,19 @@ func _on_launched(craft: Ship) -> void:
 	var fold: WingFoldNode = WingFoldNode.of(craft)
 	if fold != null:
 		fold.set_folded(false)  # clear of the bay: the wings spread
+
+
+# A trip reached the floor: its lanes are free for the next one, which sinks once these have run clear.
+func _on_lifted(craft: Ship, index: int) -> void:
+	free_lane(craft)
+	_bays[cradles.bays[index]]["lifted_at"] = _clock_s
+
+
+# The pool gets the stock's worth of ships once the carrier is in play (not for a hangar emptied straight after spawning).
+func _prepare_when_placed() -> void:
+	if not _pool_ready and not stock.is_empty() and is_inside_tree():
+		_pool_ready = true
+		prepare_pool()
 
 
 func _on_in_bay(craft: Ship, index: int) -> void:
@@ -661,6 +746,8 @@ func _on_docked(craft: Ship) -> void:
 
 
 func _on_craft_destroyed(_info: HitInfo, key: int) -> void:
+	if _held.has(key):
+		_let_go(key, true)  # the rows place bodies natively: a dead craft leaves them at once
 	if _out.has(key):
 		_forget(key)
 		wing_losses += 1

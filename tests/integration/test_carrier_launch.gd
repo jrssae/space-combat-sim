@@ -51,7 +51,7 @@ func _carrier(type: StringName, ahead_m: float = AHEAD_M) -> CapitalShip:
 	CapitalBeams.of(main.world).hold(cap, true)
 	assert_not_null(cap.hangar, "it has a hangar")
 	cap.hangar.auto = false
-	assert_gt(cap.hangar.stock_from_loadout(), 0, "its loadout's craft aboard")
+	assert_false(cap.hangar.stock.is_empty(), "it spawned with its loadout's craft aboard (full by default)")
 	cap.hangar.prepare_pool()
 	return cap
 
@@ -93,27 +93,44 @@ func test_a_nova_launches_a_wing_up_its_lift_and_out_of_its_bay() -> void:
 		releases.append({"t": SimClock.now(), "z": local.origin.z, "nose": -local.basis.z,
 				"out": nova.global_basis.inverse() * (craft.linear_velocity - nova.linear_velocity)}))
 	var lowest: Array[float] = [1.0]
+	var ordered: float = SimClock.now()
 	assert_eq(h.launch_wing(), 12, "the first wing of 12 (Q73)")
 	assert_true(h.is_launching())
 	await _fly(120.0, func() -> bool:
 		lowest[0] = minf(lowest[0], lift.height())
 		return releases.size() >= 12 and h.queued_count() == 0)
 	assert_eq(releases.size(), 12, "the whole wing left")
-	assert_eq(lift.trips_up, 4, "three abreast a trip up the lift")
+	assert_eq(lift.trips_up, 2, "two rows of three abreast a trip up the lift")
 	assert_almost_eq(lowest[0], 0.0, 1e-3, "the lift went all the way down to the hangar deck")
 	for r: Dictionary in releases:
 		assert_lt(float(r["z"]), exit.z, "let go past the mouth")
 		assert_gt((r["nose"] as Vector3).dot(Vector3.FORWARD), 0.99, "nose out of the bay")
 		assert_gt(-(r["out"] as Vector3).z, 40.0, "leaving at the push's speed (%s)" % r["out"])
-	var first: float = float(releases[0]["t"])
 	var last: float = float(releases[releases.size() - 1]["t"])
-	assert_between(last - first, 20.0, 60.0, "a wing in under a minute: %.1f s" % (last - first))
+	assert_between(last - ordered, 15.0, 30.0, "a wing out in 20 to 30 s (the maintainer): %.1f s" % (last - ordered))
 	assert_eq(int(h.stock[&"starfury_ally"]), 12, "the second wing still aboard")
 	assert_eq(h.out_count(), 12)
 	for entry: Dictionary in h.craft_out():
 		assert_eq((entry["combatant"] as Combatant).faction, Factions.EARTH_ALLIANCE, "its own side's")
 		assert_true((entry["combatant"] as Combatant).display_name.begins_with("Delta"), "the first wing's callsign")
 	assert_false(h.is_launching(), "done: its brain lets the helm go again")
+
+
+func test_carriers_spawn_full_and_a_lone_capital_opts_out() -> void:
+	var omega: CapitalShip = _carrier(&"ea_omega")
+	if omega == null:
+		return
+	assert_eq(int(omega.hangar.stock[&"starfury_ally"]), 32, "the Omega's 32 aboard")
+	assert_eq(omega.hangar.launch_wing(), 8, "its first wing of 8 (the maintainer, 2026-11-26)")
+	CapitalHangar.stocked_on_spawn = false
+	var lone: CapitalShip = CapitalShip.create(&"ea_omega", Factions.EARTH_ALLIANCE, "LONE", main.world.rest_velocity())
+	CapitalHangar.stocked_on_spawn = true
+	assert_true(lone.hangar.stock.is_empty(), "a test's lone capital carries nothing")
+	lone.free()
+	var parked: CapitalShip = CapitalShip.create(&"ea_nova", Factions.EARTH_ALLIANCE, "PARKED", main.world.rest_velocity())
+	parked.hangar.empty()
+	assert_true(parked.hangar.stock.is_empty() and parked.hangar.queued_count() == 0, "a line-up ship emptied")
+	parked.free()
 
 
 func test_the_hyperion_opens_a_door_only_for_its_own_craft_and_shuts_it_after() -> void:

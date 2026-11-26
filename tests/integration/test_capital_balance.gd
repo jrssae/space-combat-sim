@@ -31,6 +31,14 @@ var _steps_backup: int = 8
 var _tier_backup: Variant = null
 
 
+func before_all() -> void:
+	CapitalHangar.stocked_on_spawn = false  # its capitals are alone here: their hangars stay empty (M10-T17)
+
+
+func after_all() -> void:
+	CapitalHangar.stocked_on_spawn = true
+
+
 @warning_ignore("untyped_declaration")  # GutTest declares it untyped
 func should_skip_script():
 	return BalanceTests.skip_reason()

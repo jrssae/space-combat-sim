@@ -15,6 +15,14 @@ const LAYER_SIDE: StringName = &"drakh"
 var main: Main
 
 
+func before_all() -> void:
+	CapitalHangar.stocked_on_spawn = false  # its capitals are alone here: their hangars stay empty (M10-T17)
+
+
+func after_all() -> void:
+	CapitalHangar.stocked_on_spawn = true
+
+
 func before_each() -> void:
 	get_tree().paused = false
 	DebugConsole.flags.invulnerable = true  # the player sits near the test mines
