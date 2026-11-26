@@ -54,7 +54,10 @@ def problems(hardpoints: Mapping[str, Any], loadouts: Mapping[str, Any], hull_id
         out.append(f"weapons built {dict(sorted(built.items()))}, the loadout has {dict(sorted(wanted.items()))}")
     launched: Counter[str] = Counter()
     for bay in hardpoints.get("bays", []):
-        launched[bay.get("craft", "?")] += int(bay.get("capacity", 0))
+        if bay.get("berth_craft"):  # a bay whose berths each take their own craft (the Asimov's)
+            launched.update(bay["berth_craft"])
+        else:
+            launched[bay.get("craft", "?")] += int(bay.get("capacity", 0))
     if launched != Counter(entry["launches"]):
         out.append(f"bays launch {dict(sorted(launched.items()))}, the loadout has {dict(sorted(entry['launches'].items()))}")
     return out

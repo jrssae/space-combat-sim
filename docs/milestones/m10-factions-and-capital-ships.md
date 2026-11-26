@@ -122,6 +122,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q93 | Centauri and Kestrel shuttles (2026-11-25) | For T58's and T57's stage 2: (1) the Centauri shuttle has **no tail fin** (built to the STL, confirmed); (2) it uses the EA ships' conventional **reaction** drive (Q51): visible plumes from its two main nozzles, retros as built; (3) **no weapons** on the Centauri shuttle or the EA shuttles (crew shuttle and Kestrel); (4) **no docking collar** on the Centauri shuttle: like the Kestrel it only lands in bays (no `docking_ports`); (5) **no RCS on the wing tips** of the Centauri shuttle or the Kestrel (`ea_atmo_shuttle`): the side thrust sits on the outside base of each wing (the wing root's outer face); the ports move on both craft in stage 2 (`assets/ea_shuttles.py`'s `atmo_ports` and its tests, the hardpoints test and the Kestrel's GUT test kept green); (6) the **wing-fold animation stays in T17**, which now also folds the Centauri shuttle's wings (it is an atmospheric shuttle too); (7) both shuttles' flight tuning is left until later |
 | Q94 | Damage state owner and the per-tick hit summary (2026-11-25, T75) | **Option A:** one native damage store owns every hull's, section's and part's points (capitals, stations with Babylon 5's sections and grid mounts, fighters' `HullHealth`) and applies the Q72 rules; every source calls it (bolts, rams and the console one call a hit, beams one batch a tick, T76's blasts later); `CapitalDamage`, `StationDamage` and `HullHealth` become thin readers and events are raised once each. Beam hits raise no per-hit `hit_taken`/`damaged`: each damaged ship gets **one summary a tick** listing **every attacker that hit it** that tick, the total damage and the sections and parts hit; the AI's attacker memory, `carrier_jumps`, the `section_hit` counters, the HUD's damage zones and the core's hull column read it. Tests read a native hit log; damage values byte for byte. Done in two pieces: the store (bolts, rams, console through it), then the beam batch |
 | Q95 | Asimov look, bars and forward cavity (2026-11-25) | After the A/B/C sheet (T53). **Look:** B's warmer white and denser, darker patches **with C's window rows on the band**; A and C are dropped. **Green layout as the show's:** a band-coloured **ring** round the forward face with a thin white rim inside it (between the face's grey collar and the ring), and **narrower bars** running aft from the ring across the band (not the whole forward cap, not 22.5 degree meridians). **Ring narrowed (the maintainer, 2026-11-25, after the round 2 sheet):** about as wide as one bar, with white panels between the bars behind it back to the aft window band; the skin behind the ring turns with the band so the bars meet it. **Six or eight bars, by ship:** the count is picked from the ship's name as the livery is (Q86) but apart from the colour, so the names give varied pairings; the *Asimov* has six (the stills). One atlas for all: the bars are drawn by the band's shader, not baked. **Forward cavity as the show's:** a deep bowl in the forward face with the spine running into it and structure on its walls, a **screen-plausible exception to the 90 % rule for the face only**: the silhouettes and every other part's sections still pass, the face's planes that cannot are exempted by name in `ea_asimov_fidelity.py` with this reason. The hexagonal shuttle-bay mouth stays (in the bowl's floor; stage 2's bay behind it, Q84) and the collision stays honest round the cavity. Break-up chunks wear their ship's livery. (The maintainer's brief called this row Q89; Q89 to Q94 were taken by then) |
+| Q96 | Asimov shuttle bay: option A (2026-11-26) | After T53's stage 2 found no hall that fits inside the fixed forward section (`docs/assets-capital.md`, `ea_asimov`): **option A.** The turning band's collision is a **ring round a fixed, non-rotating core** (the band is a habitat ring; nothing changes to look at), and the **hall runs about 70 m straight back** behind the hexagonal mouth inside that core, with **two berths side by side**: one EA crew shuttle (38.0 x 18.8 x 10.7 m) and one Kestrel with folded wings (29.0 x 22.9 x 19.4 m, Q73, Q93). Lit, with doors, on the interior layer (Q68); a `bay` hardpoint with two berths flown by T17's `CapitalHangar`, as the Hyperion's shuttle bay is. The band's inner ring stays clear of the hall with margin while it turns; the collars keep working. Options B (a hangar trunk proud of the bowl's floor), C (sterns left in the bowl) and D (smaller craft only) are dropped |
 
 ## The hulls
 
@@ -1786,7 +1787,7 @@ On top of it:
 
 ### M10-T70 Clearance of the resized EA craft in B5's main docking bay
 
-- **Stage 2 progress (2026-11-26, committed; the task stays in progress: the bay is open, then stage 3).**
+- **Stage 2 progress (2026-11-26, committed; the task stays in progress: stage 3).** The collars first; the bay after the maintainer's Q96 (below).
   **Built:** four docking collars on the collar's lower teeth (`docking_ports`, a new `dock` hardpoint kind; none on the
   turning band); `ShipDock` on every capital with collars, flying craft with M8-T06's `DockKeepOut`, `DockAutopilot` (now
   with a nose direction and a fine seek for backing onto a lock) and `DockVisit` in the hull's frame, numbers in
@@ -1796,13 +1797,8 @@ On top of it:
   `liner_dock` ("Liner docking" in the New game list; `player.type` puts the player in a crew shuttle): target the docking
   collars and hold X (Shift, Mouse 4) to dock, hold again to abort on the way in or to undock once mated. `info.md`,
   `docs/architecture.md` §22.12, `docs/assets-capital.md`.
-  **Not built, needs the maintainer: the shuttle bay.** The decision of 2026-11-26 (the hall spreads sideways inside the
-  fixed forward section) cannot hold either craft: there are 20 m between the bowl's floor and the mouth's back, the crew
-  shuttle is 38 m long and the folded Kestrel 29.0 x 22.9 x 19.4 m, and neither can turn in a 45 x 27 m doorway with 20 m
-  behind it or come through it sideways-on (the numbers and options A to D are in `docs/assets-capital.md`, `ea_asimov`;
-  A, the band's collision as a ring round a fixed core, changes nothing to look at). So there is no hall, no doors, no
-  berths, and the Kestrel (no docking lock, Q93) cannot dock at the liner yet: a headless test shows it refused. With a
-  `bay` hardpoint the bay is flown by T17's `CapitalHangar` as the Hyperion's shuttle bay is.
+  **The shuttle bay was not built in that commit** (no hall fits inside the fixed forward section: 20 m between the bowl's
+  floor and the turning band); the maintainer chose option A (Q96) and it is built, below.
   **Verified on staged copies (HEAD and T53's files only, the liner rebuilt there, their own native build):** Python 78
   (`test_ea_asimov` 21 with the reference STL, three of them new: the collars, a crew shuttle swept onto each, neighbours
   apart; `test_capital_framework` 9, `test_capital_parts`, `test_ea_craft_bay_clearance`, `test_cli`, `test_budgets`); the
@@ -1818,8 +1814,49 @@ On top of it:
   **GPU** (RX 6950 XT, Forward+, 1280x720): `references/screenshots/M10-T53 Asimov liner/stage2_docks.png` (the player's
   shuttle on its approach with two AI shuttles mated, backing down the lane, mated from two sides), 109 fps and 98 draw
   calls mated with three shuttles; no bay panel, since there is no bay. Judging the look is (H).
-  **Open:** the bay (above); AI visitors keep their collar until told to leave (stage 3's traffic times them); a shuttle
+  **Open:** AI visitors keep their collar until told to leave (stage 3's traffic times them); a shuttle
   docking is not followed by cinematic shots; the collars have no door or docking light of their own.
+- **Stage 2, the shuttle bay (2026-11-26, Q96: option A; committed; the task stays in progress for stage 3).**
+  **Built:** the band's collision is a ring of 32 sectors round a fixed core (52 m in radius) as far back as the bay reaches
+  (236 to 298 m; solid aft of it), the core the hull's own; the mouth is a frame 2 m deep (214 to 216 m) and behind it the
+  hall runs 70 m straight back (216 to 286 m), 70 m wide and 23.2 m high, metal-lined, lit red by its own lamp, on the
+  interior layer, a roll-up door across the mouth inside the frame. Two berths side by side, each on its own straight lane
+  through the middle of the mouth, 20 degrees either side of the axis (two craft that each take half the mouth cannot pass it
+  abreast): the crew shuttle to starboard, the Kestrel with folded wings to port; the deck stands 3.8 m above the mouth's
+  lower edge, where the folded Kestrel has the same room above and below. It is a `bay` hardpoint (`berth_craft`,
+  `berth_fan_deg`, `berth_run_m`; `BayBerths` reads the fan) flown by T17's `CapitalHangar` for the liner's own two shuttles
+  (the loadout now has them: one crew shuttle, one Kestrel; taken in 250 m out, ahead of the nose, let go 90 m past the mouth),
+  and its berths are places of `ShipDock` beside the collars for craft that are not the liner's (the player, a mission's
+  shuttle): they stay themselves in their berth, seen, where the hangar's own go back to their pool. A berth is free for a
+  visitor only when the liner's own craft leave it room; one craft passes the mouth at a time, the hangar's or a visitor;
+  the door opens for it and shuts behind it. The Kestrel docks at the liner now (it has no lock, so no collar takes it:
+  `shipdock send ea_atmo_shuttle` goes to the bay). Its wings' hit volumes fold with the wings (`Ship.turn_collision`, from
+  `WingFoldNode`: they were drawn folded only, and a folded Kestrel must rest 13 m from the shuttle beside it). The player
+  picks the bay or the collars: each is its own target with the same hold (`liner_dock`, whose liner has its hangar empty).
+  `shipdock ... bay`, `m.dock_at(craft, ship, "bay")`; `info.md`, `docs/architecture.md` §22.12, `docs/assets-capital.md`.
+  **Clearances** (`test_ea_asimov.py`, each craft's hit volumes swept down its lane from 150 m out to its berth against the
+  liner's collision; `tests/convex_gap.py`, a lower bound): the crew shuttle 2.96 m at the least (its stern flaps to the
+  hall's side wall, berthed), 2.2 m off by 0.75 m and 2 degrees of roll; the Kestrel 2.76 m (a wing root to the mouth's lower
+  side), 1.82 m off; berthed they are 13.5 m apart; the Kestrel passes the berthed crew shuttle's bow at 2.9 m, the crew
+  shuttle the Kestrel at 11.8 m; both pass shuttles mated on the collars at 8.7 m or more. The hall's far corners are 4.1 m
+  inside the turning ring, its back wall 12 m ahead of the band's solid part.
+  **Verified on a staged copy (7eb20b00 and T53's files only, the liner rebuilt there):** Python 118 (`test_ea_asimov` 26 with
+  the reference STL, five of them the bay's; `test_capital_framework`, `test_capital_parts`, `test_ea_craft_bay_clearance`,
+  `test_cli`, `test_budgets`, `test_capital_loadouts`, and `test_ea_hyperion` 29 for `launch_bay`'s new option); the 90 %
+  compare 0.972, 0.974, 0.996, sizes within 0.1 %, every section as before (24 at 0.90 or over, the face's four exempt by
+  Q95); 19 358 triangles (hull 12 494, band 6 864; 64 of the hull's on the interior layer); collision 93 shapes on the face
+  (budget 96), 59 on the band, coverage 1.0 (worst gap 0.93 m, worst excess 1.0 m); the atlases are unchanged (two of
+  4 096 px), so video memory is as it was. Compile check 1 171 scripts clean. GUT 342 of 342 on 7eb20b00 (the docking, hangar, front-end and console files again on bfa95f33 with these docs): `test_ship_dock` 10 (three new:
+  a crew shuttle and a Kestrel berth, rest in the hall untouched and leave one after the other; the player picks the bay
+  with the hold and leaves with it; the liner's own two launch through the mouth and come home, and leave visitors no room
+  while aboard), `test_ship_dock_ports` 8 (two new: the fan, the berths as places), and the neighbours `test_carrier_launch` 7, `test_ea_asimov` 3, `test_ea_hyperion` 5, `test_ea_nova` 5, `test_ea_omega` 5, `test_front_end` 26, `test_capital_hulks` 11, `test_capital_bay_interiors` 4 and 3, `test_wing_fold` 4, `test_carrier_logic` 23, `test_hangar_rules` 10, `test_ship_dock_rules` 10, `test_band_tint_material` 6, `test_bay_doors` 10, `test_text_names_no_control` 3, `test_ship_catalog` 13, `test_ship_catalog_data` 9, `test_mesh_assets` 7, `test_dock_autopilot` 7, `test_docking` 17, `test_autopilot_abort` 2, `test_nav_targets` 9, `test_station_traffic` 7, `test_scenario_loader` 42, `test_keyboard_parity` 4, `test_quick_suite` 3, `test_settings_schema` 26, `test_console_command_list` 7, `test_capital_ship` 10, `test_dock_keep_out` 7, `test_dock_visit` 5, `test_dock_roll` 2, `test_nav_interaction` 12.
+  **GPU** (RX 6950 XT, Forward+, 1280x720): `references/screenshots/M10-T53 Asimov liner/stage2_bay.png` (the player's shuttle
+  on its lane to the lit mouth, in the bowl, entering with the Kestrel berthed, both berthed, the view from the berth and
+  out through the mouth); 73 fps in the hall with both craft, 42 draw calls. Judging the look is (H).
+  **Open:** the hall is bare (walls, deck, lamp, no fittings), its deck reads near black in the sheet; a visitor's docking that
+  is called off inside the mouth flies back out along its lane before it is let go; the hangar's own craft are drawn in from
+  250 m out by the dock kernel's capture, which is flown within a few metres, not as true as a visitor's lane (T17's, as on the
+  Hyperion); the hit sweep's native copy of a Kestrel's wing volumes does not fold; stage 3.
 - **T70 done (2026-11-23).** Each hull's collision shapes swept down the mouth (73.2 x 16.7 m band, 45.5 x 30.0 m core, outline clear to the doors) all fit, level and centred: crew shuttle 9.5 m, Kestrel 5.3 m (the wingtip under the band's ceiling), tender 12.8 m; off by 2 m and 2 degrees of roll 7.4, 2.4 and 10.7 m. Test: `tools/procgen/tests/test_ea_craft_bay_clearance.py`.
 
 ### M10-T71 Re-size the Panama (Q66, Q74)

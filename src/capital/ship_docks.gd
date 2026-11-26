@@ -2,8 +2,9 @@ class_name ShipDocks
 extends Node
 ## Docking at ships, seen from the game (M10-T53, Q84): finds every `ShipDock` in play, sends named craft to them (the console,
 ## `MissionApi.dock_at`), brings in a pooled shuttle to dock, and carries the player's own docking: the hold of X on a ship's
-## collars, the autopilot's command for `Main`, the held controls while mated and the hold of X again to leave
-## (`AutopilotAbort`: ABORT on the way in, UNDOCK once mated).
+## collars or its shuttle bay, the autopilot's command for `Main`, the held controls while mated and the hold of X again to
+## leave (`AutopilotAbort`: ABORT on the way in, UNDOCK once mated). A place is a collar or a berth by its name, or `bay`
+## for the berth that takes the craft (stage 2: the Asimov's shuttle bay takes a crew shuttle and a Kestrel).
 ## Console: command `shipdock`, provider `ship_docks`.
 
 const NODE_NAME: StringName = &"ShipDocks"
@@ -103,9 +104,9 @@ func dock_ship(craft_name: String, ship_name: String = "", port_name: String = "
 	var dock: ShipDock = dock_named(ship_name)
 	if dock == null:
 		return "no ship with docking collars%s" % ("" if ship_name.is_empty() else " called '%s'" % ship_name)
-	var port: int = dock.ports.index_of(port_name) if not port_name.is_empty() else -1
+	var port: int = dock.place_named(port_name, craft.spec.asset_id) if not port_name.is_empty() else -1
 	if not port_name.is_empty() and port < 0:
-		return "%s has no collar '%s' (%s)" % [dock.ship.targetable.display_name, port_name, ", ".join(dock.ports.names)]
+		return "%s has no place '%s' for it (%s)" % [dock.ship.targetable.display_name, port_name, ", ".join(dock.ports.names)]
 	return dock.start(craft, port)
 
 
@@ -129,22 +130,23 @@ func cancel_ship(craft_name: String) -> String:
 	return dock.cancel(craft)
 
 
-## Brings a pooled craft of `type` into play off `dock`'s collars and sends it in (the console's `send`; a test's visitor).
-## Returns the craft, or null with `why[0]` saying why not.
+## Brings a pooled craft of `type` into play off one of `dock`'s places and sends it in (the console's `send`; a test's
+## visitor): `port` -1 for a free collar, or its berth when it has no lock. Returns the craft, or null with `why[0]` saying why not.
 func send_craft(dock: ShipDock, type: StringName = SEND_TYPE, port: int = -1, why: Array[String] = []) -> Combatant:
 	var pool: ShipPool = ShipPool.for_tree(get_tree())
 	var world: WorldFrame = WorldFrame.of(dock.ship)
 	var problem: String = dock.closed_reason()
 	if problem.is_empty() and (pool == null or world == null or not ShipCatalog.data().has(type)):
 		problem = "no pooled craft of type %s" % type
-	if problem.is_empty() and port < 0 and dock.free_count() == 0:
-		problem = "every collar is taken"
+	var has_lock: bool = problem.is_empty() and _type_has_lock(type)
+	if problem.is_empty():
+		problem = dock.refusal_for(String(type), has_lock, port)
 	if not problem.is_empty():
 		why.append(problem)
 		return null
 	if pool.free_count(type) <= 0:
 		pool.prepare(type, pool.pool_size(type) + 1)
-	var index: int = port if port >= 0 else dock.ports.nearest_free(Vector3.ZERO, dock._taken())
+	var index: int = port if port >= 0 else dock.place_for(String(type), has_lock, Vector3.ZERO)
 	var hull: Transform3D = dock.ship.global_transform
 	var out: Vector3 = dock.ports.outs[index]
 	# Off the collar's lane, to one side, so its first leg is seen as an approach.
@@ -188,14 +190,20 @@ func toggle_player(dock: ShipDock) -> String:
 	return start_player(dock)
 
 
-## Starts the player's docking at `dock`, collar `port` (-1: the nearest free one). Returns "" or why not.
-func start_player(dock: ShipDock, port: int = -1) -> String:
+## Starts the player's docking at `dock`: `place` a collar's or a berth's number or name, `bay` for the berth that takes the
+## player's craft, -1 or "" for the nearest free collar. Returns "" or why not.
+func start_player(dock: ShipDock, place: Variant = -1) -> String:
 	if main == null or not main.player_alive:
 		return "the player's ship is lost"
 	if dock == null:
 		return "no ship with docking collars"
 	if main.controls_locked():
 		return "the controls are held"
+	var port: int = int(place) if place is int else -1
+	if place is String and not (place as String).is_empty():
+		port = dock.place_named(place, main.ship.spec.asset_id)
+		if port < 0:
+			return "%s has no place '%s' for a %s" % [dock.ship.targetable.display_name, place, main.ship.spec.asset_id]
 	var refused: String = dock.start(main.ship, port, true, DockVisit.WHY_HOLD)
 	if refused.is_empty():
 		_player_dock = dock
@@ -246,12 +254,14 @@ func step_player(_delta: float) -> FlightCommand:
 func _register_console() -> void:
 	DebugConsole.registry.register_provider(PROVIDER, ConsoleVars.new({
 		&"ships": {"get": func() -> int: return docks().size(), "type": TYPE_INT, "doc": "Ships in play with docking collars"},
-		&"collars": {"get": func() -> int: return _sum(func(d: ShipDock) -> int: return d.ports.count()), "type": TYPE_INT,
+		&"collars": {"get": func() -> int: return _sum(func(d: ShipDock) -> int: return d.ports.collar_count()), "type": TYPE_INT,
 				"doc": "Their collars together"},
+		&"berths": {"get": func() -> int: return _sum(func(d: ShipDock) -> int: return d.ports.bay_count()), "type": TYPE_INT,
+				"doc": "Their shuttle bays' berths together"},
 		&"visiting": {"get": func() -> int: return _sum(func(d: ShipDock) -> int: return d.visits().size()), "type": TYPE_INT,
 				"doc": "Craft on their way in, mated or leaving"},
 		&"docked": {"get": func() -> int: return _sum(func(d: ShipDock) -> int: return d.docked_count()), "type": TYPE_INT,
-				"doc": "Craft mated on a collar now"},
+				"doc": "Craft mated on a collar or resting in a berth now"},
 		&"dockings": {"get": func() -> int: return _sum(func(d: ShipDock) -> int: return d.dockings), "type": TYPE_INT,
 				"doc": "Craft mated so far"},
 		&"undockings": {"get": func() -> int: return _sum(func(d: ShipDock) -> int: return d.undockings), "type": TYPE_INT,
@@ -264,7 +274,7 @@ func _register_console() -> void:
 		&"list": {"get": func() -> String: return "; ".join(_describe_all()), "doc": "Every dock and its visitors"},
 	}), self)
 	DebugConsole.registry.register_command(ConsoleCommand.new(COMMAND,
-			"Docking at ships (M10-T53): status, list, dock <craft> [ship] [collar], undock <craft>, cancel <craft>, send [type] [collar] (a pooled shuttle flies in and docks), player [collar] (the player's hold of X: dock, or leave when mated), hold (the ship holds station)",
+			"Docking at ships (M10-T53): status, list, dock <craft> [ship] [place], undock <craft>, cancel <craft>, send [type] [place] (a pooled shuttle flies in and docks), player [place] (the player's hold of X: dock, or leave when mated), hold (the ship holds station); a place is a collar's or a berth's name, or bay (the shuttle bay's berth for that craft)",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"), ConsoleArg.string_optional(&"what"),
 			ConsoleArg.string_optional(&"where"), ConsoleArg.string_optional(&"collar")] as Array[ConsoleArg]), _cmd, self)
 
@@ -290,9 +300,11 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 			if dock == null:
 				return ConsoleResult.failure("shipdock: no ship with docking collars (capital spawn ea_asimov)")
 			var named: String = where if action == &"send" else what
-			var port: int = dock.ports.index_of(named) if not named.is_empty() else -1
+			var flown: String = (what if not what.is_empty() else String(SEND_TYPE)) if action == &"send" else \
+					(main.ship.spec.asset_id if main != null and is_instance_valid(main.ship) else "")
+			var port: int = dock.place_named(named, flown) if not named.is_empty() else -1
 			if not named.is_empty() and port < 0:
-				return ConsoleResult.failure("collars are %s" % ", ".join(dock.ports.names))
+				return ConsoleResult.failure("places are %s, and bay" % ", ".join(dock.ports.names))
 			var label: String = dock.ship.targetable.display_name
 			if action == &"hold":
 				dock.hold_station()
@@ -306,6 +318,13 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.failure(reasons[0]) if made == null else ConsoleResult.line("%s flies in to dock at %s (%s)" % [
 					made.display_name, label, dock.ports.names[dock.port_of(made.ship)]])
 	return ConsoleResult.success(_describe_all())
+
+
+# Whether craft of `type` have a docking lock of their own (their hull's `docking_ports`).
+static func _type_has_lock(type: StringName) -> bool:
+	var spec: ShipSpec = ShipCatalog.spec_for(type)
+	var loaded: Hardpoints = Hardpoints.load_file(spec.hardpoints_path()) if spec != null else null
+	return loaded != null and loaded.valid and not ShipDockPorts.craft_port(loaded.raw).is_empty()
 
 
 func _sum(per: Callable) -> int:
@@ -328,8 +347,9 @@ func _describe_all() -> PackedStringArray:
 	var lines := PackedStringArray()
 	for dock: ShipDock in docks():
 		var closed: String = dock.closed_reason()
-		lines.append("%s: %d collars, %d free, %d mated, %d dockings, %d undockings%s" % [dock.ship.targetable.display_name,
-				dock.ports.count(), dock.free_count(), dock.docked_count(), dock.dockings, dock.undockings,
+		var bay: String = "" if dock.ports.bay_count() == 0 else ", %d berths, %d free" % [dock.ports.bay_count(), dock.free_berths()]
+		lines.append("%s: %d collars, %d free%s, %d mated, %d dockings, %d undockings%s" % [dock.ship.targetable.display_name,
+				dock.ports.collar_count(), dock.free_count(), bay, dock.docked_count(), dock.dockings, dock.undockings,
 				"" if closed.is_empty() else " (closed: %s)" % closed])
 		for line: String in dock.describe_visits():
 			lines.append("  %s" % line)

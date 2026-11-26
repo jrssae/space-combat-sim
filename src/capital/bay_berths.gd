@@ -9,6 +9,10 @@ extends RefCounted
 ## rows on the lift (round its point, `elevator_row_gap_m` apart along the hall); a
 ## big hall without one (the Omega) has `lanes` lanes at the back of the hall; a bay with `berths` (the Hyperion's shuttle bay)
 ## that many mid-hall; any other bay one, mid-hall (the Hyperion's single-fury bays).
+##
+## A bay wider than its mouth (the Asimov's, M10-T53) fans its berths: each has its own straight lane through the mouth's
+## middle, `berth_fan_deg` its way out (turned to starboard of the bay's), `berth_run_m` how far back along it the craft
+## rests, and `berth_craft` the one craft it takes.
 
 ## Lanes side by side are at most this far apart, m (a Starfury is 15.4 m across).
 const LANE_SPACING_M: float = 20.0
@@ -28,18 +32,20 @@ static func of(hardpoints: Dictionary, options: Dictionary) -> CarrierCradles:
 	return out
 
 
-## The craft types a bay takes: its `craft` and any its `poses` name (the Hyperion's shuttle bay takes the Kestrel too).
+## The craft types a bay takes: its `craft`, any its `poses` name (the Hyperion's shuttle bay takes the Kestrel too) and its
+## berths' own (`berth_craft`).
 static func crafts_of(bay: Dictionary) -> PackedStringArray:
 	var out := PackedStringArray([str(bay.get("craft", ""))])
-	if bay.get("poses") is Dictionary:
-		for key: Variant in bay["poses"]:
-			if not out.has(str(key)):
-				out.append(str(key))
+	var more: Array = (bay["poses"] as Dictionary).keys() if bay.get("poses") is Dictionary else []
+	more.append_array(bay["berth_craft"] if bay.get("berth_craft") is Array else [])
+	for key: Variant in more:
+		if not out.has(str(key)):
+			out.append(str(key))
 	return out
 
 
 ## A bay's lanes in the hull's frame: `{at, lift_m, run_in_m}` each (the floor point, the lift's drop, the way from it to
-## the mouth along `forward`).
+## the mouth along `forward`); a fanned berth also has `out` (its own way out) and `craft` (the one type it takes).
 static func lanes_of(bay: Dictionary, options: Dictionary) -> Array[Dictionary]:
 	var forward: Vector3 = _vec(bay.get("forward"), Vector3.FORWARD).normalized()
 	var up: Vector3 = _vec(bay.get("up"), Vector3.UP).normalized()
@@ -47,6 +53,8 @@ static func lanes_of(bay: Dictionary, options: Dictionary) -> Array[Dictionary]:
 	var mouth: Array = bay.get("mouth_m", [20.0, 10.0]) as Array
 	var depth: float = float(bay.get("depth_m", 20.0))
 	var floor_at: Vector3 = _vec(bay.get("exit"), Vector3.ZERO) - up * (float(mouth[1]) / 3.0)
+	if bay.get("berth_fan_deg") is Array:
+		return _fan(bay, floor_at, forward, right)
 	var capacity: int = maxi(int(bay.get("capacity", 1)), 1)
 	var lift_m: float = float(bay.get("elevator_travel_m", 0.0)) if bay.has("elevator") else 0.0
 	var count: int = 1
@@ -73,8 +81,23 @@ static func lanes_of(bay: Dictionary, options: Dictionary) -> Array[Dictionary]:
 	return out
 
 
+# A fanned bay's berths: each lane leaves through the middle of the mouth's sill, so two craft too wide to pass the mouth
+# side by side still rest side by side in the hall.
+static func _fan(bay: Dictionary, sill: Vector3, forward: Vector3, right: Vector3) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	var fan: Array = bay["berth_fan_deg"]
+	var runs: Array = bay.get("berth_run_m", []) if bay.get("berth_run_m") is Array else []
+	var crafts: Array = bay.get("berth_craft", []) if bay.get("berth_craft") is Array else []
+	for k: int in fan.size():
+		var turn: float = deg_to_rad(float(fan[k]))
+		var way: Vector3 = (forward * cos(turn) + right * sin(turn)).normalized()
+		var run: float = float(runs[k]) if k < runs.size() else 0.5 * float(bay.get("depth_m", 20.0))
+		out.append({"at": sill - way * run, "lift_m": 0.0, "run_in_m": run, "out": way, "craft": str(crafts[k]) if k < crafts.size() else ""})
+	return out
+
+
 static func _add(out: CarrierCradles, bay: Dictionary, lane: Dictionary, options: Dictionary) -> void:
-	var forward: Vector3 = _vec(bay.get("forward"), Vector3.FORWARD).normalized()
+	var forward: Vector3 = lane.get("out", _vec(bay.get("forward"), Vector3.FORWARD).normalized())
 	var up: Vector3 = _vec(bay.get("up"), Vector3.UP).normalized()
 	var bay_name: String = str(bay.get("name", "bay"))
 	var lane_index: int = out.bays.count(bay_name)
@@ -89,7 +112,7 @@ static func _add(out: CarrierCradles, bay: Dictionary, lane: Dictionary, options
 	out.lift_m.append(float(lane["lift_m"]))
 	out.bays.append(bay_name)
 	out.lanes.append(lane_index)
-	out.crafts.append(crafts_of(bay))
+	out.crafts.append(PackedStringArray([lane["craft"]]) if not str(lane.get("craft", "")).is_empty() else crafts_of(bay))
 
 
 static func _vec(value: Variant, fallback: Vector3) -> Vector3:

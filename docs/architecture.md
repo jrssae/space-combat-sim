@@ -7809,10 +7809,27 @@ data/scenarios/liner_dock.json      the player in a crew shuttle (`player.type`)
 - **Cost.** A dock with nobody visiting does not tick. With one visitor 76 us a tick in the debug build (GDScript: one
   `DockKeepOut` lookup or lane command, the hold). At most one craft a collar, so four a liner; if many ships take visitors
   at once this is the loop to move into the dock kernel (as §22.11's rows).
-- **Not built: the shuttle bay.** The hall behind the hexagonal mouth is open (`docs/assets-capital.md`, `ea_asimov`): the
-  mouth's back is 20 m behind the bowl's floor and the turning band's collision starts 2 m after, so no hall inside the
-  fixed forward section can take a 38 m crew shuttle or a 29 m Kestrel through the 45 x 27 m mouth. When the geometry is
-  settled the bay is a `bay` hardpoint with two berths, flown by §22.11's `CapitalHangar` (the Hyperion's shuttle bay already
-  takes both craft that way, the Kestrel with folded wings).
+- **The shuttle bay (stage 2, Q96).** A bay whose hardpoint says `visitors` (the Asimov's, `docs/assets-capital.md`) adds
+  its berths to the dock's places, after the collars (`ShipDockPorts.add_berths`; `is_berth`, `takes`, `berth_for`). A berth
+  is one of the hangar's cradles (`BayBerths`, §22.11): its point on the deck, its own lane out of the mouth, the one craft it
+  takes. So one bay serves two kinds of craft and there is one list of berths:
+  - *the ship's own* (its loadout's `launches`) are the hangar's: pooled, flown on the dock rows, gone back to their pool
+    once docked (§22.11, unchanged);
+  - *visitors* (the player, a mission's shuttle, `shipdock send`) are `ShipDock`'s: the same visit as at a collar, except
+    that the craft needs no lock, rests on its `rest` point nose out (`ShipDock.points_of`), passes through the hull from
+    the lane's start (the lane is flown true; `test_ea_asimov.py` holds its clearance), folds its wings before it moves down
+    the lane and spreads them when it is let go `BAY_RELEASE_M` out, and stays in play, seen, in its berth.
+  The two share the mouth through three calls on `CapitalHangar`: `free_for_visitor(cradle)` (the cradle is free and the
+  ship's own craft that it would take, aboard, queued or out, leave a berth over), `set_visitor(cradle, here, passing)` (the
+  cradle is kept; while `passing` the door is open and nothing of the hangar's launches or is drawn in) and
+  `mouth_in_use(bay)` (a visitor waits while one of the hangar's craft is in the mouth). One visitor passes at a time.
+  A fanned bay (`berth_fan_deg`, `berth_run_m`, `berth_craft` in the hardpoint) gives each berth its own straight lane
+  through the middle of the mouth's sill: `BayBerths._fan`; any other bay is read as before. A craft with no lock is sent to
+  its berth when no place is named, a craft with one to a collar; `bay` names the berth that takes the craft
+  (`ShipDock.place_named`). The player has two targets, the collars and the bay (`ShipDock.nav`, `bay_nav`), with the same
+  hold. A docking called off after the craft is among the hull's walls turns it round: it flies out along its lane and is
+  let go there. `WingFoldNode` now turns the wings' hit volumes with the wings (`Ship.turn_collision`): a folded Kestrel
+  rests beside another craft, which its spread hit volumes would reach.
 - Tests: `tests/unit/test_ship_dock_ports.gd`, `test_ship_dock_rules.gd`, `tests/integration/test_ship_dock.gd`; the collars
-  and a crew shuttle swept onto each in `tools/procgen/tests/test_ea_asimov.py`.
+  and a crew shuttle swept onto each, and both shuttles swept down the bay's lanes, in
+  `tools/procgen/tests/test_ea_asimov.py`.

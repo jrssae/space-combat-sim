@@ -20,6 +20,8 @@ extends CarrierDock
 ## - **Recovery.** Every craft out is called home once nothing hostile has been within reach for a while, a badly hurt one
 ##   alone, and all of them before a jump: the jump waits a time for them (`ready_to_jump`), then leaves the rest.
 ## - A hulk or a ship with no power launches nothing and takes nobody in (Q72, Q78), nor does a lost bay.
+## - **Visitors** (M10-T53): a craft that is not the hangar's (`ShipDock` flies it: the player, a mission's shuttle) may take
+##   a berth its own craft leave free (`free_for_visitor`, `set_visitor`); the hangar keeps the berth and works the door.
 ## Console: command `hangar`, provider `hangars` (`HangarConsole`).
 
 ## The hangar finished a wing's queue: `wing` is its number (0 first), `size` the craft it sent.
@@ -86,6 +88,7 @@ var _moving: Array[BayElevator] = []  # the lifts on the move, stepped every tic
 var _lift_bay: Dictionary = {}  # lift -> its bay
 var _pool_ready: bool = false
 var _prepared: Dictionary = {}  # craft type -> ships this hangar has built into the pool
+var _visitors: Dictionary = {}  # cradle -> whether the visiting craft kept there is passing the mouth now
 
 
 ## A hangar for `p_ship` from its bays and its hull's options; null when no bay takes craft. Call before it enters the tree.
@@ -182,6 +185,44 @@ func capacity_for(type: StringName) -> int:
 		if BayBerths.crafts_of(bay).has(String(type)):
 			room += maxi(int(bay.get("capacity", 1)), 1)
 	return room
+
+
+## Whether a visiting craft may take cradle `index`: the bay works, nothing uses the cradle, and the hangar's own craft that
+## it would take (aboard, queued or out) leave a berth over.
+func free_for_visitor(index: int) -> bool:
+	if index < 0 or index >= cradles.count() or cradles.states[index] != CarrierCradles.State.FREE or not has_power() \
+			or not ship.bay_works(cradles.bays[index]):
+		return false
+	var takes: PackedStringArray = cradles.crafts[index]
+	var own: int = 0
+	for type: String in takes:
+		own += int(stock.get(StringName(type), 0))
+	for entry: Dictionary in _out.values():
+		own += 1 if takes.has(String(entry["type"])) else 0
+	for queued: StringName in _bays[cradles.bays[index]]["queue"]:
+		own += 1 if takes.has(String(queued)) else 0
+	var berths: int = 0
+	for i: int in _bays[cradles.bays[index]]["cradles"]:
+		berths += 1 if cradles.crafts[i] == takes and not _visitors.has(i) else 0
+	return own < berths
+
+
+## A visiting craft takes cradle `index` (`here`) or gives it up; while it is `passing` the mouth the bay's door stays open.
+func set_visitor(index: int, here: bool, passing: bool = false) -> void:
+	if here:
+		_visitors[index] = passing
+	else:
+		_visitors.erase(index)
+	cradles.set_state(index, CarrierCradles.State.BUSY if here else CarrierCradles.State.FREE)
+	_wake()
+
+
+## Whether one of the hangar's own craft is flying through `bay`'s mouth, out or in (a visitor waits its turn).
+func mouth_in_use(bay: String) -> bool:
+	for entry: Dictionary in _held.values():
+		if cradles.bays[int(entry["cradle"])] == bay and not bool(entry["flying"]):
+			return true
+	return false
 
 
 ## Fighters aboard (the stock's fighter types), craft out, and craft waiting in a bay's queue.
@@ -347,9 +388,18 @@ func _all_idle() -> bool:
 	for bay: String in _bays:
 		var door: BayDoorNode = door_of(bay)
 		var lift: BayElevator = _bays[bay]["lift"]
-		if not (_bays[bay]["queue"] as Array).is_empty() or (door != null and door.amount > 0.0) or (lift != null and not lift.is_free()):
+		if not (_bays[bay]["queue"] as Array).is_empty() or (door != null and door.amount > 0.0) or (lift != null and not lift.is_free()) \
+				or _visitor_passing(bay):
 			return false
 	return true
+
+
+# Whether a visiting craft is flying through `bay`'s mouth.
+func _visitor_passing(bay: String) -> bool:
+	for index: int in _visitors:
+		if bool(_visitors[index]) and cradles.bays[index] == bay:
+			return true
+	return false
 
 
 # The wings and the recovery, a couple of times a second.
@@ -392,13 +442,13 @@ func _pump(bay: String, delta: float) -> void:
 	var door: BayDoorNode = door_of(bay)
 	var lift: BayElevator = state["lift"]
 	if queue.is_empty() and int(held_in_bay.get(bay, 0)) == 0 and (door == null or door.amount <= 0.0) \
-			and (lift == null or lift.is_free()):
+			and (lift == null or lift.is_free()) and not _visitor_passing(bay):
 		return  # at rest
 	if not queue.is_empty() and (not has_power() or not ship.bay_works(bay)):
 		refused += queue.size()
 		_clear_queue(bay)  # a dark ship or a lost bay launches nothing (Q72)
 	if door != null:
-		if not queue.is_empty() or _bay_busy(bay):
+		if not queue.is_empty() or _bay_busy(bay) or _visitor_passing(bay):
 			state["idle_s"] = 0.0
 			ship.set_bay_door(bay, true)
 		else:
@@ -410,7 +460,7 @@ func _pump(bay: String, delta: float) -> void:
 		_pump_lift(bay, state, lift, delta, door_ready)
 		return
 	state["since_s"] = float(state["since_s"]) + delta
-	if queue.is_empty() or not door_ready or float(state["since_s"]) < launch_gap_s or _returning_near(bay):
+	if queue.is_empty() or not door_ready or float(state["since_s"]) < launch_gap_s or _returning_near(bay) or _visitor_passing(bay):
 		return
 	var type: StringName = queue[0]
 	for i: int in state["cradles"]:
@@ -574,7 +624,7 @@ func _recall_one(entry: Dictionary) -> bool:
 # wings are folded, and a lift bay's lift is at the floor and not about to go down.
 func _may_enter(craft: Ship, index: int) -> bool:
 	var bay: String = cradles.bays[index]
-	if not has_power() or not ship.bay_works(bay) or cradles.states[index] != CarrierCradles.State.FREE:
+	if not has_power() or not ship.bay_works(bay) or cradles.states[index] != CarrierCradles.State.FREE or _visitor_passing(bay):
 		return false
 	var door: BayDoorNode = door_of(bay)
 	if door != null:

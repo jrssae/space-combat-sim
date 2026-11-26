@@ -10,6 +10,11 @@ extends Node3D
 ## dock commands its ship; the player's command comes from `command_for` through `ShipDocks.step_player`.
 ##
 ## The ship holds station while craft dock (Q84): no visit starts while it is under way, without power or lost.
+##
+## A bay that takes visitors (the Asimov's shuttle bay, stage 2) adds its berths to the collars as places: a craft the berth
+## is for (the crew shuttle, the Kestrel with its wings folded) backs down the berth's own lane through the mouth and rests
+## on the deck. The berths are the hangar's cradles (`CapitalHangar`, which flies the ship's own craft): the dock asks it
+## for a free one, keeps it while the visitor is there, and has the door open while one passes the mouth, one at a time.
 ## Console: `shipdock`, provider `ship_docks` (`ShipDocks`).
 
 ## `craft` is mated on collar `port`.
@@ -22,12 +27,16 @@ signal gave_up(craft: Ship, reason: String)
 const NODE_NAME: StringName = &"ShipDock"
 const GROUP: StringName = &"ship_docks"
 const LABEL_DOCK: String = "DOCK"
+## A craft leaving a berth is let go this far out along its lane, m: clear of the bowl, the collars and craft mated on them.
+const BAY_RELEASE_M: float = 190.0
 
 var ship: CapitalShip = null
 var ports: ShipDockPorts = ShipDockPorts.new()
 var options: Dictionary = {}
-## The place the player targets to dock (HOLD X), ahead of the collars.
+## The place the player targets to dock (HOLD X), ahead of the collars; null on a hull with a bay only.
 var nav: NavPoint = null
+## The place the player targets to dock in the shuttle bay, ahead of its mouth; null without one.
+var bay_nav: NavPoint = null
 ## Counts so far, for tests and the console.
 var dockings: int = 0
 var undockings: int = 0
@@ -36,12 +45,15 @@ var given_up: int = 0
 var ticks: int = 0
 var tick_us: float = 0.0
 
-var _entries: Array[Dictionary] = []  # each {visit, craft, port, lock, mate, capability, cautious, way, driver, tier_exempt, assist, excepted}
+# Each {visit, craft, port, lock, mate, capability, cautious, way, driver, tier_exempt, assist, excepted}, and for a berth
+# {berth, fold, passing, turned_back}.
+var _entries: Array[Dictionary] = []
 
 
-## A dock for `capital` from its hull's collars; null when it has none. Call before it enters the tree.
+## A dock for `capital` from its hull's collars and its visitors' berths; null when it has none. Call before it enters the tree.
 static func make(capital: CapitalShip) -> ShipDock:
 	var found: ShipDockPorts = ShipDockPorts.of(capital.hardpoints())
+	found.add_berths(capital.hardpoints(), BayBerths.of(capital.hardpoints(), HangarRules.options(capital.type_id)))
 	if found.count() == 0:
 		return null
 	var dock := ShipDock.new()
@@ -65,6 +77,14 @@ static func lock_of(craft: Ship) -> Dictionary:
 	return ShipDockPorts.craft_port(loaded.raw) if loaded != null and loaded.valid else {}
 
 
+## What of `craft` meets a place: its lock's keys (none without one) and `rest`, the point that stands on a berth's deck.
+static func points_of(craft: Ship) -> Dictionary:
+	var points: Dictionary = lock_of(craft).duplicate()
+	var mesh: Mesh = craft.hull_mesh() if craft != null else null
+	points["rest"] = CarrierCradles.rest_point(mesh.get_aabb(), CarrierDock.DOCK_GAP_M) if mesh != null else Vector3.ZERO
+	return points
+
+
 func _ready() -> void:
 	add_to_group(GROUP)
 	set_physics_process(false)
@@ -72,32 +92,68 @@ func _ready() -> void:
 	if hull != null:
 		hull.destroyed.connect(_on_hull_destroyed)
 	var middle := Vector3.ZERO
-	for i: int in ports.count():
-		middle += (ports.positions[i] + ports.outs[i] * 20.0) / float(ports.count())
-	var act := TargetInteraction.new(NavPoint.KIND_DOCK, LABEL_DOCK, _player_action, Callable(), float(options["range_m"]))
-	nav = NavPoint.make("%s DOCKING COLLARS" % ship.targetable.display_name, act, CapitalData.broadcast_range_m(ship.capital_class))
-	nav.class_text = "Docking collars"
-	nav.home_id = StringName(ship.targetable.display_name)
-	nav.position = middle
-	add_child(nav)
+	for i: int in ports.collar_count():
+		middle += (ports.positions[i] + ports.outs[i] * 20.0) / float(ports.collar_count())
+	if ports.collar_count() > 0:
+		nav = _nav_point("DOCKING COLLARS", "Docking collars", middle, _player_action)
+	if ports.bay_count() > 0:
+		bay_nav = _nav_point("SHUTTLE BAY", "Shuttle bay", ports.bay_mouth + ports.bay_out * 30.0,
+				_player_bay_action)
+
+
+# A place of the dock the player can target and hold X on.
+func _nav_point(title: String, class_text: String, at: Vector3, action: Callable) -> NavPoint:
+	var act := TargetInteraction.new(NavPoint.KIND_DOCK, LABEL_DOCK, action, Callable(), float(options["range_m"]))
+	var point: NavPoint = NavPoint.make("%s %s" % [ship.targetable.display_name, title], act, CapitalData.broadcast_range_m(ship.capital_class))
+	point.class_text = class_text
+	point.home_id = StringName(ship.targetable.display_name)
+	point.position = at
+	add_child(point)
+	return point
 
 
 # --- asking --------------------------------------------------------------------------------------------------------------
 
 
-## Whether collar `port` is kept for a craft (on its way, mated or leaving).
+## Whether place `port` is kept for a craft (on its way, mated or leaving); a berth also while the hangar uses it or its own
+## craft leave no room.
 func is_taken(port: int) -> bool:
 	for entry: Dictionary in _entries:
 		if int(entry["port"]) == port:
 			return true
-	return false
+	var hangar: CapitalHangar = CapitalHangar.of(ship) if ports.is_berth(port) else null
+	return hangar != null and not hangar.free_for_visitor(ports.cradles[port])
 
 
+## Free collars.
 func free_count() -> int:
 	var n: int = 0
-	for i: int in ports.count():
+	for i: int in ports.collar_count():
 		n += 0 if is_taken(i) else 1
 	return n
+
+
+## Free berths in the shuttle bay.
+func free_berths() -> int:
+	var n: int = 0
+	for i: int in range(ports.collar_count(), ports.count()):
+		n += 0 if is_taken(i) else 1
+	return n
+
+
+## The free place a craft of `type` goes to when none is named: the nearest free collar to `local` (the hull's frame) when
+## it has a lock, else its berth. -1 when there is none.
+func place_for(type: String, has_lock: bool, local: Vector3) -> int:
+	var shut: Array[bool] = []
+	for i: int in ports.count():
+		shut.append(ports.is_berth(i) == has_lock or not ports.takes(i, type, has_lock) or is_taken(i))
+	return ports.nearest_free(local, shut)
+
+
+## The place called `place_name` for a craft of `type`: a collar's or a berth's own name, or "bay" for the berth that takes it.
+## -1 when there is none.
+func place_named(place_name: String, type: String) -> int:
+	return ports.berth_for(type) if place_name.to_lower() == ShipDockPorts.BAY else ports.index_of(place_name)
 
 
 ## Craft mated now.
@@ -163,24 +219,39 @@ func closed_reason() -> String:
 	return ""
 
 
-## Why `craft` cannot dock at collar `port` (-1: any free one), or "".
+## Why `craft` cannot dock at place `port` (-1: a free collar, or its berth when it has no lock), or "".
 func refusal(craft: Ship, port: int = -1) -> String:
 	if craft == null or not is_instance_valid(craft) or not craft.is_visible_in_tree():
 		return "no such craft in play"
 	if not _entry_of(craft).is_empty():
 		return "it is docking here already"
-	if lock_of(craft).is_empty():
-		return "a %s has no docking lock (it lands in bays)" % (craft.spec.asset_id if craft.spec != null else "craft")
+	var type: String = craft.spec.asset_id if craft.spec != null else "craft"
+	return refusal_for(type, not lock_of(craft).is_empty(), port, ship.global_transform.affine_inverse() * craft.global_position)
+
+
+## Why a craft of `type` cannot dock at place `port` (-1: as `place_for`), or "".
+func refusal_for(type: String, has_lock: bool, port: int = -1, local: Vector3 = Vector3.ZERO) -> String:
+	var no_lock: String = "a %s has no docking lock (it lands in bays)" % type
+	if not has_lock and ports.berth_for(type) < 0:
+		return no_lock
 	var closed: String = closed_reason()
 	if not closed.is_empty():
 		return closed
 	if port >= ports.count():
 		return "no such collar"
-	if port >= 0 and is_taken(port):
-		return "%s is taken" % ports.names[port]
-	if port < 0 and free_count() == 0:
+	if port >= 0 and not ports.takes(port, type, has_lock):
+		return "%s takes %s" % [ports.names[port], ", ".join(ports.crafts[port])] if ports.is_berth(port) else no_lock
+	var place: int = port if port >= 0 else place_for(type, has_lock, local)
+	if place >= 0 and not is_taken(place):
+		return ""
+	if port < 0 and has_lock:
 		return "every collar is taken"
-	return ""
+	var wanted: int = port if port >= 0 else ports.berth_for(type)
+	for entry: Dictionary in _entries:
+		if int(entry["port"]) == wanted:
+			return "%s is taken" % ports.names[wanted]
+	return "%s is taken" % ports.names[wanted] if not ports.is_berth(wanted) else \
+			"%s has no room: the ship's own craft are aboard or on their way" % ports.names[wanted]
 
 
 ## Has the ship hold where it is, at rest against the place (the console and missions call it before a docking).
@@ -200,8 +271,9 @@ func start(craft: Ship, port: int = -1, is_player: bool = false, why: StringName
 	if not refused.is_empty():
 		return refused
 	var local: Vector3 = ship.global_transform.affine_inverse() * craft.global_position
-	var index: int = port if port >= 0 else ports.nearest_free(local, _taken())
-	var lock: Dictionary = lock_of(craft)
+	var lock: Dictionary = points_of(craft)
+	var index: int = port if port >= 0 else place_for(craft.spec.asset_id, lock.has("position"), local)
+	var berth: bool = ports.is_berth(index)
 	var gap: float = float(options["gap_m"])
 	var entry: Dictionary = {
 		"visit": DockVisit.new(_label(craft), is_player, why), "craft": craft, "port": index, "lock": lock,
@@ -209,7 +281,10 @@ func start(craft: Ship, port: int = -1, is_player: bool = false, why: StringName
 		"cautious": ShipDockRules.cautious(ShipCapability.from_spec(craft.spec, craft.get_layout()), options),
 		"way": ShipDockRules.keep_out(options, ports.lane_point(index, lock, gap, float(options["join_out_m"]))),
 		"driver": _driver_of(craft), "tier_exempt": craft.tier_exempt, "assist": craft.assist_on, "excepted": false,
+		"berth": berth, "fold": WingFoldNode.attach(craft) if berth else null, "passing": false, "turned_back": false,
 	}
+	if berth:
+		_tell_hangar(entry, true)
 	var driver: AiPilotDriver = entry["driver"]
 	if driver != null and not is_player:
 		driver.in_passage = true
@@ -238,8 +313,13 @@ func cancel(craft: Ship, reason: String = "cancelled") -> String:
 	var entry: Dictionary = _entry_of(craft)
 	if entry.is_empty():
 		return "it is not docking here"
-	if not (entry["visit"] as DockVisit).can_cancel():
+	var visit: DockVisit = entry["visit"]
+	if not visit.can_cancel():
 		return "it is mated: undock it"
+	if bool(entry["berth"]) and bool(entry["excepted"]):
+		entry["turned_back"] = true  # among the hull's walls it cannot be let go: it flies back out along its lane first
+		visit.enter(DockVisit.State.LAUNCHING)
+		return ""
 	_end(entry, reason)
 	return ""
 
@@ -291,17 +371,26 @@ func _step(entry: Dictionary, delta: float, closed: String) -> void:
 			elif ShipDockRules.captured(craft.global_position - mated.origin, velocity.length(), options):
 				_mate(entry)
 				return
-			if _along(craft.global_position, mated, int(entry["port"])) <= float(options["final_m"]):
+			if bool(entry["berth"]):
+				if visit.state == DockVisit.State.LANE and _cleared(entry):
+					_except(entry, true)  # the lane runs through the mouth with metres to spare: flown true, not felt out
+			elif _along(craft.global_position, mated, int(entry["port"])) <= float(options["final_m"]):
 				_except(entry, true)  # the locks meet within centimetres
 		DockVisit.State.INSIDE:
 			_hold(craft, mated)
 		DockVisit.State.LAUNCHING:
-			if _along(craft.global_position, mated, int(entry["port"])) >= float(options["release_m"]):
-				undockings += 1
+			var release_m: float = BAY_RELEASE_M if bool(entry["berth"]) else float(options["release_m"])
+			if _along(craft.global_position, mated, int(entry["port"])) >= release_m:
 				var port: int = int(entry["port"])
+				var turned_back: bool = bool(entry["turned_back"])
 				visit.enter(DockVisit.State.DONE)
 				_drop(entry)
-				undocked.emit(craft, port)
+				if turned_back:
+					given_up += 1
+					gave_up.emit(craft, "cancelled")
+				else:
+					undockings += 1
+					undocked.emit(craft, port)
 				return
 	if not visit.is_player:
 		craft.set_flight_command(_command(entry))
@@ -326,14 +415,16 @@ func _command(entry: Dictionary) -> FlightCommand:
 			return DockAutopilot.approach(craft.global_position, velocity, craft.global_basis, hull * target,
 					float(options["approach_mps"]), arrive, entry["cautious"])
 		DockVisit.State.LANE:
-			var lined_up: bool = ShipDockRules.aligned(craft.global_basis, nose, mated.basis.y, options)
+			var lined_up: bool = ShipDockRules.aligned(craft.global_basis, nose, mated.basis.y, options) \
+					and (not bool(entry["berth"]) or _cleared(entry))
 			var speed: float = ShipDockRules.lane_speed(_along(craft.global_position, mated, port), lined_up,
 					ShipDockRules.brake_mps2(nose.dot(-out), capability), options)
 			return DockAutopilot.lane(craft.global_position, velocity, craft.global_basis, mated.origin, -out, speed, capability,
 					PilotSteering.align_roll(craft.global_basis, mated.basis.y, capability.rate_max_rad), nose, true)
 		DockVisit.State.LAUNCHING:
+			var leaves: bool = not bool(entry["berth"]) or _cleared(entry)
 			return DockAutopilot.lane(craft.global_position, velocity, craft.global_basis, mated.origin, out,
-					float(options["lane_mps"]), capability,
+					float(options["lane_mps"]) if leaves else 0.0, capability,
 					PilotSteering.align_roll(craft.global_basis, mated.basis.y, capability.rate_max_rad), nose)
 	return FlightCommand.new()
 
@@ -343,11 +434,41 @@ func _along(at: Vector3, mated: Transform3D, port: int) -> float:
 	return (at - mated.origin).dot(ship.global_basis * ports.outs[port])
 
 
+# Whether a berth's visitor may fly through the mouth now: the mouth is its own (one craft at a time, the hangar's or a
+# visitor), the door is open and its wings are folded. Asking takes the mouth when it is free.
+func _cleared(entry: Dictionary) -> bool:
+	var hangar: CapitalHangar = CapitalHangar.of(ship)
+	var bay: String = ports.bays[int(entry["port"])]
+	if not bool(entry["passing"]):
+		for other: Dictionary in _entries:
+			if other != entry and bool(other["passing"]) and ports.bays[int(other["port"])] == bay:
+				return false
+		if hangar != null and hangar.mouth_in_use(bay):
+			return false
+		entry["passing"] = true
+		_tell_hangar(entry, true)
+	var fold: WingFoldNode = entry["fold"]
+	if fold != null and is_instance_valid(fold):
+		fold.set_folded(true)
+	var door: BayDoorNode = ship.bay_doors.get(bay) as BayDoorNode
+	return (door == null or door.amount >= 1.0) and (fold == null or not is_instance_valid(fold) or fold.is_folded())
+
+
+# Tells the hangar whose berth this visitor has: kept while it visits, the door open while it passes the mouth.
+func _tell_hangar(entry: Dictionary, here: bool) -> void:
+	var hangar: CapitalHangar = CapitalHangar.of(ship)
+	if hangar != null:
+		hangar.set_visitor(ports.cradles[int(entry["port"])], here, here and bool(entry["passing"]))
+
+
 # The craft is on the collar from now on: held there, moving with the ship.
 func _mate(entry: Dictionary) -> void:
 	var visit: DockVisit = entry["visit"]
 	var craft: Ship = entry["craft"]
 	visit.enter(DockVisit.State.INSIDE)
+	if bool(entry["berth"]):
+		entry["passing"] = false
+		_tell_hangar(entry, true)  # in its berth: the mouth is free and the door shuts behind it
 	_except(entry, true)
 	dockings += 1
 	craft.set_flight_command(FlightCommand.new())
@@ -378,6 +499,12 @@ func _end(entry: Dictionary, reason: String) -> void:
 func _drop(entry: Dictionary) -> void:
 	_entries.erase(entry)
 	var craft: Ship = entry["craft"]
+	if bool(entry["berth"]):
+		entry["passing"] = false
+		_tell_hangar(entry, false)
+		var fold: WingFoldNode = entry["fold"]
+		if fold != null and is_instance_valid(fold):
+			fold.set_folded(false)  # clear of the bay, or never in it: the wings spread
 	if is_instance_valid(craft):
 		_except(entry, false)
 		craft.tier_exempt = bool(entry["tier_exempt"])
@@ -403,13 +530,6 @@ func _except(entry: Dictionary, on: bool) -> void:
 		craft.remove_collision_exception_with(ship)
 
 
-func _taken() -> Array[bool]:
-	var out: Array[bool] = []
-	for i: int in ports.count():
-		out.append(is_taken(i))
-	return out
-
-
 func _entry_of(craft: Ship) -> Dictionary:
 	for entry: Dictionary in _entries:
 		if entry["craft"] == craft:
@@ -421,6 +541,12 @@ func _entry_of(craft: Ship) -> Dictionary:
 func _player_action() -> String:
 	var docks: ShipDocks = ShipDocks.of(get_tree()) if is_inside_tree() else null
 	return docks.start_player(self) if docks != null else TargetInteraction.NOT_AVAILABLE
+
+
+# The player's hold of X on the shuttle bay: dock in the berth that takes the player's craft.
+func _player_bay_action() -> String:
+	var docks: ShipDocks = ShipDocks.of(get_tree()) if is_inside_tree() else null
+	return docks.start_player(self, ShipDockPorts.BAY) if docks != null else TargetInteraction.NOT_AVAILABLE
 
 
 func _on_hull_destroyed(_info: HitInfo) -> void:

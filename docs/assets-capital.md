@@ -795,7 +795,7 @@ unarmed Earth Alliance liner (Q84). The shape is in `docs/design-references.md`,
 | Length | **600 m** (built 599.5: the saucer's nose) |
 | Span, height | 347.4 m x 347.4 m (the sphere, 173.7 m in radius, centre 331.5 m aft) |
 | Pieces | `hull` and `band` (the turning habitat band, 236 to 428 m, with the skin ahead of it from the ring's aft edge at 202 m; a `CapitalRotor` at 0.05 rad/s), a 4 096 px atlas each |
-| Triangles | 18 848 drawn (hull 11 984, band 6 864; capital budget 100 000) |
+| Triangles | 19 358 drawn (hull 12 494 with the collars and the shuttle bay, band 6 864; capital budget 100 000) |
 | Texture sets | 109.3 MB high, 29.3 MB low (two 4 096 px atlases) |
 
 Bow to stern: the saucer bridge (a lens 93 m across at 0 to 94 m) with its ridge, the keel under it; the spine lofted through six
@@ -804,18 +804,19 @@ face: the sphere cut flat at 183 m, a collar ring (174 m, 60 to 75 m out, its ou
 eleven teeth, and inside it the **bowl** (Q95, the show's deep cavity, not the reference's shallow disc): three terraces
 narrowing from 60 m to 42 m in radius down to a floor at 214 m (40 m below the collar's face), ribs down its walls and lit ports
 low on them, the skirt and the column running down into it, and in its floor the **hexagonal mouth** below the spine (45 x 27 m,
-centre y -21.5 m, open 20 m deep to a dark back at 234 m, 2 m ahead of the turning band; stage 2's shuttle bay goes behind it);
+centre y -21.5 m, a frame 2 m deep; the shuttle bay's hall lies behind it, inside the fixed core the band turns round);
 the band with a groove each side; the aft cap with the dark window band (429.5 to 441.5 m); the engine frame (a cross of radiator bars, 465
 to 511 m) and six nacelles in two rows of three: the outer four the engines (oval drums, oval open bells), the middle pair the
 reactors with square exhausts.
 
 ### Sections and hardpoints
 
-Sections: `bridge`, `spine`, `face`, `habitat` (on the band), `sphere_aft`, `reactor` (blast) and `engine_r`, `engine_l`. No weapons,
-interceptors or bays (the loadout, T03); four engines; running lights red and green on the ring's flanks, white on
+Sections: `bridge`, `spine`, `face`, `habitat` (on the band), `sphere_aft`, `reactor` (blast) and `engine_r`, `engine_l`. No weapons or
+interceptors; one bay, the shuttle bay, for the loadout's two shuttles (one crew shuttle, one Kestrel: T03, Q84); four engines; running lights red and green on the ring's flanks, white on
 the saucer, red-orange beacons at the ring's keel and on the dorsal radiator bar. Collision budget 96 shapes a section (the face
-90: the collar and the bowl's three terraces in 16 sectors each, their walls a metre in so the ribs are inside, and six shapes
-round the open mouth, none across the bowl or the mouth); coverage 1.0 within 1 m (worst gap 0.93 m), every shape within 2.5 m
+93: the collar and the bowl's three terraces in 16 sectors each, their walls a metre in so the ribs are inside, six shapes
+round the mouth's frame and nine round the bay's hall, none across the bowl, the mouth or the hall; the band 59, its forward
+62 m a ring of 32 sectors round the fixed core); coverage 1.0 within 1 m (worst gap 0.93 m), every shape within 2.5 m
 of the skin (worst 0.87 m).
 
 ### Fidelity (Q10)
@@ -895,26 +896,49 @@ is off by 0.75 m and 2 degrees of roll; shuttles on neighbouring collars are ove
 sweeps Babylon 5's bay). The game side is `ShipDock` (`docs/architecture.md` §22.12): `shipdock`, the `liner_dock` scene.
 The collars add 448 triangles (19 296 in all) and 8 collision shapes (the face 86 of its budget's 96).
 
-**The shuttle bay is not built: its geometry needs a decision.** The hexagonal mouth is 45 x 27 m and its back wall stands
-20 m behind the bowl's floor (214 to 234 m); the turning band's collision is solid from 236 m. The crew shuttle is 38.0 m
-long, 18.8 m wide and 10.7 m tall; the Kestrel with folded wings 29.0 x 22.9 x 19.4 m. Spreading the hall sideways inside the
-fixed forward section (the decision of 2026-11-26) gives width but no depth, and depth is what is missing:
+**Stage 2, the shuttle bay (Q84, Q96).** The first plan, a hall spread sideways inside the fixed forward section, could
+not hold either craft: the mouth is 45 x 27 m, there were 20 m between the bowl's floor and the turning band, the crew shuttle
+is 38.0 x 18.8 x 10.7 m and the Kestrel with folded wings 29.0 x 22.9 x 19.4 m. The maintainer chose **option A** (Q96): the
+band's collision is a ring round a fixed core, and the hall runs straight back inside that core. Nothing changes to look at
+from outside.
 
-- A craft has to pass the mouth's plane whole before it can turn, and behind that plane there are 20 m. Lying along the
-  ship's axis neither craft fits (38 m and 29 m); lying across it the crew shuttle would need 18.8 m of the 20 m (0.6 m to
-  spare each side) and the folded Kestrel 19.4 m at best.
-- Neither can come through the mouth sideways-on: at the crew shuttle's height the hexagon is 36 m wide (the shuttle is
-  38 m long), at the folded Kestrel's 29 m (it is 29 m long).
-- Turning in the doorway does not work either: with its tail still in the mouth a 38 m hull can be at most 58 degrees off
-  the axis (the mouth's width), and at that angle only 8 m of it are inside before its nose meets the back wall.
+| | |
+|---|---|
+| Mouth | the hexagon in the bowl's floor, 45 x 27 m, now a frame 2 m deep (214 to 216 m) with a sill under the deck |
+| Hall | 216 to 286 m (70 m deep), 70 m wide, 23.2 m high (y -31.2 to -8.0 m); `parts/ea_asimov.shuttle_bay`, `BAY_*` |
+| Lining | Babylon 5's grey bay metal lit red by the bay's own lamp (`capital_bays.launch_bay(metal=True, housing=False)`), small lamps on the roof's edges, a wall round the mouth; all on the interior layer (Q68, `capital_bays.hall_of`): 64 triangles in `ea_asimov_interior.glb` |
+| Door | a roll-up shutter 45.4 x 27.1 m across the mouth, inside its frame (`doors`: `bay_shuttle_door`); shut unless a craft passes; the lamp lights as it opens |
+| Berths | two, side by side: `bay_shuttle_0` the crew shuttle's, to starboard; `bay_shuttle_1` the Kestrel's, to port |
+| Fixed core | 52 m in radius, 236 to 298 m; the band's collision is a ring of 32 sectors round it there (two steps of 16), solid aft of 298 m |
 
-Ways out, each for the maintainer: **(A)** make the band's collision a ring round a fixed core (the band is a habitat ring in
-any case; nothing changes to look at), so the hall runs 70 m straight back behind the mouth, two berths side by side;
-**(B)** a hangar trunk standing 28 m proud of the bowl's floor under the spine, the mouth at its front (changes the look of
-the bowl); **(C)** berths where the craft nose in 20 m and their sterns stay in the bowl (no doors can shut behind them);
-**(D)** the bay takes smaller craft only. The docking itself is ready for any of them: a `bay` hardpoint with two berths is
-flown by T17's `CapitalHangar` (the Hyperion's shuttle bay takes both craft that way, the Kestrel folded), the hall goes on
-the interior layer by `capital_bays.hall_of` (T72), and its clearance sweep joins the collars' in `test_ea_asimov.py`.
+**The lanes fan.** Each craft is about half the mouth wide, so two cannot pass it side by side, and a hall 70 m deep has no
+room to step sideways behind it. Each berth has its own straight lane through the middle of the mouth's sill, 20 degrees to
+its side of the ship's axis (`berth_fan_deg` -20 and 20, the way out turned to starboard of the bay's; `berth_run_m` 49.1 and
+54.0 m from the mouth's plane back to the craft's middle, its stern 3 m off the back wall). A craft backs down its lane tail
+first and rests nose out; in the hall the two lie in a V, 13.5 m apart. The deck stands 3.8 m above the mouth's lower edge:
+there the folded Kestrel, which is 19.4 m tall in a 27 m mouth, has the same room above and below. `mouth_m` in the `bay`
+hardpoint is the hall's own section (the interior layer and the game's hall volume read it); `aperture_m` is the mouth's.
+
+**The band is a habitat ring.** Its collision from the forward groove to 298 m is sixteen sectors a step whose flat inner
+faces are the core's sides (as built they lie face to face; turned, the ring's faces come no nearer the axis than 51.0 m).
+The hall's far corners are 46.9 m from the axis, 4.1 m inside the ring whichever way it has turned, and its back wall is 12 m
+ahead of the band's solid part. The core (the block behind the mouth's frame, the core round the hall and its solid end,
+nine shapes, all the `face` section's) is the hull's and does not turn.
+
+**Clearances** (`test_ea_asimov.py`; each craft's hit volumes, the Kestrel's wings folded, swept down its lane from 150 m out
+to its berth against every collision shape of the liner but the deck it stands on; `tests/convex_gap.py` gives a lower bound
+of the gap, so a pass is clear by at least that much):
+
+| | on its lane | off by 0.75 m and 2 degrees of roll | past the other craft in its berth | past a shuttle on a collar |
+|---|---|---|---|---|
+| crew shuttle | 2.96 m (its stern flaps to the hall's side wall, berthed) | 2.20 m | 11.8 m | 8.7 m |
+| Kestrel, folded | 2.76 m (a wing root to the mouth's lower side) | 1.82 m | 2.9 m (its body past the crew shuttle's bow) | 9.1 m |
+
+**In the game.** The bay is the liner's hangar (`CapitalHangar`, T17): the loadout gives it one crew shuttle and one Kestrel,
+launched and recovered through the mouth as the Hyperion's are (`data/capitals/capitals.json`, `carrier_launch.hulls.ea_asimov`:
+taken in 250 m out, ahead of the nose, and let go 90 m past the mouth, clear of the collar's teeth). Craft that are not the
+liner's berth there through `ShipDock` (`docs/architecture.md` §22.12): the bay's hardpoint says `visitors`, and a berth is
+free for one only when the liner's own craft leave it room.
 
 Look sheets (gitignored): `references/screenshots/M10-T53 Asimov liner/look_sheet_r3.png` (the narrowed ring: the first still
 beside the build at its angle, the port side, an eight-bar ship) and `look_sheet_r2.png` (the ring still over the whole cap:

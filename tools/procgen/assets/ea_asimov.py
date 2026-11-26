@@ -2,9 +2,10 @@
 a capital by its budget class; unarmed.
 
 The structure is ``parts/ea_asimov.py`` (measured off the reference model); this file adds the lights and names the damage
-sections. The loadout (``data/capitals/loadouts.json``, ``ea_asimov``) has no weapons, interceptors or bays. Four docking collars
-stand on the rim's lower teeth (``docking_ports`` in its hardpoints, stage 2): a crew shuttle backs onto one and mates by its
-stern hatch (``ShipDock`` in the game). The shuttle bay behind the hexagonal mouth is not built yet (docs/assets-capital.md).
+sections. The loadout (``data/capitals/loadouts.json``, ``ea_asimov``) has no weapons or interceptors, and its two shuttles.
+Four docking collars stand on the rim's lower teeth (``docking_ports`` in its hardpoints, stage 2): a crew shuttle backs onto
+one and mates by its stern hatch (``ShipDock`` in the game). The shuttle bay behind the hexagonal mouth (Q84, Q96) is a hall
+inside the fixed core the band turns round, with a berth for a crew shuttle and one for a Kestrel (``parts/ea_asimov.shuttle_bay``).
 
 Sections: the bridge (the saucer), the spine, the forward face, the habitat band (its own piece, turning slowly about the axis),
 the aft cap with its window band, the reactor (the engine frame and the middle nacelles) and an engine pair each side.
@@ -24,7 +25,7 @@ from ..parts import ea_asimov as asi
 from ..styles.ea_asimov import PATTERN, band_bars, ea_asimov
 
 ASSET_ID = "ea_asimov"
-GENERATOR_VERSION = 2
+GENERATOR_VERSION = 3
 SHIP_CLASS = "capital"
 LENGTH_M = asi.LENGTH_M
 VARIANTS = ("liner",)
@@ -42,7 +43,7 @@ SECTIONS = (
     cap.Section("engine_r", "engine", 0.06),  # and its port twin, engine_l
 )
 PIECES = (cap.PieceSpec(cap.HULL_PIECE, ATLAS_PX), cap.PieceSpec("band", ATLAS_PX, asi.BAND_PIVOT, (0.0, 0.0, 1.0), BAND_SPIN_RAD_S))
-COLLISION = col.Budget(max_shapes=96, max_excess_m=2.5)  # the bowl's sectored terraces, the collar's teeth and the shapes round the open mouth
+COLLISION = col.Budget(max_shapes=96, max_excess_m=2.5)  # the bowl's sectored terraces, the collar's teeth, the shapes round the open mouth and the bay's hall
 UP, RIGHT = (0.0, 1.0, 0.0), (1.0, 0.0, 0.0)
 RUNNING_RED = (1.0, 0.22, 0.05)
 
@@ -68,7 +69,7 @@ def modules(variant: str = "liner") -> list[cp.Module]:
         raise ValueError(f"ea_asimov has no variant {variant!r}; it has {list(VARIANTS)}")
     s = ea_asimov().style
     return [
-        *asi.command(s), *asi.forward_face(s, PATTERN), *asi.docking_collars(s), asi.brackets(s, "brackets_fore", "habitat", (asi.FORE_SEAM_Z - 14.0, asi.FORE_SEAM_Z - 2.0), 15.0),
+        *asi.command(s), *asi.forward_face(s, PATTERN), asi.shuttle_bay(s), *asi.docking_collars(s), asi.brackets(s, "brackets_fore", "habitat", (asi.FORE_SEAM_Z - 14.0, asi.FORE_SEAM_Z - 2.0), 15.0),
         *asi.band(s, PATTERN), *asi.aft_cap(s), asi.brackets(s, "brackets_aft", "sphere_aft", (asi.AFT_SEAM_Z + 2.0, asi.AFT_SEAM_Z + 14.0), 15.0),
         *asi.engine_frame(s), asi.engine(s, "engine_top_r", "engine_r", 1.0), asi.engine(s, "engine_low_r", "engine_r", -1.0),
         *light_modules(),
@@ -88,7 +89,7 @@ def spec(variant: str = "liner") -> cap.CapitalSpec:
         collision=COLLISION,
         piece_surface={"band": {"band_bars": band_bars()}},
         notes=("unarmed; no jump engine (it travels by the gates)",
-               "four docking collars on the rim's lower teeth (docking_ports); the shuttle bay behind the hexagonal mouth is not built yet"),
+               "four docking collars on the rim's lower teeth (docking_ports); the shuttle bay behind the hexagonal mouth holds a crew shuttle and a Kestrel"),
     )
 
 

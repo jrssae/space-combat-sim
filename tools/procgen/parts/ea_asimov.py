@@ -10,10 +10,14 @@ Bow to stern:
   column behind it running back into the sphere's face, and a hexagonal pod each side;
 * **forward face** (166 to 202 m outside, its structure to 236 m): the sphere cut flat at 183 m, a collar with a ring of teeth round a deep terraced bowl (the
   show's cavity, Q95, not the reference's shallow disc) the spine runs into, and in the bowl's floor the hexagonal mouth below the
-  spine (open, 45 x 27 m, 20 m deep: stage 2 puts the shuttle bay behind it);
+  spine (open, 45 x 27 m, a frame 2 m deep);
+* **shuttle bay** (216 to 286 m, Q84, Q96): the hall behind the mouth, straight back inside the fixed core the band turns
+  round: 70 m wide and deep, 23.2 m high, a berth for a crew shuttle to starboard and one for a Kestrel with folded wings to
+  port, each on its own lane through the mouth (``shuttle_bay``);
 * **habitat band** (236 to 428 m): the sphere's middle, which turns (its own piece), in two halves split at the equator so the
   mining transport (T56) can part them; the skin from the ring to its forward groove (202 to 236 m) turns with it, so a
-  ship's bars run unbroken from the ring;
+  ship's bars run unbroken from the ring. A habitat ring: its collision is a ring round the fixed core as far back as the
+  bay reaches (to 298 m), solid aft of it;
 * **aft cap** (428 to 505 m): the rest of the sphere with the dark band of window rows at its forward edge;
 * **engine frame** (465 to 600 m): a cross of radiator bars and six nacelles in two rows of three; the outer four are the
   engines, the middle pair the reactors.
@@ -34,6 +38,7 @@ from ..core import collision as col
 from ..core.geometry import Material, Mesh, lathe, rotation_z
 from ..styles import Style
 from . import capital as cp
+from . import capital_bays as bays
 from . import capital_solids as cs
 from .capital_hull import HullRoles
 from .raider_carrier import flat
@@ -53,7 +58,19 @@ SEAM_INSET, SEAM_WIDTH = 2.5, 2.5  # the groove each side of the band
 BAND_PIVOT = (0.0, 0.0, SPHERE_Z)
 # The hexagonal mouth below the spine (the reference's, about 45 x 30 m): its outline in the bowl's floor and how deep it runs.
 HEX = ((22.5, -21.5), (11.5, -8.0), (-11.5, -8.0), (-22.5, -21.5), (-11.5, -35.0), (11.5, -35.0))
-HEX_BACK_Z = 234.0
+HEX_BACK_Z = 216.0  # the mouth is a frame this deep; the shuttle bay's hall begins behind it
+# The shuttle bay (Q84, Q96): a hall straight back behind the mouth, inside the fixed core the habitat band turns round. Its
+# two berths lie either side of the mouth's axis, each on a straight lane through the mouth's middle (a fan: a craft is as
+# wide as half the mouth, so two cannot pass it side by side); the deck stands above the mouth's lower edge, where a folded
+# Kestrel passes the mouth with the same room above and below.
+BAY_NAME = "bay_shuttle"
+BAY_SIZE, BAY_DEPTH = (70.0, 23.2), 70.0  # the hall across and up, and how far back it runs
+BAY_DECK_Y = -31.2
+BAY_CRAFT = ("ea_shuttle", "ea_atmo_shuttle")  # berth by berth: the crew shuttle to starboard, the Kestrel to port
+BAY_FAN_DEG = (-20.0, 20.0)  # each berth's way out, turned this far to starboard of straight ahead
+BAY_RUN_M = (49.1, 54.0)  # from the mouth's plane back along its lane to each craft's middle: its stern 3 m off the back wall
+BAY_DOOR_M = (45.4, 27.1)  # the shutter across the mouth, inside its frame
+CORE_R, CORE_SIDES, CORE_END_Z = 52.0, 16, 298.0  # the fixed core the band's collision turns round, and where it ends
 POD_ANGLES_DEG = (-70.5, -52.5, -34.5, -16.5, 19.5, 36.0, 53.5)  # the collar's teeth from starboard (the port ones are their twins)
 POD_R, POD_Z = (62.0, 74.0), (166.0, COLLAR[0] + 0.5)
 # The docking collars (Q84): on the tips of these four teeth below the spine (the port two are the twins), where a crew shuttle
@@ -122,6 +139,36 @@ def _revolved(name: str, profile: Sequence[tuple[float, float]], mats: Material 
     """A zone of the sphere: ``profile`` (z, r) lathed round the axis, ``outline`` the (z, r) it buries (increasing z)."""
     mesh = lathe(profile, SIDES, mats, creases=creases)
     return cp.module(name, mesh, shapes, solid=lathe_solid(list(outline)))
+
+
+def _ring_shapes(name: str, z0: float, z1: float) -> list:
+    """Collision for a zone of the sphere as a ring round the fixed core: ``_hull_shapes``' steps, each in sectors whose inner
+    faces are the core's sides (the band is a habitat ring; the shuttle bay lies in the core, which does not turn)."""
+    a0, a1 = (math.acos(np.clip((z - SPHERE_Z) / SPHERE_R, -1.0, 1.0)) for z in (z0, z1))
+    n = max(1, int(math.ceil(abs(a1 - a0) / math.radians(15.0))))
+    grown = SPHERE_R / math.cos(0.5 * abs(a1 - a0) / n)
+    angles = np.linspace(a0, a1, n + 1)
+    zs = [SPHERE_Z + grown * math.cos(a) for a in angles]
+    zs[0], zs[-1] = z0, z1
+    radii = [grown * math.sin(a) for a in angles]
+    step = 2.0 * math.pi / CORE_SIDES
+    reach = 1.0 / math.cos(0.25 * step)  # three outer corners a sector, as col.ring_sectors
+    out = []
+    for i in range(n):
+        for k in range(CORE_SIDES):
+            b = k * step
+            pts = [(r * math.cos(a), r * math.sin(a), z) for z, outer in ((zs[i], radii[i]), (zs[i + 1], radii[i + 1]))
+                   for r, a in ((CORE_R, b), (CORE_R, b + step), (outer * reach, b), (outer * reach, b + 0.5 * step), (outer * reach, b + step))]
+            out.append(col.hull(f"{name}_{i}_{k:02d}", np.array(pts)))
+    return out
+
+
+def _round_the_core(solid: Solid) -> Solid:
+    """``solid`` without the fixed core: what the band buries, which is nothing of the bay's hall."""
+    def test(p: np.ndarray, margin: float) -> np.ndarray:
+        return solid.test(p, margin) & ((np.hypot(p[:, 0], p[:, 1]) > CORE_R) | (p[:, 2] > CORE_END_Z))
+
+    return Solid(test, solid.local_bounds)
 
 
 def _put(section: str, m: cp.Module, side: str = cp.CENTRE) -> cp.Module:
@@ -197,8 +244,8 @@ def _bowl_r(z: np.ndarray) -> np.ndarray:
     return out
 
 
-def _bowl_floor(material: Material, tunnel: Material, back: Material) -> Mesh:
-    """The bowl's floor, with the hexagonal mouth through it, the mouth's walls and its dark back."""
+def _bowl_floor(material: Material, tunnel: Material, sill: Material) -> Mesh:
+    """The bowl's floor, with the hexagonal mouth through it, the mouth's frame and the sill under the bay's deck."""
     hex_pts = np.array(HEX)
     centre = hex_pts.mean(axis=0)
     floor_z, floor_r = BOWL_FLOOR_Z, BOWL[-1][2]
@@ -219,7 +266,8 @@ def _bowl_floor(material: Material, tunnel: Material, back: Material) -> Mesh:
     axis = (float(centre[0]), float(centre[1]), 0.5 * (floor_z + HEX_BACK_Z))
     walls = [flat([(*a, floor_z), (*b, floor_z), (*b, HEX_BACK_Z), (*a, HEX_BACK_Z)], tunnel, (axis[0] + 3.0 * (a[0] + b[0] - 2 * axis[0]), axis[1] + 3.0 * (a[1] + b[1] - 2 * axis[1]), axis[2]))
              for a, b in zip(HEX, HEX[1:] + HEX[:1], strict=True)]
-    plate = flat([(*p, HEX_BACK_Z) for p in HEX], back, (axis[0], axis[1], HEX_BACK_Z + 10.0))
+    below = _clip_xy(list(HEX), lambda p: BAY_DECK_Y - p[1])
+    plate = flat([(*p, HEX_BACK_Z) for p in below], sill, (axis[0], axis[1], HEX_BACK_Z + 10.0))
     return Mesh.concatenate([*quads, *walls, plate])
 
 
@@ -300,8 +348,8 @@ def _bowl_shapes(count: int = 16) -> list:
 
 
 def _mouth_shapes() -> list:
-    """Collision for the cap from the bowl's floor to the mouth's back, round the hexagonal mouth and not across it (shuttles
-    fly in there in stage 2): the parts above and below it and, each side, above and below its pointed end."""
+    """Collision for the mouth's frame, from the bowl's floor to the bay's hall, round the hexagonal mouth and not across it
+    (shuttles fly in there): the parts above and below it and, each side, above and below its pointed end."""
     def edge(a: tuple[float, float], b: tuple[float, float]):  # noqa: ANN202 - the side of the hex edge a-b away from its middle
         centre = np.array(HEX).mean(axis=0)
         n = np.array([b[1] - a[1], a[0] - b[0]])
@@ -388,7 +436,7 @@ def forward_face(s: Style, pattern: Pattern, section: str = "face") -> list[cp.M
     mats += [panel] * (len(COLLAR_SLOPE) + 1) + [white] * (len(rim) - 1) + [green] * (len(ring) - 1)
     creases = set(range(1, 2 * len(BOWL) + len(COLLAR_SLOPE) + 2))
     mesh = Mesh.concatenate([lathe(profile, SIDES, mats, creases=creases), _bowl_floor(dark, s.material("interior"), s.material("bore"))])
-    shapes = [*_bowl_shapes(), *_mouth_shapes(), *_hull_shapes("cap", HEX_BACK_Z, FORE_SEAM_Z)]
+    shapes = [*_bowl_shapes(), *_mouth_shapes()]  # behind the frame the cap's collision is the bay's (``shuttle_bay``)
     cap = cp.module("forward_cap", mesh, shapes, solid=_cap_solid(FACE_Z, pattern.ring_end_z))
     out = [_put(section, cap), *bowl_fittings(s, section)]
     for k, deg in enumerate(POD_ANGLES_DEG):
@@ -400,6 +448,76 @@ def forward_face(s: Style, pattern: Pattern, section: str = "face") -> list[cp.M
     keel = [(w, -r, z) for z, rs, ws in ((POD_Z[1], POD_R, (-5.0, 5.0)), (POD_Z[0], (64.0, 70.0), (-4.0, 4.0))) for r in rs for w in ws]
     out.append(_put(section, cs.convex("collar_tooth_keel", keel, s, DARK, skin=cp.SKIN_FITTING)))
     return out
+
+
+def _round_a_hall(name: str, z: tuple[float, float], outline, sides: int) -> list:  # noqa: ANN001 - outline(z) a radius
+    """Collision for a round block from ``z[0]`` to ``z[1]`` with the bay's hall left open through it: the parts above and
+    below the hall and one each side. ``outline(z)`` is the radius of the block's ``sides`` corners there."""
+    half, (y0, y1) = 0.5 * BAY_SIZE[0], (BAY_DECK_Y, BAY_DECK_Y + BAY_SIZE[1])
+    regions = {
+        "top": [lambda p: p[1] - y1],
+        "low": [lambda p: y0 - p[1]],
+        "side_r": [lambda p: y1 - p[1], lambda p: p[1] - y0, lambda p: p[0] - half],
+        "side_l": [lambda p: y1 - p[1], lambda p: p[1] - y0, lambda p: -half - p[0]],
+    }
+    out = []
+    for part, keeps in regions.items():
+        rings = []
+        for at in z:
+            poly = [(outline(at) * math.cos(a), outline(at) * math.sin(a)) for a in np.linspace(0.0, 2.0 * math.pi, sides, endpoint=False)]
+            for keep in keeps:
+                poly = _clip_xy(poly, keep)
+            rings += [(x, y, at) for x, y in poly]
+        out.append(col.hull(f"{name}_{part}", np.array(rings)))
+    return out
+
+
+def _bay_shapes() -> list:
+    """Collision round the bay's hall: the cap behind the mouth's frame out to the sphere, then the fixed core the band turns
+    round (its corners where the band's sectors meet, so the two lie face to face as built), and the core's solid end."""
+    cap = _round_a_hall("cap_bay", (HEX_BACK_Z, FORE_SEAM_Z), lambda z: (sphere_r(z) + 0.6) / math.cos(math.pi / 24), 24)
+    back = HEX_BACK_Z + BAY_DEPTH
+    core = _round_a_hall("core_bay", (FORE_SEAM_Z, back), lambda _z: CORE_R, CORE_SIDES)
+    ring = [(CORE_R * math.cos(a), CORE_R * math.sin(a)) for a in np.linspace(0.0, 2.0 * math.pi, CORE_SIDES, endpoint=False)]
+    end = col.hull("core_end", np.array([(x, y, z) for z in (back, CORE_END_Z) for x, y in ring]))
+    return [*cap, *core, end]
+
+
+def _bay_front(material: Material) -> Mesh:
+    """The hall's front wall, seen from inside: round the mouth, which is cut off at the deck."""
+    half, (y0, y1) = 0.5 * BAY_SIZE[0], (BAY_DECK_Y, BAY_DECK_Y + BAY_SIZE[1])
+    z = HEX_BACK_Z + 0.1  # a hand inside the hall, so it is lit as the hall is
+    mouth = np.array(_clip_xy(list(HEX), lambda p: p[1] - y0))
+    wall = np.array([(half, y0), (half, y1), (-half, y1), (-half, y0)])
+    centre = mouth.mean(axis=0)
+    corners = [math.atan2(*(p - centre)[::-1]) for p in (*mouth, *wall)]
+    angles = sorted(set(corners) | set(np.linspace(-math.pi, math.pi, 25)[:-1].tolist()))
+    quads = []
+    for a, b in zip(angles, angles[1:] + angles[:1], strict=True):
+        rays = [np.array([math.cos(t), math.sin(t)]) for t in (a, b)]
+        (ia, oa), (ib, ob) = ((_ray_to_polygon(centre, d, mouth), _ray_to_polygon(centre, d, wall)) for d in rays)
+        if float(np.linalg.norm(oa - ia)) + float(np.linalg.norm(ob - ib)) > 1e-6:  # along the deck the mouth's edge is the wall's
+            quads.append(flat([(*ia, z), (*oa, z), (*ob, z), (*ib, z)], material, (0.0, 0.0, z - 10.0)))
+    return Mesh.concatenate(quads)
+
+
+def shuttle_bay(s: Style, section: str = "face") -> cp.Module:
+    """The shuttle bay behind the mouth (Q84, Q96): a metal-lined hall lit red by its own lamp, its front wall round the
+    mouth, a roll-up door across the mouth inside its frame, and the ``bay`` hardpoint with its two berths: ``berth_craft``
+    names each berth's craft, ``berth_fan_deg`` its lane (the way out, turned to starboard of the bay's) and ``berth_run_m``
+    how far back along it the craft's middle rests. ``mouth_m`` is the hall's own section; ``aperture_m`` the mouth's."""
+    centre_y = BAY_DECK_Y + 0.5 * BAY_SIZE[1]
+    hall = bays.launch_bay(BAY_NAME, BAY_SIZE, BAY_DEPTH, s, wall_m=1.0, lit=True, rim=False, metal=True, housing=False)
+    hall = hall.transformed(np.eye(3), (0.0, centre_y, HEX_BACK_Z))
+    mouth_y = float(np.array(HEX)[:, 1].mean())
+    door = cp.Hardpoint(f"{BAY_NAME}_door", cp.DOOR, (0.0, mouth_y, 0.5 * (BOWL_FLOOR_Z + HEX_BACK_Z)), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0),
+                        {"size_m": [*BAY_DOOR_M, bays.DOOR_THICK_M], "slats": round(BAY_DOOR_M[1] / bays.SLAT_M)})
+    mesh = Mesh.concatenate([hall.part.mesh, _bay_front(s.material("bay_metal"))])
+    hall = dataclasses.replace(hall, part=dataclasses.replace(hall.part, mesh=mesh), shapes=tuple(_bay_shapes()), hardpoints=(*hall.hardpoints, door))
+    width = float(np.ptp(np.array(HEX)[:, 0]))
+    height = float(np.ptp(np.array(HEX)[:, 1]))
+    return _put(section, hall.with_params(cp.BAY, craft=BAY_CRAFT[0], capacity=len(BAY_CRAFT), berths=len(BAY_CRAFT), berth_craft=list(BAY_CRAFT),
+                                          berth_fan_deg=list(BAY_FAN_DEG), berth_run_m=list(BAY_RUN_M), aperture_m=[width, height], visitors=True))
 
 
 def docking_collars(s: Style, section: str = "face") -> list[cp.Module]:
@@ -437,7 +555,9 @@ def band(s: Style, pattern: Pattern, section: str = "habitat") -> list[cp.Module
         profile = [*fore, *arc, *aft]
         mats = [dark] * len(fore) + [white] * (len(arc) - 1) + [dark] * len(aft)
         outline = [(z0, sphere_r(z0)), *[p for p in profile if lo < p[0] < hi], (z1, sphere_r(z1))]
-        out.append(_put(section, _revolved(name, profile, mats, _hull_shapes(name, z0, z1), outline, creases={1, len(profile) - 2})))
+        shapes = _hull_shapes(name, z0, z1) if z0 >= CORE_END_Z else [*_ring_shapes(name, z0, CORE_END_Z), *_hull_shapes(f"{name}_aft", CORE_END_Z, z1)]
+        half = _revolved(name, profile, mats, shapes, outline, creases={1, len(profile) - 2})
+        out.append(_put(section, dataclasses.replace(half, solid=_round_the_core(half.solid)) if z0 < CORE_END_Z else half))
         out.append(_put(section, window_rows(f"{name}_windows", s, 0.5 * (z0 + z1), rows=2)))
     return out
 
@@ -548,6 +668,6 @@ def engine(s: Style, name: str, section: str, up: float) -> cp.Module:
     return _put(section, dataclasses.replace(cs.compound(name, [drum, bell]), hardpoints=(point,)), cp.RIGHT)
 
 
-__all__ = ["AFT_SEAM_Z", "BAND_PIVOT", "BOWL", "BOWL_FLOOR_Z", "COLLAR_NAMES", "COLLAR_R", "COLLAR_TEETH_DEG", "ENGINE_XY", "ENGINE_Z", "FACE_Z", "FORE_SEAM_Z", "HEX", "HEX_BACK_Z", "LENGTH_M", "POD_ANGLES_DEG",
+__all__ = ["AFT_SEAM_Z", "BAND_PIVOT", "BAY_CRAFT", "BAY_DECK_Y", "BAY_DEPTH", "BAY_DOOR_M", "BAY_FAN_DEG", "BAY_NAME", "BAY_RUN_M", "BAY_SIZE", "BOWL", "BOWL_FLOOR_Z", "COLLAR_NAMES", "CORE_END_Z", "CORE_R", "CORE_SIDES", "COLLAR_R", "COLLAR_TEETH_DEG", "ENGINE_XY", "ENGINE_Z", "FACE_Z", "FORE_SEAM_Z", "HEX", "HEX_BACK_Z", "LENGTH_M", "POD_ANGLES_DEG",
            "Pattern", "SAUCER_AT", "SEAM_WIDTH", "SPHERE_R", "SPHERE_Z", "WINDOW_BAND_Z", "aft_cap", "band", "bowl_fittings", "brackets", "command", "docking_collars", "engine",
-           "engine_frame", "forward_face", "sphere_r", "window_rows"]
+           "engine_frame", "forward_face", "shuttle_bay", "sphere_r", "window_rows"]

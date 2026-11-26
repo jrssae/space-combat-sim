@@ -42,10 +42,15 @@ static func chunk_transform(chunk: Dictionary, amount: float, fold_deg: float) -
 	var chunk_name: String = str(chunk.get("name", ""))
 	if not WINGS.has(chunk_name):
 		return at
+	return wing_turn(chunk, amount, fold_deg) * at
+
+
+## How a wing chunk and everything on it (its hit volumes) is turned about its joint with the fold `amount` done.
+static func wing_turn(chunk: Dictionary, amount: float, fold_deg: float) -> Transform3D:
 	var joint: Vector3 = _vec(chunk.get("joint"))
 	var side: float = 1.0 if joint.x >= 0.0 else -1.0
 	var turn := Basis(Vector3.BACK, side * deg_to_rad(fold_deg) * clampf(amount, 0.0, 1.0))
-	return Transform3D(turn, joint - turn * joint) * at
+	return Transform3D(turn, joint - turn * joint)
 
 
 ## `amount` moved toward `target` by `delta` seconds of a fold that takes `fold_s`, eased at both ends by the caller's draw.

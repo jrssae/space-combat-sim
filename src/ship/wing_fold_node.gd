@@ -2,7 +2,8 @@ class_name WingFoldNode
 extends Node3D
 ## Folds a shuttle's wings on screen (M10-T17, Q73, Q93; the rules are `WingFold`): while the wings are not spread the hull is
 ## drawn as its break-up chunks, the wings turned about their joints, and the one-piece hull is hidden. A child of the `Ship`,
-## made on first use (`attach`) and kept with the pooled ship. Visual only: the hull's hit volumes do not fold.
+## made on first use (`attach`) and kept with the pooled ship. The wings' hit volumes turn with them (M10-T53: a folded
+## Kestrel rests beside another craft in the Asimov's bay); the hit sweep's own copy of the volumes does not.
 
 const NODE_NAME: StringName = &"WingFold"
 
@@ -13,6 +14,7 @@ var fold_s: float = 4.0
 var _target: float = 0.0
 var _ship: Ship = null
 var _chunks: Array[Dictionary] = []  # {entry, node}
+var _collision_share: float = 0.0  # the fold the hit volumes stand at
 
 
 ## The fold node of `ship`, made the first time; null when its craft does not fold or its wings are not their own chunks.
@@ -96,3 +98,7 @@ func _draw() -> void:
 		var part: MeshInstance3D = c["node"]
 		part.visible = not spread and not far
 		part.transform = WingFold.chunk_transform(c["entry"], share, fold_deg)
+		var chunk_name: String = str((c["entry"] as Dictionary).get("name", ""))
+		if _ship != null and not is_equal_approx(share, _collision_share) and WingFold.WINGS.has(chunk_name):
+			_ship.turn_collision(chunk_name, WingFold.wing_turn(c["entry"], share, fold_deg))
+	_collision_share = share

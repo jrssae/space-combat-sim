@@ -1021,7 +1021,10 @@
    "jump": "gate",
    "weapons": {},
    "interceptors": {},
-   "launches": {},
+   "launches": {
+    "ea_shuttle": 1,
+    "ea_atmo_shuttle": 1
+   },
    "lays_mines": null
   },
   "ea_mining_transport": {

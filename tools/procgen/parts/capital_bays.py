@@ -62,17 +62,18 @@ def _shell(w: float, h: float, z0: float, z1: float, material, inward: bool, bac
 
 
 def launch_bay(name: str, mouth_m: tuple[float, float], depth_m: float, style: Style, wall_m: float = 1.5, lit: bool = False,
-               rim: bool = True, door: bool = False, metal: bool = False) -> Module:
+               rim: bool = True, door: bool = False, metal: bool = False, housing: bool = True) -> Module:
     """A launch bay: a housing ``wall_m`` thick round a hall ``mouth_m`` wide and high and ``depth_m`` deep, open at -z,
     the hall dark with a lit deck (or, ``lit``, in the hull's paint and red light; ``rim=False`` leaves the mouth's outer band and corner
     lamps off, the red staying inside; ``door`` adds a roll-up door: its housing over the mouth and a door hardpoint the game draws as
     a shutter; ``metal``, with ``lit``, lines the hall in grey metal lit red by its light alone, as Babylon 5's docking bay, with
-    small lamps and no glowing strips). A craft starts at the hall's middle, a third of its height above the deck."""
+    small lamps and no glowing strips; ``housing=False`` builds the hall alone, for a bay inside a hull that has its own mouth:
+    no outer shell and no frame round the mouth). A craft starts at the hall's middle, a third of its height above the deck."""
     w, h = mouth_m
     if w <= 0.0 or h <= 0.0 or depth_m <= 0.0 or wall_m <= 0.0:
         raise ValueError(f"launch bay {name!r} needs a mouth, a depth and a wall")
     ow, oh = w + 2.0 * wall_m, h + 2.0 * wall_m
-    outer = _shell(ow, oh, 0.0, depth_m + wall_m, style.material("hull"), inward=False, back=True)
+    outer = _shell(ow, oh, 0.0, depth_m + wall_m, style.material("hull"), inward=False, back=True) if housing else []
     metal = metal and lit
     hall_role = "bay_metal" if metal else "bay_hall" if lit else "interior"
     hall = _shell(w, h, 0.0, depth_m, style.material(hall_role), inward=True, back=True)
@@ -84,7 +85,7 @@ def launch_bay(name: str, mouth_m: tuple[float, float], depth_m: float, style: S
     frame_mat = style.material("hull" if lit else "hazard_dark")
     frame = [flat([(a[0], a[1], 0.0), (b[0], b[1], 0.0), (c[0], c[1], 0.0), (d[0], d[1], 0.0)], frame_mat, (0.0, 0.0, 1.0))
              for a, b, c, d in (((-X, -Y), (X, -Y), (x, -y), (-x, -y)), ((X, -Y), (X, Y), (x, y), (x, -y)),
-                                ((X, Y), (-X, Y), (-x, y), (x, y)), ((-X, Y), (-X, -Y), (-x, -y), (-x, y)))]
+                                ((X, Y), (-X, Y), (-x, y), (x, y)), ((-X, Y), (-X, -Y), (-x, -y), (-x, y)))] if housing else []
     mid_z = 0.5 * (depth_m + wall_m)
     # Four walls and a back, so the hall stays open to a craft's collision.
     shapes = [col.box(f"{name}_top", (0.0, 0.5 * (h + wall_m), mid_z), (ow, wall_m, depth_m + wall_m)),

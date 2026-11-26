@@ -2,7 +2,8 @@
 the habitat band's turning piece, an unarmed loadout, the open hexagonal mouth, the halves the mining variant will part, collision
 coverage, the class budget, the look (the patch skin, no seam lines), the band liveries and bars, the forward bowl, and each
 part's sections against the reference STL (CLAUDE.md, "STL fidelity"; the face's planes exempted by Q95), and stage 2's docking
-collars with a crew shuttle swept onto each (as M10-T70 sweeps the craft through Babylon 5's bay).
+collars with a crew shuttle swept onto each (as M10-T70 sweeps the craft through Babylon 5's bay) and its shuttle bay (Q96): the
+hall inside the fixed core the band turns round, on the interior layer, with both shuttles swept down their lanes into their berths.
 
 The expected numbers are typed in from docs/assets-capital.md, data/capitals/loadouts.json and the generator's docstring.
 """
@@ -30,7 +31,10 @@ from tools.procgen.core.seams import Plates
 from tools.procgen.parts import capital as cp
 from tools.procgen.parts import ea_asimov as asi
 from tools.procgen.parts import ea_asimov_fidelity as fid
+from tools.procgen.parts import ea_hyperion as hy
 from tools.procgen.styles import ea_asimov as st
+from tools.procgen.tests import bay_interiors
+from tools.procgen.tests import convex_gap as cg
 from tools.procgen.tests import test_ea_craft_bay_clearance as bay
 from tools.procgen.tests.budget_table import read_budgets
 from tools.refview.sections import PASS_IOU, section_score
@@ -38,6 +42,12 @@ from tools.refview.sections import PASS_IOU, section_score
 ROOT = Path(__file__).resolve().parents[3]
 SHUTTLE = ROOT / "assets" / "generated" / "ea_shuttle" / "hardpoints.json"  # the crew shuttle as built (its stern hatch, Q84)
 DOCK_GAP_M = 0.3  # data/capitals/ship_docks.json, gap_m
+CRAFT_DIR = ROOT / "assets" / "generated"
+REST_GAP_M = 0.05  # CarrierDock.DOCK_GAP_M: a berthed craft's belly over the deck
+KESTREL_FOLD = tuple(hy.SHUTTLE_POSES["ea_atmo_shuttle"]["fold_joint_m"])  # its wings turn up about these roots (Q73)
+DECK_SHAPES = ("cap_bay_low", "core_bay_low")  # the bay's deck: a berthed craft stands on it
+SWEEP_OUT_M, SWEEP_STEP_M = 150.0, 1.0  # a lane is swept from the berth to clear of the bowl
+OFF_LANE = [(dx, dy, roll) for dx in (-0.75, 0.75) for dy in (-0.75, 0.75) for roll in (-2.0, 2.0)]
 STL = ROOT / "references" / "EA Asimov liner 600m.stl"
 NAMES = ROOT / "data" / "ships" / "names.json"
 TEST_OPTIONS = {"atlas_px": 512, "detail_px": 128}
@@ -117,11 +127,144 @@ class AsimovBuildTests(unittest.TestCase):
 
     def test_unarmed_with_four_engines_and_its_lights(self) -> None:
         self.assertEqual(loadout.problems(self.hp, loadout.read(), "ea_asimov"), [])
-        self.assertEqual((self.hp["weapons"], self.hp["bays"]), ([], []))
+        self.assertEqual(self.hp["weapons"], [])
+        self.assertEqual(loadout.read()["hulls"]["ea_asimov"]["launches"], {"ea_shuttle": 1, "ea_atmo_shuttle": 1}, "its two shuttles (Q84)")
         self.assertEqual(len(self.hp["engines"]), 4)
         self.assertAlmostEqual(sum(e["share"] for e in self.hp["engines"]), 1.0)
         roles = sorted(light["role"] for light in self.hp["lights"])
-        self.assertEqual(roles, ["beacon", "beacon", "port", "starboard", "top"])
+        self.assertEqual(roles, ["bay", "beacon", "beacon", "port", "starboard", "top"])
+
+    # --- the shuttle bay (Q84, Q96) --------------------------------------------------------------------------------------
+    def test_the_shuttle_bay_is_a_lit_hall_with_a_door_and_two_berths(self) -> None:
+        (b,) = self.hp["bays"]
+        self.assertEqual((b["name"], b["kind"], b["section"]), (asi.BAY_NAME, cp.BAY, "face"))
+        self.assertEqual((b["forward"], b["up"]), ([0.0, 0.0, -1.0], [0.0, 1.0, 0.0]), "it opens forward, into the bowl")
+        self.assertEqual((b["mouth_m"], b["depth_m"]), ([70.0, 23.2], 70.0), "the hall runs 70 m straight back (Q96)")
+        self.assertEqual(b["aperture_m"], [45.0, 27.0], "behind the hexagonal mouth")
+        self.assertEqual((b["capacity"], b["berths"], b["berth_craft"]), (2, 2, ["ea_shuttle", "ea_atmo_shuttle"]), "a crew shuttle and a Kestrel (Q84)")
+        self.assertTrue(b["visitors"], "craft that are not the liner's own may berth in it")
+        hall = bay_interiors.halls(self.hp)[0]
+        front = float((hall.centre + hall.axes[2] * hall.half[2] + self.offset)[2])
+        self.assertAlmostEqual(front, asi.HEX_BACK_Z, places=3, msg="the hall begins behind the mouth's frame")
+        self.assertAlmostEqual(float((hall.centre - hall.axes[1] * hall.half[1] + self.offset)[1]), asi.BAY_DECK_Y, places=3)
+        (door,) = self.hp["doors"]
+        self.assertEqual(door["name"], f"{asi.BAY_NAME}_door")
+        self.assertGreaterEqual(door["size_m"][0], 45.0)
+        self.assertGreaterEqual(door["size_m"][1], 27.0)
+        at = np.array(door["position"]) + self.offset
+        self.assertTrue(asi.BOWL_FLOOR_Z < at[2] < asi.HEX_BACK_Z, "the shutter runs inside the mouth's frame")
+        np.testing.assert_allclose(at[:2], np.array(asi.HEX).mean(axis=0), atol=1e-3)
+        (lamp,) = [light for light in self.hp["lights"] if light["role"] == "bay"]
+        self.assertEqual(lamp["name"], f"{asi.BAY_NAME}_light", "the door lights the hall as it opens")
+        self.assertTrue(bay_interiors.halls(self.hp)[0].name == asi.BAY_NAME)
+
+    def test_the_bay_hall_is_on_the_interior_layer(self) -> None:
+        """Q68: the sun's light stays out of the hall; its walls, deck, back and the wall round the mouth are lit by its lamp."""
+        bay_interiors.check(self, self.dir, self.manifest, self.hp, 1)
+        self.assertGreaterEqual(self.manifest["pieces"]["hull"]["mesh"]["interior_triangles"], 40, "and its front wall round the mouth")
+
+    def test_the_band_turns_round_a_fixed_core_clear_of_the_bay(self) -> None:
+        """Q96: the habitat band's collision is a ring as far back as the bay reaches; the hall lies inside the core with room
+        to spare whichever way the band has turned."""
+        shapes = {entry["name"]: entry for entry in self.manifest["collision"]["pieces"]}
+        pivot = np.array(self.manifest["pieces"]["band"]["pivot"]) + self.offset
+        inner = asi.CORE_R * math.cos(math.pi / asi.CORE_SIDES)  # the nearest the ring's flat inner faces come to the axis
+        ring = 0
+        for shape in shapes["habitat"]["shapes"]:
+            pts = _shape_points(shape) + pivot
+            if pts[:, 2].min() < asi.CORE_END_Z - 0.01 and float(np.hypot(pts[:, 0], pts[:, 1]).max()) > asi.CORE_R + 1.0:
+                ring += 1 if shape["name"].startswith("band_fore_") else 0  # the others are the clamps on the skin
+                self.assertGreaterEqual(float(np.hypot(pts[:, 0], pts[:, 1]).min()), asi.CORE_R - 1e-3, f"{shape['name']} stays off the core")
+        self.assertEqual(ring, 2 * asi.CORE_SIDES, "two steps of sectors round the core")
+        half, top = 0.5 * asi.BAY_SIZE[0], asi.BAY_DECK_Y + asi.BAY_SIZE[1]
+        far = max(math.hypot(half, y) for y in (asi.BAY_DECK_Y, top))
+        self.assertGreaterEqual(inner - far, 3.0, "the hall's far corners to the turning ring")
+        self.assertGreaterEqual(asi.CORE_END_Z - (asi.HEX_BACK_Z + asi.BAY_DEPTH), 10.0, "and its back wall to the band's solid part")
+        self.assertEqual(shapes["habitat"]["piece"], "band")
+        self.assertEqual(shapes["face"]["piece"], "hull", "the core and the hall do not turn")
+        core = [s for s in shapes["face"]["shapes"] if s["name"].startswith("core_")]
+        self.assertEqual(len(core), 5, "the core round the hall and its solid end")
+
+    def _berths(self) -> list[tuple[str, np.ndarray, np.ndarray]]:
+        """The bay's berths as the game reads them (``BayBerths``): the craft, its point on the deck and its lane's way out."""
+        (b,) = self.hp["bays"]
+        forward, up = np.array(b["forward"]), np.array(b["up"])
+        right = np.cross(forward, up)
+        sill = np.array(b["exit"]) - up * (b["mouth_m"][1] / 3.0)
+        out = []
+        for craft, deg, run in zip(b["berth_craft"], b["berth_fan_deg"], b["berth_run_m"], strict=True):
+            way = forward * math.cos(math.radians(deg)) + right * math.sin(math.radians(deg))
+            out.append((craft, sill - way * run, way))
+        return out
+
+    def _liner(self) -> cg.Body:
+        """Every collision shape of the liner but the bay's deck, in the body's frame."""
+        if not hasattr(type(self), "_body"):
+            names, sets = [], []
+            for entry in self.manifest["collision"]["pieces"]:
+                at = np.zeros(3) if entry["piece"] == cap.HULL_PIECE else np.array(self.manifest["pieces"][entry["piece"]]["pivot"])
+                for shape in entry["shapes"]:
+                    if shape["name"] not in DECK_SHAPES:
+                        names.append(shape["name"])
+                        sets.append(_shape_points(shape) + at)
+            type(self)._body = cg.Body(names, sets)
+        return type(self)._body
+
+    @staticmethod
+    def _craft(craft: str) -> tuple[cg.Body, np.ndarray]:
+        """A shuttle as it flies into a bay (the Kestrel's wings folded) and the point of it that rests on the deck."""
+        body = cg.craft_body(CRAFT_DIR / craft / "hardpoints.json", KESTREL_FOLD if craft == "ea_atmo_shuttle" else None)
+        box = json.loads((CRAFT_DIR / craft / "manifest.json").read_text(encoding="utf-8"))
+        lo, hi = np.array(box["aabb_min"]), np.array(box["aabb_max"])
+        return body, np.array([0.5 * (lo[0] + hi[0]), lo[1] - REST_GAP_M, 0.5 * (lo[2] + hi[2])])
+
+    @staticmethod
+    def _on_lane(body: cg.Body, rest: np.ndarray, deck: np.ndarray, way: np.ndarray, out_m: float = 0.0, off: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> cg.Body:
+        """The craft ``out_m`` out of its berth along its lane, nose out, set ``off`` (m across, m up, degrees of roll) from it."""
+        axes = cg.nose_along(way)
+        return body.moved(cg.rolled(axes, off[2]), deck - axes @ rest + way * out_m + axes @ np.array([off[0], off[1], 0.0]))
+
+    def _lane_gap(self, craft: str, deck: np.ndarray, way: np.ndarray, others: cg.Body, off: tuple[float, float, float] = (0.0, 0.0, 0.0)) -> tuple[float, str]:
+        """The least gap from the craft to ``others`` anywhere on its lane, from its berth out past the bowl."""
+        body, rest = self._craft(craft)
+        ends = [self._on_lane(body, rest, deck, way, t, off).bounds() for t in (0.0, SWEEP_OUT_M)]
+        near = others.near(np.min([e[0] for e in ends], axis=0) - 15.0, np.max([e[1] for e in ends], axis=0) + 15.0)
+        return min((cg.gap(self._on_lane(body, rest, deck, way, t, off), near) for t in np.arange(0.0, SWEEP_OUT_M + 0.5, SWEEP_STEP_M)),
+                   key=lambda found: found[0])
+
+    def _need_craft(self) -> None:
+        for craft in asi.BAY_CRAFT:
+            if not (CRAFT_DIR / craft / "hardpoints.json").exists():
+                self.skipTest(f"{craft} is not built")
+
+    def test_both_shuttles_fly_their_lanes_through_the_mouth_into_their_berths(self) -> None:
+        """As M10-T70 sweeps Babylon 5's bay: each craft's collision, swept down its own lane from outside the bowl to its
+        berth, stays clear of the mouth's frame, the hall and the rest of the hull, also when it is off its lane."""
+        self._need_craft()
+        for craft, deck, way in self._berths():
+            body, rest = self._craft(craft)
+            berthed = self._on_lane(body, rest, deck, way)
+            self.assertGreaterEqual(float(berthed.corners[..., 1].min()), float(deck[1]) - 0.25, f"{craft} stands on the deck (its boxes a hand larger than its skin)")
+            centred, where = self._lane_gap(craft, deck, way, self._liner())
+            self.assertGreaterEqual(centred, 2.5, f"{craft} on its lane ({where})")
+            worst = min(self._lane_gap(craft, deck, way, self._liner(), off)[0] for off in OFF_LANE)
+            self.assertGreaterEqual(worst, 1.0, f"{craft} off by 0.75 m and 2 degrees of roll")
+
+    def test_the_two_berths_and_the_collars_leave_each_other_room(self) -> None:
+        """A craft flies in or out past the other in its berth, and past crew shuttles mated on the collars."""
+        self._need_craft()
+        berths = self._berths()
+        placed = {craft: self._on_lane(*self._craft(craft), deck, way) for craft, deck, way in berths}
+        crew, kestrel = (placed[c] for c in asi.BAY_CRAFT)
+        self.assertGreaterEqual(cg.gap(crew, kestrel)[0], 8.0, "side by side in their berths")
+        shuttle, _ = self._craft("ea_shuttle")
+        hatch = np.array(json.loads(SHUTTLE.read_text(encoding="utf-8"))["docking_ports"][0]["position"])
+        mated = [shuttle.moved(np.eye(3), np.array(p["position"]) + np.array(p["out"]) * DOCK_GAP_M - hatch) for p in self.hp["docking_ports"]]
+        for (craft, deck, way), other in zip(berths, (kestrel, crew), strict=True):
+            passing, where = self._lane_gap(craft, deck, way, other)
+            self.assertGreaterEqual(passing, 2.5, f"{craft} past the other berth ({where})")
+            for port, body in zip(self.hp["docking_ports"], mated, strict=True):
+                self.assertGreaterEqual(self._lane_gap(craft, deck, way, body)[0], 3.0, f"{craft} past a shuttle on {port['name']}")
 
     def test_four_docking_collars_on_the_lower_teeth_face_forward(self) -> None:
         ports = {p["name"]: p for p in self.hp["docking_ports"]}
@@ -236,7 +379,7 @@ class AsimovSpecTests(unittest.TestCase):
         self.assertAlmostEqual(lo["band_aft"], asi.SPHERE_Z, places=6)
 
     def test_the_hexagonal_mouth_is_open(self) -> None:
-        """Nothing stands in the mouth from the bow back to its floor (stage 2 puts the shuttle bay behind it)."""
+        """Nothing stands in the mouth from the bow back to the bay's back wall."""
         hex_pts = np.array(asi.HEX)
         centre = hex_pts.mean(axis=0)
         mesh = Mesh.concatenate([m.part.mesh for m in cp.with_twins(ea.modules())])
@@ -254,7 +397,7 @@ class AsimovSpecTests(unittest.TestCase):
             w1, w2 = cross(ray - a, c - a) / d, cross(b - a, ray - a) / d
             if w1 >= 0.0 and w2 >= 0.0 and w1 + w2 <= 1.0:
                 hit_z.append(float(t[0, 2] + w1 * (t[1, 2] - t[0, 2]) + w2 * (t[2, 2] - t[0, 2])))
-        self.assertAlmostEqual(min(hit_z), asi.HEX_BACK_Z, places=3, msg="the first surface down the mouth's axis is its floor")
+        self.assertAlmostEqual(min(hit_z), asi.HEX_BACK_Z + asi.BAY_DEPTH, places=3, msg="the first surface down the mouth's axis is the hall's back wall")
 
     def test_the_forward_face_is_a_deep_bowl_with_the_mouth_in_its_floor(self) -> None:
         """Q95: the show's cavity. The bowl narrows terrace by terrace to a floor wide enough for the mouth, and its collision

@@ -881,6 +881,20 @@ func _build_collision() -> void:
 		_collision_nodes.append(node)
 
 
+## Moves the hit volumes whose names begin with `prefix` by `turn` (the hull's frame) from where they were built: a shuttle's
+## wings fold up for a bay (M10-T53), and what it collides with folds with them.
+func turn_collision(prefix: String, turn: Transform3D) -> void:
+	for i: int in _hardpoints.collision.size():
+		var entry: Dictionary = _hardpoints.collision[i]
+		if not str(entry["name"]).begins_with(prefix):
+			continue
+		var placed: Transform3D = turn * (entry["transform"] as Transform3D)
+		if lean and i < _shape_owners.size():
+			shape_owner_set_transform(_shape_owners[i], placed)
+		elif not lean and i < _collision_nodes.size():
+			_collision_nodes[i].transform = placed
+
+
 func _build_muzzles() -> void:
 	if lean:
 		return  # the muzzles are data (M4-T35): the cannon fires from the transforms, the pool flashes them

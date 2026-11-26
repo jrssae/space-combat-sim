@@ -37,7 +37,7 @@ from ..core.seams import Feature, PatchPlates, Plates, Relief, SeamLayout, _keye
 from ..parts import ea_asimov as asi
 from ..parts.ea_asimov import Pattern
 from .capital import CapitalStyle
-from .ea_capital import Look, capital_style
+from .ea_capital import Look, bay_metal_materials, capital_style
 from .ea_civilian import lin
 
 PREFIX = "eaa"
@@ -170,7 +170,7 @@ def ea_asimov(livery: Mapping[str, int] | None = None) -> CapitalStyle:
     """The liner's style, any role repainted by ``livery`` (a build in one fixed band colour)."""
     style = capital_style(LOOK, "ea_asimov", PREFIX, SKIN, livery)
     window = Material(f"{PREFIX}_window", capture_albedo(0x1A2A40), emissive=lin(WINDOW_BLUE), emissive_strength=WINDOW_STRENGTH)
-    materials = {**style.style.materials, "window": window}
+    materials = {**style.style.materials, "window": window, **bay_metal_materials(PREFIX)}  # the shuttle bay's hall, as the fleet's
     extra = {**style.style.extra, "speckle": 0.06, "smudge": 0.1, "bare_metal": 0.05}
     return dataclasses.replace(style, style=dataclasses.replace(style.style, materials=materials, extra=extra), surface={"band_tint": band_tint()})
 
