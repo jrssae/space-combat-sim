@@ -125,7 +125,9 @@ func step() -> void:
 		world.rebase(offset)
 		_rebased -= offset
 	_hits.clear()
+	BlastResolver.set_hit_log(true)  # forgets the last tick's blast hits
 	MineField.step_all(now_s, DT)  # the mines step on the core's rows with the weapons (M10-T15)
+	_take_blast_hits()
 	director.step(DT, now_s)
 	director.pull_native_state()
 	log.append(_entry())
@@ -188,7 +190,19 @@ func _lay_quarry() -> void:
 
 
 func _on_hit(info: HitInfo, fighter: int) -> void:
-	_hits.append([fighter, String(info.cause), info.damage, info.point, info.normal])
+	if info.cause != HitInfo.CAUSE_BLAST:  # a blast's hits come from the batch's log (`_take_blast_hits`)
+		_hits.append([fighter, String(info.cause), info.damage, info.point, info.normal])
+
+
+# The mines' blast hits on the fighters, in the order the batch landed them (M10-T76 lands blasts natively and tells a ship of
+# them once, as a summary, not a `hit_taken` each; its log has no normal).
+func _take_blast_hits() -> void:
+	for info: HitInfo in BlastResolver.hit_log():
+		for i: int in fighters.size():
+			if fighters[i].get_instance_id() == info.target_id:
+				_hits.append([i, String(HitInfo.CAUSE_BLAST), info.damage, info.point])
+				break
+	BlastResolver.set_hit_log(false)
 
 
 # Names a body by its place in the scene: "f<i>" a fighter, "c<i>" a capital, "" none, "?" anything else.
