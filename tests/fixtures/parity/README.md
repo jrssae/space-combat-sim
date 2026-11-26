@@ -104,3 +104,8 @@ stopped). Run as M7-T16's command above. What moved (old → new): `weapon_rows_
 `flight_parity_fight` 98 → 54 hits over 10 s and 371 → 201 over 30 s, mix attack 18 evade 7 → attack 15 evade 10;
 `brain_tolerance` native hits furball 680, 710, 644 → 368, 446, 394, spread 618, 888, 513 → 460, 427, 378. Its mix gate against
 the GDScript fight passes again: worst furball 3.6, 2.2, 0.4 points, spread 1.4, 0.6, 0.3.
+
+**M10-T15 re-recorded `turret_kernel.json`** (the seeded scene's 90 mines are `MineField`s now: they blast with the table's falloff, cause `blast`,
+instead of a flat 200, and the log no longer carries `checked`; `weapon_rows_battle.json` and its counts are unchanged). Recorded from the
+native path with `SCS_RECORD_FIXTURES=1 GUT_SLOW=1 ... -gtest=res://tests/unit/test_turret_kernel.gd`. `mine_kernel.json` is gone with
+its test: the mine kernels' own cargo tests and `test_mine_field` replace it.

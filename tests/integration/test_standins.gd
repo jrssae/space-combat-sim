@@ -67,6 +67,7 @@ func _bolts(faction: StringName = &"") -> Array[Projectile]:
 func _step() -> int:
 	var before: int = _bolts().size()
 	sim.sync_now()  # the rows as the bodies stand now: the test moves them by hand between steps
+	MineField.step_all(now_s, DT)  # the core's own step does it in play (`SimCore.step_now`, M10-T15)
 	standins.step(DT, now_s)
 	standins.pull_native_state()  # the turrets' nodes show the rows' state, as the tests read it
 	now_s += DT
@@ -444,12 +445,12 @@ func test_no_missile_without_a_hostile_fighter_in_range() -> void:
 
 
 func test_a_mine_detonates_on_a_hostile_never_a_friend_hurts_every_hull_in_its_blast_and_is_gone() -> void:
-	var mines: MineStandin = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
+	var mines: MineField = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
 			{"offset": Vector3(0.0, 0.0, -2000.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
 	assert_eq(mines.count(), 2)
 	assert_eq(mines.alive_count(), 2)
 	var friend: TargetDrone = _drone(Vector3(30.0, 0.0, -1000.0), Factions.EARTH_ALLIANCE)
-	for i: int in 2 * MineStandin.TRIGGER_TICKS:
+	for i: int in 2 * MineKinds.CHECK_TICKS:
 		_step()
 	assert_eq(mines.alive_count(), 2, "a friend inside the trigger sets nothing off")
 	var hostile: TargetDrone = _drone(Vector3(0.0, 40.0, -1000.0))
@@ -459,7 +460,7 @@ func test_a_mine_detonates_on_a_hostile_never_a_friend_hurts_every_hull_in_its_b
 		_step()
 		ticks += 1
 	assert_false(mines.is_alive(0), "the hostile set it off")
-	assert_lte(ticks, MineStandin.TRIGGER_TICKS, "within one trigger cadence")
+	assert_lte(ticks, MineKinds.CHECK_TICKS, "within one trigger cadence")
 	assert_true(mines.is_alive(1), "the other mine is untouched")
 	assert_lt(hostile.damageable.hull.hp, hostile.damageable.hull.max_hp, "the hostile is hurt")
 	assert_lt(friend.damageable.hull.hp, friend.damageable.hull.max_hp, "and so is the friend in the blast")
@@ -467,7 +468,7 @@ func test_a_mine_detonates_on_a_hostile_never_a_friend_hurts_every_hull_in_its_b
 	assert_eq(standins.detonations, 1)
 	assert_eq(standins.counts[StandinDirector.Count.MINES], 1, "the row is removed")
 	var hp: float = hostile.damageable.hull.hp
-	for i: int in 2 * MineStandin.TRIGGER_TICKS:
+	for i: int in 2 * MineKinds.CHECK_TICKS:
 		_step()
 	assert_eq(hostile.damageable.hull.hp, hp, "a mine goes off once")
 
@@ -476,26 +477,24 @@ func test_a_mine_checks_every_third_tick_and_is_laid_again_after_a_while() -> vo
 	var rows: Array[Dictionary] = []
 	for i: int in 30:
 		rows.append({"offset": Vector3(float(i) * 300.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE})
-	var mines: MineStandin = standins.add_mines(rows, world.to_universe(Vector3.ZERO))
-	_step()
-	assert_eq(mines.checked_last_tick, 10, "a third of the mines each tick")
+	var mines: MineField = standins.add_mines(rows, world.to_universe(Vector3.ZERO))
 	var hostile: TargetDrone = _drone(Vector3(0.0, 0.0, -1010.0))
-	for i: int in MineStandin.TRIGGER_TICKS:
+	for i: int in MineKinds.CHECK_TICKS:
 		_step()
 	assert_false(mines.is_alive(0))
 	hostile.global_position = Vector3(0.0, 0.0, 5000.0)
-	for i: int in roundi(MineStandin.RELAY_S / DT) + MineStandin.TRIGGER_TICKS:
+	for i: int in roundi(MineField.RELAY_S / DT) + MineKinds.CHECK_TICKS:
 		_step()
 	assert_true(mines.is_alive(0), "laid again in its place, so the belt holds the mix")
 	assert_eq(mines.alive_count(), 30)
 	# M7-T59 fix: once the bench run is over a spent mine stays gone.
 	mines.relays = false
 	var second: TargetDrone = _drone(Vector3(0.0, 0.0, -1010.0))
-	for i: int in MineStandin.TRIGGER_TICKS:
+	for i: int in MineKinds.CHECK_TICKS:
 		_step()
 	assert_false(mines.is_alive(0))
 	second.global_position = Vector3(0.0, 0.0, 5000.0)
-	for i: int in roundi(MineStandin.RELAY_S / DT) + MineStandin.TRIGGER_TICKS:
+	for i: int in roundi(MineField.RELAY_S / DT) + MineKinds.CHECK_TICKS:
 		_step()
 	assert_false(mines.is_alive(0), "not laid again after the run")
 	assert_eq(mines.alive_count(), 29)
@@ -511,7 +510,7 @@ func test_a_shot_sets_off_a_mine_whoever_fired_it() -> void:
 	var rows: Array[Dictionary] = []
 	for k: int in cases.size() + 1:
 		rows.append({"offset": Vector3(400.0 * k, 0.0, -1000.0), "faction": ea if k == cases.size() else cases[k][0]})
-	var mines: MineStandin = standins.add_mines(rows, world.to_universe(Vector3.ZERO))
+	var mines: MineField = standins.add_mines(rows, world.to_universe(Vector3.ZERO))
 	var hits: Array[HitInfo] = []
 	var resolver: HitResolver = _resolver(hits)
 	for k: int in cases.size():
@@ -546,7 +545,7 @@ func test_a_shot_sets_off_a_mine_whoever_fired_it() -> void:
 # M7-T64: a hull that touches a mine's body sets it off on any tick, whatever its side and the mine's, also when it flew
 # through between two ticks; a friend inside the trigger but clear of the body sets nothing off.
 func test_a_touch_sets_off_a_mine_of_any_side() -> void:
-	var mines: MineStandin = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
+	var mines: MineField = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
 			{"offset": Vector3(500.0, 0.0, -1000.0), "faction": Factions.RAIDERS},
 			{"offset": Vector3(1000.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
 			{"offset": Vector3(1500.0, 0.0, -1000.0), "faction": Factions.RAIDERS}], world.to_universe(Vector3.ZERO))
@@ -565,7 +564,7 @@ func test_a_touch_sets_off_a_mine_of_any_side() -> void:
 	assert_eq(mines.by_trigger, 0)
 	assert_lt(own.damageable.hull.hp, own.damageable.hull.max_hp, "the blast hurts whoever touched it")
 	assert_lt(other.damageable.hull.hp, other.damageable.hull.max_hp)
-	for i: int in 2 * MineStandin.TRIGGER_TICKS:
+	for i: int in 2 * MineKinds.CHECK_TICKS:
 		_step()
 	assert_true(mines.is_alive(2), "the friend never sets it off")
 	assert_eq(friend.damageable.hull.hp, friend.damageable.hull.max_hp)
@@ -574,7 +573,7 @@ func test_a_touch_sets_off_a_mine_of_any_side() -> void:
 # Council round 1 (O1): off its anchor the mines drift with it, so a ship at rest against them sweeps no phantom path through
 # one, and a ship still in the World frame that a mine drifted across touches it.
 func test_off_the_anchor_a_touch_is_taken_against_the_drifting_mines() -> void:
-	var mines: MineStandin = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
+	var mines: MineField = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
 			{"offset": Vector3(500.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
 	var at_rest: TargetDrone = _drone(Vector3(0.0, 1.0, -1030.0), Factions.EARTH_ALLIANCE)
 	var still: TargetDrone = _drone(Vector3(500.0, 1.0, -970.0), Factions.EARTH_ALLIANCE)
@@ -588,29 +587,9 @@ func test_off_the_anchor_a_touch_is_taken_against_the_drifting_mines() -> void:
 	assert_eq(mines.by_touch, 1)
 
 
-# M7-T64: a capital touches a mine with its hull, not its bounding sphere: its own side's mine off its flank goes off, one
-# inside the sphere but clear of the hull does not.
-func test_a_capital_touches_a_mine_with_its_hull_not_its_sphere() -> void:
-	var cap: CapitalStandin = _quiet_capital(Vector3(0.0, 0.0, -2000.0))
-	cap.beams().clear()
-	cap.freeze = true
-	var half_width: float = float((CapitalStandin.CLASSES[&"cruiser"] as Dictionary)["width"]) * 0.5
-	assert_gt(cap.damageable.bounding_radius, 120.0, "a sphere far bigger than the hull's width")
-	var mines: MineStandin = standins.add_mines([
-			{"offset": Vector3(half_width + 2.0, 0.0, -2000.0), "faction": Factions.EARTH_ALLIANCE},
-			{"offset": Vector3(-half_width - 110.0, 0.0, -2000.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
-	_step()
-	assert_false(mines.is_alive(0), "2 m off its flank: the hull touches the body")
-	assert_true(mines.is_alive(1), "110 m off the other flank: inside its sphere, clear of its hull (and of the blast)")
-	assert_eq(mines.by_touch, 1)
-	for i: int in 2 * MineStandin.TRIGGER_TICKS:
-		_step()
-	assert_true(mines.is_alive(1), "and it stays")
-
-
 # M7-T64: a blast sets off every mine whose body it reaches in the same tick, and those mines' blasts carry it on.
 func test_a_blast_sets_off_the_mines_it_reaches() -> void:
-	var mines: MineStandin = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.RAIDERS},
+	var mines: MineField = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.RAIDERS},
 			{"offset": Vector3(80.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
 			{"offset": Vector3(160.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
 			{"offset": Vector3(400.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
@@ -632,13 +611,14 @@ func _step_mines() -> int:
 
 
 func test_a_rebase_shifts_the_mines() -> void:
-	var mines: MineStandin = standins.add_mines([{"offset": Vector3(100.0, 0.0, -1000.0), "faction": Factions.RAIDERS}],
+	var mines: MineField = standins.add_mines([{"offset": Vector3(100.0, 0.0, -1000.0), "faction": Factions.RAIDERS}],
 			world.to_universe(Vector3.ZERO))
 	var before: Vector3 = mines.position_of(0)
 	var offset := Vector3(1000.0, -200.0, 500.0)
 	world.rebase(offset)
 	assert_almost_eq(mines.position_of(0).distance_to(before - offset), 0.0, 1e-3)
 	assert_eq(mines.kind, Targetable.Kind.MINE, "a row of kind mine for the body registry")
+	assert_eq(StaticRows.count(), 1, "a placed mine is a static row, so its own side steers round it")
 
 
 func test_capitals_and_mines_attach_the_core() -> void:

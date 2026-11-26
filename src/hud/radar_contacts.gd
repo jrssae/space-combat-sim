@@ -47,6 +47,7 @@ static func gather(tree: SceneTree, own_body: Node3D, sensor_range_m: float) -> 
 	out.reach = rows[3]
 	out.civilian = rows[4]
 	out.faction_names.assign(sim.core.factions())
+	_add_mines(out, own_body, sensor_range_m)
 	return out
 
 
@@ -64,3 +65,22 @@ static func from_infos(infos: Array[TargetInfo]) -> RadarContacts:
 		out.reach.append(info.broadcast_range_m)
 		out.civilian.append(1 if info.role == Targetable.Role.CIVILIAN else 0)
 	return out
+
+
+# The mines of every field the ship's side may see (M10-T15, Q20): its own and its friends' always, a hostile one only within 1 km
+# of the ship. They are dots like any contact, never targets (no id of a body).
+static func _add_mines(out: RadarContacts, own_body: Node3D, sensor_range_m: float) -> void:
+	if MineField.fields.is_empty():
+		return
+	var damageable: Damageable = Damageable.of(own_body)
+	var viewer: StringName = damageable.faction if damageable != null else Factions.NEUTRAL
+	var found: Array = MineField.radar_contacts(own_body.global_position, viewer, sensor_range_m)
+	var ids: PackedInt64Array = found[0]
+	if ids.is_empty():
+		return
+	out.ids.append_array(ids)
+	out.positions.append_array(found[1] as PackedVector3Array)
+	out.faction_ix.append_array(found[2] as PackedInt32Array)
+	for _i: int in ids.size():
+		out.reach.append(INF)  # a mine within the radar's sight is identified: its side's colour
+		out.civilian.append(0)

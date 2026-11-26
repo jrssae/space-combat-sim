@@ -103,3 +103,7 @@ mod capital_intercepts;
 mod capital_brain;
 mod capital_brain_rows;
 mod capital_helm;
+// M10-T15: mines and minefields, engine-free kernels and the core's shell around them.
+mod mine_kernels;
+mod mine_layers;
+mod mine_rows;

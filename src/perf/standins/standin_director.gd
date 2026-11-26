@@ -69,7 +69,8 @@ var ticks: int = 0
 
 var _capitals: Array[CapitalStandin] = []
 var _field: AsteroidBelt = null
-var _mines: MineStandin = null
+var _mines: MineField = null
+var _mines_seen: int = 0  # mines set off so far, as of the last tick
 var _strike: Dictionary = {}  # capital -> [target body id, tick it was looked up]
 var _capital_turn: int = 0
 
@@ -196,8 +197,10 @@ func _step_native(native: NativeWeapons, delta: float, now_s: float, started_us:
 		missile_intercepts += int(out[20])
 		tier_group_rolls = int(out[15])
 	mark_us = _mark(Part.MISSILES, mark_us)
-	if native.mines != null and is_instance_valid(native.mines):
-		detonations += native.mines.step_native(_tick, now_s, delta)
+	if _mines != null and is_instance_valid(_mines):
+		var set_off: int = _mines.total_set_off()  # the core steps the mines (`SimCore.step_now`, M10-T15)
+		detonations += set_off - _mines_seen
+		_mines_seen = set_off
 	mark_us = _mark(Part.MINES, mark_us)
 	_finish(now_s, mark_us, started_us)
 
@@ -229,7 +232,7 @@ func _native_weapons() -> NativeWeapons:
 		MissileStandin.native_rows = null
 		return null
 	if _native == null:
-		_native = NativeWeapons.bind(sim, _capitals, mines())
+		_native = NativeWeapons.bind(sim, _capitals)
 		_native.push_strike(_strike, _capital_turn)
 		_native_dirty = false
 	MissileStandin.native_rows = _native.rows
@@ -241,7 +244,6 @@ func _leave_native() -> void:
 	if _native == null:
 		return
 	pull_native_state()
-	_native.unbind_mines()
 	_native = null
 	if MissileStandin.native_rows != null:
 		MissileStandin.native_rows = null
@@ -270,20 +272,14 @@ func add_capital(cls: StringName, faction: StringName, display_name: String, at:
 	return cap
 
 
-## The mine belts: `rows` (`offset` m from `anchor`, `faction` the layer's).
-func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineStandin:
+## The mine belts: `rows` (`offset` m from `anchor`, `faction` the layer's), a placed field a spent mine of which is laid again.
+func add_mines(rows: Array[Dictionary], anchor: UniversePos) -> MineField:
 	remove_mines()
-	SimCore.attach(world)  # the core steps the mines (M4-T42)
 	_native_dirty = true
-	_mines = MineStandin.new()
-	_mines.name = "Mines"
-	_mines.world = world
-	world.spawn(_mines, anchor, Basis.IDENTITY, self)
-	_mines.add_to_group(WorldFrame.ANCHORED_GROUP)
+	_mines = MineField.spawn_in(world, anchor, true, self)
+	_mines.relays = true
 	_mines.build(rows)
-	var destruction: DestructionDirector = DestructionDirector.current()
-	if destruction != null:
-		destruction.watch_mines(_mines)  # a mine that goes off is drawn exploding (M7-T64)
+	_mines_seen = _mines.total_set_off()
 	return _mines
 
 
@@ -295,7 +291,7 @@ func remove_mines() -> void:
 	_mines = null
 
 
-func mines() -> MineStandin:
+func mines() -> MineField:
 	return _mines if _mines != null and is_instance_valid(_mines) else null
 
 

@@ -59,6 +59,6 @@ func test_no_batched_draw_uploads_straight_to_the_server() -> void:
 				offenders.append(path)
 	# Build-time fills (props, lights, gate glows) run once outside the frame and are listed here on purpose.
 	for path: String in ["res://src/rendering/render_piece.gd", "res://src/world/station_lights.gd", "res://src/world/asteroid_belt.gd",
-			"res://src/ship/running_lights.gd", "res://src/props/jumpgate.gd", "res://src/perf/standins/mine_standin.gd"]:
+			"res://src/ship/running_lights.gd", "res://src/props/jumpgate.gd", "res://src/combat/mines/mine_field.gd"]:
 		offenders.erase(path)
 	assert_eq(offenders, [], "uploads go through MultiMeshUpload")

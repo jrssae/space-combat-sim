@@ -13,6 +13,8 @@ extends RefCounted
 ## - **Chains.** A blast that kills sets off the dead hull's own blast through the destruction director; it waits until this one
 ##   is landed, then lands in the same tick, in the order set off.
 ##
+## A blast also sets off the mines it reaches (`MineField.blast_reached`, M10-T15): a field goes off as a chain.
+##
 ## Without a core nothing is reached (the core is required; there is no other path). `stats` holds the readouts the console's
 ## `blasts` provider shows.
 
@@ -96,6 +98,7 @@ static func nearest_on(damageable: Damageable, xform: Transform3D, at: Vector3, 
 # One blast: the hulls the core names, the nearest piece of each, then the damage and the push on each in the core's order.
 static func _land(spec: BlastSpec, centre: Vector3, faction: StringName, shooter_id: int) -> void:
 	var started: int = Time.get_ticks_usec()  # a readout, never gameplay time
+	MineField.blast_reached(centre, spec.radius_m)  # the mines it reaches go off with it (T15; T76 moves this into the batch)
 	var sim: SimCore = SimCore.current()
 	var reached: int = 0
 	var hurt: int = 0

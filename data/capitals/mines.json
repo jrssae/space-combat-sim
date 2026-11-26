@@ -1,0 +1,12 @@
+{
+ "_doc": "M10-T15 (Q20, Q53; docs/assets-capital.md 'Mines'): the three mine kinds' numbers and how a hull lays them in battle. kinds: trigger_m from the hull's surface, body_m what a touch must reach, arm_s before a laid mine's trigger works, dormant_s a guided mine lies idle, speed_mps its flight or homing speed, home_m the range a guided mine homes from, fuse_s after an energy mine arrives before it goes off whatever is near (0: never), capitals_only, turn_rad_s a guided mine's turn rate, toughness the interceptor pulses a flying mine takes, radar_m how close a hostile mine shows on the radar (own and friendly always); the blast is the BlastTable source of the same name (capitals.json 'blasts'). laying: per kind, what a mount does: it looks for a hostile it perceives between range_min_m and range_m within cone_deg of its forward, lays count mines every cycle_s (never more than max_in_play of that kind from the ship), a mine leaving at drop_mps along forward, clearance_m in front of the mount. mount_kinds: the hardpoints' `mine` mounts take the kind of their weapon id in loadouts.json.",
+ "kinds": {
+  "mine_prox": {"trigger_m": 60.0, "body_m": 3.0, "arm_s": 0.0, "dormant_s": 0.0, "speed_mps": 0.0, "home_m": 0.0, "fuse_s": 0.0, "capitals_only": false, "turn_rad_s": 0.0, "toughness": 1, "radar_m": 1000.0},
+  "mine_energy": {"trigger_m": 200.0, "body_m": 3.0, "arm_s": 0.0, "dormant_s": 0.0, "speed_mps": 900.0, "home_m": 0.0, "fuse_s": 5.0, "capitals_only": true, "turn_rad_s": 0.0, "toughness": 3, "radar_m": 1000.0},
+  "mine_guided": {"trigger_m": 30.0, "body_m": 3.0, "arm_s": 0.0, "dormant_s": 60.0, "speed_mps": 150.0, "home_m": 800.0, "fuse_s": 0.0, "capitals_only": false, "turn_rad_s": 1.0, "toughness": 1, "radar_m": 1000.0}
+ },
+ "laying": {
+  "mine_energy": {"range_min_m": 4000.0, "range_m": 12000.0, "cycle_s": 20.0, "count": 1, "max_in_play": 6, "cone_deg": 60.0, "drop_mps": 0.0, "clearance_m": 30.0},
+  "mine_guided": {"range_min_m": 0.0, "range_m": 3000.0, "cycle_s": 30.0, "count": 4, "max_in_play": 12, "cone_deg": 70.0, "drop_mps": 20.0, "clearance_m": 25.0}
+ }
+}

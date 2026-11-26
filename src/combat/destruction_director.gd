@@ -21,7 +21,7 @@ extends Node
 ## the full effects while it is 8 px or more in radius, a reduced explosion (no light, the gas shell only, no debris) down to
 ## 2 px, and below that a point flash in the world's `FarFlashes`, with no node and no particle. A death in the low-attention tier is drawn where its row
 ## flew. A **capital** stand-in's death (`watch_capital`) is drawn the same way; the capital then leaves play (and the tier)
-## and `capital_destroyed` is emitted. A **mine** that goes off (`watch_mines`, M7-T64) is drawn the same way, its fireball as big
+## and `capital_destroyed` is emitted. A **mine** that goes off (`watch_mines`, M7-T64, M10-T15) is drawn the same way, its fireball as big
 ## as its blast; at most `MINE_BLASTS_MAX` of its explosions are alive at once and the rest are far flashes, so a battle's
 ## chains stay cheap. Every death's killing hit carries its blast's energy, radius and point (`set_blast`).
 ##
@@ -170,11 +170,11 @@ func watch_station(station: Station) -> void:
 		station.station_destroyed.connect(_on_station_destroyed.bind(station))
 
 
-## Draws every mine of `belt` that goes off from now on (M7-T64). Watching a belt twice is harmless.
-func watch_mines(belt: MineStandin) -> void:
-	if belt == null or belt.detonated.is_connected(_on_mine_detonated):
+## Draws every mine of `field` that goes off from now on (M7-T64, M10-T15). Watching a field twice is harmless.
+func watch_mines(field: MineField) -> void:
+	if field == null or field.detonated.is_connected(_on_mine_detonated):
 		return
-	belt.detonated.connect(_on_mine_detonated.bind(belt))
+	field.detonated.connect(_on_mine_detonated)
 
 
 ## True while a respawn of the player is pending.
@@ -272,20 +272,21 @@ func _on_station_destroyed(_section: String, station: Station) -> void:
 		BlastResolver.set_off(spec, at, Factions.EARTH_ALLIANCE)
 
 
-func _on_mine_detonated(index: int, belt: MineStandin) -> void:
-	draw_mine_blast(belt.position_of(index))
+func _on_mine_detonated(_slot: int, kind_index: int, at: Vector3) -> void:
+	draw_mine_blast(at, kind_index)
 
 
-## A mine's blast at `at` (World frame): drawn at its level of detail like a death, capped so a battle's chains stay cheap.
-## Returns the level it was drawn at.
-func draw_mine_blast(at: Vector3) -> ExplosionLod.Level:
-	var radius: float = MineStandin.BLAST_RADIUS_M / Explosion.FIREBALL_FINAL_SCALE
+## A mine's blast at `at` (World frame), of mine kind `kind_index` (`MineKinds`): drawn at its level of detail like a death,
+## capped so a battle's chains stay cheap. Returns the level it was drawn at.
+func draw_mine_blast(at: Vector3, kind_index: int = MineKinds.PROX) -> ExplosionLod.Level:
+	var blast: BlastSpec = MineKinds.blast(kind_index)
+	var radius: float = (blast.radius_m if blast != null else 100.0) / Explosion.FIREBALL_FINAL_SCALE
 	var velocity: Vector3 = world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
 	var level: ExplosionLod.Level = _level_at(radius, at)
 	if level != ExplosionLod.Level.FAR and _mine_explosions_alive() >= MINE_BLASTS_MAX:
 		level = ExplosionLod.Level.FAR
 	if level == ExplosionLod.Level.FAR:
-		_spawn_far(level, at, velocity, radius, _mine_energy_j())
+		_spawn_far(level, at, velocity, radius, blast.energy_j() if blast != null else 0.0)
 	else:
 		var explosion: Explosion = _add_explosion(radius, velocity, at, level == ExplosionLod.Level.REDUCED)
 		if explosion != null:
@@ -296,12 +297,6 @@ func draw_mine_blast(at: Vector3) -> ExplosionLod.Level:
 			mine_exploded.emit(at)
 	mine_blasts[level] += 1
 	return level
-
-
-# A mine's blast energy for its far flash: the table's proximity mine (T15 moves the mines' damage onto the blast model).
-static func _mine_energy_j() -> float:
-	var mine: BlastSpec = BlastTable.spec(&"mine_prox")
-	return mine.energy_j() if mine != null else 0.0
 
 
 # Mine explosions still showing; drops the finished ones.

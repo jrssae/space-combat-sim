@@ -47,6 +47,7 @@ func before_each() -> void:
 
 
 func after_each() -> void:
+	DebugConsole.registry.unregister_owner(self)
 	StaticRows.clear()
 	ContactScan.invalidate()
 	Factions.reset()
@@ -54,11 +55,12 @@ func after_each() -> void:
 
 func _step() -> void:
 	sim.sync_now()
+	MineField.step_all(now_s, DT)
 	standins.step(DT, now_s)
 	now_s += DT
 
 
-func _mines(offsets: Array[Vector3]) -> MineStandin:
+func _mines(offsets: Array[Vector3]) -> MineField:
 	var rows: Array[Dictionary] = []
 	for at: Vector3 in offsets:
 		rows.append({"offset": at, "faction": Factions.RAIDERS})
@@ -78,8 +80,13 @@ func _flash_count() -> int:
 	return flashes.flash_count() if flashes != null else 0
 
 
+# The proximity mine's blast radius, m (the blast table's row).
+func _blast_m() -> float:
+	return MineKinds.blast(MineKinds.PROX).radius_m
+
+
 func _radius() -> float:
-	return MineStandin.BLAST_RADIUS_M / Explosion.FIREBALL_FINAL_SCALE
+	return _blast_m() / Explosion.FIREBALL_FINAL_SCALE
 
 
 # Where a mine's fireball is `px` pixels in radius on this picture, m.
@@ -88,7 +95,7 @@ func _switch_m(px: float) -> float:
 
 
 func test_a_mine_that_goes_off_shows_one_explosion_at_its_place() -> void:
-	var mines: MineStandin = _mines([Vector3(30.0, 0.0, -1000.0)])
+	var mines: MineField = _mines([Vector3(30.0, 0.0, -1000.0)])
 	assert_true(mines.strike(0))
 	_step()
 	assert_false(mines.is_alive(0), "(it went off)")
@@ -96,7 +103,7 @@ func test_a_mine_that_goes_off_shows_one_explosion_at_its_place() -> void:
 	assert_eq(made.size(), 1, "one explosion")
 	assert_false(made[0].reduced, "the full effect near")
 	assert_almost_eq(made[0].global_position.distance_to(mines.position_of(0)), 0.0, 0.5, "at the mine")
-	assert_almost_eq(made[0].radius_m * Explosion.FIREBALL_FINAL_SCALE, MineStandin.BLAST_RADIUS_M, 1e-3,
+	assert_almost_eq(made[0].radius_m * Explosion.FIREBALL_FINAL_SCALE, _blast_m(), 1e-3,
 			"its fireball as big as the blast")
 	assert_eq(director.mine_blasts, PackedInt32Array([1, 0, 0]))
 	assert_eq(sounds.size(), 1, "and a sound")
@@ -104,7 +111,7 @@ func test_a_mine_that_goes_off_shows_one_explosion_at_its_place() -> void:
 
 
 func test_a_chain_draws_one_explosion_per_mine_and_sounds_once() -> void:
-	var mines: MineStandin = _mines([Vector3(0.0, 0.0, -1000.0), Vector3(80.0, 0.0, -1000.0), Vector3(160.0, 0.0, -1000.0),
+	var mines: MineField = _mines([Vector3(0.0, 0.0, -1000.0), Vector3(80.0, 0.0, -1000.0), Vector3(160.0, 0.0, -1000.0),
 			Vector3(400.0, 0.0, -1000.0)])
 	assert_true(mines.strike(0))
 	_step()
@@ -121,7 +128,7 @@ func test_a_chain_draws_one_explosion_per_mine_and_sounds_once() -> void:
 
 func test_a_mine_between_is_a_reduced_explosion() -> void:
 	var at: float = 0.5 * (_switch_m(ExplosionLod.FULL_PX) + _switch_m(ExplosionLod.REDUCED_PX))
-	var mines: MineStandin = _mines([Vector3(0.0, 0.0, -at)])
+	var mines: MineField = _mines([Vector3(0.0, 0.0, -at)])
 	assert_true(mines.strike(0))
 	_step()
 	var made: Array[Explosion] = _explosions()
@@ -131,7 +138,7 @@ func test_a_mine_between_is_a_reduced_explosion() -> void:
 
 
 func test_a_far_mine_is_a_point_flash_with_no_node() -> void:
-	var mines: MineStandin = _mines([Vector3(0.0, 0.0, -1.3 * _switch_m(ExplosionLod.REDUCED_PX))])
+	var mines: MineField = _mines([Vector3(0.0, 0.0, -1.3 * _switch_m(ExplosionLod.REDUCED_PX))])
 	assert_true(mines.strike(0))
 	var nodes_before: int = effects.get_child_count()
 	_step()
@@ -147,7 +154,7 @@ func test_past_the_cap_a_mine_blast_is_a_point_flash() -> void:
 	var count: int = DestructionDirector.MINE_BLASTS_MAX + 3
 	for i: int in count:
 		offsets.append(Vector3(300.0 * i - 2000.0, 0.0, -1500.0))  # 300 m apart: no chain
-	var mines: MineStandin = _mines(offsets)
+	var mines: MineField = _mines(offsets)
 	for i: int in count:
 		assert_true(mines.strike(i))
 	_step()
@@ -161,7 +168,8 @@ func test_the_console_sets_off_the_nearest_mine_and_it_explodes() -> void:
 	drone.set_physics_process(false)
 	world.spawn(drone, world.to_universe(Vector3.ZERO))
 	drone.damageable.respects_god_mode = true  # stands in for the player
-	var mines: MineStandin = _mines([Vector3(0.0, 0.0, -3000.0), Vector3(0.0, 0.0, -1000.0)])
+	var mines: MineField = _mines([Vector3(0.0, 0.0, -3000.0), Vector3(0.0, 0.0, -1000.0)])
+	MineConsole.new().register(self)  # `Main` registers it in play
 	assert_true(DebugConsole.registry.execute("mines set_off")[0].ok)
 	_step()
 	assert_false(mines.is_alive(1), "the nearest went off")

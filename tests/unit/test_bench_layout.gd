@@ -445,7 +445,7 @@ func test_mines_lie_in_groups_of_4_to_8_of_one_side_each_a_chain() -> void:
 			while k < reached.size():
 				var at: Vector3 = members[reached[k]]["offset"]
 				for j: int in members.size():
-					if not reached.has(j) and at.distance_to(members[j]["offset"]) <= MineStandin.BLAST_RADIUS_M:
+					if not reached.has(j) and at.distance_to(members[j]["offset"]) <= MineKinds.blast(MineKinds.PROX).radius_m:
 						reached.append(j)
 				k += 1
 			assert_eq(reached.size(), members.size(), "%s group %d goes off as one chain" % [case, g])
@@ -454,7 +454,7 @@ func test_mines_lie_in_groups_of_4_to_8_of_one_side_each_a_chain() -> void:
 
 
 func test_no_blast_reaches_from_one_group_to_another() -> void:
-	assert_gt(BenchLayout.MINE_GROUP_GAP_M, 2.0 * MineStandin.BLAST_RADIUS_M, "more than a blast and a margin")
+	assert_gt(BenchLayout.MINE_GROUP_GAP_M, 2.0 * MineKinds.blast(MineKinds.PROX).radius_m, "more than a blast and a margin")
 	for case: Array in MINE_CASES:
 		var mines: Array[Dictionary] = BenchLayout.mines(case[0], case[1], 1)
 		var nearest: float = INF
@@ -493,13 +493,13 @@ func test_the_mines_lie_in_the_rock_slab_on_the_fights_approaches_clear_of_ships
 				var at: Vector3 = m["offset"]
 				if not slab.has_point(at):
 					bad.append("group %d outside the rock slab" % g)
-				if at.length() <= MineStandin.TRIGGER_RADIUS_M:
+				if at.length() <= MineKinds.number(MineKinds.PROX, "trigger_m"):
 					bad.append("group %d inside the player's trigger" % g)
 				for e: Dictionary in plan:
-					if at.distance_to(e["offset"]) <= float(e["radius"]) + MineStandin.TRIGGER_RADIUS_M:
+					if at.distance_to(e["offset"]) <= float(e["radius"]) + MineKinds.number(MineKinds.PROX, "trigger_m"):
 						bad.append("group %d: a ship starts inside a trigger" % g)
 				for r: Dictionary in rocks:
-					if at.distance_to(r["offset"]) <= float(r["radius"]) + MineStandin.DRAWN_RADIUS_M:
+					if at.distance_to(r["offset"]) <= float(r["radius"]) + MineField.BODY_RADIUS_M:
 						bad.append("group %d: a mine inside a rock" % g)
 		assert_eq(bad, [] as Array[String], "%s: every mine in the slab, clear of ships and rocks" % [case])
 		assert_eq(fights.size(), BenchLayout.fights_in_slab(layout, n), "%s: every fight in the slab has mines" % [case])

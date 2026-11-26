@@ -147,7 +147,7 @@ func test_mines_view_returns_the_frame() -> void:
 	await _leave("frame drop 500")
 	assert_true(_run("mines view 300").ok)
 	await _check_home("mines view")
-	var mines: MineStandin = main.bench.standins.get_node("Mines") as MineStandin
+	var mines: MineField = main.bench.standins.mines()
 	assert_almost_eq(main.ship.global_position.distance_to(mines.position_of(0)), 300.0, 5.0, "300 m from the mine")
 
 

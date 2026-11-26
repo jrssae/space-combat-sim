@@ -1,7 +1,7 @@
 class_name NativeWeapons
 extends RefCounted
 ## The stand-ins' weapons on the native rows (M4-T20, architecture §17.13): an `ScsWeaponRows` attached to the simulation
-## core, holding the capitals' guns, interceptors and beam emitters and the mine belt, which `StandinDirector` steps once
+## core, holding the capitals' guns, interceptors and beam emitters, which `StandinDirector` steps once
 ## per tick instead of the GDScript stand-ins. This class binds the stand-ins to the rows (their state taken from the
 ## nodes), keeps the hostility table the kernels read in step with `Factions` and the core's factions, and hands the state
 ## back to the nodes when the rows are rebound.
@@ -16,15 +16,14 @@ var sim: SimCore = null
 ## interceptors and beam emitters of each capital in turn).
 var capitals: Array = []
 var turrets: Array[Node3D] = []
-var mines: MineStandin = null
 
 var _relations_count: int = -1
 var _relations_table: FactionTable = null
 var _relations_revision: int = -1
 
 
-## Binds `p_capitals` (with their turrets' state) and `p_mines` (or null) to new rows on `p_sim`'s core.
-static func bind(p_sim: SimCore, p_capitals: Array, p_mines: MineStandin) -> NativeWeapons:
+## Binds `p_capitals` (with their turrets' state) to new rows on `p_sim`'s core.
+static func bind(p_sim: SimCore, p_capitals: Array) -> NativeWeapons:
 	var made := NativeWeapons.new()
 	made.sim = p_sim
 	made.rows = ClassDB.instantiate(NATIVE_CLASS)
@@ -49,9 +48,6 @@ static func bind(p_sim: SimCore, p_capitals: Array, p_mines: MineStandin) -> Nat
 	made.rows.set_capitals(body_ids)
 	made.rows.set_turrets(owners, locals, roles)
 	made.push_turrets()
-	if p_mines != null and is_instance_valid(p_mines):
-		made.mines = p_mines
-		p_mines.bind_native(made.rows)
 	return made
 
 
@@ -117,13 +113,6 @@ func pull_strike(strike: Dictionary) -> int:
 		else:
 			strike.erase(capitals[c])
 	return int(state[3])
-
-
-## The mines go back to the GDScript.
-func unbind_mines() -> void:
-	if mines != null and is_instance_valid(mines):
-		mines.bind_native(null)
-	mines = null
 
 
 ## Builds the hostility table again when the core knows a new faction, another faction table is active (the bench

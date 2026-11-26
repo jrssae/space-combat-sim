@@ -687,6 +687,21 @@ func raid_station(count: int, scramble: bool = true) -> void:
 		push_error("Mission: raid_station: %s" % why)
 
 
+## Lays a minefield (M10-T15, Q20): `entry` is a `MineFieldPlan` entry (`faction`, `kind`, `pattern` and its numbers, `seed`) plus
+## `anchor` ("origin", the scenario's, or "player", where the player is now) and `at` ([x, y, z] metres from the anchor, default
+## 0). Its mines never hurt `faction`'s side and its friends. Returns whether it was laid.
+func lay_minefield(entry: Dictionary) -> bool:
+	if has_ended():
+		return false
+	journal.append("lay_minefield %s" % entry.get("id", entry.get("pattern", "")))
+	if stage == null:
+		return true  # a pure script run: the field is only noted
+	var why: String = stage.lay_minefield(entry)
+	if not why.is_empty():
+		push_error("Mission: lay_minefield: %s" % why)
+	return why.is_empty()
+
+
 ## Puts `ship_name`'s name and hull on the HUD as a bar while the mission runs (the ship being escorted).
 func show_hull(ship_name: String) -> void:
 	if has_ended() or ship_name.strip_edges().is_empty() or hull_bars.has(ship_name):

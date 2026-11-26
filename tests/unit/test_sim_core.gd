@@ -676,6 +676,13 @@ const CAPITAL_GUN_KERNEL_FILE: String = "res://native/src/capital_gun_kernels.rs
 const CAPITAL_GUN_KERNEL_USER: String = "res://native/src/capital_gun_rows.rs"
 const CAPITAL_GUN_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::brain_maths::",
 		"use crate::intercept_kernels::", "use crate::rows::", "use crate::surface::", "use crate::turret_kernels::", "use crate::v3::", "use crate::weapon_kernels::"]
+## The mines and their layers (M10-T15): a mine's triggers, touches, flights and the battle's laying, held to the kernels' rules;
+## they import the row tables, the surfaces' maths and the vector maths (and each other). The shell (`mine_rows.rs`) is what
+## GDScript reaches.
+const MINE_KERNEL_FILES: Array[String] = ["res://native/src/mine_kernels.rs", "res://native/src/mine_layers.rs"]
+const MINE_KERNEL_USER: String = "res://native/src/mine_rows.rs"
+const MINE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::capital_gun_kernels::", "use crate::mine_kernels::",
+		"use crate::rows::", "use crate::surface::", "use crate::v3::"]
 ## The capital ships' helm and brain (M10-T16): the helm's command, the brain's states, targets and attitude, held to the
 ## kernels' rules; they import the row tables, the surfaces' and the brains' maths and each other only. The shell
 ## (`capital_brain_rows.rs`) is what GDScript reaches; the AI job (`brain_step.rs`) thinks them.
@@ -758,6 +765,10 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(BEAM_KERNEL_FILE, KERNEL_FORBIDDEN, BEAM_KERNEL_USE_ALLOWED))
 	assert_true(FileAccess.get_file_as_string(BEAM_KERNEL_USER).contains("use crate::beam_kernels"), "the shell reads the beam kernel")
 	assert_false(FileAccess.get_file_as_string(BEAM_KERNEL_FILE).contains("static mut"), "no shared state in the beam kernel")
+	for path: String in MINE_KERNEL_FILES:
+		violations.append_array(_engine_free_violations(path, KERNEL_FORBIDDEN, MINE_KERNEL_USE_ALLOWED))
+		assert_false(FileAccess.get_file_as_string(path).contains("static mut"), "no shared state in %s" % path.get_file())
+	assert_true(FileAccess.get_file_as_string(MINE_KERNEL_USER).contains("use crate::mine_kernels::"), "the shell reads the mine kernel")
 	violations.append_array(_engine_free_violations(CAPITAL_GUN_KERNEL_FILE, KERNEL_FORBIDDEN, CAPITAL_GUN_KERNEL_USE_ALLOWED))
 	assert_true(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_USER).contains("use crate::capital_gun_kernels"),
 			"the shell reads the capital gun kernel")
@@ -866,13 +877,13 @@ func test_sync_in_and_sync_out_are_the_only_places_the_core_touches_the_engine()
 # --- the weapon kernels (M4-T20) ----------------------------------------------------------------------------------------
 
 
-## The weapon kernels (`native/src/weapon_kernels.rs`: turrets, interceptors, strike targets, missiles, mines) hold no way to
+## The weapon kernels (`native/src/weapon_kernels.rs`: turrets, interceptors, strike targets, missiles) hold no way to
 ## the engine either, under the same tokens as the core's kernels; their shell reads them through the crate path.
 const WEAPON_KERNEL_FILE: String = "res://native/src/weapon_kernels.rs"
 const WEAPON_KERNEL_USERS: Array[String] = ["res://native/src/weapon_rows.rs"]
 const WEAPON_KERNEL_USE_ALLOWED: Array[String] = ["use std::", "use godot::builtin::{Basis, Vector3};",
-		"use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_TIER, Rows};",
-		"use crate::v3::"]  # FLAG_TIER: M4-T23's blast on tier rows
+		"use crate::rows::{Bolts, FLAG_RIGID, Rows};",
+		"use crate::v3::"]
 
 
 func test_the_weapon_kernels_hold_no_engine_type() -> void:
@@ -880,7 +891,7 @@ func test_the_weapon_kernels_hold_no_engine_type() -> void:
 	assert_eq(violations.size(), 0, "no engine type, call, crate path or stray import in the weapon kernels: %s" % violations)
 	var source: String = FileAccess.get_file_as_string(WEAPON_KERNEL_FILE)
 	for kernel: String in ["pub fn retarget", "pub fn aim_gun", "pub fn gate", "pub fn intercept_candidates", "pub fn strike_target",
-			"pub fn steer", "pub fn mine_hits", "pub fn blast"]:
+			"pub fn steer"]:
 		assert_true(source.contains(kernel), "the weapon kernels hold %s" % kernel)
 	assert_false(source.contains("static mut") or source.contains("thread_local") or source.contains("Cell<"),
 			"no shared mutable state in the weapon kernels (T18's threads)")

@@ -20,7 +20,7 @@ extends Node
 ## are `StaticRows` with no node: they stay in a grid of their own between ticks, rebuilt only when a rock changes, and a bolt
 ## that reaches one first is spent there (rocks never break; any bolt of another faction stops on one). The mines' bodies
 ## (M7-T64) share that grid, every belt's mines after the rocks: a shot of any side that reaches one first is spent there and
-## sets it off (`MineStandin.strike`). The bolt is spent,
+## sets it off (`MineField.strike`). The bolt is spent,
 ## `Damageable.apply_hit` runs, an `ImpactFlash` is added and `hit_resolved` is emitted for the HUD and sound; a missile's
 ## warhead then blasts there too (M10-T09, `BlastResolver`). Nothing is cached
 ## between ticks, so a `World.rebase()` changes nothing. The target's rotation during one
@@ -118,9 +118,9 @@ var _solid_moves: int = -1
 var _rock_count: int = 0
 var _static_positions := PackedVector3Array()
 var _static_radii := PackedFloat64Array()
-var _mine_belts: Array[MineStandin] = []
+var _mine_belts: Array[MineField] = []
 var _mine_slots := PackedInt32Array()
-var _kept_belts: Array[MineStandin] = []
+var _kept_belts: Array[MineField] = []
 var _kept_origins := PackedVector3Array()
 var _belts_version: int = -1
 var _rock_t: float = INF
@@ -385,10 +385,10 @@ func _rock_pairs(sim: SimCore) -> PackedInt64Array:
 
 # Whether a belt came, went or moved since the grid was kept.
 func _belts_changed() -> bool:
-	if MineStandin.belts_version != _belts_version:
+	if MineField.fields_version != _belts_version:
 		return true
 	for k: int in _kept_belts.size():
-		var belt: MineStandin = _kept_belts[k]
+		var belt: MineField = _kept_belts[k]
 		if not is_instance_valid(belt) or belt.global_position != _kept_origins[k]:
 			return true
 	return false
@@ -403,19 +403,19 @@ func _keep_statics() -> void:
 	_mine_slots.clear()
 	_kept_belts.clear()
 	_kept_origins.clear()
-	for belt: MineStandin in MineStandin.belts:
-		if not is_instance_valid(belt) or not belt.is_inside_tree():
-			continue
+	for belt: MineField in MineField.fields:
+		if not is_instance_valid(belt) or not belt.placed or not belt.is_inside_tree():
+			continue  # the battle's field holds moving mines: shots reach the placed ones only
 		var origin: Vector3 = belt.global_position
 		_kept_belts.append(belt)
 		_kept_origins.append(origin)
 		var offsets: PackedVector3Array = belt.offsets()
 		for i: int in offsets.size():
 			_static_positions.append(origin + offsets[i])
-			_static_radii.append(MineStandin.DRAWN_RADIUS_M)
+			_static_radii.append(MineField.BODY_RADIUS_M)
 			_mine_belts.append(belt)
 			_mine_slots.append(i)
-	_belts_version = MineStandin.belts_version
+	_belts_version = MineField.fields_version
 	_rocks.keep(_static_positions, _static_radii)
 
 
@@ -438,7 +438,7 @@ func _earliest_rock(c: int, keys: PackedInt64Array, first: int, next: int, rock_
 			if not friendly_fire and bolt_faction == _solid.factions[s]:
 				continue  # a rock's own faction passes it, as a buoy's does
 		else:
-			var belt: MineStandin = _mine_belts[s - _rock_count]
+			var belt: MineField = _mine_belts[s - _rock_count]
 			if not is_instance_valid(belt) or not belt.can_strike(_mine_slots[s - _rock_count]):
 				continue  # spent, or already hit this tick
 		var centre: Vector3 = _static_positions[s]

@@ -147,6 +147,7 @@ func _ready() -> void:
 		CapitalFlight.attach(_world_signals).join(self)
 		CapitalBeams.attach(_world_signals).join(self)  # its beam emitters on the native rows (M10-T12)
 		CapitalGuns.attach(_world_signals).join(self)  # its guns and launchers on the native rows (M10-T14)
+		MineLayers.join_ship(self, _world_signals)  # its mine mounts, laid by the core (M10-T15)
 	var destruction: DestructionDirector = DestructionDirector.current()
 	if destruction != null:
 		destruction.watch_capital(self)  # its death is drawn and takes it out of play (M10-T21)
@@ -170,6 +171,9 @@ func _exit_tree() -> void:
 		var guns: CapitalGuns = CapitalGuns.of(_world_signals)
 		if guns != null:
 			guns.leave(self)
+		var layers: MineLayers = MineLayers.of(_world_signals)
+		if layers != null:
+			layers.leave(self)
 	_world_signals = null
 	if _core != null and is_instance_valid(_core):
 		_core.clear_surface(get_instance_id())

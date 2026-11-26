@@ -15,7 +15,7 @@ from . import ea_hyperion, ea_nova, ea_omega, ea_shuttles, ea_thunderbolt, ea_wo
 from . import grid_heavy_cannon
 from . import grid_interceptor_battery, jumpgate, planet, saturn_family, skylark_transport
 from . import maintenance_bot, minbari_flyer, narn_transport, nav_buoy, organic_test_hull, raider_fighter, raider_strike_carrier
-from . import sfx_combat, sfx_ui, sfx_world, sky_default
+from . import sfx_combat, sfx_ui, sfx_world, sky_default, space_mines
 from . import starfury_aurora
 
 ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
@@ -50,6 +50,7 @@ ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
     "sfx_ui": sfx_ui.build,
     "sfx_world": sfx_world.build,
     "sky_default": sky_default.build,
+    "space_mines": space_mines.build,
     "skylark_transport": skylark_transport.build,
     "starfury_aurora": starfury_aurora.build,
     **saturn_family.BUILDERS,

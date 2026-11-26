@@ -462,6 +462,7 @@ func step_now(delta: float) -> void:
 	turrets.step(now_s, delta)
 	if capital_guns != null and is_instance_valid(capital_guns):
 		capital_guns.step_now(self, now_s, delta)
+	MineField.step_all(now_s, delta)  # after the interceptors' pulses met the mines in flight (M10-T15)
 	var fired: int = Time.get_ticks_usec()
 	cannon_us = fired - started
 	expired_last_tick = int(core.step_bolts(now_s, delta))

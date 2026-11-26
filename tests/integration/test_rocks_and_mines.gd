@@ -267,7 +267,7 @@ func test_a_rebase_moves_rocks_and_mines_once() -> void:
 	var rocks: Array[Dictionary] = [GeneratedRocks.round_rock(Vector3(100.0, 0.0, -1000.0), 40.0),
 			GeneratedRocks.round_rock(Vector3(-300.0, 50.0, -2000.0), 80.0)]
 	var field: AsteroidBelt = standins.add_asteroids(rocks, world.to_universe(Vector3.ZERO))
-	var mines: MineStandin = standins.add_mines([{"offset": Vector3(500.0, 0.0, -1500.0), "faction": Factions.RAIDERS}],
+	var mines: MineField = standins.add_mines([{"offset": Vector3(500.0, 0.0, -1500.0), "faction": Factions.RAIDERS}],
 			world.to_universe(Vector3.ZERO))
 	var rock_before: Vector3 = StaticRows.position_of(field.row_id(1))
 	var mine_before: Vector3 = StaticRows.position_of(mines.row_id(0))
@@ -298,7 +298,7 @@ func test_a_rebase_moves_rocks_and_mines_once() -> void:
 
 
 func test_a_mine_leaves_the_rows_when_it_fires_and_comes_back_when_laid_again() -> void:
-	var mines: MineStandin = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
+	var mines: MineField = standins.add_mines([{"offset": Vector3(0.0, 0.0, -1000.0), "faction": Factions.EARTH_ALLIANCE},
 			{"offset": Vector3(0.0, 0.0, -3000.0), "faction": Factions.EARTH_ALLIANCE}], world.to_universe(Vector3.ZERO))
 	var first: int = mines.row_id(0)
 	assert_true(StaticRows.has(first), "a laid mine is a row")
@@ -306,20 +306,22 @@ func test_a_mine_leaves_the_rows_when_it_fires_and_comes_back_when_laid_again() 
 	var at: int = StaticRows.ids.find(first)
 	assert_eq(StaticRows.kinds[at], BodyKind.MINE, "of kind mine")
 	assert_eq(StaticRows.factions[at], Factions.EARTH_ALLIANCE, "owned by its side")
-	assert_eq(StaticRows.radii[at], MineStandin.TRIGGER_RADIUS_M, "as big as its trigger")
+	assert_eq(StaticRows.radii[at], MineKinds.number(MineKinds.PROX, "trigger_m"), "as big as its trigger")
 	assert_eq(StaticRows.solid().ids.size(), 0, "a mine is not solid: bolts and rams pass it")
 	var hostile: TargetDrone = _drone(Vector3(0.0, 0.0, -1010.0))
 	var sim: SimCore = SimCore.attach(world)  # the mines step on the core's rows (M4-T37: their GDScript step is gone)
-	for i: int in MineStandin.TRIGGER_TICKS:
+	for i: int in MineKinds.CHECK_TICKS:
 		sim.sync_now()  # the rows as the bodies stand now: this test steps the stand-ins by hand
+		MineField.step_all(now_s, DT)
 		standins.step(DT, now_s)
 		now_s += DT
 	assert_false(mines.is_alive(0), "the hostile set it off")
 	assert_false(StaticRows.has(first), "a mine that went off is no longer a row")
 	assert_true(StaticRows.has(mines.row_id(1)), "the other stays")
 	hostile.global_position = Vector3(0.0, 0.0, 5000.0)
-	for i: int in roundi(MineStandin.RELAY_S / DT) + MineStandin.TRIGGER_TICKS:
+	for i: int in roundi(MineField.RELAY_S / DT) + MineKinds.CHECK_TICKS:
 		sim.sync_now()
+		MineField.step_all(now_s, DT)
 		standins.step(DT, now_s)
 		now_s += DT
 	assert_true(mines.is_alive(0), "laid again")
@@ -338,7 +340,7 @@ func test_a_side_knows_its_own_mines_and_not_an_enemys_and_rocks_are_for_everyon
 	var field: AsteroidBelt = standins.add_asteroids([rock] as Array[Dictionary], world.to_universe(Vector3.ZERO))
 	var raider: TargetDrone = _drone(Vector3.ZERO, Factions.RAIDERS)
 	var ally: TargetDrone = _drone(Vector3(0.0, 50.0, 0.0), Factions.EARTH_ALLIANCE)
-	var mines: MineStandin = standins.mines()
+	var mines: MineField = standins.mines()
 	for native: bool in _paths():
 		ContactScan.invalidate()
 		var scan: ContactScan = ContactScan.shared(get_tree())
@@ -379,7 +381,7 @@ func test_a_fighter_steers_round_its_own_mine_and_flies_straight_over_an_enemy_o
 		ContactScan.invalidate()
 		StaticRows.clear()
 		var mine := Vector3(float(i) * LANE_SPACING_M, 0.0, 0.0)
-		ContactScan.register_static(StaticRows.new_id(), mine, MineStandin.TRIGGER_RADIUS_M, BodyKind.MINE, cases[i]["mine"],
+		ContactScan.register_static(StaticRows.new_id(), mine, MineKinds.number(MineKinds.PROX, "trigger_m"), BodyKind.MINE, cases[i]["mine"],
 				world)
 		var ship: Combatant = _ai_ship("RUNNER %d" % i, Factions.RAIDERS, mine + Vector3(0.0, 0.0, MINE_START_M),
 				Vector3(0.0, 0.0, -MINE_SPEED_MPS))
@@ -396,9 +398,9 @@ func test_a_fighter_steers_round_its_own_mine_and_flies_straight_over_an_enemy_o
 		var own: bool = cases[i]["mine"] == Factions.RAIDERS
 		var label: String = "%s mine on the %s path" % ["its own" if own else "an enemy", "native" if cases[i]["native"]
 				else "GDScript"]
-		gut.p("%s: closest %.1f m (trigger %.1f m)" % [label, monitor.min_m, MineStandin.TRIGGER_RADIUS_M])
+		gut.p("%s: closest %.1f m (trigger %.1f m)" % [label, monitor.min_m, MineKinds.number(MineKinds.PROX, "trigger_m")])
 		if own:
-			assert_gt(monitor.min_m, MineStandin.TRIGGER_RADIUS_M, "%s: kept out of its trigger" % label)
+			assert_gt(monitor.min_m, MineKinds.number(MineKinds.PROX, "trigger_m"), "%s: kept out of its trigger" % label)
 		else:
 			assert_lt(monitor.min_m, 20.0, "%s: flown straight over, unseen" % label)
 		monitor.free()

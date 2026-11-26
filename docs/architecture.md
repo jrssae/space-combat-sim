@@ -2500,7 +2500,7 @@ assets/shaders/far_ship_dot.gdshader   the dot: the hull's angular size with a 1
 ```
 src/perf/standins/missile_standin.gd   MissileStandin (RefCounted): a missile's steering, proportional navigation, the launch
 src/perf/standins/beam_standin.gd      BeamStandin (Node3D under a capital): fires a 3 km hitscan beam as a one-tick projectile
-src/perf/standins/mine_standin.gd      MineStandin (Node3D): every mine of the battle as rows, the trigger cadence and the blast
+src/perf/standins/mine_standin.gd      (gone, M10-T15: `MineField`, section 22.9) every mine of the battle as rows
 src/weapons/projectile.gd              + `steering` (a guided projectile's hook), `fire_beam` (a beam's one tick)
 src/combat/hit_resolver.gd             + a beam is retired after the resolve that swept it
 ```
@@ -2523,7 +2523,7 @@ src/combat/hit_resolver.gd             + a beam is retired after the resolve tha
 - **Interceptors** now take candidates from the hit broad phase: once a tick the director gathers every projectile in flight but
   beams and asks the grid which lie within 1.5 km of each interceptor due (the interceptors as hulls of 1.5 km reach, the
   projectiles as points), then each interceptor shoots down the nearest hostile missile in reach, else the nearest hostile bolt.
-- **Mines** are rows in one `MineStandin` node (no node per mine, one `MultiMeshInstance3D` draws them): 50 m trigger, 100 m blast,
+- **Mines** (M4-T12; since M10-T15 the `MineField` of section 22.9, with T03's 60 m trigger and falloff blasts, where this note's flat numbers no longer hold) are rows in one node (no node per mine, one `MultiMeshInstance3D` draws them): 50 m trigger, 100 m blast,
   200 hull points. The layout lays the mix's mines (`max(100, N)`, every one) as small groups (M7-T65): each side's share in seeded
   groups of 4 to 8 (sizes adding up to the share), laid only in the fights inside the rock slab, where the fighters were measured
   to fight: 2.5 to 4.4 km out from a fight's centre along a side's direction, 700 m either way across it and 1 km below to 300 m
@@ -7548,3 +7548,74 @@ data/capitals/capitals.json                `capital_brain`: the brain's numbers,
 - **Known gaps.** A capital in the low-attention tier thinks but its row flies its last cruise (the tier's capital law), so it does
   not manoeuvre far from the player; carriers do not launch (T17); no Xill belly-on passes yet (no Xill hull); torpedo craft have
   no reactor runs (none fly); the fighters' abort counts a squadron's losses from its peak, not only those to a capital.
+
+### 22.9 Mines and minefields (D12.9; T15, Q20)
+
+```
+native/src/mine_kernels.rs      the mines: slots in a field's frame, triggers, touches, flights, arming, the guided mine's homing,
+                                blast reach, the radar's short range; engine-free (guard test); mine_kernels/tests.rs
+native/src/mine_layers.rs       the hulls that lay mines in battle: what a mount sees, when it lays, where an energy mine
+                                stops; engine-free (guard test); mine_layers/tests.rs
+native/src/mine_rows.rs         ScsMineRows: one a field, the core's shell (step, lay, detonate, in_blast, radar, layers, digest)
+native/src/weapon_kernels.rs    - the M4 stand-in's mine kernels (mine_hits, mine_touches, blast, ...); weapon_rows.rs - set_mines,
+                                mine_step, blast, mines_in_blast
+src/combat/mines/mine_field.gd  MineField (Node3D): a field's draw (a MultiMesh a kind), its static rows, what a step names landed
+src/combat/mines/mine_kinds.gd  MineKinds: data/capitals/mines.json as the rows take it, the blast of each kind
+src/combat/mines/mine_field_plan.gd  MineFieldPlan: where a field's mines lie, from one data entry (pure, seeded)
+src/combat/mines/mine_layers.gd MineLayers: a ship's `mine` mounts joined to the battle's field
+src/combat/mines/mine_console.gd the `mines` command and provider
+tools/procgen/assets/space_mines.py  the three kinds' textured meshes (assets/generated/space_mines)
+data/capitals/mines.json        each kind's numbers (T03's) and how a mount lays it
+```
+
+- **Three kinds, one table.** A field's mines are slots of one native table in the field's frame (offsets from its node, which
+  rides the anchor: a rebase moves the node, the frame's drift carries the mines). A kind is data (`mines.json`; the blast is
+  `BlastTable`'s row of the same name): `mine_prox` (60 m from the hull's surface, hostile only, 3 m body, blast 300 / 120 m),
+  `mine_energy` (flies at 900 m/s to a lead point, arms there, goes off on a hostile capital within 200 m or 5 s after arriving,
+  toughness 3, blast 250 / 300 m) and `mine_guided` (dormant 60 s, then homes at 150 m/s on a hostile within 800 m, 30 m trigger,
+  blast 400 / 60 m).
+- **What sets one off.** A hull **hostile to the layer by its true faction** (a transponder's disguise does not fool a mine, Q55)
+  within the trigger of its **surface** (a big hull's nearest hit volume, a fighter's sphere), one tick in three by slot (the
+  cadence `CHECK_TICKS`); any hull of any side whose body touches a mine's 3 m body, every tick along its move (a fast hull
+  cannot pass through; a big hull by its volumes; a laid mine ignores its own ship's touch for 6 s); a shot (the hit resolver
+  stops any side's bolt on a placed mine, `MineField.strike`, M7-T64); a blast of any source reaching its body
+  (`MineField.blast_reached`, called by `BlastResolver._land`, so a death's blast sets mines off and a mine's sets its
+  neighbours off: a field goes off as a chain); a fuse; a flight that ended. The core names the mines (`ScsMineRows.step`); the
+  field lands each one's blast through T09's `BlastResolver` (falloff damage and push on every hull in reach, friend or foe) and
+  draws it (`DestructionDirector.watch_mines`). The landing stays GDScript's until T76 moves blasts into Rust: the seam is
+  `BlastResolver._land`'s one call and `ScsMineRows.in_blast`.
+- **In flight a mine is a bolt row.** An energy mine and a homing guided mine are owned bolt rows of the missile kind (no
+  damage, no look, `hits_left` from the kind's toughness): the capitals' interceptors shoot them down like any missile (three
+  pulses for an energy mine); the field draws the mine itself from its row's place. A row spent by the pulses takes the mine out
+  of play with no blast; a row that vanished (a hull struck it, its time ran out) sets it off where it was. A mine on the ground
+  is no bolt: only touches, shots (placed fields) and blasts reach it. Batteries cover the hemispheres over their decks, so an
+  Omega's side batteries engage a mine coming in from the flank, not one level along its axis.
+- **Laying in battle.** `MineLayers` joins a hull's `mine` mounts (hardpoints `weapons[]` of kind `mine`; the weapon id's kind in
+  `loadouts.json` decides it) to the battle's own `MineField` (`MineField.battle`, 256 slots, made on demand). The core's
+  `mine_layers::decide` runs each mount on its cycle: the G'Quan's energy launchers (`narn_energy_mine`, 2) pick the nearest
+  hostile capital (as the ship perceives it, so a disguised renegade is passed by) 4 to 12 km away inside a 60 deg cone and send a
+  mine at where it will be, stopping 100 m short of its surface (`surface::path_entry`); the Vorchan's mount (`centauri_guided_mine`)
+  drops 4 guided mines side by side every 30 s while a hostile hull is within 3 km astern, at most 12 in play from the ship. A
+  lost section, a hulk or a wreck stops a mount (`MineLayers.refresh`). No hull has these mounts yet (T25, T26): the tests drive
+  the layers with the test cruiser's.
+- **Placing fields (data).** A scenario's `minefields[]` and a mission's `MissionApi.lay_minefield` take one entry
+  (`MineFieldPlan`: `faction`, `kind`, `pattern` box, sphere, shell, ring, line or points, its numbers, `seed`, `min_gap_m`;
+  `centre` the field's anchor in a scenario, `at` and `anchor` in a mission). The mines of a placed field are `StaticRows` of
+  kind `MINE` (its own side and its friends' steer round them, an enemy's stay hidden, Q27) and shootable; the battle's field is
+  neither (its mines move).
+- **Radar (Q20).** `RadarContacts.gather` adds the mines the player's side may see from `ScsMineRows.radar`: its own and its
+  friends' (any not hostile to it) always, a hostile one only within 1 km, in flight too; ids below `MineField.RADAR_ID_BASE`
+  (never a body). The AI's perception keeps its rule (an enemy's mine is hidden until it goes off).
+- **Cost and threads.** The step is on the main thread after the capital guns (so the interceptors' pulses have met the mines in
+  flight) and before the bolts move (`SimCore.step_now` calls `MineField.step_all`); no randomness, slot and hull order, a
+  cadence counted per field: 1 and 6 threads go off alike (`test_mine_field_threads`). 500 mines through the seeded furball
+  (102 rows): median 40 us a tick, p99 70 us, with one thread and six (`test_mine_cost`); a blast's landing is T09's
+  170 to 220 us each.
+- **Console and state.** `mines [view|set_off|list|spawn|clear]`, provider `mines` (`info.md`); `MineConsole` is registered by
+  `Main`. Tests: `mine_kernels` and `mine_layers` in cargo; `test_mine_kinds`, `test_mine_field_plan`, `test_mine_field`
+  (the scene: trigger, falloff, chain, a death's blast, the hull touch, the energy mine arriving and shot down, guided drops,
+  radar, scenario and mission data, console), `test_mine_field_threads`, `test_mine_cost`, and the M7-T64 files ported
+  (`test_standins`, `test_rocks_and_mines`, `test_mine_blast`, `test_bench`).
+- **Known gaps.** Mines in flight cannot be shot by the player's guns (only interceptors stop them); a guided mine does not
+  home on a hull with no hit volumes beyond its sphere's gap; an energy mine's stand-off is read from the surface at launch (a
+  target that turns after launch may be missed); the bench's counters and `StandinDirector.add_mines` stay until T45.

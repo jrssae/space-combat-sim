@@ -285,7 +285,7 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 		if rocks is MultiMeshInstance3D and (rocks as MultiMeshInstance3D).is_visible_in_tree():
 			drawn += (rocks as MultiMeshInstance3D).multimesh.instance_count
 	assert_eq(drawn, int(mix["asteroids"]), "and are drawn")
-	var mines: MineStandin = standins.mines()
+	var mines: MineField = standins.mines()
 	assert_not_null(mines, "the mines stay")
 	if mines != null:
 		for i: int in mines.count():
@@ -317,7 +317,7 @@ func test_a_short_battle_writes_every_entity_count_and_puts_the_factions_back() 
 # M7-T64: after the run a mine of the player's own side and an enemy's each go off when the player's side shoots it and when the
 # player flies into it; a mine of its own side 30 m off, inside the trigger but not touched, stays. M7-T65: each takes its whole
 # group with it as a chain, and nothing beyond. Read on the console.
-func _assert_mines_go_off_after_the_run(mines: MineStandin) -> void:
+func _assert_mines_go_off_after_the_run(mines: MineField) -> void:
 	if mines == null:
 		return
 	DebugConsole.flags.invulnerable = true  # the blasts would kill the player
@@ -355,7 +355,7 @@ func _assert_mines_go_off_after_the_run(mines: MineStandin) -> void:
 	for k: int in own[2]:
 		outer = k if mines.position_of(k).distance_to(centre) > mines.position_of(outer).distance_to(centre) else outer
 	var out: Vector3 = (mines.position_of(outer) - centre).normalized()
-	await _hold_player_at(mines.position_of(outer) + (out if out != Vector3.ZERO else Vector3.UP) * 30.0, 2 * MineStandin.TRIGGER_TICKS)
+	await _hold_player_at(mines.position_of(outer) + (out if out != Vector3.ZERO else Vector3.UP) * 30.0, 2 * MineKinds.CHECK_TICKS)
 	assert_eq(_alive_in(mines, own[2]), own[2].size(), "the player's own mines 30 m off, untouched, stay")
 	# The battle flies on around the mines, so the counts are at least these (its fighters may set off others meanwhile).
 	var gone: int = own[0].size() + own[1].size() + foe[0].size() + foe[1].size()
@@ -364,18 +364,18 @@ func _assert_mines_go_off_after_the_run(mines: MineStandin) -> void:
 	assert_gte(int(_read("combat.mines_struck")) - int(before["combat.mines_struck"]), 2, "the bolts stopped on them")
 	assert_gte(int(_read("mines.by_touch")) - int(before["mines.by_touch"]), 2, "two by a touch")
 	assert_gte(int(_read("mines.by_blast")) - int(before["mines.by_blast"]), gone - 4, "the rest of each group by the chain")
-	await _hold_player_at(mines.global_position + home, 30)  # back where the fighters and capitals fly near
+	await _hold_player_beside(mines, home, 30)  # back where the fighters and capitals fly near
 	DebugConsole.flags.invulnerable = false
 	main.combatant.damageable.restore()
 
 
 # Up to `n` whole groups of mines in play of `side` (or hostile to it), nearest the player first: mines linked by blasts, none
 # of another group or a ship within two blasts of them.
-func _lone_groups(mines: MineStandin, side: StringName, hostile: bool, n: int) -> Array[PackedInt32Array]:
+func _lone_groups(mines: MineField, side: StringName, hostile: bool, n: int) -> Array[PackedInt32Array]:
 	var out: Array[PackedInt32Array] = []
 	var seen: Dictionary = {}
-	var link_m: float = MineStandin.BLAST_RADIUS_M + MineStandin.DRAWN_RADIUS_M
-	var clear_m: float = 2.0 * MineStandin.BLAST_RADIUS_M
+	var link_m: float = MineKinds.blast(MineKinds.PROX).radius_m + MineField.BODY_RADIUS_M
+	var clear_m: float = 2.0 * MineKinds.blast(MineKinds.PROX).radius_m
 	var order: Array[int] = []
 	for i: int in mines.count():
 		order.append(i)
@@ -409,7 +409,7 @@ func _lone_groups(mines: MineStandin, side: StringName, hostile: bool, n: int) -
 	return out
 
 
-func _alive_in(mines: MineStandin, group: PackedInt32Array) -> int:
+func _alive_in(mines: MineField, group: PackedInt32Array) -> int:
 	var alive: int = 0
 	for i: int in group:
 		alive += 1 if mines.is_alive(i) else 0
@@ -424,20 +424,20 @@ func test_ai_fighters_set_off_mines_in_a_battle_of_300() -> void:
 		return
 	assert_true(_exec("bench battle 300 5 warmup=0 seed=1 label=battle_mines_test").ok)
 	await _ticks(2)
-	var mines: MineStandin = main.bench.standins.mines()
+	var mines: MineField = main.bench.standins.mines()
 	assert_not_null(mines, "the mines are laid")
 	if mines == null:
 		return
 	var by_fighters: Array[int] = [0]
 	var hulls_before: Array[int] = [mines.by_trigger + mines.by_touch]
 	var chained: Array[int] = [0]
-	mines.detonated.connect(func(i: int) -> void:
+	mines.detonated.connect(func(i: int, _kind: int, _at: Vector3) -> void:
 		var hulls: int = mines.by_trigger + mines.by_touch
 		if hulls == hulls_before[0]:
 			chained[0] += 1
 			return
 		hulls_before[0] = hulls
-		var reach: float = MineStandin.TRIGGER_RADIUS_M + 30.0  # a fighter's hull and a tick's flight
+		var reach: float = MineKinds.number(MineKinds.PROX, "trigger_m") + 30.0  # a fighter's hull and a tick's flight
 		for c: Combatant in main.ships.alive():
 			if c != main.combatant and TierDirector.flying_position(c.ship).distance_to(mines.position_of(i)) < reach:
 				by_fighters[0] += 1
@@ -448,11 +448,21 @@ func test_ai_fighters_set_off_mines_in_a_battle_of_300() -> void:
 	assert_gt(chained[0], 0, "and their groups went off after them")
 
 
+# The player held still `offset` from `node` for `ticks` physics ticks: the place is read again each tick, since a rebase moves the
+# node (M10-T15: the lone groups the checks fly to are far now, so the way back crosses one).
+func _hold_player_beside(node: Node3D, offset: Vector3, ticks: int) -> void:
+	for t: int in ticks:
+		main.ship.global_position = node.global_position + offset
+		main.ship.linear_velocity = main.world.rest_velocity()
+		main.ship.angular_velocity = Vector3.ZERO
+		await _ticks(1)
+
+
 # The player held still at `at` for `ticks` physics ticks.
 func _hold_player_at(at: Vector3, ticks: int) -> void:
 	for t: int in ticks:
 		main.ship.global_position = at
-		main.ship.linear_velocity = Vector3.ZERO
+		main.ship.linear_velocity = main.world.rest_velocity()  # at rest in the frame: a blast's push may have boosted it (M10-T15)
 		main.ship.angular_velocity = Vector3.ZERO
 		await _ticks(1)
 

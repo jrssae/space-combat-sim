@@ -1142,6 +1142,8 @@ The capital rows were scaled to the new hull points (x0.3) to keep the draft's p
 | `mine_energy` | G'Quan, 2 launchers, 1 a 20 s each, at capitals 4 to 12 km away | flies at 900 m/s to the lead point, arms there, goes off on a hostile capital within 200 m or 5 s after arriving | 200 m, capitals only | as a missile while flying |
 | `mine_guided` | Vorchan, while a hostile is astern within 3 km: 4 every 30 s, at most 12 in play | dormant for 60 s, homes at 150 m/s on a hostile within 800 m | 30 m | hostile within 1 000 m |
 
+As built (M10-T15, `docs/architecture.md` 22.9): the numbers above are `data/capitals/mines.json`; an energy mine stops 100 m short of its target's surface; a mine in flight is a bolt row the interceptors shoot down (three pulses for an energy mine); a hostile mine shows on the radar within 1 km, its own side's always; nothing in a hull lays them until the G'Quan (T25) and the Vorchan (T26).
+
 ### Jump points (Q22, Q49)
 
 Unchanged from Q49's list:

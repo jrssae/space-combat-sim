@@ -125,6 +125,7 @@ func step() -> void:
 		world.rebase(offset)
 		_rebased -= offset
 	_hits.clear()
+	MineField.step_all(now_s, DT)  # the mines step on the core's rows with the weapons (M10-T15)
 	director.step(DT, now_s)
 	director.pull_native_state()
 	log.append(_entry())
@@ -248,12 +249,12 @@ func _entry() -> Dictionary:
 	for k: int in _laid.size():
 		alive.append(1 if is_instance_valid(_laid[k]) and not _laid[k].is_spent() else 0)
 	var hits: Array = _hits.duplicate()  # in the order the blasts landed
-	var mines: MineStandin = director.mines()
+	var mines: MineField = director.mines()
 	var mine_alive := PackedByteArray()
 	for i: int in mines.count():
 		mine_alive.append(1 if mines.is_alive(i) else 0)
 	return {"tick": tick, "turrets": turrets, "made": made, "alive": alive, "hits": var_to_bytes(hits),
-			"mines": mine_alive, "checked": mines.checked_last_tick,
+			"mines": mine_alive,
 			"counts": [director.intercepts, director.missile_intercepts, director.beam_shots, director.missile_launches,
 					director.detonations]}
 

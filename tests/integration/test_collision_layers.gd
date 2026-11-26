@@ -276,7 +276,7 @@ func test_a_mine_has_no_body() -> void:
 	standins.projectiles = projectiles
 	world.add_child(standins)
 	standins.set_physics_process(false)
-	var mines: MineStandin = standins.add_mines([{"offset": Vector3(0.0, 0.0, -300.0), "faction": Factions.RAIDERS},
+	var mines: MineField = standins.add_mines([{"offset": Vector3(0.0, 0.0, -300.0), "faction": Factions.RAIDERS},
 			{"offset": Vector3(0.0, 0.0, -600.0), "faction": Factions.EARTH_ALLIANCE}] as Array[Dictionary], world.to_universe(Vector3.ZERO))
 	assert_false(mines.is_class("CollisionObject3D"))
 	assert_eq(mines.find_children("*", "CollisionObject3D", true, false).size(), 0)

@@ -460,11 +460,11 @@ static func mines(layout: StringName, n: int, seed_value: int, rock_list: Varian
 	rng.seed = hash([String(layout), n, seed_value, "mines"])
 	var obstacles: Dictionary = {}
 	for e: Dictionary in plan(layout, n, seed_value):
-		_grid_add(obstacles, e["offset"] as Vector3, float(e["radius"]) + MineStandin.TRIGGER_RADIUS_M)
-	_grid_add(obstacles, Vector3.ZERO, MINE_PLAYER_RADIUS_M + MineStandin.TRIGGER_RADIUS_M)
+		_grid_add(obstacles, e["offset"] as Vector3, float(e["radius"]) + MineKinds.number(MineKinds.PROX, "trigger_m"))
+	_grid_add(obstacles, Vector3.ZERO, MINE_PLAYER_RADIUS_M + MineKinds.number(MineKinds.PROX, "trigger_m"))
 	var rock_rows: Array = rock_list if rock_list is Array else rocks(layout, n, seed_value)
 	for r: Dictionary in rock_rows:
-		_grid_add(obstacles, r["offset"] as Vector3, float(r["radius"]) + MineStandin.DRAWN_RADIUS_M + MINE_ROCK_CLEARANCE_M)
+		_grid_add(obstacles, r["offset"] as Vector3, float(r["radius"]) + MineField.BODY_RADIUS_M + MINE_ROCK_CLEARANCE_M)
 	var inside := slab.grow(-MINE_SLAB_MARGIN_M)
 	var laid: Dictionary = {}  # every mine laid so far, to keep groups apart
 	var specs: Array[Vector2i] = mine_groups(count, side_list.size(), rng)

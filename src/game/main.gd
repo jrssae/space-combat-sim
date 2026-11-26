@@ -60,6 +60,8 @@ var cannon: PulseCannon = null
 var buoys: Array[NavBuoy] = []
 ## The scenario's asteroid belts (M5-T29).
 var asteroid_belts: Array[AsteroidBelt] = []
+## The scenario's minefields (M10-T15).
+var minefields: Array[MineField] = []
 ## The ships the scenario places at load (`spawns`, M3-T09), from the pool; the route leaders are placed again on a respawn.
 var scenario_ships: Array[Combatant] = []
 ## The ship leading a route (the instructor) and its follow-path behaviour; null when the scenario has none.
@@ -249,6 +251,7 @@ func _ready() -> void:
 		for entry: Dictionary in scenario["jumpgates"]:
 			_offer_jump(gates.place(entry, star_system.system, frame))
 		_spawn_belts(scenario["belts"])
+		_spawn_minefields(scenario["minefields"])
 	_spawn_scenario_ships()
 	launches = LaunchDirector.new()
 	launches.main = self
@@ -993,6 +996,17 @@ func _spawn_belts(belts: Array) -> void:
 		asteroid_belts.append(belt)
 
 
+# The scenario's minefields (M10-T15, Q20): each laid out from its entry's seed and built as placed mines round its anchor.
+func _spawn_minefields(fields: Array) -> void:
+	for entry: Dictionary in fields:
+		var plan: MineFieldPlan = MineFieldPlan.place(entry["entry"])
+		if plan.shortfall > 0:
+			push_warning("Minefield %s: %d mines found no room with the gap asked for" % [entry["entry"].get("id", "?"), plan.shortfall])
+		var field: MineField = MineField.spawn_in(world, entry["anchor"], true)
+		field.build(plan.rows)
+		minefields.append(field)
+
+
 func _handle_ui(ui: UiCommand) -> void:
 	if ui.pause:
 		pause_menu.on_pause_action()
@@ -1058,6 +1072,7 @@ func _update_bracket() -> void:
 
 
 func _register_console() -> void:
+	MineConsole.new().register(self)  # the `mines` provider and command (M10-T15)
 	DebugConsole.registry.register_provider(&"belts", ConsoleVars.new({
 		&"count": {"get": func() -> int: return asteroid_belts.size(), "doc": "Asteroid belts in the scenario (M5-T29)"},
 		&"rocks": {"get": func() -> int: return asteroid_belts.reduce(func(n: int, b: AsteroidBelt) -> int: return n + b.rock_count, 0),

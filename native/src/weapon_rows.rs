@@ -1,20 +1,20 @@
 // The stand-ins' weapons on the core's rows (M4-T20, docs/architecture.md 17.13): the capitals' guns, interceptors and beam
-// emitters, their strike targets and missile launches, the mines' triggers and blasts, and a missile's guidance, one call
-// per tick (or per missile). The maths is `weapon_kernels`; this class binds the core, keeps the turrets' and mines' state
+// emitters, their strike targets and missile launches, and a missile's guidance, one call
+// per tick (or per missile). The maths is `weapon_kernels`; this class binds the core, keeps the turrets' state
 // between ticks and hands the decisions over. The GDScript stand-ins stay the reference and do every engine write (bolts
 // spawned, projectiles spent, hits applied) from what this returns.
 // gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
-use crate::rows::{FLAG_HULK, FLAG_RIGID, FLAG_TIER};
+use crate::rows::{FLAG_HULK, FLAG_TIER};
 use crate::sim_core::ScsSimCore;
 use crate::tier_fire;
 use crate::weapon_kernels::{
-    self as wk, Candidate, Capitals, Mines, ROLE_BEAM, ROLE_GUN, ROLE_INTERCEPTOR, Turrets,
+    self as wk, Candidate, Capitals, ROLE_BEAM, ROLE_GUN, ROLE_INTERCEPTOR, Turrets,
 };
 
-/// The capitals' turrets and the mine belts as rows with no node, stepped once per tick over the core's rows by the
+/// The capitals' turrets as rows with no node, stepped once per tick over the core's rows by the
 /// weapon kernels. Never calls the engine or `Factions`: the caller passes the hostility table (by the core's faction
 /// indices) and does what the step decides.
 #[derive(GodotClass)]
@@ -24,7 +24,6 @@ pub struct ScsWeaponRows {
     core: Option<Gd<ScsSimCore>>,
     turrets: Turrets,
     capitals: Capitals,
-    mines: Mines,
     // The hostility table, row-major by the core's faction indices, and its size.
     hostile: Vec<bool>,
     factions: usize,
@@ -33,8 +32,6 @@ pub struct ScsWeaponRows {
     cap_rows: Vec<i64>,
     candidates: Vec<Candidate>,
     spent: Vec<bool>,
-    hits: Vec<u32>,
-    fired: Vec<u8>,
     // The far capitals' fire (M4-T22): missiles resolved at launch and still flying to their targets, and the rolls run.
     tier_missiles: Vec<TierMissile>,
     tier_rolls: i64,
@@ -741,162 +738,6 @@ impl ScsWeaponRows {
     #[func]
     fn tier_us(&self) -> f64 {
         self.tier_us
-    }
-
-    /// The mines: offsets from the belt's node, layers (faction names) and which are in play.
-    #[func]
-    fn set_mines(
-        &mut self,
-        locals: PackedVector3Array,
-        factions: Array<StringName>,
-        alive: PackedByteArray,
-    ) -> bool {
-        let n = locals.len();
-        if factions.len() != n || alive.len() != n {
-            godot_error!("ScsWeaponRows.set_mines: every array must hold {n} mines");
-            return false;
-        }
-        let Some(core) = self.core.as_mut() else {
-            return false;
-        };
-        let faction_ix: Vec<u32> = {
-            let mut guard = core.bind_mut();
-            factions
-                .iter_shared()
-                .map(|f| guard.faction_index(f))
-                .collect()
-        };
-        let local = locals.as_slice().to_vec();
-        self.mines = Mines {
-            cells: wk::mine_cells(&local),
-            local,
-            faction_ix,
-            alive: alive.as_slice().iter().map(|&a| a == 1).collect(),
-        };
-        true
-    }
-
-    /// Mine `index` is in play again, or went off.
-    #[func]
-    fn set_mine_alive(&mut self, index: i64, alive: bool) {
-        if let Some(a) = usize::try_from(index)
-            .ok()
-            .and_then(|i| self.mines.alive.get_mut(i))
-        {
-            *a = alive;
-        }
-    }
-
-    /// One tick of the mines at tick `tick` with the belt's node at `origin`, `delta` the tick's length: `[mines that
-    /// checked, mines set off (ascending), whether each was touched (1) rather than triggered (0), then per mine a hull
-    /// bigger than a fighter may touch: the mine, the hull's id, its place and its basis's three columns]`. A hostile hull
-    /// inside a checking mine's trigger sets it off; so does a fighter-sized hull of any side whose sphere touched a mine's
-    /// body since the last tick (M7-T64). A bigger hull's sphere is far from its shape, so its mines go back to the caller
-    /// to test against its hit volumes.
-    #[func]
-    fn mine_step(&mut self, tick: i64, origin: Vector3, delta: f64) -> VarArray {
-        let phase = tick.rem_euclid(wk::TRIGGER_TICKS) as usize;
-        let mines = &self.mines;
-        let checked = (0..mines.local.len())
-            .filter(|&i| i % wk::TRIGGER_TICKS as usize == phase && mines.alive[i])
-            .count() as i64;
-        let mut set_off: Vec<i32> = Vec::new();
-        let mut touched: Vec<u8> = Vec::new();
-        let mut near_mines: Vec<i32> = Vec::new();
-        let mut near_hulls: Vec<i64> = Vec::new();
-        let mut near_at: Vec<Vector3> = Vec::new();
-        let mut near_axes: Vec<Vector3> = Vec::new();
-        if let Some(core) = self.core.as_ref() {
-            let guard = core.bind();
-            let rows = &guard.rows;
-            let n = self.factions;
-            let frame_velocity = guard.frame_velocity();
-            // Per mine: 0 untouched, 1 triggered, 2 touched.
-            self.fired.clear();
-            self.fired.resize(mines.local.len(), 0);
-            // Each hull's column of the table, by mine faction (hostility is symmetric); tier rows set mines off too.
-            for &h in &guard.sweep_rows {
-                let j = h as usize;
-                if rows.flags[j] & FLAG_RIGID == 0 && rows.flags[j] & FLAG_TIER == 0 {
-                    continue;
-                }
-                let column = table_row(&self.hostile, n, rows.faction_ix[j]);
-                self.hits.clear();
-                wk::mine_hits(
-                    mines,
-                    phase,
-                    origin,
-                    rows.positions[j],
-                    rows.radii[j],
-                    column,
-                    &mut self.hits,
-                );
-                for &m in &self.hits {
-                    self.fired[m as usize] = self.fired[m as usize].max(1);
-                }
-                self.hits.clear();
-                let step = wk::touch_step(rows.velocities[j], frame_velocity, delta);
-                wk::mine_touches(mines, origin, rows.positions[j], step, rows.radii[j], &mut self.hits);
-                if rows.radii[j] <= wk::FIGHTER_RADIUS_MAX_M {
-                    for &m in &self.hits {
-                        self.fired[m as usize] = 2;
-                    }
-                } else {
-                    let basis = rows.bases[j];
-                    for &m in &self.hits {
-                        near_mines.push(m as i32);
-                        near_hulls.push(rows.hull_ids[j]);
-                        near_at.push(rows.positions[j]);
-                        near_axes.extend([basis.col_a(), basis.col_b(), basis.col_c()]);
-                    }
-                }
-            }
-            for (i, &f) in self.fired.iter().enumerate() {
-                if f > 0 {
-                    set_off.push(i as i32);
-                    touched.push(u8::from(f == 2));
-                }
-            }
-        }
-        let mut out = VarArray::new();
-        out.push(&checked.to_variant());
-        out.push(&PackedInt32Array::from(set_off.as_slice()).to_variant());
-        out.push(&PackedByteArray::from(touched.as_slice()).to_variant());
-        out.push(&PackedInt32Array::from(near_mines.as_slice()).to_variant());
-        out.push(&PackedInt64Array::from(near_hulls.as_slice()).to_variant());
-        out.push(&PackedVector3Array::from(near_at.as_slice()).to_variant());
-        out.push(&PackedVector3Array::from(near_axes.as_slice()).to_variant());
-        out
-    }
-
-    /// The mines in play whose body the blast of a mine at `at` reaches, with the belt's node at `origin`, ascending
-    /// (M7-T64: a blast sets them off).
-    #[func]
-    fn mines_in_blast(&mut self, origin: Vector3, at: Vector3) -> PackedInt32Array {
-        self.hits.clear();
-        wk::mines_in_blast(&self.mines, origin, at, &mut self.hits);
-        let out: Vec<i32> = self.hits.iter().map(|&m| m as i32).collect();
-        PackedInt32Array::from(out.as_slice())
-    }
-
-    /// The hulls in the blast of a mine at `at`, near and tier rows in the core's order (M4-T23): `[hull ids, their bodies' places]`.
-    #[func]
-    fn blast(&mut self, at: Vector3) -> VarArray {
-        let mut ids: Vec<i64> = Vec::new();
-        let mut places: Vec<Vector3> = Vec::new();
-        if let Some(core) = self.core.as_ref() {
-            let guard = core.bind();
-            self.hits.clear();
-            wk::blast(&guard.rows, &guard.sweep_rows, at, &mut self.hits);
-            for &r in &self.hits {
-                ids.push(guard.rows.hull_ids[r as usize]);
-                places.push(guard.rows.positions[r as usize]);
-            }
-        }
-        let mut out = VarArray::new();
-        out.push(&PackedInt64Array::from(ids.as_slice()).to_variant());
-        out.push(&PackedVector3Array::from(places.as_slice()).to_variant());
-        out
     }
 
     /// One missile's guidance toward body `target_id` from its row: the velocity in x, y and z and in w 1 when steered,

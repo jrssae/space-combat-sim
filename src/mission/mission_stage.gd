@@ -419,6 +419,29 @@ func raid_station(count: int, scramble: bool) -> String:
 	return traffic.raid(count, scramble)
 
 
+## Lays a minefield from a mission's entry (M10-T15): its `anchor` ("origin" or "player") and `at` metres from it, the rest the
+## `MineFieldPlan` entry; "" or why not.
+func lay_minefield(entry: Dictionary) -> String:
+	if world == null:
+		return "no world in this scene"
+	var plan_entry: Dictionary = entry.duplicate()
+	plan_entry["centre"] = [0, 0, 0]
+	var problem: String = MineFieldPlan.problem(plan_entry)
+	if not problem.is_empty():
+		return problem
+	var where: Variant = plan_entry.get("at", [0, 0, 0])
+	if not (where is Array) or (where as Array).size() != 3:
+		return "at must be [x, y, z]"
+	var anchor := UniversePos.new(0.0, 0.0, 0.0, system_id)
+	if str(entry.get("anchor", "origin")) == "player" and player != null and player.ship != null:
+		anchor = world.to_universe(player.ship.global_position)
+	var at: UniversePos = anchor.plus_local(Vector3(float(where[0]), float(where[1]), float(where[2])))
+	var made: MineFieldPlan = MineFieldPlan.place(plan_entry)
+	var field: MineField = MineField.spawn_in(world, at, true)
+	field.build(made.rows)
+	return ""
+
+
 ## The player is still on its rack or rail.
 func launching() -> bool:
 	return launches != null and is_instance_valid(launches) and launches.locks_controls()

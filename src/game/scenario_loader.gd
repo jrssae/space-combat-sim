@@ -57,6 +57,8 @@ extends RefCounted
 ##                                                  #       count, radius_m: Vector2 (min, max bounding radius), seed, min_gap_m,
 ##                                                  #       lane_m (a clear lane along its Z axis, M8-T26; 0: none)},
 ##                                                  #       the input `BeltLayout.place` takes; may be empty
+##      "minefields": Array[Dictionary],            # `minefields[]` (M10-T15, Q20): each {anchor: UniversePos (its `centre`), entry:
+##                                                  #       the `MineFieldPlan` entry with its centre at the anchor}; may be empty
 ##      "civilian_names": Dictionary,               # (M5-T30) civilian hull -> PackedStringArray of names; may be empty
 ##      "placeholders": Dictionary,                 # (M5-T30) filled by `resolve_random_civilian`: "{civilian}" -> name
 ##      "relations": Array[Dictionary],             # (M10-T02) per-scenario faction relation overrides, `{a, b, relation}` with
@@ -228,6 +230,9 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	var belts: Variant = _belts(root.get("asteroid_belts", []), system, source)
 	if belts is String:
 		return _failure(belts as String)
+	var minefields: Variant = _minefields(root.get("minefields", []), system, source)
+	if minefields is String:
+		return _failure(minefields as String)
 	var civilian_names: Variant = _civilian_names(root.get("civilian_names", {}), source)
 	if civilian_names is String:
 		return _failure(civilian_names as String)
@@ -270,6 +275,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["mission"] = mission
 	result["cinematics"] = cinematics
 	result["belts"] = belts
+	result["minefields"] = minefields
 	result["station"] = station
 	result["hud"] = hud
 	result["civilian_names"] = civilian_names
@@ -422,6 +428,32 @@ static func _belts(raw: Variant, system: StringName, source: String) -> Variant:
 		out.append({"centre": centre as UniversePos, "size": size as Vector3, "count": int(count),
 				"radius_m": Vector2(float((radii as Array)[0]), float((radii as Array)[1])), "seed": int(seed_value),
 				"min_gap_m": float(gap), "lane_m": float(lane)})
+	return out
+
+
+## `minefields[]` (M10-T15, Q20): each field's anchor (`centre`) and its `MineFieldPlan` entry (`faction`, `kind`, `pattern` and
+## the pattern's numbers, `seed`, `min_gap_m`); or an error string. The mines lie round the anchor by the entry's own numbers.
+static func _minefields(raw: Variant, system: StringName, source: String) -> Variant:
+	if not (raw is Array):
+		return "%s: minefields must be an array" % source
+	var out: Array[Dictionary] = []
+	for m: int in (raw as Array).size():
+		var where: String = "%s: minefields[%d]" % [source, m]
+		var entry: Variant = (raw as Array)[m]
+		if not (entry is Dictionary):
+			return "%s must be an object" % where
+		var field: Dictionary = (entry as Dictionary).duplicate()
+		var centre: Variant = _universe_pos(field.get("centre"), system)
+		if centre == null:
+			return "%s: centre must be [x, y, z] (numbers)" % where
+		field["centre"] = [0, 0, 0]
+		if not Factions.is_known(StringName(str(field.get("faction", "")))):
+			return "%s: faction must be a known faction, got %s" % [where, JSON.stringify(field.get("faction"))]
+		var problem: String = MineFieldPlan.problem(field)
+		if not problem.is_empty():
+			return "%s: %s" % [where, problem]
+		field["id"] = str(field.get("id", "%s_%d" % [source.get_file().get_basename(), m]))
+		out.append({"anchor": centre as UniversePos, "entry": field})
 	return out
 
 
@@ -918,7 +950,7 @@ static func _empty() -> Dictionary:
 			"props": [] as Array[Dictionary], "jumpgates": [] as Array[Dictionary], "pools": {}, "waves": [] as Array[Dictionary],
 			"loop": {"from_wave": 0, "add_per_loop": 1}, "routes": [] as Array[Route], "spawns": [] as Array[Dictionary],
 			"wings": [] as Array[Dictionary], "mission": {}, "cinematics": {}, "belts": [] as Array[Dictionary],
-			"civilian_names": {}, "placeholders": {}, "station": {}, "hud": {}, "relations": [] as Array[Dictionary],
+			"minefields": [] as Array[Dictionary], "civilian_names": {}, "placeholders": {}, "station": {}, "hud": {}, "relations": [] as Array[Dictionary],
 			"capitals": [] as Array[Dictionary]}
 
 

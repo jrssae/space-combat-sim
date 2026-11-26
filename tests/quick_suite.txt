@@ -20,7 +20,8 @@ res://tests/unit/test_pilot_kernels.gd
 res://tests/unit/test_brain_parity.gd
 res://tests/unit/test_sweep_cells.gd
 res://tests/unit/test_missile_kernel.gd
-res://tests/unit/test_mine_kernel.gd
+res://tests/unit/test_mine_kinds.gd
+res://tests/unit/test_mine_field_plan.gd
 res://tests/unit/test_core_state.gd
 res://tests/unit/test_tier.gd
 res://tests/unit/test_parity_fixture.gd
