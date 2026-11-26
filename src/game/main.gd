@@ -811,6 +811,9 @@ func _spawn_scenario_capitals() -> void:
 			if made != null:
 				world.spawn(made, at, basis)
 				made.set_course(Vector3.ZERO, world.rest_velocity())
+				if bool(entry.get("hangar", false)) and made.hangar != null:
+					made.hangar.stock_from_loadout()  # its craft aboard, and the pool built to field them (M10-T17)
+					made.hangar.prepare_pool()
 				cap = made
 		if cap == null:
 			push_warning("Main: capital %s could not be built" % type)

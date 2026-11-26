@@ -4,6 +4,10 @@ extends RefCounted
 ## carrier's frame. Pure bookkeeping: `CarrierDock` moves the ships.
 ##
 ## A cradle is FREE, DOCKED (a fighter sits on it) or BUSY (kept for a fighter launching from it or coming back to it).
+##
+## M10-T17: a capital carrier's bays are cradles too (`BayBerths` makes them): each a place on a hall's floor with its own way
+## out (`out_axes`, the bay's mouth), how far its launch runs (`launch_m`), how far a lift starts below the floor (`lift_m`), the
+## bay it belongs to, the lane of the bay it uses and the craft it takes. A cradle carrier leaves these empty.
 
 enum State { FREE, DOCKED, BUSY }
 
@@ -17,6 +21,14 @@ var bases: Array[Basis] = []
 ## How far out along the cradle's +Y a returning fighter is taken, m.
 var approach_m: PackedFloat32Array = PackedFloat32Array()
 var states: PackedInt32Array = PackedInt32Array()
+## Bay cradles only (empty for a cradle carrier): the way out and in, the launch's run and the lift's drop, m, and per cradle its
+## bay, its lane in that bay and the craft types it takes.
+var out_axes: PackedVector3Array = PackedVector3Array()
+var launch_m: PackedFloat32Array = PackedFloat32Array()
+var lift_m: PackedFloat32Array = PackedFloat32Array()
+var bays: PackedStringArray = PackedStringArray()
+var lanes: PackedInt32Array = PackedInt32Array()
+var crafts: Array[PackedStringArray] = []
 
 
 ## The cradles of a hull's hardpoints (`cradles[]`: `name`, `position`, `forward`, `up`, `approach_from`); entries without a
@@ -46,6 +58,16 @@ func count() -> int:
 	return names.size()
 
 
+## Whether these are a capital's bays (M10-T17) rather than a raider carrier's pads.
+func is_bays() -> bool:
+	return not out_axes.is_empty()
+
+
+## Whether cradle `index` takes a craft of `type` (a pad takes anything).
+func takes(index: int, type: StringName) -> bool:
+	return not is_bays() or crafts[index].has(String(type))
+
+
 func count_in(state: State) -> int:
 	var n: int = 0
 	for s: int in states:
@@ -58,12 +80,28 @@ func first_in(state: State) -> int:
 	return states.find(state)
 
 
-## The free cradle whose approach point is nearest `local` (the carrier's frame), -1 when none is free.
-func nearest_free(local: Vector3) -> int:
+## The free cradle whose approach point is nearest `local` (the carrier's frame), -1 when none is free. With `type`, only a
+## cradle that takes that craft; with `usable`, only one it says yes to (a bay that still works).
+func nearest_free(local: Vector3, type: StringName = &"", usable: Callable = Callable()) -> int:
 	var best: int = -1
 	var best_d: float = INF
 	for i: int in count():
-		if states[i] != State.FREE:
+		if states[i] != State.FREE or (type != &"" and not takes(i, type)) or (usable.is_valid() and not bool(usable.call(i))):
+			continue
+		var d: float = approach_point(i).distance_squared_to(local)
+		if d < best_d:
+			best = i
+			best_d = d
+	return best
+
+
+## The cradle taking `type` (and that `usable` allows) whose approach point is nearest `local`, free or not: a bay's lanes,
+## where returning craft wait their turn. -1 when none takes it.
+func nearest_taking(local: Vector3, type: StringName = &"", usable: Callable = Callable()) -> int:
+	var best: int = -1
+	var best_d: float = INF
+	for i: int in count():
+		if (type != &"" and not takes(i, type)) or (usable.is_valid() and not bool(usable.call(i))):
 			continue
 		var d: float = approach_point(i).distance_squared_to(local)
 		if d < best_d:
@@ -79,7 +117,12 @@ func set_state(index: int, state: State) -> void:
 
 ## Where a returning fighter is handed to cradle `index`, the carrier's frame.
 func approach_point(index: int) -> Vector3:
-	return positions[index] + bases[index].y * approach_m[index]
+	return positions[index] + out_axis(index) * approach_m[index]
+
+
+## The way out of cradle `index`: off a pad its up, out of a bay its mouth.
+func out_axis(index: int) -> Vector3:
+	return out_axes[index] if is_bays() else bases[index].y
 
 
 ## Where a fighter whose resting point is `rest` (its own frame) sits on cradle `index`, the carrier's frame.

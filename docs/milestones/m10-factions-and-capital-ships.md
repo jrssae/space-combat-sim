@@ -350,7 +350,7 @@ Settled in T03 (Q16, Q17, Q53).
   bays; torpedo craft the reactor), break off across the nearest beam arc, open to 3 km, repeat; abort at half the
   squadron lost, regroup at 5 km. Raiders never attack warships.
 - **Carriers** launch their faction's fighters (Q53's counts) from their bays and tubes through the ship pool, replacing
-  M4's stand-in launches; M7's launch sequence for AI ships is reused where it fits. Recovery into a bay is out.
+  M4's stand-in launches; M7's launch sequence for AI ships is reused where it fits. Recovery into their bays as the raider carrier's (Q73, T17).
 
 ### D12.11 The ancients' and special mechanics
 
@@ -445,7 +445,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | done |
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | in progress |
 | T16 | E | The `capital` brain and fighters' attacks on capitals; the capital helm (steering, today ~52 µs per capital per tick in GDScript) moves into the native brain (Q70) | T12, T14 | Opus | in progress |
-| T17 | E | Carriers launch fighters from bays and tubes; the wing-fold animation of the Kestrel and the Centauri shuttle (Q93) | T07, T16 | Opus | not started |
+| T17 | E | Carriers launch fighters from bays and tubes; the wing-fold animation of the Kestrel and the Centauri shuttle (Q93) | T07, T16 | Opus | in progress |
 | T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | done |
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
@@ -1344,6 +1344,44 @@ Done notes (in progress until the maintainer closes it):
   where its target is when it launches and a turning target may be missed; a battery covers the hemisphere over its deck, so a mine
   level with an Omega's axis is not engaged (it comes in from the flank in the test); balance (damage, counts, ranges) is T03's
   starting points, T16's to tune.
+
+### M10-T17 Carriers launch and recover
+
+The capital carriers launch their craft from their bays through the ship pool and take them back in (D12.10, Q53, Q58, Q71,
+Q73, Q93; `docs/architecture.md` §22.11). Done notes (in progress until the maintainer closes it):
+
+- **What it is.** `CapitalHangar` (a `CarrierDock` subclass, a child of every `CapitalShip` whose bays take craft) holds counts
+  of craft by type, takes a craft from the pool to launch it (the carrier's faction, its catalogue pilot, a wing callsign such
+  as "Delta 3" so it wears its wing's livery) and gives it back when it docks. Bays come from `hardpoints.json` (`BayBerths`):
+  the Nova's three lanes on its hidden lift, the Omega's three lanes at its hall's back, the Hyperion's six single-fury bays and
+  its one-berth shuttle bay (which takes the Kestrel too). The flying is T19's native dock kernel with bay rows (`dock_kernels.rs`:
+  a run out of the mouth at the cradle's 15 m/s², the lift up over 4 s, a capture at a walk, a wait on the floor, the lift down).
+- **Wings and triggers** (`HangarRules`, `capitals.json` `carrier_launch`). The native brain counts the hostile fighters and
+  warships within 15 km of a carrier (`capital_brain/launch.rs`, `EVENT_THREAT`); the first wing goes on any threat, the next when
+  the threat grows by half (a warship counting 6) or a quarter of the wings out are lost: the Nova's two wings of 12 (Q73), the
+  Omega's 32 and the Hyperion's 6 at once (data). While launching the brain is in **launch**: it holds its course and bow.
+- **Recovery** (as Q25 to Q30's raider carrier, Q73). The fight over (nothing hostile within reach for 30 s), everyone is called
+  home; a craft under a fifth of its hull comes home alone; a withdraw calls them all and `CapitalBrains` holds the exit search
+  until they are aboard or 90 s have passed, then leaves the rest. Craft waiting at a bay share its lanes' approach points and
+  come in one a lane; a bay launches nothing while a craft coming home is within 400 m of its mouth. This replaces D12.10's
+  "recovery into a bay is out".
+- **Doors and lift.** A Hyperion door opens only for its own bay's launch or recovery (a craft drawn in or within 1.5 km) and
+  shuts 3 s after (Q73); the Nova's lift sinks empty, rises with three craft abreast and takes recovered craft down in groups
+  (`BayElevator`, drawn by `BayElevatorNode`: a deck plate and a dark well over the hall's floor, the hull mesh not cut).
+- **Wing fold** (Q73, Q93). `WingFold` and `WingFoldNode` fold a shuttle's wings about their root joints from its break-up chunks
+  (the wings were already their own chunk meshes; no generator change): the Kestrel 90 degrees (T22's bay pose), the Centauri
+  shuttle 72 degrees (its 18 degree upswept wings stand upright; data, `data/ships/wing_folds.json`). A Kestrel folds before it
+  is drawn into the Hyperion's shuttle bay and spreads its wings once let go. The Centauri shuttle has no catalogue entry or
+  bay yet, so its fold runs only once T58 adds it (its committed chunks have both wings with joints).
+- **Power** (Q72, Q78). A hulk, a carrier with no power or a lost bay launches nothing and takes nobody in; doors stay put.
+- **Stocking.** A bare `CapitalShip.create` carries no craft (the balance fights' unescorted capitals stay so); a scenario capital
+  with `hangar: true` (`ScenarioLoader`) or `hangar stock` takes its loadout's craft and builds them into the pool. The bench's
+  stand-in launches stay until T45 (L11).
+- **Tests (staged copy).** Cargo 403 (new: `dock_kernels` 4, `capital_brain` 3), clippy with nothing new in the touched files; compile check 1 152 scripts clean; GUT 194 of 194: `test_carrier_launch` 6 (the Nova's wing up its lift, the Hyperion's door per craft and a recovery through it, a Kestrel's fold, a threat then losses then calm, the jump's wait, a hulk), `test_carrier_launch_threads` 1 (a Nova and an Omega launching 20 craft through the seeded battle, 1 and 6 threads byte for byte), `test_hangar_rules` 10, `test_wing_fold` 4, and their neighbours `test_carrier_logic` 23, `test_capital_hulks` 11, `test_strike_carrier` 24, `test_sim_core` 21, `test_scenario_loader` 42, `test_console_command_list` 7, `test_bay_doors` 10, `test_capital_bay_interiors` 7, `test_ship_showcase` 4, `test_capital_brain` 8, `test_capital_brain_threads` 1, `test_ea_nova` 5, `test_ea_hyperion` 5, `test_ea_omega` 5.
+- **Cost.** The rows are T19's native kernel; the GDScript per tick is the dock applying its rows and the hangar's bays. Two carriers launching (debug Godot, the seeded battle): 63 us a carrier a tick while craft are under the dock; a hangar with nobody out and its bays at rest sleeps (no tick) until a threat, an order or a stock wakes it. The brain's threat count rides its 5 Hz think.
+- **GPU** (RX 6950 XT, Forward+, 960x540, 60 fps capped): a Nova launching its first wing up the lift and a Hyperion opening a door
+  per Starfury and its shuttle bay, `references/screenshots/M10-T17 carriers/` (judging the look is (H)).
+- **Open.** (1) The Omega's 32 and the Hyperion's 6 launch as one wing each (data, `carrier_launch.hulls`); Q73 split only the Nova. (2) The lift carries three Starfuries abreast a trip (`elevator_abreast`), a wing of 12 in about 50 s. (3) The Nova's lift is a plate and a dark well drawn over the hall's floor; the hull mesh is not cut. (4) The Omega's craft appear at its hall's back (no lift or hangar deck); craft aboard are not drawn. (5) A returning craft may meet the hull on T19's way round. (6) The bench's stand-in launches stay until T45. (7) Faction fighters not built yet (Frazi, Nial, Sky Serpent, ...) are skipped by `stock_from_loadout`. (8) The hangar's apply loop is GDScript (T19's pattern), 63 us a launching carrier; it could move into the dock kernel if many carriers launch at once. Judging the look is (H).
 
 ### M10-T49 The player at a capital's helm
 

@@ -134,3 +134,92 @@ fn a_row_depends_on_nothing_but_itself() {
     };
     assert_eq!(run(&[0, 1, 2]), run(&[2, 0, 1]));
 }
+
+// M10-T17: a forward bay's floor point 100 m inside the mouth, facing out along -Z; the craft's attitude noses out of it.
+fn bay_row(phase: i32, lift_m: f32) -> Row {
+    let out = v(0.0, 0.0, -1.0);
+    Row::bay(phase, v(0.0, -10.0, -400.0), Basis::IDENTITY, out, 160.0, 140.0, lift_m, v(0.0, -1.0, 0.0))
+}
+
+#[test]
+fn a_bay_launch_runs_out_of_the_mouth_at_the_cradles_acceleration() {
+    let mut row = bay_row(PHASE_LAUNCH, 0.0);
+    let mut last = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+    assert!(close(last.position, v(0.0, -9.0, -400.0), 0.05), "it starts on the bay's floor: {:?}", last.position);
+    let mut ticks = 1;
+    while last.event == EVENT_NONE {
+        last = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+        ticks += 1;
+        assert!(ticks < 2000);
+    }
+    assert_eq!(last.event, EVENT_RELEASED);
+    let time_s = LAUNCH_S * (140.0 / RELEASE_M).sqrt();
+    assert!((ticks as f64 / 60.0 - time_s).abs() < 0.05, "{} s", ticks as f64 / 60.0);
+    assert!(close(last.position, v(0.0, -9.0, -540.0), 1e-2), "out along the mouth: {:?}", last.position);
+    let accel = 2.0 * RELEASE_M / (LAUNCH_S * LAUNCH_S);
+    assert!((f64::from(-last.velocity.z) - accel * time_s).abs() < 0.1, "the cradle's push, longer: {:?}", last.velocity);
+    assert!(close(col_c(&last.basis), v(0.0, 0.0, 1.0), 1e-4), "nose out of the mouth all the way");
+}
+
+#[test]
+fn a_lift_brings_the_fighter_up_to_the_floor_then_it_launches() {
+    let mut row = bay_row(PHASE_LAUNCH, 30.0);
+    assert_eq!(row.phase, PHASE_LIFT, "a launch from a lift starts on the hangar deck");
+    let first = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+    assert!(close(first.position, v(0.0, -39.0, -400.0), 0.05), "30 m below the floor: {:?}", first.position);
+    let mut last = first;
+    let mut ticks = 1;
+    let mut height = first.position.y;
+    while last.event != EVENT_LIFTED {
+        last = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+        assert!(last.position.y >= height - 1e-4 && last.velocity.y >= 0.0, "it only rises");
+        assert!(close(v(last.position.x, 0.0, last.position.z), v(0.0, 0.0, -400.0), 1e-4), "straight up");
+        height = last.position.y;
+        ticks += 1;
+        assert!(ticks < 1000);
+    }
+    assert!((ticks as f64 / 60.0 - LIFT_S).abs() < 0.05);
+    assert!(close(last.position, v(0.0, -9.0, -400.0), 1e-3) && last.velocity.y.abs() < 0.1, "at the floor, stopped");
+    assert_eq!(row.phase, PHASE_LAUNCH);
+    let next = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+    assert_eq!(next.event, EVENT_NONE);
+    assert!(next.position.z < -400.0, "its run out begins");
+}
+
+#[test]
+fn a_bay_capture_walks_into_the_hall_and_a_lift_takes_it_down() {
+    let mut row = bay_row(PHASE_RETURN, 30.0);
+    assert!(close(approach_point(&row), v(0.0, -9.0, -560.0), 1e-3), "the approach point is on the bay's axis outside the mouth");
+    row.begin_capture(v(0.0, -9.0, -560.0), Basis::IDENTITY);
+    assert!((row.capture_s - 2.0 * 160.0 / BAY_ENTRY_MPS).abs() < 1e-6, "at a walk: {}", row.capture_s);
+    let mut last = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+    let mut ticks = 1;
+    while last.event != EVENT_IN_BAY {
+        last = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+        ticks += 1;
+        assert!(ticks < 3000);
+    }
+    assert!(close(last.position, v(0.0, -9.0, -400.0), 1e-3), "on the lift at the floor: {:?}", last.position);
+    for _ in 0..120 {
+        let wait = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+        assert_eq!(wait.event, EVENT_NONE);
+        assert!(close(wait.position, v(0.0, -9.0, -400.0), 1e-4), "it waits there for the lift");
+    }
+    row.begin_lower();
+    assert_eq!(row.phase, PHASE_LOWER);
+    while last.event != EVENT_DOCKED {
+        last = step_row(&mut row, &still(), Vector3::ZERO, Vector3::ZERO, 20.0, 900.0, 1.0 / 60.0);
+        ticks += 1;
+        assert!(ticks < 4000);
+    }
+    assert!(close(last.position, v(0.0, -39.0, -400.0), 1e-3), "down on the hangar deck: {:?}", last.position);
+}
+
+#[test]
+fn a_cradle_row_keeps_its_old_launch_and_capture() {
+    let row = top_row(PHASE_LAUNCH);
+    assert!(!row.bay && row.lift_m == 0.0 && (row.launch_s() - LAUNCH_S).abs() < 1e-12);
+    let mut caught = top_row(PHASE_RETURN);
+    caught.begin_capture(v(0.0, 300.0, 10.0), Basis::IDENTITY);
+    assert_eq!(caught.capture_s, CAPTURE_S, "a cradle draws in at its own pace however far");
+}

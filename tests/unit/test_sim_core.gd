@@ -694,7 +694,7 @@ const MINE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", 
 ## (`capital_brain_rows.rs`) is what GDScript reaches; the AI job (`brain_step.rs`) thinks them.
 const CAPITAL_BRAIN_FILES: Array[String] = ["res://native/src/capital_helm.rs", "res://native/src/capital_brain.rs",
 		"res://native/src/capital_brain/attitude.rs", "res://native/src/capital_brain/targets.rs", "res://native/src/capital_brain/aim.rs",
-		"res://native/src/brain_behaviours/capital_run.rs"]
+		"res://native/src/capital_brain/launch.rs", "res://native/src/brain_behaviours/capital_run.rs"]
 const CAPITAL_BRAIN_USE_ALLOWED: Array[String] = ["use std::sync::Arc;", "use godot::builtin::Vector3;",
 		"use godot::builtin::{Basis, Vector3};", "use crate::brain_maths::", "use crate::capital_helm::", "use crate::rows::",
 		"use crate::surface;", "use crate::v3::", "use crate::capital_brain::", "use super::"]

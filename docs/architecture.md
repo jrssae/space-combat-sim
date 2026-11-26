@@ -7498,7 +7498,7 @@ data/capitals/capitals.json                `capital_brain`: the brain's numbers,
   1.15 x the hold (1.3 once engaged), bow on at `approach_mps`; **engage** at `engage_share` (0.7) of the main weapon's range (the
   range whose guns and beams give the most dps, launchers and anti-fighter guns left out: the Omega's pulse cannons, 4 km), the
   range met over `arrive_s`, in the attitude below; **idle** with no target: the course it had before the fight, taken up again.
-  Launch is T17's (`STATE_LAUNCH`, never entered yet).
+  **launch** (M10-T17, §22.11): a carrier whose hangar is launching holds its course and bow (over approach, engage and idle).
 - **Targets** (`targets.rs`). Hostile warships (capitals and stations' own hulls, as the ship perceives them) within `sensor_m`
   (30 km): `(threat + 1)^threat_w x value^value_w / time_to_kill`, the time to kill its hull points at its own dps plus the time
   to close to its main range; a disabled hull at 5 %, the held target 1.25 x. No capital in reach: no order, and the guns pick
@@ -7546,7 +7546,7 @@ data/capitals/capitals.json                `capital_brain`: the brain's numbers,
   its own point, for the gate, or fighting on, a fighter's runs and a raider leaving a warship alone, the console),
   `test_capital_brain_threads`, `test_capital_helm_parity`; `test_sim_core`'s guard holds the kernels to the kernels' rules.
 - **Known gaps.** A capital in the low-attention tier thinks but its row flies its last cruise (the tier's capital law), so it does
-  not manoeuvre far from the player; carriers do not launch (T17); no Xill belly-on passes yet (no Xill hull); torpedo craft have
+  not manoeuvre far from the player; no Xill belly-on passes yet (no Xill hull); torpedo craft have
   no reactor runs (none fly); the fighters' abort counts a squadron's losses from its peak, not only those to a capital.
 
 ### 22.9 Mines and minefields (D12.9; T15, Q20)
@@ -7622,3 +7622,66 @@ data/capitals/mines.json        each kind's numbers (T03's) and how a mount lays
 - **Known gaps.** A mine on the ground laid in battle is reached only by touches and blasts (a placed field's mines are shot by the hit resolver's rock grid, any side's bolt, one hit each); a guided mine does not
   home on a hull with no hit volumes beyond its sphere's gap; an energy mine's stand-off is read from the surface at launch (a
   target that turns after launch may be missed); the bench's counters and `StandinDirector.add_mines` stay until T45.
+
+### 22.11 Carriers launch and recover (D12.10; T17, Q71, Q73)
+
+```
+src/capital/capital_hangar.gd       CapitalHangar (extends CarrierDock, a child of the CapitalShip): stock, wings, bays, recovery
+src/capital/hangar_rules.gd         HangarRules, pure: the hull's options, wing sizes, the next wing, calm, hurt, the jump's wait
+src/capital/bay_berths.gd           BayBerths, pure: a hull's bays as CarrierCradles (lanes on a lift, at a hall's back, mid-hall)
+src/capital/bay_elevator.gd         BayElevator, pure: a bay's hidden lift (up, sinking, down, rising, lowering, returning)
+src/capital/bay_elevator_node.gd    BayElevatorNode: the lift's deck plate and the dark well in the floor
+src/capital/hangar_console.gd       the `hangar` command and the `hangars` provider
+src/ship/wing_fold.gd               WingFold, pure: a shuttle's wing fold (data/ships/wing_folds.json), each wing about its joint
+src/ship/wing_fold_node.gd          WingFoldNode: draws the folding wings from the hull's break-up chunks
+native/src/dock_kernels.rs          the docking rows (T19's), with bay rows: a run out of the mouth, the lift up, the wait, down
+native/src/capital_brain/launch.rs  the brain's count of hostiles within `launch_m` for a carrier's hangar
+data/capitals/capitals.json         `carrier_launch`: wings, triggers, gaps, lanes, the wait; `capital_brain.launch_m` (15 km)
+```
+
+- **Craft.** A carrier's craft are counts by type (`stock`), filled from its loadout's `launches` (`stock_from_loadout`) up to its
+  bays' capacity by whoever spawns it for play: a scenario capital with `hangar: true`, or `hangar stock`. A bare
+  `CapitalShip.create` carries none (the balance fights' unescorted Omegas stay unescorted). A craft exists only while out: it is
+  taken from the ship pool to launch (as the carrier's faction, its catalogue pilot, a wing callsign from `carrier_launch.callsigns`
+  so a Starfury wears its wing's livery) and given back when it docks; `prepare_pool` builds the stock's worth into the pool.
+- **Bays** (`BayBerths`, from `hardpoints.json` `bays`). Each bay gives cradles nose out of its mouth on its floor (a third of the
+  mouth under the exit point): a bay with a lift (the Nova, Q71) `elevator_abreast` (3) lanes side by side on the lift; a big hall
+  (the Omega) `lanes` (3) at its back; a bay with `berths` (the Hyperion's shuttle bay) that many mid-hall; any other one
+  mid-hall (the Hyperion's single-fury bays, Q58). A bay takes its `craft` and any its `poses` name (the Kestrel).
+- **Launch and recovery rows** (`dock_kernels.rs`, native, per tick for every craft under a dock). A bay row runs out along the
+  mouth for `run in + clear_m` at the cradle's acceleration (15 m/s²) and is let go with that speed; a lift row first rises
+  `elevator_travel_m` over `LIFT_S` (4 s, eased). A recalled craft flies to its lane's approach point outside the mouth (craft
+  share a lane's point and wait their turn: a lane is kept only while one is drawn in), is drawn in at a walk (`BAY_ENTRY_MPS`,
+  30 m/s at most), and in a lift bay waits on the floor (`EVENT_IN_BAY`) until the lift takes the craft aboard down
+  (`begin_lower`). Rows depend on themselves alone; the dock (GDScript) applies them, so 1 and 6 threads are identical.
+- **Bays at work** (`CapitalHangar`, per tick, cheap). A door (Hyperion, Q73) opens for its own bay's launch, for a craft of its
+  bay being drawn in or within `door_lead_m` (1.5 km) of its mouth, and shuts `DOOR_IDLE_S` (3 s) after the bay was last used. A
+  lift sinks empty, takes a trip up (its rows start their lift the same tick, `BayElevator` in step with them) and comes back for
+  the next once its lanes are clear; craft drawn in gather on it for `LIFT_GATHER_S` and go down together. Lane bays send a craft
+  every `launch_gap_s` (0.8 s) onto a free lane. A bay launches nothing while a craft coming home is within 400 m of its approach
+  point. A shuttle that folds its wings (`WingFoldNode`) folds them before it is drawn in and spreads them once let go.
+- **Decisions** (`HangarRules`, at 2 Hz). The brain counts the hostile fighters and warships within `launch_m` (15 km) of a
+  carrier at each think (`launch.rs`; `EVENT_THREAT` hands changes on, `CapitalBrains` passes them to `on_threat`). The first wing
+  goes on any threat; the next (Q73: the Nova's two wings of 12) once the threat, a warship weighing `warship_weight` fighters,
+  grows to `next_wing_threat` (1.5) times what the last met or the wings out lose `next_wing_losses` (a quarter). Recovery as the
+  raider carrier's (Q25 to Q30): after a fight, nothing hostile within reach for `calm_s` (30 s) calls everyone home; a craft
+  under `fighter_return_hull` (20 %) comes home alone; a withdraw calls them all (`ready_to_jump`) and `CapitalBrains` holds the
+  exit search until they are aboard or `wait_s` (90 s) has passed, then leaves the rest. While its hangar launches the brain is in
+  **launch** (`capital_set_launching`): it holds its course and bow (not over hold, withdraw or screen). `auto = false` (the
+  console, tests) stops the hangar's own launches and recalls; a jump still recalls.
+- **Power** (Q72, Q78). No power (a hulk), a lost bay or a dead carrier launches nothing; a recall is refused and a craft on its
+  way back is let go (T19's rule); doors without power stay where they are. Craft aboard die with the carrier (Q28).
+- **Cost.** The rows are T19's native kernel; the GDScript per tick is the dock applying its rows and the hangar's bays. Two
+  carriers launching through the seeded battle (20 craft): 63 us a carrier a tick while launching; an idle carrier's hangar a few us.
+- **Console.** `hangar [info|list|stock|launch [type|wing] [n]|recall|jump|auto on|off|door <bay> open|shut|fold <ship>]`;
+  provider `hangars` (`info.md`).
+- **Tests.** Rust `dock_kernels::tests` (a bay launch's run and speed, a lift up then the run, a capture at a walk, the wait and the
+  lift down, a pad row unchanged), `capital_brain::tests` (threat counts, no event for an unchanged count, launching holds the
+  course); GUT `test_hangar_rules` (options, wing sizes, the next wing, calm, hurt, the jump's wait, callsigns, lanes on a lift, at a
+  hall's back and mid-hall, shared lanes, the lift's states, a scenario's `hangar`), `test_wing_fold`, `test_carrier_launch` (the
+  Nova's wing up its lift, the Hyperion's doors per craft and a recovery, a Kestrel's fold, a threat and losses and calm, the
+  jump's wait, a hulk) and `test_carrier_launch_threads` (a Nova and an Omega launching through the seeded battle, 1 and 6 threads
+  byte for byte).
+- **Known gaps.** The Nova's lift is drawn over the hall's floor (its plate and a dark well), not cut into it; the Omega's craft
+  appear at its hall's back; craft aboard are not drawn; a returning craft may meet the hull on its way round (T19's way round);
+  the bench's stand-in launches stay until T45; fighters of factions whose craft are not built yet (Frazi, Nial, ...) are skipped.

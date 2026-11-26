@@ -1,0 +1,5 @@
+{
+ "_doc": "M10-T17 (Q73, Q93): atmospheric shuttles that fold their wings to fit a bay (WingFold, WingFoldNode). Each wing chunk (wing_l, wing_r in its hardpoints.json chunks) turns up about its root joint round the hull's length by fold_deg, over fold_s. The Kestrel's 90 degrees match the Hyperion's shuttle bay pose (T22); the Centauri shuttle's upswept wings (they rise about 18 degrees to their tips) fold 72 degrees, standing them upright like the Kestrel's.",
+ "ea_atmo_shuttle": {"fold_deg": 90.0, "fold_s": 4.0},
+ "centauri_shuttle": {"fold_deg": 72.0, "fold_s": 4.0}
+}

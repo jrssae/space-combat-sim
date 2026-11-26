@@ -64,6 +64,8 @@ var bay_doors: Dictionary = {}
 ## Its bays' halls as trigger volumes (a ship inside is lit as the hall is) and its open bays' lamps; null without (M10-T72).
 var bay_zones: InteriorZones = null
 var bay_lamps: CapitalBayLamps = null
+## Its hangar (M10-T17): the craft its bays launch and recover; null for a hull whose bays take none. Empty until stocked.
+var hangar: CapitalHangar = null
 ## 1 when this ship wears its style's second colouring (M10-T06: about a fifth of the Vorlons are red-based), else 0: drawn from
 ## the ship's own name, the same in every run. Its break-up chunks take the same value (`HullSheenMaterial.set_variant`).
 var skin_variant: float = 0.0
@@ -442,6 +444,9 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	_add_marks(display_name)
 	_add_doors()
 	_add_bay_interiors()
+	hangar = CapitalHangar.make(self)
+	if hangar != null:
+		add_child(hangar)
 	targetable = Targetable.new()
 	targetable.name = "Targetable"
 	targetable.display_name = display_name
@@ -465,8 +470,8 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	_packed_hulls = Station.pack_hulls(shapes, volumes)
 
 
-## Opens (true) or shuts a bay's door; false when the hull has no door for that bay or no power to move it (T17 calls this
-## around a launch or a docking).
+## Opens (true) or shuts a bay's door; false when the hull has no door for that bay or no power to move it (the hangar calls
+## this around a launch or a docking, M10-T17).
 func set_bay_door(bay: String, open: bool, instant: bool = false) -> bool:
 	var door: BayDoorNode = bay_doors.get(bay) as BayDoorNode
 	if door == null or not damage.has_power():

@@ -5,7 +5,8 @@
 //! - **States.** Approach a hostile capital until 0.7 x its main weapon's range; Engage: hold that range with the attitude
 //!   that brings the most mount dps to bear (`attitude`); Screen: an escort holds 0.8 to 1.2 km off its charge; Withdraw at
 //!   hull under 30 %, reactor under 50 % or every main engine lost (GDScript finds the exit: its own point, a friendly point,
-//!   a gate; none and it fights on); Hold on orders (the helm is the caller's). Launch is T17's (`STATE_LAUNCH`).
+//!   a gate; none and it fights on); Hold on orders (the helm is the caller's); Launch (M10-T17): a carrier holds its course
+//!   while its hangar launches, and counts the hostiles within reach for it (`launch`).
 //! - **Targets** (`targets`): `threat x value / time_to_kill` with the faction's doctrine weights; anti-capital mounts take
 //!   it, with a subsystem to aim at when outgunned or when a withdrawing target is to be crippled.
 //!
@@ -21,17 +22,17 @@ use crate::v3::{add, clampf, dist_sq, distance, div_s, length, scale, sub};
 
 mod aim;
 pub mod attitude;
+mod launch;
 mod targets;
 
 
-/// The brain's states (`STATE_NAMES`). Launch is T17's: a carrier launches on a hostile within 15 km (not entered yet).
+/// The brain's states (`STATE_NAMES`). Launch (M10-T17): a carrier whose hangar is launching holds its course.
 pub const STATE_IDLE: u8 = 0;
 pub const STATE_APPROACH: u8 = 1;
 pub const STATE_ENGAGE: u8 = 2;
 pub const STATE_SCREEN: u8 = 3;
 pub const STATE_WITHDRAW: u8 = 4;
 pub const STATE_HOLD: u8 = 5;
-#[allow(dead_code)] // T17's: carriers launch
 pub const STATE_LAUNCH: u8 = 6;
 pub const STATE_NAMES: [&str; 7] = ["idle", "approach", "engage", "screen", "withdraw", "hold", "launch"];
 
@@ -71,6 +72,8 @@ pub const EXIT_NONE: u8 = 2;
 /// An answer's events for GDScript (`Answer.events`): its order changed, it wants an exit to withdraw through.
 pub const EVENT_ORDER: u8 = 1;
 pub const EVENT_WITHDRAW: u8 = 2;
+/// A carrier's count of hostiles within its launch reach changed (M10-T17).
+pub const EVENT_THREAT: u8 = 4;
 
 // `BodyKind.CAPITAL`.
 const KIND_CAPITAL: u8 = 1;
@@ -151,6 +154,8 @@ pub struct Tuning {
     pub keep_bonus: f64,
     /// A new attitude must bring this much more dps to bear than the held one.
     pub attitude_margin: f64,
+    /// A carrier counts the hostiles within this for its hangar, m (15 km, M10-T17).
+    pub launch_m: f64,
     /// The fighters' attack runs on a capital (`RunTuning`).
     pub runs: RunTuning,
 }
@@ -194,6 +199,7 @@ impl Default for Tuning {
             outgunned_ratio: 1.5,
             keep_bonus: 1.25,
             attitude_margin: 1.1,
+            launch_m: 15000.0,
             runs: RunTuning::default(),
         }
     }
@@ -208,8 +214,7 @@ pub struct CapitalSpec {
     /// Its class's worth as a target (a cruiser 1, a dreadnought 4).
     pub value: f64,
     pub doctrine: Doctrine,
-    /// It has bays: T17's carriers launch from it (the Launch state's hook).
-    #[allow(dead_code)]
+    /// It has bays: it counts threats for its hangar and holds its course while launching (M10-T17).
     pub carrier: bool,
     pub mounts: Vec<BrainMount>,
     pub points: Vec<BrainPoint>,
@@ -253,6 +258,8 @@ pub struct Status {
     pub charge: i64,
     pub exit: u8,
     pub exit_at: [f64; 3],
+    /// Its hangar is launching (M10-T17): it holds its course.
+    pub launching: bool,
 }
 
 impl Default for Status {
@@ -265,6 +272,7 @@ impl Default for Status {
             charge: 0,
             exit: EXIT_UNKNOWN,
             exit_at: [0.0; 3],
+            launching: false,
         }
     }
 }
@@ -287,6 +295,9 @@ pub struct Memory {
     pub thought_at: i64,
     /// The course it held before its fight (heading, velocity against the World's rest), taken up again once it has no target.
     pub cruise: Option<(Vector3, Vector3)>,
+    /// A carrier's hostile fighters and warships within its launch reach at its last think (M10-T17).
+    pub threat_fighters: u32,
+    pub threat_warships: u32,
 }
 
 /// The helm's course a think gives: the bow's heading, the velocity held (World frame) and the way the top should face (zero:
@@ -434,7 +445,9 @@ fn think_one<F: Fn(i64) -> i64>(
         memory.state = STATE_IDLE;
         memory.target = 0;
         memory.aim = None;
-        answer.events = order_events(&e.memory, &memory);
+        memory.threat_fighters = 0;
+        memory.threat_warships = 0;
+        answer.events = order_events(&e.memory, &memory) | threat_events(&e.memory, &memory);
         answer.memory = memory;
         return answer;
     }
@@ -442,6 +455,7 @@ fn think_one<F: Fn(i64) -> i64>(
         memory.bearings = attitude::bearings(spec, Some(surface));
     }
     let own_ix = rows.faction_ix[r];
+    (memory.threat_fighters, memory.threat_warships) = launch::threats(job, spec, rows, row_of, r, own_ix);
     let pick = targets::choose(job, spec, &memory, rows, row_of, r, own_ix);
     memory.target = pick.map_or(0, |p| p.body);
     memory.aim = pick.and_then(|p| p.aim);
@@ -468,6 +482,10 @@ fn think_one<F: Fn(i64) -> i64>(
     } else {
         STATE_IDLE
     };
+    // A carrier launching holds its course (not while it withdraws, screens or holds on orders).
+    if spec.carrier && e.status.launching && matches!(memory.state, STATE_IDLE | STATE_APPROACH | STATE_ENGAGE) {
+        memory.state = STATE_LAUNCH;
+    }
     if memory.state == STATE_WITHDRAW && !memory.withdraw_asked {
         memory.withdraw_asked = true;
         answer.events |= EVENT_WITHDRAW;
@@ -487,6 +505,7 @@ fn think_one<F: Fn(i64) -> i64>(
     // The helm's course in the World frame (the rows' velocities are against the World's rest).
     answer.helm = match memory.state {
         STATE_HOLD => None,
+        STATE_LAUNCH => Some(Course::bow(attitude::nose(&basis), own_v)),
         STATE_WITHDRAW if e.status.exit == EXIT_FOUND => {
             let goal = Vector3::new(
                 (e.status.exit_at[0] - origin[0]) as f32,
@@ -525,8 +544,18 @@ fn think_one<F: Fn(i64) -> i64>(
     answer.order = memory.target;
     answer.order_aim = memory.aim;
     answer.events |= order_events(&e.memory, &memory);
+    answer.events |= threat_events(&e.memory, &memory);
     answer.memory = memory;
     answer
+}
+
+// Whether a carrier's threat count changed between two thinks' memories.
+fn threat_events(before: &Memory, after: &Memory) -> u8 {
+    if before.threat_fighters != after.threat_fighters || before.threat_warships != after.threat_warships {
+        EVENT_THREAT
+    } else {
+        0
+    }
 }
 
 // Whether the order changed between two thinks' memories.

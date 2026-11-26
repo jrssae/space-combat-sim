@@ -461,3 +461,61 @@ fn out_of_the_fight_it_takes_up_its_course_again() {
     assert_eq!(c.velocity, v(5.0, 0.0, 0.0));
     assert!(a.memory.cruise.is_none());
 }
+
+// M10-T17: a carrier counts the hostiles within its launch reach for its hangar, and holds its course while it launches.
+#[test]
+fn a_carrier_counts_hostile_fighters_and_warships_within_its_launch_reach() {
+    let mut rows = rows_of(&[
+        (1, Vector3::ZERO, 0),
+        (2, v(5000.0, 0.0, 0.0), 1),
+        (3, v(9000.0, 0.0, 0.0), 1),
+        (4, v(14000.0, 0.0, 0.0), 1),
+        (5, v(16000.0, 0.0, 0.0), 1),
+        (6, v(2000.0, 0.0, 0.0), 0),
+    ]);
+    for k in [1, 2, 4, 5] {
+        rows.kinds[k] = 0; // fighters: two hostile within 15 km, one beyond, one friendly
+        rows.roles[k] = 0;
+    }
+    let mut carrier = broadside(1);
+    carrier.carrier = true;
+    let a = &think(&mut job(vec![entry(carrier, 0)]), &rows)[0];
+    assert_eq!((a.memory.threat_fighters, a.memory.threat_warships), (2, 1), "two fighters and a warship within 15 km");
+    assert_ne!(a.events & EVENT_THREAT, 0, "the hangar hears of it");
+    let plain = &think(&mut job(vec![entry(broadside(1), 0)]), &rows)[0];
+    assert_eq!((plain.memory.threat_fighters, plain.memory.threat_warships), (0, 0), "a hull with no bays counts nothing");
+    assert_eq!(plain.events & EVENT_THREAT, 0);
+}
+
+#[test]
+fn an_unchanged_threat_raises_no_event() {
+    let mut rows = rows_of(&[(1, Vector3::ZERO, 0), (2, v(5000.0, 0.0, 0.0), 1)]);
+    rows.kinds[1] = 0;
+    rows.roles[1] = 0;
+    let mut carrier = broadside(1);
+    carrier.carrier = true;
+    let mut j = job(vec![entry(carrier, 0)]);
+    assert_ne!(think(&mut j, &rows)[0].events & EVENT_THREAT, 0);
+    settle(&mut j);
+    assert_eq!(think(&mut j, &rows)[0].events & EVENT_THREAT, 0, "the same count again: nothing to hear");
+}
+
+#[test]
+fn a_launching_carrier_holds_its_course_instead_of_closing() {
+    let rows = rows_of(&[(1, Vector3::ZERO, 0), (2, v(0.0, 0.0, -20000.0), 1)]);
+    let mut carrier = broadside(1);
+    carrier.carrier = true;
+    let mut e = entry(carrier, 0);
+    e.status.launching = true;
+    let a = &think(&mut job(vec![e.clone()]), &rows)[0];
+    assert_eq!(a.memory.state, STATE_LAUNCH);
+    let course = a.helm.expect("it steers");
+    assert!(length(course.velocity) < 1e-3, "it holds its velocity (at rest): {:?}", course.velocity);
+    assert!(dot(course.heading, v(0.0, 0.0, -1.0)) > 0.999, "and its bow");
+    assert_eq!(a.order, 2, "its guns still take the target");
+    e.status.launching = false;
+    assert_eq!(think(&mut job(vec![e.clone()]), &rows)[0].memory.state, STATE_APPROACH, "done launching, it closes again");
+    e.status.launching = true;
+    e.status.mode = MODE_HELD;
+    assert_eq!(think(&mut job(vec![e]), &rows)[0].memory.state, STATE_HOLD, "orders come first");
+}

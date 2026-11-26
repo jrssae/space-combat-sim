@@ -8,7 +8,7 @@ use godot::prelude::*;
 
 use crate::brain_maths::Capability;
 use crate::capital_brain::{
-    Answer, BrainMount, BrainPoint, CapitalJob, CapitalSpec, Doctrine, EVENT_ORDER, EVENT_WITHDRAW, EXIT_FOUND, EXIT_NONE,
+    Answer, BrainMount, BrainPoint, CapitalJob, CapitalSpec, Doctrine, EVENT_ORDER, EVENT_THREAT, EVENT_WITHDRAW, EXIT_FOUND, EXIT_NONE,
     EXIT_UNKNOWN, Entry, MODE_AUTO, MODE_HELD, Memory, RunTuning, STATE_NAMES, Status, Tuning,
 };
 use crate::capital_helm::{self as ch, Helm, HelmSpec};
@@ -23,7 +23,7 @@ pub const POINT_LEN: usize = 8;
 pub const HELM_LEN: usize = 12;
 pub const BRAIN_LEN: usize = 6;
 /// `capital_set_tuning`'s numbers, in `Tuning`'s field order, the fighters' runs (`RunTuning`) last.
-pub const TUNING_LEN: usize = 17;
+pub const TUNING_LEN: usize = 18;
 /// `FlightBatch`'s command layout per ship.
 const CMD_SCALARS: usize = 4;
 const CMD_VECTORS: usize = 6;
@@ -127,7 +127,7 @@ fn apply(row: &mut Row, a: &Answer) {
         row.order_aim = a.order_aim;
         row.changes |= EVENT_ORDER;
     }
-    row.changes |= a.events & EVENT_WITHDRAW;
+    row.changes |= a.events & (EVENT_WITHDRAW | EVENT_THREAT);
 }
 
 fn v3(p: &[f64], k: usize) -> Vector3 {
@@ -157,12 +157,13 @@ impl ScsSimCore {
             outgunned_ratio: n[9],
             keep_bonus: n[10],
             attitude_margin: n[11],
+            launch_m: n[12],
             runs: RunTuning {
-                fire_from_m: n[12],
-                fire_to_m: n[13],
-                open_m: n[14],
-                replan_s: n[15],
-                regroup_m: n[16],
+                fire_from_m: n[13],
+                fire_to_m: n[14],
+                open_m: n[15],
+                replan_s: n[16],
+                regroup_m: n[17],
             },
         };
         true
@@ -337,6 +338,14 @@ impl ScsSimCore {
         }
     }
 
+    /// Whether `body`'s hangar is launching (M10-T17): its brain holds its course meanwhile.
+    #[func]
+    fn capital_set_launching(&mut self, body: i64, launching: bool) {
+        if let Some(i) = self.capitals.index_of(body) {
+            self.capitals.rows[i].entry.status.launching = launching;
+        }
+    }
+
     /// Which of `body`'s mounts and points still work, one byte each in `capital_add`'s order.
     #[func]
     fn capital_set_works(&mut self, body: i64, mounts: PackedByteArray, points: PackedByteArray) {
@@ -487,7 +496,7 @@ impl ScsSimCore {
     }
 
     /// `body`'s brain as the console and tests read it: `[state, target body, aim (or null), attitude, thinks, mode, exit,
-    /// withdraw asked, order body]`; empty without one.
+    /// withdraw asked, order body, hostile fighters and warships within its launch reach, launching]`; empty without one.
     #[func]
     fn capital_brain_state(&self, body: i64) -> VarArray {
         let mut out = VarArray::new();
@@ -503,18 +512,24 @@ impl ScsSimCore {
             out.push(&i64::from(row.entry.status.exit).to_variant());
             out.push(&m.withdraw_asked.to_variant());
             out.push(&row.order.to_variant());
+            out.push(&i64::from(m.threat_fighters).to_variant());
+            out.push(&i64::from(m.threat_warships).to_variant());
+            out.push(&row.entry.status.launching.to_variant());
         }
         out
     }
 
-    /// What GDScript is yet to hear since the last call: `[bodies, order targets, aims, flags]`, one entry per capital with a
-    /// change (flags: 1 its order changed, 2 it has an aim point, 4 it wants an exit to withdraw through).
+    /// What GDScript is yet to hear since the last call: `[bodies, order targets, aims, flags, threat fighters, threat
+    /// warships]`, one entry per capital with a change (flags: 1 its order changed, 2 it has an aim point, 4 it wants an exit
+    /// to withdraw through, 8 a carrier's count of hostiles within its launch reach changed, M10-T17).
     #[func]
     fn capital_take_changes(&mut self) -> VarArray {
         let mut bodies = PackedInt64Array::new();
         let mut targets = PackedInt64Array::new();
         let mut aims = PackedVector3Array::new();
         let mut flags = PackedByteArray::new();
+        let mut fighters = PackedInt32Array::new();
+        let mut warships = PackedInt32Array::new();
         for row in &mut self.capitals.rows {
             if row.changes == 0 {
                 continue;
@@ -532,7 +547,12 @@ impl ScsSimCore {
             if row.changes & EVENT_WITHDRAW != 0 {
                 f |= 4;
             }
+            if row.changes & EVENT_THREAT != 0 {
+                f |= 8;
+            }
             flags.push(f);
+            fighters.push(row.entry.memory.threat_fighters as i32);
+            warships.push(row.entry.memory.threat_warships as i32);
             row.changes = 0;
         }
         let mut out = VarArray::new();
@@ -540,6 +560,8 @@ impl ScsSimCore {
         out.push(&targets.to_variant());
         out.push(&aims.to_variant());
         out.push(&flags.to_variant());
+        out.push(&fighters.to_variant());
+        out.push(&warships.to_variant());
         out
     }
 
@@ -587,6 +609,7 @@ impl ScsSimCore {
             word(u64::from(m.attitude));
             word(u64::from(row.entry.helm.flipping));
             word(m.thinks as u64);
+            word(u64::from(m.threat_fighters) | (u64::from(m.threat_warships) << 32));
         }
         h as i64
     }

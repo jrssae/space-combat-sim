@@ -26,6 +26,18 @@ impl ScsDockRows {
         self.rows.push(Row::new(phase, cradle_position, cradle_basis, approach_m, rest));
     }
 
+    /// Puts the fighter `key` under a bay's control (M10-T17): it rests at `position` (the bay's floor point, the carrier's
+    /// frame) with attitude `basis`, launches along `out_axis` for `launch_m` and returns to `approach_m` out along it; with
+    /// `lift_m` over 0 a lift brings it up from that far below the floor first, and takes it down after a capture.
+    #[func]
+    #[allow(clippy::too_many_arguments)]
+    fn add_bay(&mut self, key: i64, phase: i32, position: Vector3, basis: Basis, out_axis: Vector3, approach_m: f32, launch_m: f64,
+            lift_m: f32, rest: Vector3) {
+        self.remove(key);
+        self.keys.push(key);
+        self.rows.push(Row::bay(phase, position, basis, out_axis, approach_m, launch_m, lift_m, rest));
+    }
+
     /// Lets the fighter `key` go; false when it was not there.
     #[func]
     fn remove(&mut self, key: i64) -> bool {
@@ -47,6 +59,14 @@ impl ScsDockRows {
         }
     }
 
+    /// The lift takes the fighter `key`, waiting on a bay's floor, down to the hangar deck (M10-T17).
+    #[func]
+    fn begin_lower(&mut self, key: i64) {
+        if let Some(i) = self.keys.iter().position(|&k| k == key) {
+            self.rows[i].begin_lower();
+        }
+    }
+
     #[func]
     fn clear(&mut self) {
         self.keys.clear();
@@ -64,7 +84,7 @@ impl ScsDockRows {
         PackedInt64Array::from(self.keys.as_slice())
     }
 
-    /// The phase of `key` (0 launch, 1 return, 2 capture), -1 when it is not there.
+    /// The phase of `key` (0 launch, 1 return, 2 capture, 3 lift, 4 lower, 5 waiting on a bay's floor), -1 when it is not there.
     #[func]
     fn phase_of(&self, key: i64) -> i32 {
         self.keys.iter().position(|&k| k == key).map_or(-1, |i| self.rows[i].phase)
@@ -72,7 +92,7 @@ impl ScsDockRows {
 
     /// One tick of every row. The carrier's pose, velocity and spin and each fighter's `positions`, `velocities` and
     /// braking (`brakes`, m/s2) are World-frame, in row order. Returns `[events, positions, velocities, x, y, z]`: per
-    /// row its event (0 none, 1 released, 2 at its approach point, 3 docked), the pose to set (launch, capture) or the
+    /// row its event (0 none, 1 released, 2 at its approach point, 3 docked, 4 lifted to the bay's floor, 5 in a bay waiting for its lift), the pose to set (launch, capture) or the
     /// point flown to (return), the velocity to set or to hold, and the attitude's three axes. Released and docked rows
     /// are gone after the step.
     #[func]
@@ -127,9 +147,11 @@ impl ScsDockRows {
     }
 
     /// The kernel's numbers, for the tests and the console: launch and capture times (s), release height, capture
-    /// radius (m) and capture speed (m/s).
+    /// radius (m), capture speed (m/s), a lift's time (s) and a bay's entry speed (m/s).
     #[func]
     fn constants(&self) -> PackedFloat64Array {
-        PackedFloat64Array::from([dk::LAUNCH_S, dk::CAPTURE_S, dk::RELEASE_M, dk::CAPTURE_RADIUS_M, dk::CAPTURE_MPS].as_slice())
+        PackedFloat64Array::from(
+            [dk::LAUNCH_S, dk::CAPTURE_S, dk::RELEASE_M, dk::CAPTURE_RADIUS_M, dk::CAPTURE_MPS, dk::LIFT_S, dk::BAY_ENTRY_MPS].as_slice(),
+        )
     }
 }

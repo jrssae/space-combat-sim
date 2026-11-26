@@ -37,7 +37,8 @@ extends RefCounted
 ##                                                  #       the members of `wings[]` come last, in their order
 ##      "capitals": Array[Dictionary],              # (M10-T64) `capitals[]`, capital ships parked at load, held still: each {type,
 ##                                                  #       name ("" = its class's names), offset (from the origin), forward,
-##                                                  #       standin (bool, false: build the class's `CapitalStandin`, as the raiders' strike carrier is)}
+##                                                  #       standin (bool, false: build the class's `CapitalStandin`, as the raiders' strike carrier is),
+##                                                  #       hangar (bool, false: M10-T17, its hangar takes its loadout's craft aboard to launch)}
 ##      "wings": Array[Dictionary],                 # `wings[]` (M3-T10): {name, faction (StringName, &"" for any), leader
 ##                                                  #       ("player", a spawn's name, or "" for its first ship), formation
 ##                                                  #       (Formation.Shape), order (AiContext.Order), home (StringName, M8-T06: the
@@ -799,7 +800,8 @@ static func _capitals(raw: Variant, source: String) -> Variant:
 		if offset == null or forward == null or (forward as Vector3).is_zero_approx():
 			return "%s: offset and forward must be [x, y, z] (numbers), forward not zero" % where
 		out.append({"type": StringName(type as String), "name": str(entry.get("name", "")),
-				"offset": offset as Vector3, "forward": forward as Vector3, "standin": bool(entry.get("standin", false))})
+				"offset": offset as Vector3, "forward": forward as Vector3, "standin": bool(entry.get("standin", false)),
+				"hangar": bool(entry.get("hangar", false))})
 	return out
 
 

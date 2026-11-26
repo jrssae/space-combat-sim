@@ -22,8 +22,8 @@ const POINT_SECTION: int = 5
 const PART_HALF_M: float = 10.0
 ## `capital_set_tuning`'s keys, in order, with their defaults.
 const TUNING_KEYS: Array[String] = ["think_hz", "engage_share", "approach_mps", "arrive_s", "sensor_m", "screen_min_m",
-		"screen_max_m", "withdraw_hull", "withdraw_reactor", "outgunned_ratio", "keep_bonus", "attitude_margin"]
-const TUNING_DEFAULTS: Array[float] = [5.0, 0.7, 40.0, 30.0, 30000.0, 800.0, 1200.0, 0.3, 0.5, 1.5, 1.25, 1.1]
+		"screen_max_m", "withdraw_hull", "withdraw_reactor", "outgunned_ratio", "keep_bonus", "attitude_margin", "launch_m"]
+const TUNING_DEFAULTS: Array[float] = [5.0, 0.7, 40.0, 30.0, 30000.0, 800.0, 1200.0, 0.3, 0.5, 1.5, 1.25, 1.1, 15000.0]
 
 
 ## The helm's numbers for a hull flying `flight_spec` with `layout`'s nozzles: gravitic, retros, a_main, a_retro, a_rcs x and
