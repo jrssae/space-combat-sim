@@ -1728,6 +1728,40 @@ On top of it:
 
 ### M10-T70 Clearance of the resized EA craft in B5's main docking bay
 
+- **Stage 2 progress (2026-11-26, committed; the task stays in progress: the bay is open, then stage 3).**
+  **Built:** four docking collars on the collar's lower teeth (`docking_ports`, a new `dock` hardpoint kind; none on the
+  turning band); `ShipDock` on every capital with collars, flying craft with M8-T06's `DockKeepOut`, `DockAutopilot` (now
+  with a nose direction and a fine seek for backing onto a lock) and `DockVisit` in the hull's frame, numbers in
+  `data/capitals/ship_docks.json`; a crew shuttle (AI or the player's) approaches round the hull, backs down the collar's lane,
+  mates by its stern hatch, rides with the liner and leaves; the liner must hold station (Q84), a hulk takes nobody;
+  `ShipDocks` with the `shipdock` command, the `ship_docks` provider and `m.dock_at` / `m.undock` for missions; the scene
+  `liner_dock` ("Liner docking" in the New game list; `player.type` puts the player in a crew shuttle): target the docking
+  collars and hold X (Shift, Mouse 4) to dock, hold again to abort on the way in or to undock once mated. `info.md`,
+  `docs/architecture.md` §22.12, `docs/assets-capital.md`.
+  **Not built, needs the maintainer: the shuttle bay.** The decision of 2026-11-26 (the hall spreads sideways inside the
+  fixed forward section) cannot hold either craft: there are 20 m between the bowl's floor and the mouth's back, the crew
+  shuttle is 38 m long and the folded Kestrel 29.0 x 22.9 x 19.4 m, and neither can turn in a 45 x 27 m doorway with 20 m
+  behind it or come through it sideways-on (the numbers and options A to D are in `docs/assets-capital.md`, `ea_asimov`;
+  A, the band's collision as a ring round a fixed core, changes nothing to look at). So there is no hall, no doors, no
+  berths, and the Kestrel (no docking lock, Q93) cannot dock at the liner yet: a headless test shows it refused. With a
+  `bay` hardpoint the bay is flown by T17's `CapitalHangar` as the Hyperion's shuttle bay is.
+  **Verified on staged copies (HEAD and T53's files only, the liner rebuilt there, their own native build):** Python 78
+  (`test_ea_asimov` 21 with the reference STL, three of them new: the collars, a crew shuttle swept onto each, neighbours
+  apart; `test_capital_framework` 9, `test_capital_parts`, `test_ea_craft_bay_clearance`, `test_cli`, `test_budgets`); the
+  90 % compare 0.971, 0.973, 0.996, sizes within 0.1 %, every section as before; compile check 1 168 scripts clean. GUT on
+  feeebe39, 196 of 196: `test_ship_dock` 7 (the scene, an AI shuttle docks, rides mated and leaves untouched, the player
+  docks and undocks with the hold, an abort, the Kestrel and a taken collar refused, the console, a mission's journal),
+  `test_ship_dock_ports` 6, `test_ship_dock_rules` 10, and neighbours `test_dock_autopilot` 7, `test_docking` 17,
+  `test_autopilot_abort` 2, `test_nav_targets` 9, `test_station_traffic` 7, `test_scenario_loader` 42, `test_keyboard_parity`
+  4, `test_quick_suite` 3, `test_settings_schema` 26, `test_front_end` 26, `test_console_command_list` 7, `test_ea_asimov` 3,
+  `test_capital_ship` 10, `test_hangar_rules` 10; on 1c57fc10 also `test_dock_keep_out` 7, `test_dock_visit` 5,
+  `test_dock_roll` 2, `test_nav_interaction` 12, `test_capital_bay_interiors` 4, `test_band_tint_material` 6. A crew shuttle
+  from 700 m is mated in about 70 s; a dock with one visitor costs 76 us a tick (debug build), nothing with none.
+  **GPU** (RX 6950 XT, Forward+, 1280x720): `references/screenshots/M10-T53 Asimov liner/stage2_docks.png` (the player's
+  shuttle on its approach with two AI shuttles mated, backing down the lane, mated from two sides), 109 fps and 98 draw
+  calls mated with three shuttles; no bay panel, since there is no bay. Judging the look is (H).
+  **Open:** the bay (above); AI visitors keep their collar until told to leave (stage 3's traffic times them); a shuttle
+  docking is not followed by cinematic shots; the collars have no door or docking light of their own.
 - **T70 done (2026-11-23).** Each hull's collision shapes swept down the mouth (73.2 x 16.7 m band, 45.5 x 30.0 m core, outline clear to the doors) all fit, level and centred: crew shuttle 9.5 m, Kestrel 5.3 m (the wingtip under the band's ceiling), tender 12.8 m; off by 2 m and 2 degrees of roll 7.4, 2.4 and 10.7 m. Test: `tools/procgen/tests/test_ea_craft_bay_clearance.py`.
 
 ### M10-T71 Re-size the Panama (Q66, Q74)

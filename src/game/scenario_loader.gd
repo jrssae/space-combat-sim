@@ -12,6 +12,8 @@ extends RefCounted
 ##      "player": {"position": UniversePos, "forward": Vector3, "basis": Basis,
 ##                 "velocity": Vector3,             # the start velocity (M5-T10), zero unless given
 ##                 "home": StringName,              # (M8-T06) `player.home`: the dock it belongs to ("babylon5"), &"" for none
+##                 "type": StringName,              # (M10-T53) `player.type`: the hull the player flies (a test scene's crew
+##                                                  #       shuttle); the Starfury unless given
 ##                 "launch_bay": String},           # (M7-T08) `player.launch_bay` or `player.launch` {wing, door}: the start on
 ##                                                  #       that Cobra bay's rack ("cobra_bay_alpha_3"); "" in flight
 ##      "station": Dictionary,                      # (M7-T12) the station's traffic at the start: {"cargo_ferry": int} (the Saturn 3 backed
@@ -128,6 +130,9 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	var player_dict: Dictionary = player
 	if not (player_dict.get("home", "") is String):
 		return _failure("%s: player.home must be a dock's id (\"babylon5\") or \"none\"" % source)
+	var player_type: Variant = player_dict.get("type", String(ShipCatalog.PLAYER_TYPE))
+	if not (player_type is String) or not _is_ship_type(StringName(player_type as String)):
+		return _failure("%s: player.type must be a ship type of the catalogue" % source)
 	var launch_bay: Variant = _launch_bay(player_dict, source)
 	if launch_bay is Dictionary:
 		return launch_bay
@@ -264,7 +269,7 @@ static func from_data(data: Variant, source: String = "scenario") -> Dictionary:
 	result["system_id"] = system
 	result["player"] = {"position": player_pos as UniversePos, "forward": forward_unit,
 			"basis": basis_facing(forward_unit), "velocity": start_velocity as Vector3, "launch_bay": launch_bay as String,
-			"home": home_id(player_dict.get("home", "") as String)}
+			"home": home_id(player_dict.get("home", "") as String), "type": StringName(player_type as String)}
 	result["props"] = props
 	result["jumpgates"] = jumpgates
 	result["pools"] = pools

@@ -1,0 +1,34 @@
+{
+ "_doc": "Docking at a ship (M10-T53, Q84): a small craft with a docking port of its own (docking_ports in its hardpoints.json: the crew shuttle's stern hatch) mates with a collar of a capital hull (docking_ports in the hull's hardpoints.json), flown by M8-T06's docking autopilot (ShipDock, ShipDockRules). `defaults` hold for every hull, a hull's own entry under `hulls` overrides them. Lengths in metres, speeds in m/s, times in seconds; boxes in the hull's body frame (-z forward). join_out_m: the lane begins this far out of the collar on its axis; join_m, join_max_mps: a craft this near that point and this slow turns onto the lane; nose_tol_deg: it moves down the lane only once its nose (away from the collar: it backs in) and roll are within this; lane_mps, final_mps, final_m: its speed down the lane and over the last metres; gap_m: the space left between the two locks when mated; capture_m, capture_mps: within this of the mated place and this slow it is taken and held; release_m: an undocking craft is let go this far out; approach_mps, via_mps, clear_m, via_m: the way round the hull's keep_out boxes, as the station's; brake_share: the share of its mains the approach plans its braking with (a heavy shuttle turns slowly before it brakes, and the lane's start lies between it and the hull); hold_max_mps: no docking while the hull moves faster than this against the place's rest (Q84: it holds station); range_m: how near the player must be for HOLD X: DOCK; timeout_s: a craft not mated by then gives up.",
+ "defaults": {
+  "join_out_m": 220.0,
+  "join_m": 12.0,
+  "join_max_mps": 6.0,
+  "nose_tol_deg": 6.0,
+  "lane_mps": 14.0,
+  "final_mps": 1.5,
+  "final_m": 25.0,
+  "gap_m": 0.3,
+  "capture_m": 0.6,
+  "capture_mps": 2.5,
+  "release_m": 90.0,
+  "approach_mps": 80.0,
+  "brake_share": 0.5,
+  "via_mps": 40.0,
+  "clear_m": 30.0,
+  "via_m": 55.0,
+  "hold_max_mps": 2.0,
+  "range_m": 3000.0,
+  "timeout_s": 300.0,
+  "keep_out": []
+ },
+ "hulls": {
+  "ea_asimov": {
+   "_doc": "The sphere with its collar's teeth and the engine frame as one box, the command spine ahead of it as another (it stands above the axis; the collars are below it).",
+   "keep_out": [
+    {"name": "sphere", "min": [-176, -180, -170], "max": [176, 172, 268]},
+    {"name": "spine", "min": [-54, 6, -338], "max": [54, 82, -168]}
+   ]
+  }
+ }
+}

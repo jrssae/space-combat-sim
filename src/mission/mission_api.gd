@@ -386,6 +386,27 @@ func send(ship_name: String, target_name: String) -> bool:
 	return true
 
 
+## Sends the AI craft `craft_name` to dock at the ship `ship_name` (M10-T53: a liner's docking collars; "" the nearest ship
+## that has them), at collar `port_name` ("" its nearest free one). The ship must hold station. False when it cannot.
+func dock_at(craft_name: String, ship_name: String = "", port_name: String = "") -> bool:
+	if has_ended():
+		return false
+	if stage != null and not stage.dock_at(craft_name, ship_name, port_name):
+		return false
+	journal.append("dock %s at %s" % [craft_name, ship_name if not ship_name.is_empty() else "the nearest ship"])
+	return true
+
+
+## Sends the craft `craft_name`, mated on a ship's collar, on its way again (M10-T53). False when it is not docked.
+func undock(craft_name: String) -> bool:
+	if has_ended():
+		return false
+	if stage != null and not stage.undock(craft_name):
+		return false
+	journal.append("undock %s" % craft_name)
+	return true
+
+
 ## Ships that only matter while this step plays (a wave, M5-T30): in a skipped step they leave play at once, as a forced
 ## `destroyed` would release them, so a skip leaves no wave behind (D62). Played, it does nothing.
 func transient(names: PackedStringArray) -> void:

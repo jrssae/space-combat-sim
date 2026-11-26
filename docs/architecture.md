@@ -6948,7 +6948,8 @@ src/mission/trigger_fact.gd           TriggerFact (`TriggerSpec.fact`, JSON kind
   `gate_point(ahead_m)`; `gather(names, at)` (in a skipped step only: where flying the step would have left those ships);
   `fact(name)` with `TriggerSpec.fact`; `when(trigger, action)` (an action run once when its trigger first holds, while the
   steps go on: Control's docking offer, a launch asked again while the arm is busy); `note` / `noted`; `checkpoint(step, label)`;
-  `debrief_line(text)`; `award_rank(rank)`; `own_dock_offer()`.
+  `debrief_line(text)`; `award_rank(rank)`; `own_dock_offer()`; `dock_at(craft, ship, collar)` and `undock(craft)` (M10-T53:
+  an AI craft to a ship's docking collar and off it again, §22.12).
 - **Two ships until the alarm (M8-T33).** `m.pilot(ship, profile)` gives an AI ship another pilot (`MissionStage` keeps
   the one it had and `m.pilot(ship)` gives it back); `m.join_flight(ship)` and `m.leave_flight(ship)` put it in the player's
   flight and take it out. The instructor joins the flight for the launch (the squadron launch with one flight carries the
@@ -7727,3 +7728,57 @@ data/capitals/capitals.json         `carrier_launch`: wings, triggers, gaps, lan
 - **Known gaps.** A craft flying home is steered in GDScript (`CarrierDock._steer`). The Nova's lift is drawn over the hall's floor (its plate and a dark well), not cut into it; the Omega's craft
   appear at its hall's back; craft aboard are not drawn; a returning craft may meet the hull on its way round (T19's way round);
   the bench's stand-in launches stay until T45; fighters of factions whose craft are not built yet (Frazi, Nial, ...) are skipped.
+
+### 22.12 Docking at a ship (T53, Q84)
+
+```
+src/capital/ship_dock.gd            ShipDock (a child of every CapitalShip whose hull has `docking_ports`): the collars, the
+                                    visits, the flying, the hold on a mated craft, the collars' nav point (HOLD X: DOCK)
+src/capital/ship_dock_ports.gd      ShipDockPorts (pure): a hull's collars and the mated pose of a craft's own lock on one
+src/capital/ship_dock_rules.gd      ShipDockRules (pure): a hull's options, the way round its keep-out boxes, the lane's speeds
+src/capital/ship_docks.gd           ShipDocks (Main's child): orders by name, a pooled shuttle sent in, the player's docking;
+                                    command `shipdock`, provider `ship_docks`
+data/capitals/ship_docks.json       `defaults` and a hull's own entry: speeds, the lane, the gap, the keep-out boxes
+data/scenarios/liner_dock.json      the player in a crew shuttle (`player.type`) 1.5 km off an Asimov's bow
+```
+
+- **What was generalised.** M8-T06's docking pieces were already pure and frame-free (§21.1): `DockKeepOut` routes round
+  boxes to a goal in whatever frame its boxes are in, `DockAutopilot` takes World poses and a velocity against the dock, and
+  `DockVisit` is a state. `ShipDock` uses all three in a **hull's** frame: the boxes are the hull's (`ship_docks.json`,
+  `hulls.<type>.keep_out`), the velocity is against the capital ship, and the dock is found from the hull's hardpoints, not
+  from the station. `DockAutopilot.lane` gained a `nose` direction (a craft that mates by its stern backs down the lane with
+  its nose out) and `fine` (`fine_seek`: `PilotSteering.seek` has a 1 m/s dead band, too coarse for the last decimetres).
+  The station's `DockingDirector` is unchanged: its bay, doors, repair and Cobra-bay relaunch stay its own.
+- **Collars are data.** A capital hull's `docking_ports` (`position`, `out`, `up`; the generator's `dock` hardpoint kind,
+  written only by a hull that has collars) and a small craft's own `docking_ports` (the crew shuttle's `stern_hatch`) are the
+  same contract. `ShipDockPorts.mate` puts the craft's lock on the collar's, the two `out`s opposed, `gap_m` apart. A craft
+  without a port cannot mate: the Kestrel only lands in bays (Q93). Any hull that gets `docking_ports` gets a dock; nothing
+  names the liner.
+- **A visit.** *Approach:* `DockKeepOut.next_target` to the lane's start, `join_out_m` out on the collar's axis, with
+  `brake_share` of the mains planned (a heavy shuttle turns for seconds before it brakes, and the hull lies beyond the
+  lane's start). *Lane:* within `join_m` and under `join_max_mps` the craft turns as it will lie mated and only then backs
+  in (`nose_tol_deg`): `lane_mps`, `final_mps` over the last `final_m`, easing onto the lock. Within `capture_m` and
+  `capture_mps` it is taken. *Inside:* placed on the collar every tick with the ship's velocity, a collision exception with
+  the ship from the last `final_m` on. *Launching:* out along the lane, let go `release_m` out. An AI craft's pilot is in
+  `in_passage` for the whole visit and the dock sets its command; the player's comes from `ShipDocks.step_player` in
+  `Main`'s autopilot chain (after the gate's and the station's), with `controls_locked` for the whole visit.
+- **The ship holds station (Q84).** `closed_reason`: no visit starts, and a craft on its way in is let go, while the ship
+  moves faster than `hold_max_mps` against the place's rest, is a hulk (Q78) or is lost. `hold_station()` (`shipdock hold`)
+  has it hold; `is_busy()` says a craft is on its way, mated or leaving, for whoever wants to move the ship (stage 3's
+  traffic). A lost ship lets every craft go.
+- **The player.** The collars are one `NavPoint` (kind `dock`, in `NavPoint.DOCKS_GROUP`, `home_id` the ship's name): target
+  it and hold X within `range_m`. `AutopilotAbort` offers the same hold as ABORT until the craft is mated (`ship_dock`) and
+  as UNDOCK once it is (`undock`), since no interaction is offered while the controls are held. Pad X, Shift and Mouse 4 are
+  the one action (`InputAdapter.AUTOTRACK`), so the keyboard has it too.
+- **Callers.** `ShipDocks.dock_ship(craft, ship, collar)`, `undock_ship`, `cancel_ship`, `send_craft(dock, type, collar)`;
+  missions `m.dock_at(craft, ship, collar)` and `m.undock(craft)` (§21.3's API list); the console's `shipdock`.
+- **Cost.** A dock with nobody visiting does not tick. With one visitor 76 us a tick in the debug build (GDScript: one
+  `DockKeepOut` lookup or lane command, the hold). At most one craft a collar, so four a liner; if many ships take visitors
+  at once this is the loop to move into the dock kernel (as §22.11's rows).
+- **Not built: the shuttle bay.** The hall behind the hexagonal mouth is open (`docs/assets-capital.md`, `ea_asimov`): the
+  mouth's back is 20 m behind the bowl's floor and the turning band's collision starts 2 m after, so no hall inside the
+  fixed forward section can take a 38 m crew shuttle or a 29 m Kestrel through the 45 x 27 m mouth. When the geometry is
+  settled the bay is a `bay` hardpoint with two berths, flown by §22.11's `CapitalHangar` (the Hyperion's shuttle bay already
+  takes both craft that way, the Kestrel with folded wings).
+- Tests: `tests/unit/test_ship_dock_ports.gd`, `test_ship_dock_rules.gd`, `tests/integration/test_ship_dock.gd`; the collars
+  and a crew shuttle swept onto each in `tools/procgen/tests/test_ea_asimov.py`.

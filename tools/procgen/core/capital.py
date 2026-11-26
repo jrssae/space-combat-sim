@@ -233,8 +233,9 @@ def _json_params(params: dict[str, Any], offset: np.ndarray) -> dict[str, Any]:
 
 def hardpoint_lists(modules: Sequence[cp.Module], offset: np.ndarray) -> dict[str, list[dict[str, Any]]]:
     """The capital hardpoints by list (body frame): ``weapons``, ``bays``, ``engines``, ``lights``, ``marks`` (painted
-    lettering, ``core/glyphs.py``) and, when a bay has one, ``doors`` (its roll-up door), in module order."""
-    out: dict[str, list[dict[str, Any]]] = {"weapons": [], "bays": [], "engines": [], "lights": [], "marks": [], "doors": []}
+    lettering, ``core/glyphs.py``) and, when the hull has any, ``doors`` (a bay's roll-up door) and ``docking_ports`` (collars, in
+    the small craft's form: ``position``, ``out``, ``up``), in module order."""
+    out: dict[str, list[dict[str, Any]]] = {"weapons": [], "bays": [], "engines": [], "lights": [], "marks": [], "doors": [], "docking_ports": []}
     for m in modules:
         for h in m.hardpoints:
             base = {"name": h.name, "section": m.section, "position": cv.r(h.position - offset)}
@@ -249,10 +250,13 @@ def hardpoint_lists(modules: Sequence[cp.Module], offset: np.ndarray) -> dict[st
                 out["marks"].append({**base, "normal": cv.r(h.forward), "up": cv.r(h.up), **params})
             elif h.kind == cp.DOOR:
                 out["doors"].append({**base, "forward": cv.r(h.forward), "up": cv.r(h.up), **params})
+            elif h.kind == cp.DOCK:
+                out["docking_ports"].append({**base, "out": cv.r(h.forward), "up": cv.r(h.up), **params})
             else:
                 out["lights"].append({**base, "direction": cv.r(h.forward), **params})
-    if not out["doors"]:
-        del out["doors"]  # a hull without doors writes what it always did
+    for optional in ("doors", "docking_ports"):
+        if not out[optional]:
+            del out[optional]  # a hull without them writes what it always did
     return out
 
 

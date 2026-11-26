@@ -3,6 +3,7 @@ extends RefCounted
 ## The autopilot that brings the player's ship into the main docking bay (M8-T06, D82): to the lane from whatever speed the ship
 ## has, then along the lane's axis through the mouth and the inner doors to a stop in the void. Pure: World poses and the ship's
 ## velocity against the station in, one `FlightCommand` out, through `PilotSteering` as the gate's autopilot flies.
+## A ship's docking collars are flown with it too (M10-T53, `ShipDock`): poses in the World, the velocity against the hull.
 ## The speeds come from `StoppingDistance`, which the approach cue shares (D84).
 
 ## The nose turns onto the velocity error while it is larger than this (a flip and burn); else onto the course.
@@ -42,18 +43,30 @@ static func lane_speed(to_stop_m: float, cap_mps: float, capability: ShipCapabil
 
 
 ## The command along the lane: `axis` (World, unit, into the bay) through `on_axis`, at `speed`, pulled onto the axis, nose in,
-## rolling at `roll` (`roll_with`).
+## rolling at `roll` (`roll_with`). `nose` (World) points the ship another way than in: a craft that mates by its stern backs
+## down the lane with its nose out (M10-T53), and with `fine` it corrects the last decimetres too (`fine_seek`).
 static func lane(position: Vector3, velocity: Vector3, basis: Basis, on_axis: Vector3, axis: Vector3, speed: float,
-		capability: ShipCapability, roll: float = 0.0) -> FlightCommand:
+		capability: ShipCapability, roll: float = 0.0, nose: Vector3 = Vector3.ZERO, fine: bool = false) -> FlightCommand:
 	var rel: Vector3 = position - on_axis
 	var lateral: Vector3 = rel - axis * rel.dot(axis)
 	var v_des: Vector3 = axis * speed + (-lateral * K_LATERAL).limit_length(MAX_LATERAL_MPS)
 	var cmd := FlightCommand.new()
-	cmd.rot = PilotSteering.face(basis, axis, capability.rate_max_rad)
+	cmd.rot = PilotSteering.face(basis, axis if nose.is_zero_approx() else nose, capability.rate_max_rad)
 	cmd.rot.z = roll  # turning with the drum (`roll_with`)
 	# Every thruster, the nose held on the axis: the retros slow it, the side thrusters keep it in the tunnel.
-	PilotSteering.apply_seek(cmd, PilotSteering.seek(velocity, v_des, basis, capability, PilotSteering.HORIZON_S, true))
+	PilotSteering.apply_seek(cmd, fine_seek(velocity, v_des, basis, capability) if fine
+			else PilotSteering.seek(velocity, v_des, basis, capability, PilotSteering.HORIZON_S, true))
 	return cmd
+
+
+## Thrust levels as `PilotSteering.seek` on every axis, without its dead band of 1 m/s: a craft meeting a lock at a walk
+## must still shed its last decimetres a second (M10-T53).
+static func fine_seek(velocity: Vector3, v_des: Vector3, basis: Basis, capability: ShipCapability) -> Dictionary:
+	var dv_b: Vector3 = basis.transposed() * (v_des - velocity)
+	return {"main": clampf(-dv_b.z / (capability.a_main * PilotSteering.HORIZON_S), 0.0, 1.0),
+			"retro": clampf(dv_b.z / (capability.a_retro * PilotSteering.HORIZON_S), 0.0, 1.0),
+			"strafe": Vector2(clampf(dv_b.x / (capability.a_rcs.x * PilotSteering.HORIZON_S), -1.0, 1.0),
+					clampf(dv_b.y / (capability.a_rcs.y * PilotSteering.HORIZON_S), -1.0, 1.0))}
 
 
 ## The roll that turns the ship with the drum (M8-T31, maintainer 2026-11-19: it visibly matches the drum's rotation before it

@@ -124,6 +124,8 @@ res://tests/unit/test_dock_keep_out.gd
 res://tests/unit/test_dock_autopilot.gd
 res://tests/unit/test_dock_repair.gd
 res://tests/unit/test_dock_visit.gd
+res://tests/unit/test_ship_dock_ports.gd
+res://tests/unit/test_ship_dock_rules.gd
 res://tests/unit/test_wing_away.gd
 res://tests/unit/test_flight_rules.gd
 # Jumpgate and jump vortex (M6-T14, T19)

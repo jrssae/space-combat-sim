@@ -56,6 +56,11 @@ HEX = ((22.5, -21.5), (11.5, -8.0), (-11.5, -8.0), (-22.5, -21.5), (-11.5, -35.0
 HEX_BACK_Z = 234.0
 POD_ANGLES_DEG = (-70.5, -52.5, -34.5, -16.5, 19.5, 36.0, 53.5)  # the collar's teeth from starboard (the port ones are their twins)
 POD_R, POD_Z = (62.0, 74.0), (166.0, COLLAR[0] + 0.5)
+# The docking collars (Q84): on the tips of these four teeth below the spine (the port two are the twins), where a crew shuttle
+# backed onto one lies clear of the spine, the saucer and its neighbour.
+COLLAR_TEETH_DEG = (-34.5, -70.5)
+COLLAR_NAMES = ("collar_upper_r", "collar_lower_r")
+COLLAR_R, COLLAR_REACH = 2.6, 2.6  # the lock's radius and how far it stands ahead of its tooth
 WINDOW_BAND_Z = (429.5, 441.5)  # the dark band of window rows on the aft cap
 ENGINE_XY = (39.0, 37.5)  # the outer nacelles' axes; the middle pair stands on x = 0
 ENGINE_Z = (466.0, 600.0)
@@ -397,6 +402,22 @@ def forward_face(s: Style, pattern: Pattern, section: str = "face") -> list[cp.M
     return out
 
 
+def docking_collars(s: Style, section: str = "face") -> list[cp.Module]:
+    """The starboard docking collars (Q84; their port twins follow): a short lock with a lit rim on a tooth's tip, facing
+    forward, and its ``dock`` hardpoint on the lock's face, where a crew shuttle's stern hatch meets it."""
+    dark, glow = s.material("hull_dark"), s.material("window")
+    out = []
+    for name, deg in zip(COLLAR_NAMES, COLLAR_TEETH_DEG, strict=True):
+        a = math.radians(deg)
+        x, y = 67.5 * math.cos(a), 67.5 * math.sin(a)  # the middle of the tooth's tip
+        z0, z1 = POD_Z[0], POD_Z[0] - COLLAR_REACH
+        profile = [(0.0, COLLAR_R + 0.4), (0.7, COLLAR_R + 0.4), (0.7, COLLAR_R), (COLLAR_REACH, COLLAR_R), (COLLAR_REACH, 0.0)]
+        lock = cs.round_body(name, (x, y, z0), (x, y, z1), profile, s, [dark, glow, dark, dark], sides=16, creases={1, 2, 3}, skin=cp.SKIN_FITTING)
+        point = cp.Hardpoint(name, cp.DOCK, (x, y, z1), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0), {"radius_m": COLLAR_R})
+        out.append(_put(section, dataclasses.replace(lock, hardpoints=(point,)), cp.RIGHT))
+    return out
+
+
 # --- the habitat band and the aft cap ------------------------------------------------------------------------------------
 def band(s: Style, pattern: Pattern, section: str = "habitat") -> list[cp.Module]:
     """The turning band in two halves split at the equator (the mining transport parts its sphere there, T56), white (the game
@@ -527,6 +548,6 @@ def engine(s: Style, name: str, section: str, up: float) -> cp.Module:
     return _put(section, dataclasses.replace(cs.compound(name, [drum, bell]), hardpoints=(point,)), cp.RIGHT)
 
 
-__all__ = ["AFT_SEAM_Z", "BAND_PIVOT", "BOWL", "BOWL_FLOOR_Z", "ENGINE_XY", "ENGINE_Z", "FACE_Z", "FORE_SEAM_Z", "HEX", "HEX_BACK_Z", "LENGTH_M", "POD_ANGLES_DEG",
-           "Pattern", "SAUCER_AT", "SEAM_WIDTH", "SPHERE_R", "SPHERE_Z", "WINDOW_BAND_Z", "aft_cap", "band", "bowl_fittings", "brackets", "command", "engine",
+__all__ = ["AFT_SEAM_Z", "BAND_PIVOT", "BOWL", "BOWL_FLOOR_Z", "COLLAR_NAMES", "COLLAR_R", "COLLAR_TEETH_DEG", "ENGINE_XY", "ENGINE_Z", "FACE_Z", "FORE_SEAM_Z", "HEX", "HEX_BACK_Z", "LENGTH_M", "POD_ANGLES_DEG",
+           "Pattern", "SAUCER_AT", "SEAM_WIDTH", "SPHERE_R", "SPHERE_Z", "WINDOW_BAND_Z", "aft_cap", "band", "bowl_fittings", "brackets", "command", "docking_collars", "engine",
            "engine_frame", "forward_face", "sphere_r", "window_rows"]

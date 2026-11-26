@@ -1,13 +1,15 @@
 """``ea_asimov`` (M10-T53, Q84, Q86, Q87): the Asimov-class liner on the capital framework. Files and pieces, size, the sections and
 the habitat band's turning piece, an unarmed loadout, the open hexagonal mouth, the halves the mining variant will part, collision
 coverage, the class budget, the look (the patch skin, no seam lines), the band liveries and bars, the forward bowl, and each
-part's sections against the reference STL (CLAUDE.md, "STL fidelity"; the face's planes exempted by Q95).
+part's sections against the reference STL (CLAUDE.md, "STL fidelity"; the face's planes exempted by Q95), and stage 2's docking
+collars with a crew shuttle swept onto each (as M10-T70 sweeps the craft through Babylon 5's bay).
 
 The expected numbers are typed in from docs/assets-capital.md, data/capitals/loadouts.json and the generator's docstring.
 """
 
 from __future__ import annotations
 
+import itertools
 import json
 import math
 import tempfile
@@ -29,15 +31,48 @@ from tools.procgen.parts import capital as cp
 from tools.procgen.parts import ea_asimov as asi
 from tools.procgen.parts import ea_asimov_fidelity as fid
 from tools.procgen.styles import ea_asimov as st
+from tools.procgen.tests import test_ea_craft_bay_clearance as bay
 from tools.procgen.tests.budget_table import read_budgets
 from tools.refview.sections import PASS_IOU, section_score
 
 ROOT = Path(__file__).resolve().parents[3]
+SHUTTLE = ROOT / "assets" / "generated" / "ea_shuttle" / "hardpoints.json"  # the crew shuttle as built (its stern hatch, Q84)
+DOCK_GAP_M = 0.3  # data/capitals/ship_docks.json, gap_m
 STL = ROOT / "references" / "EA Asimov liner 600m.stl"
 NAMES = ROOT / "data" / "ships" / "names.json"
 TEST_OPTIONS = {"atlas_px": 512, "detail_px": 128}
 LENGTH, SPAN, HEIGHT = 600.0, 347.4, 347.4
 SECTIONS = ("bridge", "spine", "face", "habitat", "sphere_aft", "reactor", "engine_r", "engine_l")
+
+
+def _shape_points(shape: dict) -> np.ndarray:
+    """Points whose convex hull holds a collision shape: a hull's own, a box's corners, and for a capsule the corners of a
+    cube round each end's sphere (a little outside it, which keeps the check on the safe side)."""
+    if shape["type"] == "hull":
+        return np.array(shape["points"])
+    basis = np.array([shape["basis"]["x"], shape["basis"]["y"], shape["basis"]["z"]]).T
+    centre = np.array(shape["position"])
+    signs = np.array(list(itertools.product((-1.0, 1.0), repeat=3)))
+    if shape["type"] == "box":
+        return centre + (signs * (np.array(shape["size"]) / 2.0)) @ basis.T
+    if shape["type"] == "capsule":
+        along = basis[:, "xyz".index(shape["axis"])] * (shape["height"] / 2.0 - shape["radius"])
+        return np.concatenate([centre + end + signs * shape["radius"] for end in (along, -along)])
+    raise AssertionError(f"{shape['name']}: {shape['type']} is not handled")
+
+
+def _polygon_gap(p: np.ndarray, q: np.ndarray) -> float:
+    """The least distance between two convex outlines (counter-clockwise); negative when they overlap."""
+    def inside(pt: np.ndarray, poly: np.ndarray) -> bool:
+        a, b = poly, np.roll(poly, -1, 0)
+        return bool((((b[:, 0] - a[:, 0]) * (pt[1] - a[:, 1]) - (b[:, 1] - a[:, 1]) * (pt[0] - a[:, 0])) >= 0.0).all())
+
+    apart = np.maximum(p.min(0) - q.max(0), q.min(0) - p.max(0)).max()
+    if apart > 40.0:
+        return float(apart)  # far apart: their boxes' gap is no more than theirs, and enough to say so
+    gap = min(float(bay.seg_dist(p, q, np.roll(q, -1, 0)).min()), float(bay.seg_dist(q, p, np.roll(p, -1, 0)).min()))
+    overlap = bay.crossing(p, q) or any(inside(v, q) for v in p) or any(inside(v, p) for v in q)
+    return -gap if overlap else gap
 
 
 class AsimovBuildTests(unittest.TestCase):
@@ -87,6 +122,74 @@ class AsimovBuildTests(unittest.TestCase):
         self.assertAlmostEqual(sum(e["share"] for e in self.hp["engines"]), 1.0)
         roles = sorted(light["role"] for light in self.hp["lights"])
         self.assertEqual(roles, ["beacon", "beacon", "port", "starboard", "top"])
+
+    def test_four_docking_collars_on_the_lower_teeth_face_forward(self) -> None:
+        ports = {p["name"]: p for p in self.hp["docking_ports"]}
+        self.assertEqual(sorted(ports), ["collar_lower_l", "collar_lower_r", "collar_upper_l", "collar_upper_r"])
+        pivot = np.array(self.hp["rotors"][0]["pivot"])  # the sphere's centre, on the axis
+        for name, port in ports.items():
+            at = np.array(port["position"]) - pivot
+            self.assertEqual((port["out"], port["up"], port["section"]), ([0.0, 0.0, -1.0], [0.0, 1.0, 0.0], "face"), name)
+            self.assertAlmostEqual(float(np.hypot(at[0], at[1])), 67.5, delta=0.01, msg=f"{name} on its tooth's tip")
+            self.assertAlmostEqual(float(at[2]), asi.POD_Z[0] - asi.COLLAR_REACH - asi.SPHERE_Z, delta=0.01, msg=f"{name} stands ahead of its tooth")
+            self.assertLess(at[1], -30.0, f"{name} below the spine")
+            twin = ports[cp.left_name(name) if name.endswith("_r") else name[:-2] + "_r"]
+            self.assertEqual([-twin["position"][0], *twin["position"][1:]], port["position"], f"{name} has its twin")
+        self.assertNotIn("habitat", {p["section"] for p in ports.values()}, "none on the turning band")
+
+    def _lane_gaps(self, port: dict, dx: float = 0.0, dy: float = 0.0, roll_deg: float = 0.0) -> tuple[float, float]:
+        """A crew shuttle mated on ``port`` by its stern hatch and swept out along the collar's axis: the least gap (m) from its
+        collision boxes to the collar's own shape and to every other shape of the liner. A shape counts when it reaches
+        ahead of the box's stern end (the sweep runs forward from there); the gap is taken in the plane across the lane."""
+        shuttle = json.loads(SHUTTLE.read_text(encoding="utf-8"))
+        (hatch,) = shuttle["docking_ports"]
+        origin = np.array(port["position"]) + np.array(port["out"]) * DOCK_GAP_M - np.array(hatch["position"])
+        r = math.radians(roll_deg)
+        turn = np.array([[math.cos(r), -math.sin(r)], [math.sin(r), math.cos(r)]])
+        own, rest = math.inf, math.inf
+        for box, c in zip(bay.box_shadows(SHUTTLE), shuttle["collision"], strict=True):
+            basis = np.array([c["basis"]["x"], c["basis"]["y"], c["basis"]["z"]]).T
+            reach = 0.5 * c["height"] if c["type"] == "capsule" else float(np.abs(basis[2] * (np.array(c["size"]) / 2.0)).sum())
+            stern = origin[2] + c["position"][2] + reach
+            shadow = bay.hull2d(box @ turn.T + origin[:2] + [dx, dy])
+            for name, bow, outline in self._hull_outlines():
+                if bow > stern:
+                    continue
+                gap = _polygon_gap(shadow, outline)
+                if name.startswith(port["name"]):
+                    own = min(own, gap)
+                else:
+                    rest = min(rest, gap)
+        return own, rest
+
+    def _hull_outlines(self) -> list[tuple[str, float, np.ndarray]]:
+        """Every collision shape of the liner seen from ahead: its name, its foremost z and its outline."""
+        if not hasattr(type(self), "_outlines"):
+            points = [(s["name"], _shape_points(s)) for p in self.manifest["collision"]["pieces"] for s in p["shapes"]]
+            type(self)._outlines = [(name, float(pts[:, 2].min()), bay.hull2d(pts[:, :2])) for name, pts in points]
+        return type(self)._outlines
+
+    def test_a_crew_shuttle_backs_onto_each_collar_clear_of_the_hull(self) -> None:
+        if not SHUTTLE.exists():
+            self.skipTest("ea_shuttle is not built")
+        for port in self.hp["docking_ports"]:
+            own, rest = self._lane_gaps(port)
+            self.assertGreaterEqual(own, 1.0, f"{port['name']}: the lock's rim to the shuttle's stern flaps, centred")
+            self.assertGreaterEqual(rest, 8.0, f"{port['name']}: the lane to the rest of the hull, centred")
+            worst = [self._lane_gaps(port, dx, dy, roll) for dx in (-0.75, 0.0, 0.75) for dy in (-0.75, 0.0, 0.75) for roll in (-2.0, 0.0, 2.0)]
+            self.assertGreaterEqual(min(w[0] for w in worst), 0.25, f"{port['name']}: the lock, off by 0.75 m and 2 degrees of roll")
+            self.assertGreaterEqual(min(w[1] for w in worst), 7.0, f"{port['name']}: the hull, off by 0.75 m and 2 degrees of roll")
+
+    def test_shuttles_on_neighbouring_collars_keep_apart(self) -> None:
+        if not SHUTTLE.exists():
+            self.skipTest("ea_shuttle is not built")
+        hatch = np.array(json.loads(SHUTTLE.read_text(encoding="utf-8"))["docking_ports"][0]["position"])
+        outline = bay.hull2d(np.concatenate(bay.box_shadows(SHUTTLE)))
+        ports = self.hp["docking_ports"]
+        for i, a in enumerate(ports):
+            for b in ports[i + 1:]:
+                gap = _polygon_gap(outline + (np.array(a["position"]) - hatch)[:2], outline + (np.array(b["position"]) - hatch)[:2])
+                self.assertGreaterEqual(gap, 8.0, f"{a['name']} and {b['name']}")
 
     def test_the_hull_is_inside_the_capital_budget(self) -> None:
         budget = self.manifest["budget"]

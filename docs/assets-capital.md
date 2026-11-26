@@ -883,6 +883,39 @@ approved): 2.4e8 kg (the skin's area at 260 kg/m2, the Omega's rule), inertia a 
 mains (120 m/s, the traffic's cruise, in under four minutes), retros at half a main, RCS for station keeping, 2 deg/s, 9 000 hull
 points (T03), no jump engine. `capital spawn ea_asimov` names it from the list.
 
+**Stage 2, the docking collars (Q84).** Four collars stand on the tips of the collar's lower teeth, at 34.5 and 70.5 degrees
+below the horizontal each side (`parts/ea_asimov.docking_collars`, `COLLAR_TEETH_DEG`): a lock 2.6 m in radius with a lit rim,
+2.6 m ahead of its tooth, facing forward. Each is a `dock` hardpoint (a new kind of `parts/capital.py`), written to
+`hardpoints.json` as `docking_ports` in the small craft's form (`name`, `section`, `position`, `out`, `up`, `radius_m`):
+`collar_upper_r`, `collar_upper_l`, `collar_lower_r`, `collar_lower_l`, all in the `face` section, so none turns with the band.
+A hull without collars writes no `docking_ports` (its files are unchanged). They are below the spine (which stands above the
+axis), so a crew shuttle backed onto one by its stern hatch lies clear: swept from its mated place out along the lane, its
+collision is **29.4 m** from the rest of the hull and its stern flaps **1.8 m** from the lock's rim, 28.3 m and 0.7 m when it
+is off by 0.75 m and 2 degrees of roll; shuttles on neighbouring collars are over 8 m apart (`test_ea_asimov.py`, as M10-T70
+sweeps Babylon 5's bay). The game side is `ShipDock` (`docs/architecture.md` §22.12): `shipdock`, the `liner_dock` scene.
+The collars add 448 triangles (19 296 in all) and 8 collision shapes (the face 86 of its budget's 96).
+
+**The shuttle bay is not built: its geometry needs a decision.** The hexagonal mouth is 45 x 27 m and its back wall stands
+20 m behind the bowl's floor (214 to 234 m); the turning band's collision is solid from 236 m. The crew shuttle is 38.0 m
+long, 18.8 m wide and 10.7 m tall; the Kestrel with folded wings 29.0 x 22.9 x 19.4 m. Spreading the hall sideways inside the
+fixed forward section (the decision of 2026-11-26) gives width but no depth, and depth is what is missing:
+
+- A craft has to pass the mouth's plane whole before it can turn, and behind that plane there are 20 m. Lying along the
+  ship's axis neither craft fits (38 m and 29 m); lying across it the crew shuttle would need 18.8 m of the 20 m (0.6 m to
+  spare each side) and the folded Kestrel 19.4 m at best.
+- Neither can come through the mouth sideways-on: at the crew shuttle's height the hexagon is 36 m wide (the shuttle is
+  38 m long), at the folded Kestrel's 29 m (it is 29 m long).
+- Turning in the doorway does not work either: with its tail still in the mouth a 38 m hull can be at most 58 degrees off
+  the axis (the mouth's width), and at that angle only 8 m of it are inside before its nose meets the back wall.
+
+Ways out, each for the maintainer: **(A)** make the band's collision a ring round a fixed core (the band is a habitat ring in
+any case; nothing changes to look at), so the hall runs 70 m straight back behind the mouth, two berths side by side;
+**(B)** a hangar trunk standing 28 m proud of the bowl's floor under the spine, the mouth at its front (changes the look of
+the bowl); **(C)** berths where the craft nose in 20 m and their sterns stay in the bowl (no doors can shut behind them);
+**(D)** the bay takes smaller craft only. The docking itself is ready for any of them: a `bay` hardpoint with two berths is
+flown by T17's `CapitalHangar` (the Hyperion's shuttle bay takes both craft that way, the Kestrel folded), the hall goes on
+the interior layer by `capital_bays.hall_of` (T72), and its clearance sweep joins the collars' in `test_ea_asimov.py`.
+
 Look sheets (gitignored): `references/screenshots/M10-T53 Asimov liner/look_sheet_r3.png` (the narrowed ring: the first still
 beside the build at its angle, the port side, an eight-bar ship) and `look_sheet_r2.png` (the ring still over the whole cap:
 the show's two stills beside the build at their angles, the bowl close, the five first names lit and in shadow; `scripts/model_sheet.sh`, whose `turn:<yaw>:<pitch>`
@@ -894,8 +927,10 @@ bar counts one after another add nothing (one atlas, one material a piece).
 
 - The look sheet (`look_sheet_r3.png`): the ring, the rim and the bars' width against the stills; the bowl's depth and the structure on its walls; the
   liveries' colours against the white and in shadow.
-- Stage 2: the bay hall behind the mouth has 2 m to the turning band's collision (solid slabs from 236 m); it either spreads
-  sideways inside the forward cap or the band's collision is opened for it.
+- Stage 2: the docking sheet (`stage2_docks.png` beside the look sheets): the collars' size and place on the teeth, a crew
+  shuttle mated and one backing in. Fly it: the New game list's "Liner docking" (`--scenario=liner_dock`), target the docking
+  collars, hold X; hold X again to leave.
+- Stage 2: the shuttle bay's geometry (above: A, B, C or D).
 
 ## M10 lengths (T01)
 

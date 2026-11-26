@@ -66,6 +66,8 @@ var bay_zones: InteriorZones = null
 var bay_lamps: CapitalBayLamps = null
 ## Its hangar (M10-T17): the craft its bays launch and recover; null for a hull whose bays take none. Empty until stocked.
 var hangar: CapitalHangar = null
+## Its docking collars (M10-T53): where small craft mate with it; null for a hull without `docking_ports`.
+var dock: ShipDock = null
 ## 1 when this ship wears its style's second colouring (M10-T06: about a fifth of the Vorlons are red-based), else 0: drawn from
 ## the ship's own name, the same in every run. Its break-up chunks take the same value (`HullSheenMaterial.set_variant`).
 var skin_variant: float = 0.0
@@ -467,6 +469,9 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	damageable.setup(entries, spec.hull_max, faction)
 	damageable.hit_taken.connect(_on_hit)
 	damageable.hits_landed.connect(_on_hits_landed)
+	dock = ShipDock.make(self)
+	if dock != null:
+		add_child(dock)
 	_packed_volumes = Station.pack_volumes(volumes)
 	_packed_hulls = Station.pack_hulls(shapes, volumes)
 

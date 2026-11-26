@@ -119,6 +119,17 @@ class CapitalFrameworkTests(unittest.TestCase):
         self.assertEqual(left["position"], [-right["position"][0], right["position"][1], right["position"][2]])
         self.assertEqual((right["section"], left["section"]), ("engine_r", "engine_l"))
 
+    def test_a_docking_collar_is_listed_as_a_docking_port_only_where_a_hull_has_one(self) -> None:
+        spec = small_spec()
+        offset = np.array([0.0, 1.0, 30.0])
+        self.assertNotIn("docking_ports", cap.hardpoint_lists(cap.all_modules(spec), offset), "a hull without collars writes what it always did")
+        body = spec.modules[0]
+        collar = cp.Hardpoint("collar", cp.DOCK, (4.0, 2.0, -10.0), (0.0, 0.0, -2.0), (0.0, 1.0, 0.0), {"radius_m": 2.6})
+        with_collar = (dataclasses.replace(body, hardpoints=(*body.hardpoints, collar)), *spec.modules[1:])
+        (port,) = cap.hardpoint_lists(with_collar, offset)["docking_ports"]
+        self.assertEqual(port, {"name": "collar", "section": body.section, "position": [4.0, 1.0, -40.0], "out": [0.0, 0.0, -1.0],
+                                "up": [0.0, 1.0, 0.0], "radius_m": 2.6})
+
     def test_the_sample_spacing_follows_the_length(self) -> None:
         self.assertEqual([cap.default_spacing(length) for length in (60.0, 300.0, 600.0, 3000.0)], [0.5, 1.0, 2.0, 4.0])
 

@@ -597,6 +597,24 @@ func _selected_id() -> int:
 	return targeting.selected_id() if targeting != null else 0
 
 
+## Sends an AI craft to a ship's docking collar (M10-T53, `ShipDocks.dock_ship`). False, with an error, when it cannot go.
+func dock_at(craft_name: String, ship_name: String, port_name: String) -> bool:
+	var why: String = _main.ship_docks.dock_ship(craft_name, ship_name, port_name) if _main != null and _main.ship_docks != null \
+			else "no docks in this scene"
+	if not why.is_empty():
+		push_error("Mission: dock_at %s: %s" % [craft_name, why])
+	return why.is_empty()
+
+
+## Sends a craft mated on a ship's collar on its way (M10-T53). False, with an error, when it is not docked.
+func undock(craft_name: String) -> bool:
+	var why: String = _main.ship_docks.undock_ship(craft_name) if _main != null and _main.ship_docks != null \
+			else "no docks in this scene"
+	if not why.is_empty():
+		push_error("Mission: undock %s: %s" % [craft_name, why])
+	return why.is_empty()
+
+
 ## Control's docking offer is the mission's to say: the HUD line stays off (M8-T06).
 func own_dock_offer() -> void:
 	if _main != null and _main.docking != null:

@@ -13,9 +13,13 @@ const PATH: String = "res://data/controls/autopilot_abort.json"
 const DEFAULT_HOLD_S: float = 1.0
 const GATE: StringName = &"gate"
 const DOCK: StringName = &"dock"
+const SHIP_DOCK: StringName = &"ship_dock"
+## Not an abort but the same hold: the player's craft, mated on a ship's docking collar, leaves it (M10-T53).
+const UNDOCK: StringName = &"undock"
 const ACTIONS: Array[StringName] = [&"status", &"abort"]
 ## What the prompt asks for, after the buttons to hold.
 const LABEL: String = "ABORT"
+const LABEL_UNDOCK: String = "UNDOCK"
 
 ## The scene that knows the player.
 var main: Main = null
@@ -36,9 +40,9 @@ static func hold_s() -> float:
 	return _hold_s
 
 
-## The prompt for the buttons `buttons` (`BindingNames.of_action(InputAdapter.AUTOTRACK)`).
-static func prompt_text(buttons: String) -> String:
-	return "HOLD %s: %s" % [buttons, LABEL]
+## The prompt for the buttons `buttons` (`BindingNames.of_action(InputAdapter.AUTOTRACK)`); `kind` is what the hold does.
+static func prompt_text(buttons: String, kind: StringName = &"") -> String:
+	return "HOLD %s: %s" % [buttons, LABEL_UNDOCK if kind == UNDOCK else LABEL]
 
 
 func _ready() -> void:
@@ -59,13 +63,17 @@ func offered() -> StringName:
 		return GATE
 	if main.docking != null and main.docking.abort_offered():
 		return DOCK
+	if main.ship_docks != null and main.ship_docks.abort_offered():
+		return SHIP_DOCK  # docking at a ship's collar, until it is mated (M10-T53)
+	if main.ship_docks != null and main.ship_docks.undock_offered():
+		return UNDOCK
 	return &""
 
 
 ## This tick's X (sampled while `offered`): the prompt and its bar shown, and a completed hold aborts. Returns whether it did.
 func take(ui: UiCommand, was_offered: StringName) -> bool:
 	if _prompt != null:
-		_prompt.text = prompt_text(BindingNames.of_action(InputAdapter.AUTOTRACK)) if offered() != &"" else ""
+		_prompt.text = prompt_text(BindingNames.of_action(InputAdapter.AUTOTRACK), offered()) if offered() != &"" else ""
 		_prompt.progress = ui.interact_progress if not _prompt.text.is_empty() else 0.0
 	if not ui.interact or was_offered == &"":
 		return false
@@ -91,6 +99,10 @@ func abort() -> String:
 			why = main.gates.abort()
 		DOCK:
 			why = main.docking.abort()
+		SHIP_DOCK:
+			why = main.ship_docks.abort()
+		UNDOCK:
+			why = main.ship_docks.undock_player()
 	if why.is_empty():
 		aborts += 1
 		last = kind
@@ -103,7 +115,7 @@ func abort() -> String:
 func _register_console() -> void:
 	DebugConsole.registry.register_provider(&"autopilot", ConsoleVars.new({
 		&"offered": {"get": func() -> String: return String(offered()) if offered() != &"" else "none",
-				"doc": "Which autopilot a hold of X aborts now: gate, dock, or none (none flies, or it is past its point of no return)"},
+				"doc": "Which autopilot a hold of X aborts now: gate, dock, ship_dock, undock (mated on a ship's collar: the hold leaves it), or none (none flies, or it is past its point of no return)"},
 		&"hold_s": {"get": hold_s, "unit": "s", "doc": "How long X is held to abort (data/controls/autopilot_abort.json)"},
 		&"prompt": {"get": prompt_line, "doc": "The abort prompt on screen"},
 		&"progress": {"get": progress, "doc": "How far the abort's hold has run, 0..1 (the bar)"},

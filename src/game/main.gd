@@ -12,7 +12,7 @@ const SCENARIO_DIR := "res://data/scenarios/"
 ## The debug overlay's text is rebuilt this often while it shows (M4-T36): a readout, not an animation.
 const OVERLAY_INTERVAL_S: float = 0.1
 const SCENARIO_CHOICES: Array[StringName] = [&"combat_sandbox", &"free_flight", &"instructor_route", &"dogfight",
-		&"ship_showcase", &"belt_showcase", &"station_launch", &"station_showcase"]
+		&"ship_showcase", &"belt_showcase", &"station_launch", &"station_showcase", &"liner_dock"]
 
 ## The player's hull reached zero (the ship is hidden and disabled; input is ignored until the respawn).
 signal player_died
@@ -96,6 +96,8 @@ var launches: LaunchDirector = null
 var traffic: StationTraffic = null
 ## Docking for repair in the main docking bay (M8-T06): the player's hold of X there, the wing's order; console `dock`.
 var docking: DockingDirector = null
+## Docking at ships' collars (M10-T53): the player's hold of X on a liner's collars, AI craft sent to dock; console `shipdock`.
+var ship_docks: ShipDocks = null
 ## Holding X aborts the gate jump's or docking's autopilot until its point of no return (M8-T32).
 var autopilot_abort: AutopilotAbort = null
 ## Babylon 5's commands from the comms menu with the station targeted (M8-T34).
@@ -112,6 +114,8 @@ var _spawn_basis: Basis = Basis.IDENTITY
 var _start_velocity: Vector3 = Vector3.ZERO
 # The dock the scenario says the player belongs to (`player.home`, M8-T06); a launch from a Cobra bay gives one too.
 var _player_home: StringName = &""
+# The hull the scenario puts the player in (`player.type`, M10-T53: the docking scene's crew shuttle); the Starfury otherwise.
+var _player_type: StringName = ShipCatalog.PLAYER_TYPE
 ## What the player's speed is read against (M6-T08): the HUD's REF, and the ship's brake, assist, fade and ceiling.
 var flight_reference: FlightReference = null
 var _system_id: StringName = &"local"
@@ -182,6 +186,7 @@ func _ready() -> void:
 		_spawn_basis = player["basis"]
 		_start_velocity = player["velocity"]
 		_player_home = player.get("home", &"")
+		_player_type = player.get("type", ShipCatalog.PLAYER_TYPE)
 		_system_id = scenario["system_id"]
 		# Every position the scenario places is in its own system, the World's origin too (M8-T23).
 		world.origin = UniversePos.new(world.origin.x, world.origin.y, world.origin.z, _system_id)
@@ -207,6 +212,8 @@ func _ready() -> void:
 		ships.prepare(ShipPool.ALLY_TYPE, ally_count)
 	# The Starfury's break-up chunks serve the allies and the player (the player can die in any scenario).
 	debris.prepare(ShipCatalog.PLAYER_TYPE)
+	if _player_type != ShipCatalog.PLAYER_TYPE:
+		debris.prepare(_player_type)
 	_prepare_other_pools(scenario)
 	hud.input_provider = _build_hud_input
 	hud.screens = ship.cockpit_screens
@@ -266,6 +273,9 @@ func _ready() -> void:
 	docking = DockingDirector.new()
 	docking.main = self
 	add_child(docking)
+	ship_docks = ShipDocks.new()
+	ship_docks.main = self
+	add_child(ship_docks)
 	station_commands = StationCommands.new()
 	station_commands.main = self
 	add_child(station_commands)
@@ -369,6 +379,8 @@ func _physics_process(delta: float) -> void:
 	var autopilot: FlightCommand = gates.step_player(delta) if not get_tree().paused else null
 	if autopilot == null and not get_tree().paused:
 		autopilot = docking.step_player(delta)  # the docking autopilot flies the ship into the bay (M8-T06)
+	if autopilot == null and not get_tree().paused:
+		autopilot = ship_docks.step_player(delta)  # or onto a ship's docking collar (M10-T53)
 	if autopilot == null and not get_tree().paused:
 		autopilot = launches.step_player(delta)  # a launched fighter's engines light as it clears the arm (M7-T08)
 	if autopilot != null:
@@ -625,6 +637,7 @@ func respawn() -> void:
 	director.cancel_respawn()  # Back while dead: the death's own respawn must not follow
 	gates.cancel_jump("respawn")
 	docking.cancel_player("respawn")
+	ship_docks.cancel_player("respawn")
 	if wings != null:
 		wings.regroup(wings.player_wing())  # the wing flies back to the respawned player (M8-T17)
 	_restart_lessons()
@@ -667,7 +680,8 @@ func objectives() -> Array[Dictionary]:
 ## on a Cobra bay's rack (M7-T08), or it is docking for repair (M8-T06): the ship flies on without them.
 func controls_locked() -> bool:
 	return (mission != null and mission.api != null and mission.api.controls_locked) or (gates != null and gates.locks_controls()) \
-			or (launches != null and launches.locks_controls()) or (docking != null and docking.locks_controls())
+			or (launches != null and launches.locks_controls()) or (docking != null and docking.locks_controls()) \
+			or (ship_docks != null and ship_docks.locks_controls())
 
 
 # A cinematic hides the HUD and brings the letterbox in; the comms panel keeps its subtitles (D55).
@@ -941,7 +955,7 @@ func _apply_input_settings() -> void:
 
 
 func _spawn_ship() -> void:
-	var spec: ShipSpec = ShipCatalog.spec_for(ShipCatalog.PLAYER_TYPE)
+	var spec: ShipSpec = ShipCatalog.spec_for(_player_type)
 	combatant = ShipAssembly.build(spec, world, projectiles, {
 		ShipAssembly.OPT_FACTION: Factions.EARTH_ALLIANCE,
 		ShipAssembly.OPT_DISPLAY_NAME: "PLAYER",
