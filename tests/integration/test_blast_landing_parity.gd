@@ -8,6 +8,11 @@ extends GutTest
 ## velocity each tick (the pushes) and the end state (`tests/fixtures/parity/blast_landing.json`). The native batch must give the
 ## same, bit for bit, with six threads, one thread and the `delayed` step alike; its hits are read from the batch's native hit
 ## log now (a hit it leaves to GDScript would still show as a `hit_taken`).
+##
+## One tick a frame (M10-T11 fix): the script lands its blasts one awaited physics frame at a time, while the tier rows fly
+## every tick on their own. `Main` sets the engine's catch-up from `physics_max_steps_per_frame` (8), so after a slow frame
+## two ticks could pass between the script's steps and its blasts land a tick late against the rest; the setting is held at
+## 1 here, and a case with a 40 ms frame at Omega A's death checks that a slow frame changes nothing.
 
 const FILE: String = "blast_landing"
 const TICKS: int = 240
@@ -29,6 +34,7 @@ var _caps: Array[CapitalShip] = []
 var _station: Station = null
 var _field: MineField = null
 var _settings_backup: Dictionary = {}
+var _stall_at: int = -1  # the tick a frame is held up 40 ms at, or -1
 
 
 # The Omegas' hangars stay empty (M10-T17's switch, when the hangar has it): only the hulls placed here.
@@ -43,7 +49,10 @@ func after_all() -> void:
 func before_each() -> void:
 	get_tree().paused = false
 	DebugConsole.flags.invulnerable = true  # the player sits far from the blasts in any case
-	_settings_backup = {&"perf_threads": Settings.get_value(&"perf_threads"), &"sim_step": Settings.get_value(&"sim_step")}
+	_settings_backup = {&"perf_threads": Settings.get_value(&"perf_threads"), &"sim_step": Settings.get_value(&"sim_step"),
+			&"physics_max_steps_per_frame": Settings.get_value(&"physics_max_steps_per_frame")}
+	Settings.set_value(&"physics_max_steps_per_frame", 1)
+	_stall_at = -1
 
 
 func after_each() -> void:
@@ -62,6 +71,11 @@ func test_one_thread_lands_the_same_blasts() -> void:
 
 func test_the_delayed_step_lands_the_same_blasts() -> void:
 	await _check(6, &"delayed", false)
+
+
+func test_a_slow_frame_lands_the_same_blasts() -> void:
+	_stall_at = 70  # Omega A's death
+	await _check(6, &"threaded", false)
 
 
 func _check(threads: int, step: StringName, may_record: bool) -> void:
@@ -136,7 +150,7 @@ func _run() -> Dictionary:
 	for k: int in 4:
 		var c: Combatant = _spawn("raider")
 		b.append(c)
-		_place(c, cap_a.global_position + up * (300.0 + 40.0 * k) + side * (30.0 * k))
+		_place(c, cap_a.global_position + up * (_clear_above(cap_a) + 40.0 * k) + side * (30.0 * k))
 	# The field: 100 raider mines in a line from 2.3 km to 4.3 km left of Omega B (its reactor reaches the first few, the rest
 	# go off as a chain), and a raider group at its far end.
 	var field_at: Vector3 = cap_b.global_position - side * 3300.0
@@ -168,7 +182,7 @@ func _run() -> Dictionary:
 		if k % 2 == 0:
 			a[k].damageable.hull.hp = a[k].damageable.hull.max_hp * (0.05 + 0.04 * k)
 	for k: int in b.size():
-		_place(b[k], cap_a.global_position + up * (300.0 + 40.0 * k) + side * (30.0 * k))
+		_place(b[k], cap_a.global_position + up * (_clear_above(cap_a) + 40.0 * k) + side * (30.0 * k))
 	for k: int in c_group.size():
 		_place(c_group[k], far_mine + away * (50.0 + 12.0 * k) + up * (10.0 * k))
 	for c: Combatant in a + b + c_group:
@@ -191,6 +205,8 @@ func _run() -> Dictionary:
 		var spent: Array[int] = [BlastResolver.blasts, BlastResolver.total_us,
 				int(BlastResolver.stats().get("native_mean_us", 0.0) * BlastResolver.blasts)]
 		_script(t, a, b, cap_a, cap_b, side, up)
+		if t == _stall_at:
+			OS.delay_msec(40)  # a slow frame: the next one has ticks to catch up
 		if t >= 4 and t <= 7:
 			probe[0] += BlastResolver.last_hurt
 			probe[1] += BlastResolver.total_us - spent[1]
@@ -270,6 +286,12 @@ func _script(t: int, a: Array[Combatant], b: Array[Combatant], cap_a: CapitalShi
 				BlastResolver.set_off(BlastTable.spec(source), at, Factions.RAIDERS)
 		130:
 			cap_b.damageable.kill()  # beside the minefield: the field goes off as a chain
+
+
+# How far above `cap`'s centre its attackers wait: 60 m clear of its top (M10-T11 fix: a hull's touch is a Jolt contact, which
+# a second scene in one process does not repeat bit for bit; the blasts are what is recorded here).
+func _clear_above(cap: CapitalShip) -> float:
+	return cap.half_extents().y + 60.0
 
 
 func _alive(list: Array[Combatant]) -> Combatant:
