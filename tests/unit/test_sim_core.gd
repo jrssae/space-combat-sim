@@ -681,7 +681,7 @@ const CAPITAL_GUN_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Bas
 ## GDScript reaches.
 const MINE_KERNEL_FILES: Array[String] = ["res://native/src/mine_kernels.rs", "res://native/src/mine_layers.rs"]
 const MINE_KERNEL_USER: String = "res://native/src/mine_rows.rs"
-const MINE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::capital_gun_kernels::", "use crate::mine_kernels::",
+const MINE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::capital_gun_kernels::", "use crate::intercept_kernels::", "use crate::mine_kernels::",
 		"use crate::rows::", "use crate::surface::", "use crate::v3::"]
 ## The capital ships' helm and brain (M10-T16): the helm's command, the brain's states, targets and attitude, held to the
 ## kernels' rules; they import the row tables, the surfaces' and the brains' maths and each other only. The shell

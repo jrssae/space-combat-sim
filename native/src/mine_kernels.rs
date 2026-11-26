@@ -17,6 +17,7 @@
 use godot::builtin::Vector3;
 
 use crate::capital_gun_kernels::is_capital;
+use crate::intercept_kernels::{KIND_BOLT, KIND_MISSILE, first_touch};
 use crate::rows::{Bolts, FLAG_HULL_ACTIVE, FLAG_RIGID, FLAG_SHELTERED, FLAG_TIER, Rows};
 use crate::surface::{into_body, nearest};
 use crate::v3::{add, dist_sq, dot, length, normalized, scale, sub};
@@ -304,6 +305,10 @@ pub struct StepOut {
     pub downed: Vec<u32>,
     /// Slots that moved (their draw is updated).
     pub moved: Vec<u32>,
+    /// `(shot's bolt row, mine slot, hits the mine's row has left)`: a hostile shot that met a mine in flight, spent by the caller.
+    pub shot_hits: Vec<(u32, u32, u8)>,
+    /// Mine bolt rows this step (scratch for the shots' sweep).
+    mine_rows: Vec<bool>,
     fired: Vec<u8>,
     // The mines not on the grid this tick, so a hull's search does not walk every slot.
     mobile: Vec<u32>,
@@ -317,6 +322,7 @@ impl StepOut {
         self.spends.clear();
         self.downed.clear();
         self.moved.clear();
+        self.shot_hits.clear();
     }
 }
 
@@ -438,6 +444,7 @@ pub fn step(mines: &mut Mines, specs: &[Spec; KINDS], w: &World, out: &mut StepO
     out.fired.clear();
     out.fired.resize(n, 0);
     follow_flights(mines, specs, w, out);
+    shots_on_flights(mines, specs, w, out);
     wake_and_arm(mines, specs, w);
     steer_guided(mines, specs, w, out);
     let mut mobile = std::mem::take(&mut out.mobile);
@@ -498,6 +505,51 @@ fn follow_flights(mines: &mut Mines, specs: &[Spec; KINDS], w: &World, out: &mut
                 mines.fuse_at[i] = if spec.fuse_s > 0.0 { w.now_s + spec.fuse_s } else { f64::INFINITY };
                 out.spends.push(mines.bolt[i]);
                 mines.bolt[i] = 0;
+            }
+        }
+    }
+}
+
+// The shots that met a mine in flight along their last move (the mine is a bolt row, so the player's and the fighters' guns can
+// stop it as the interceptors do): each hostile bolt or missile whose swept sphere touched a flying mine's body takes one of the
+// mine's hits, in row order; the mine at 0 is shot down. Never a beam, a pulse or another mine.
+fn shots_on_flights(mines: &Mines, specs: &[Spec; KINDS], w: &World, out: &mut StepOut) {
+    let bolts = w.bolts;
+    let mut flying: Vec<(usize, usize, u8)> = Vec::new();
+    for i in 0..mines.len() {
+        if !(mines.alive[i] && mines.state[i] == FLYING) || out.downed.contains(&(i as u32)) {
+            continue;
+        }
+        if let Some(b) = bolt_index(bolts, mines.bolt[i]).filter(|&b| !bolts.spent[b]) {
+            flying.push((i, b, bolts.hits_left_of(b)));
+        }
+    }
+    if flying.is_empty() {
+        return;
+    }
+    out.mine_rows.clear();
+    out.mine_rows.resize(bolts.ids.len(), false);
+    for &(_, b, _) in &flying {
+        out.mine_rows[b] = true;
+    }
+    for p in 0..bolts.ids.len() {
+        let kind = bolts.kinds[p];
+        if (kind != KIND_BOLT && kind != KIND_MISSILE) || bolts.spent[p] || out.mine_rows[p] {
+            continue;
+        }
+        let step = bolts.last_steps[p];
+        let from = sub(bolts.positions[p], step);
+        for entry in flying.iter_mut() {
+            let (i, b, left) = *entry;
+            if left == 0 || !is_hostile(w, bolts.faction_ix[p], mines.faction_ix[i]) {
+                continue;
+            }
+            let (mine_step, reach) = (bolts.last_steps[b], bolts.radii[p] + specs[mines.kind[i] as usize].body_m);
+            let mine_from = sub(bolts.positions[b], mine_step);
+            if first_touch(from, step, mine_from, mine_step, reach).is_some() {
+                entry.2 = left - 1;
+                out.shot_hits.push((p as u32, i as u32, left - 1));
+                break;
             }
         }
     }

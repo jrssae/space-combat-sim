@@ -40,6 +40,7 @@ pub struct ScsMineRows {
     lays: Vec<Lay>,
     owner_rows: Vec<i32>,
     detonations: i64,
+    shot_on_flight: i64,
     last_us: f64,
 }
 
@@ -355,6 +356,12 @@ impl ScsMineRows {
         self.layers.len() as i64
     }
 
+    /// Hostile shots that met a mine in flight since the rows were made.
+    #[func]
+    fn shots_on_flight(&self) -> i64 {
+        self.shot_on_flight
+    }
+
     /// Mines gone off through `detonate` since the rows were made.
     #[func]
     fn detonations(&self) -> i64 {
@@ -429,6 +436,21 @@ impl ScsMineRows {
                 c.bolts.spent[p] = true;
             }
         }
+        // Shots that met a mine in flight: each is spent and takes a hit off the mine's row; at none left the mine is shot down.
+        for &(shot, slot, left) in &self.out.shot_hits {
+            if (shot as usize) < c.bolts.spent.len() {
+                c.bolts.spent[shot as usize] = true;
+            }
+            let id = self.mines.bolt[slot as usize];
+            if let Some(b) = (0..c.bolts.owned).rev().find(|&b| c.bolts.ids[b] == id) {
+                c.bolts.set_hits_left(b, left);
+                if left == 0 {
+                    c.bolts.spent[b] = true;
+                    self.out.downed.push(slot);
+                }
+            }
+        }
+        self.shot_on_flight += self.out.shot_hits.len() as i64;
         for &slot in &self.out.downed {
             self.mines.retire(slot as usize);
         }

@@ -1337,7 +1337,8 @@ Done notes (in progress until the maintainer closes it):
 - **Test changes by the new rules.** `test_bench`: the checks that fly the player to far lone groups cross a rebase now (the
   blasts' push boosts the frame), so the way back is read again each tick (`_hold_player_beside`) and at rest in the frame;
   `test_standins` and the other hand-stepped files call `MineField.step_all` where the director used to step the mines.
-- **Open.** The mines on the ground cannot be shot by the player's guns when laid in battle (flying ones by interceptors only);
+- **Shots on a mine in flight (maintainer, 2026-11-25).** The player's and the fighters' bolts and missiles shoot an energy or guided mine in flight, native (`mine_kernels::shots_on_flights`: the swept-sphere test on the core's bolt rows, each hostile shot spent against one of the mine's hits, three for an energy mine); a placed field's proximity mines were already shot by the hit resolver's rock grid (any side's bolt, one hit). Tests: `mine_kernels` 2 (cargo), `test_mine_field` (three bolts shoot one down, no blast), `test_mine_flight_threads` (1 vs 6 threads, with and without bolts). Mines on the ground laid in battle are still reached only by touches and blasts.
+- **Open.**
   no hull has `mine` mounts until T25 (G'Quan) and T26 (Vorchan), so the layers run on the test cruiser's; an energy mine aims at
   where its target is when it launches and a turning target may be missed; a battery covers the hemisphere over its deck, so a mine
   level with an Omega's axis is not engaged (it comes in from the flank in the test); balance (damage, counts, ranges) is T03's

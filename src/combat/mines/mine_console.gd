@@ -29,6 +29,8 @@ func register(owner: Object) -> void:
 		&"by_flight": {"get": func() -> int: return _cause(5), "doc": "Mines in flight that struck something or ran out of time"},
 		&"shot_down": {"get": func() -> int: return _sum(func(f: MineField) -> int: return f.shot_down_count),
 				"doc": "Mines in flight an interceptor shot down"},
+		&"shots_on_flight": {"get": func() -> int: return _sum(func(f: MineField) -> int: return f.shots_on_flight()),
+				"doc": "Hostile bolts and missiles that met a mine in flight (the guns' and fighters' shots take its toughness as pulses do)"},
 		&"laid_in_battle": {"get": func() -> int: return _sum(func(f: MineField) -> int: return f.mines_laid), "doc": "Mines the layers or `lay` put in play"},
 		&"step_us": {"get": func() -> float: return _sum_f(func(f: MineField) -> float: return f.step_us), "unit": "us",
 				"doc": "Wall-clock cost of the last tick's mine step, every field (a readout)"},

@@ -219,6 +219,25 @@ func test_the_interceptors_of_a_capital_shoot_an_energy_mine_down_in_flight() ->
 	assert_gt(field.shot_down_count, 0, "an interceptor shot one down (three pulses: its toughness, Q81)")
 
 
+func test_hostile_shots_from_guns_stop_a_mine_in_flight_three_for_an_energy_mine() -> void:
+	var ships: Array[CapitalShip] = _cruiser_and_omega(6300.0, true)
+	var field: MineField = _launcher(ships[0])
+	await _ticks(40)
+	assert_eq(field.alive_count(), 1, "a mine is flying")
+	var sim: SimCore = SimCore.for_tree(get_tree())
+	var weapon := WeaponSpec.new()
+	weapon.lifetime_s = 10.0
+	for k: int in 3:
+		var at: Vector3 = field.global_position + (field.rows.info(0)[4] as Vector3)
+		assert_eq(field.shot_down_count, 0, "still flying before shot %d" % k)
+		sim.add_bolt(at + Vector3.UP * 0.5, Vector3.ZERO, EA, main.combatant.ship.get_instance_id(), weapon, SimClock.now())
+		await _ticks(2)
+		assert_eq(field.shots_on_flight(), k + 1, "shot %d met the mine" % k)
+	assert_eq(field.shot_down_count, 1, "three hostile shots shot it down")
+	assert_eq(field.alive_count(), 0)
+	assert_eq(field.total_set_off(), 0, "with no blast")
+
+
 func test_a_guided_layer_drops_mines_astern_while_a_hostile_is_on_its_tail_and_stops_at_its_cap() -> void:
 	var rest: Vector3 = main.world.rest_velocity()
 	Factions.table().set_relation(LAYER_SIDE, Factions.RAIDERS, Factions.Relation.HOSTILE)

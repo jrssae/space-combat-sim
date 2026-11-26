@@ -7586,7 +7586,10 @@ data/capitals/mines.json        each kind's numbers (T03's) and how a mount lays
   `BlastResolver._land`'s one call and `ScsMineRows.in_blast`.
 - **In flight a mine is a bolt row.** An energy mine and a homing guided mine are owned bolt rows of the missile kind (no
   damage, no look, `hits_left` from the kind's toughness): the capitals' interceptors shoot them down like any missile (three
-  pulses for an energy mine); the field draws the mine itself from its row's place. A row spent by the pulses takes the mine out
+  pulses for an energy mine), and so do the guns of any hostile ship, the player's and the fighters' included: each tick
+  `mine_kernels::shots_on_flights` takes every hostile bolt or missile whose swept sphere touched a flying mine's body on its last
+  move (`intercept_kernels::first_touch`, bolt rows in row order, never a beam or a pulse) and spends it against one of the mine's
+  hits (`ScsMineRows.shots_on_flight`; main thread, no randomness: 1 and 6 threads alike, `test_mine_flight_threads`); the field draws the mine itself from its row's place. A row spent by the pulses takes the mine out
   of play with no blast; a row that vanished (a hull struck it, its time ran out) sets it off where it was. A mine on the ground
   is no bolt: only touches, shots (placed fields) and blasts reach it. Batteries cover the hemispheres over their decks, so an
   Omega's side batteries engage a mine coming in from the flank, not one level along its axis.
@@ -7616,6 +7619,6 @@ data/capitals/mines.json        each kind's numbers (T03's) and how a mount lays
   (the scene: trigger, falloff, chain, a death's blast, the hull touch, the energy mine arriving and shot down, guided drops,
   radar, scenario and mission data, console), `test_mine_field_threads`, `test_mine_cost`, and the M7-T64 files ported
   (`test_standins`, `test_rocks_and_mines`, `test_mine_blast`, `test_bench`).
-- **Known gaps.** Mines in flight cannot be shot by the player's guns (only interceptors stop them); a guided mine does not
+- **Known gaps.** A mine on the ground laid in battle is reached only by touches and blasts (a placed field's mines are shot by the hit resolver's rock grid, any side's bolt, one hit each); a guided mine does not
   home on a hull with no hit volumes beyond its sphere's gap; an energy mine's stand-off is read from the surface at launch (a
   target that turns after launch may be missed); the bench's counters and `StandinDirector.add_mines` stay until T45.

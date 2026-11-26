@@ -9,7 +9,8 @@ extends Node3D
 ## by `BlastResolver`), and a mine that goes off blasts in turn, so a field goes off as a chain.
 ##
 ## Mines go off whoever's they are when anything touches or hits their 3 m body (M7-T64): `strike` is the hit resolver's. A mine
-## in flight (an energy mine, a guided mine homing) is a bolt row the capitals' interceptors shoot down (toughness, Q81).
+## in flight (an energy mine, a guided mine homing) is a bolt row that the capitals' interceptors and any hostile ship's bolts and
+## missiles shoot down (toughness, Q81: the core's `shots_on_flight`).
 ##
 ## Spawn with `MineField.spawn_in` (a shiftable node that rides the anchor), then `build` placed rows or `build_battle`. Stepped
 ## once a tick by `SimCore.step_now` (`step_all`), after the capital guns and before the bolts move.
@@ -264,6 +265,11 @@ func total_set_off() -> int:
 	for c: int in by_cause:
 		n += c
 	return n
+
+
+## Hostile shots that met a mine in flight since the field was built: each takes one of its hits (an energy mine's three, Q81).
+func shots_on_flight() -> int:
+	return int(rows.shots_on_flight()) if rows != null else 0
 
 
 func alive_count() -> int:

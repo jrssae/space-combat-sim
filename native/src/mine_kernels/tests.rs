@@ -378,3 +378,41 @@ fn a_mine_turns_no_faster_than_its_turn_rate() {
     assert!((f64::from(dot(t, from)).acos() - 0.1).abs() < 1e-4, "{t:?}");
     assert_eq!(turn_toward(from, to, 2.0), to, "within reach it points straight at it");
 }
+
+// A shot (an owned bolt of `kind` and side `faction`) lying `off` from the flying mine's row, not moving.
+fn shot_beside_mine(s: &mut Sim, faction: u32, kind: u8, off: Vector3) -> usize {
+    let at = add(s.bolts.positions[0], off);
+    let p = s.bolts.insert_owned(-2 - s.bolts.owned as i64, at, Vector3::ZERO, faction, 0, kind, 0.25, 10.0, [1.0; 4], 255, 60.0, 0);
+    s.bolts.last_steps[p] = Vector3::ZERO;
+    p
+}
+
+#[test]
+fn a_hostile_shot_that_meets_a_mine_in_flight_takes_one_of_its_hits_and_a_friendly_or_a_beam_does_not() {
+    let mut s = Sim::new(rows_of(&[(1, FRIEND, v(0.0, 0.0, 9000.0), 8.0, LIVE)], None));
+    let slot = flying_energy(&mut s, v(0.0, 0.0, -3000.0), v(0.0, 0.0, -1000.0));
+    s.bolts.set_hits_left(0, 3);
+    s.bolts.last_steps[0] = scale(s.bolts.velocities[0], 1.0 / 60.0);
+    shot_beside_mine(&mut s, FRIEND, 7, v(1.0, 0.0, 0.0));
+    shot_beside_mine(&mut s, FOE, 8, v(1.0, 0.0, 0.0));
+    shot_beside_mine(&mut s, FOE, 7, v(40.0, 0.0, 0.0));
+    s.tick();
+    assert!(s.out.shot_hits.is_empty(), "the mine's own side's bolt, a beam and a bolt 40 m off meet nothing");
+    let hit = shot_beside_mine(&mut s, FOE, 7, v(1.0, 0.0, 0.0));
+    s.tick();
+    assert_eq!(s.out.shot_hits, vec![(hit as u32, slot as u32, 2)], "a hostile bolt takes one of three hits");
+    assert!(s.out.downed.is_empty());
+}
+
+#[test]
+fn three_hostile_shots_shoot_an_energy_mine_down_and_a_fourth_finds_nothing() {
+    let mut s = Sim::new(rows_of(&[(1, FRIEND, v(0.0, 0.0, 9000.0), 8.0, LIVE)], None));
+    let slot = flying_energy(&mut s, v(0.0, 0.0, -3000.0), v(0.0, 0.0, -1000.0));
+    s.bolts.set_hits_left(0, 3);
+    s.bolts.last_steps[0] = scale(s.bolts.velocities[0], 1.0 / 60.0);
+    let shots: Vec<usize> = (0..4).map(|_| shot_beside_mine(&mut s, FOE, 7, v(1.0, 0.0, 0.0))).collect();
+    s.tick();
+    let lefts: Vec<u8> = s.out.shot_hits.iter().map(|h| h.2).collect();
+    assert_eq!(lefts, vec![2, 1, 0], "the first three bolts, in row order, take its three hits");
+    assert!(s.out.shot_hits.iter().all(|h| h.1 == slot as u32 && h.0 != shots[3] as u32), "the fourth is not used");
+}
