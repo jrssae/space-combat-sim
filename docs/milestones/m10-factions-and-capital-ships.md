@@ -1907,6 +1907,62 @@ On top of it:
   is called off inside the mouth flies back out along its lane before it is let go; the hangar's own craft are drawn in from
   250 m out by the dock kernel's capture, which is flown within a few metres, not as true as a visitor's lane (T17's, as on the
   Hyperion); the hit sweep's native copy of a Kestrel's wing volumes does not fold; stage 3.
+- **Stage 3 progress (2026-11-26, Q85; committed; the row stays in progress until the maintainer closes it).**
+  **Built:** `LinerTraffic` (`src/world/liner_traffic.gd`, `StationTraffic`'s; `LinerVisit` a liner's record, `LinerSchedule`
+  the pure seeded schedule; numbers in `data/station/traffic.json` `liner`). A liner comes out of the jumpgate at traffic
+  cruise (120 m/s), flies the 50 km to its standoff spot (2.5 km to the gate's side of the docking lane, 1.5 km above its
+  axis, 3 km out from the mouth; a second liner 1.5 km below) and holds there, bow at the docking bay's waiting points. Its
+  hangar (T17's `CapitalHangar`, stage 2's bay; no parallel system) launches the crew shuttle and, 45 s later, the Kestrel;
+  each gets a civilian pilot, joins the docking bay's queue as any docking ship (its waiting point, the lane in its turn,
+  fighters first), flies in behind the inner doors, waits inside the station (45 to 90 s), comes out as an undocking ship,
+  flies to a point 500 m ahead of the liner's bow and is taken back into the bay; after 40 to 80 s aboard it flies the
+  same trip again to load. When its stay (15 to 30 min by the seed, at the spot) is over and its shuttles are home the
+  liner flies back and through the gate's departure vortex, and leaves the world. No trip starts once the stay is over,
+  while Control shelters the civilians or the station has no power; a liner disabled or destroyed ends its visit, its
+  shuttles out leaving through the gate. **Schedule:** on the traffic's clock while the run is on, the first visit 2 to
+  15 min in, the next 10 to 30 min (20 on average) after the last liner of a visit left its spot; one visit in ten
+  brings two (out of the gate 3 km apart, leaving 8 km apart), never more than two, each with its own spot and its own
+  name from `ea_asimov`'s list; no liner comes out of the gate while another flies out toward it (the two ways share the
+  gate's axis). A liner is placed with its hangar empty and stocked on its first look, its launches taking a free shuttle
+  from the pool or building one then (a hangar placed stocked builds its craft into the pool anew: two more ships a visit). **Console:** `traffic liner [near|show] [stay_s]` (`near` starts it at its spot, `show`
+  also puts the player beside it), `traffic.liners` (phase, seconds of the stay left, each shuttle's leg and trip),
+  `liner_next_s`, `liners_left`, `liner_trips`, `liner_us`, `liner_mean_us`; `info.md`, `docs/architecture.md`
+  (`StationTraffic`'s section).
+  **Fixed on the way:** a bay door rolled open in whole 1/60 s frames stopped a rounding short of open, and the hangar,
+  which waits for a fully open door, launched nothing (every `--fixed-fps 60` run; `BayDoorNode._settle`,
+  `test_bay_doors`).
+  **Measured** (`test_liner_visit`, a whole visit headless on a shortened clock: waits of 10 s, the flying unshortened):
+  699 s from the gate to the spot, 1 117 s for both shuttles' two trips (about 19 min; with the shipped waits about 23), 550 s
+  from the spot through the gate; so a liner is in the system about 45 to 50 min (a stay under 23 min runs on until both
+  trips are flown) and gate arrival to gate arrival runs about 55 to 62 min on average, longer than Q85's 35 to 50 (its
+  stay is counted at the spot, the gap from its leaving the spot, and the hull brakes and gathers way at 0.3 m/s2). Cost: `LinerTraffic`'s own tick 3 to 6 us with a liner and both shuttles in play (debug build),
+  nothing with none; the three hulls fly on the native rows as any capital and pooled ship.
+  **Verified on a staged copy (f34e64ad and T53's files only; the two commits since touch nothing under `src/` or these
+  tests):** import and the compile check clean (1 177 scripts). GUT: `test_liner_schedule` 7 (the mean gap, the first visit,
+  one pair in ten and never three, the stays, a pair's names, the same seed the same visits, bad data), `test_liner_traffic`
+  3 (the console: a liner at its spot, a second through the gate at the other spot under another name, a third refused,
+  the state, `show`, no arrival while one flies out, the pool no bigger; both shuttles into the docking bay and home with
+  no ram and the liner leaving once its stay is over; the schedule on a shortened clock: a pair by the run's clock, none
+  while liners are at the station, the next timed from the last departure, none under Control's shelter), `test_liner_visit`
+  1 (slow: the whole visit, gate to gate, four dockings, no ram, the liner within 250 m of its spot throughout, gone through
+  the vortex), `test_bay_doors` 11 (one new: fully open and shut at fixed frame rates), and the neighbours `test_ship_dock` 10, `test_carrier_launch` 7,
+  `test_console_command_list` 7, `test_quick_suite` 3: 48 of 48 in the seven focused files, the slow visit 1 of 1; before
+  the last fixes (the pair's spacing, the pool) 186 of 186 in 21 files: those and `test_station_traffic`, `test_station_run`,
+  `test_ship_dock_ports`, `test_ship_dock_rules`, `test_hangar_rules`, `test_jumpgate_in_play`,
+  `test_gate_civilian_departure`, `test_encounters`, `test_scenario_loader`, `test_station_sheltered`,
+  `test_station_commands`, `test_ea_asimov`, `test_capital_ship`, `test_ea_hyperion`, `test_docking_plan`, and the slow
+  `test_docking_traffic` 1 of 1. A headless soak with the run on (`--fixed-fps 60`, five civilians on the run): the liner
+  arrived whole, both shuttles queued with the civilians, docked and came home, it left through the gate and the
+  schedule's next liner came.
+  **GPU** (RX 6950 XT, Forward+): `references/screenshots/M10-T53 Asimov liner/stage3_traffic.png` (`traffic liner show`: the
+  liner at its spot with the docking sphere beyond it, a shuttle just out of the bay ahead of its bow, the traffic on the
+  radar); 145 fps, 332 draw calls. At 1 km a shuttle is a few pixels; judging the look is (H).
+  **Open:** the liner's helm is steered from GDScript twice a second (one or two ships; not per-tick work); a liner whose
+  departure the gate does not take because an arrival has the vortex is let go 1.5 km past the gate, unseen by the vortex;
+  a liner's own brain asking to withdraw in a fight would recall a shuttle from inside the station (not seen; the liner is
+  unarmed and holds under orders); the liner and its two shuttles are built when it arrives, a hitch 50 km from the station
+  (not measured); arrival to arrival is longer than Q85's figure (above): shorten `gap_s` or count the stay from the gate
+  if the maintainer wants Q85's spacing.
 - **T70 done (2026-11-23).** Each hull's collision shapes swept down the mouth (73.2 x 16.7 m band, 45.5 x 30.0 m core, outline clear to the doors) all fit, level and centred: crew shuttle 9.5 m, Kestrel 5.3 m (the wingtip under the band's ceiling), tender 12.8 m; off by 2 m and 2 degrees of roll 7.4, 2.4 and 10.7 m. Test: `tools/procgen/tests/test_ea_craft_bay_clearance.py`.
 
 ### M10-T71 Re-size the Panama (Q66, Q74)

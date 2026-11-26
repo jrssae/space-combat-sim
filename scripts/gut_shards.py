@@ -34,6 +34,7 @@ TESTS_DIR = ROOT / "tests"
 # it by re-running that parse over a new run's shard logs (`gh run view <id> --log --job <id>`).
 WEIGHTS: dict[str, float] = {
     "integration/test_civilian_escort.gd": 979,
+    "integration/test_liner_visit.gd": 600,  # M10-T53: 308 s on the maintainer's machine, not yet measured on a runner
     "integration/test_freighter_cargo.gd": 366,
     "integration/test_tier_outcomes.gd": 348,
     "integration/test_station_goto.gd": 255,
@@ -47,6 +48,7 @@ WEIGHTS: dict[str, float] = {
     "integration/test_brain_tolerance.gd": 181,
     "integration/test_launch_bay.gd": 173,
     "integration/test_gate_jumps_back_to_back.gd": 169,
+    "integration/test_liner_traffic.gd": 170,  # M10-T53: 84 s locally
     "integration/test_encounters.gd": 154,
     "integration/test_rebase_in_play.gd": 152,
     "integration/test_vortex_hold.gd": 133,

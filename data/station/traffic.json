@@ -1,4 +1,8 @@
 {"lane_ships": 5,
  "lane_spacing_s": 40.0,
  "weights": {"dock": 0.4, "undock": 0.4, "freighter": 0.2},
- "scramble": ["alpha"]}
+ "scramble": ["alpha"],
+ "liner": {"first_s": [120, 900], "gap_s": [600, 1800], "stay_s": [900, 1800], "pair_share": 0.1,
+           "cruise_mps": 120.0, "brake_mps2": 0.2, "arrive_m": 150.0, "line_up_m": 6000.0,
+           "spots": [[2500, 1500, -6500], [2500, -1500, -6500]],
+           "home_ahead_m": 500.0, "inside_s": [45, 90], "aboard_s": [40, 80]}}

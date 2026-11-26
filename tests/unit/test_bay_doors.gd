@@ -87,3 +87,21 @@ func test_a_door_node_lights_its_hall_only_while_open() -> void:
 	var dark: BayDoorNode = BayDoorNode.create(DOOR)
 	assert_null(dark.emitter, "no light in the hardpoints, no emitter")
 	dark.free()
+
+
+func test_a_door_rolled_open_in_fixed_frames_is_fully_open() -> void:
+	# M10-T53: 60 frames a second left it a rounding short of 1, and the hangar, which waits for 1, launched nothing.
+	for fps: float in [60.0, 120.0, 144.0, 480.0]:
+		var node: BayDoorNode = BayDoorNode.create(DOOR)
+		node.set_open(true)
+		var frames: int = 0
+		while node.is_processing() and frames < 10000:
+			node._process(1.0 / fps)
+			frames += 1
+		assert_eq(node.amount, 1.0, "fully open at %d frames a second" % int(fps))
+		node.set_open(false)
+		while node.is_processing() and frames < 20000:
+			node._process(1.0 / fps)
+			frames += 1
+		assert_eq(node.amount, 0.0, "and fully shut")
+		node.free()

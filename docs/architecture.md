@@ -6230,6 +6230,9 @@ src/targeting/targetable.gd      + SPEAKS_FOR: a body whose shots are answered a
 src/world/docking_plan.gd        DockingPlan (pure): the main docking bay's lane in and out, the freighter's lane
 src/world/station_traffic.gd     StationTraffic (Main's child): dock, undock, freighter, raid, scramble, the run (M7-T56);
                                  command and provider `traffic`
+src/world/liner_traffic.gd       LinerTraffic (StationTraffic's, M10-T53): the Asimov liners' visits and their shuttles' trips
+src/world/liner_visit.gd         LinerVisit: one liner's record (phase, stay, its shuttles' legs and trips) and console line
+src/world/liner_schedule.gd      LinerSchedule (pure): the seeded waits, pairs, stays and names of the liners' visits
 src/world/station_airlock.gd     StationAirlock (M7-T25): the docking bay's inner doors in play, the void's bounds (holds, M7-T62)
 src/world/airlock_doors.gd       AirlockDoors (pure): how far open, opening while any ship asks; AirlockLeaves slides the props
 src/ship/ship.gd                 + inside_station (M7-T62): SimCore.set_sheltered, native FLAG_SHELTERED
@@ -6350,6 +6353,40 @@ data/station/traffic.json        the run's ships and spacing, its kinds' weights
   it, in the tunnel or in the void, docking or undocking. A ship sent on after a lane gets a new route
   that starts at its first waypoint (`BehaviourFollowPath.attach` resets on a different route, `AiPilot` restarts the native
   slot): before M7-T56 a departing ship took its lane's end for its departure route's and was let go 5 km out.
+- **Liners (M10-T53, Q85; `LinerTraffic`, numbers in `data/station/traffic.json` `liner`).** An Asimov liner's call is a
+  `LinerVisit` (liner_visit.gd) that `StationTraffic` steps with its own ships: phases `gate`, `inbound`, `holding`, `outbound`.
+  - **The liner** is a `CapitalShip` built when the gate's arrival vortex is open (`Jumpgate.request_arrival`,
+    `bring_through`), out of the low-attention tier for its visit and flown by its helm's orders (`CapitalShip.set_course`),
+    which `LinerTraffic` gives twice a second: at traffic cruise (120 m/s) toward its **standoff spot**, slowing by
+    `sqrt(2 a d)` with `brake_mps2` 0.2 (the hull's retros give 0.3), its bow turned at the docking bay's waiting points for
+    the last 600 m, then holding there. The two spots are 2.5 km to the gate's side of the docking lane, 1.5 km above and below
+    its axis and 3 km out from the mouth (station frame `[2500, +-1500, -6500]`): off the sphere, between the run's two sides
+    and clear of both lanes. About 11.5 min from the gate to the spot. Leaving, it flies to a point 6 km out on the gate's
+    axis and on through (`Jumpgate.send_departure`; the vortex opens for it as for any departure); one the vortex did not
+    take (an arrival had the gate) is let go 1.5 km past it. A pair comes out of the gate one at a time (3 km apart) and
+    leaves 8 km apart, and no liner comes out while another flies out toward the gate (the two ways share its axis).
+  - **The shuttles** are the hangar's own two (`CapitalHangar`, its `auto` off: `launch`, `recall`). Let go ahead of the bay
+    a craft gets a `civilian` pilot (`AiPilotDriver.brain`) and joins the docking bay's queue as any docking ship
+    (`StationTraffic.adopt_docking`: a waiting point, the lane in its turn, fighters first). Behind the shut inner doors it is
+    not released but kept inside (`shuttle_inside`: no collision, clamped, `inside_station`, held 400 m behind the void in the
+    hull, where no ship in the void meets it) for `inside_s`, then sent out as an undocking ship (`send_out`) once the bay is
+    free; at its lane's end `StationTraffic._leave` hands it back (`take_home`): a route to a point 500 m ahead of the liner's
+    bow, where the hangar takes it in (its entry stays on the traffic's list as kind `shuttle` until then). Two trips each
+    (unload, load), `aboard_s` between them; no trip starts once the stay is over, while Control shelters the civilians or
+    while the station has no power. Both shuttles' two trips take about 19 min, so a stay at the short end of its range
+    runs on until they are home.
+  - **The schedule** (`LinerSchedule`, pure: hashes of the session seed and the visit's index) runs on the traffic's clock
+    while the run is on: the first visit 2 to 15 min in, the next 10 to 30 min (20 on average) after the last liner of a
+    visit left its spot, none while a liner is at the station or on its way in; one visit in ten brings two, never more
+    (`MAX_AT_ONCE`, the console included), each with its own spot and name (`data/ships/names.json`, so liveries and bar
+    counts vary); a stay is 15 to 30 min at the spot.
+  - A liner disabled or destroyed ends its visit where it is, and its shuttles out leave through the gate as civilians.
+    A liner is placed with its hangar empty and stocked on its first look, each launch taking a free shuttle from the pool
+    (`Main.ensure_free`): a hangar placed stocked builds its craft into the pool anew, two more ships every visit.
+    Cost: `LinerTraffic`'s own tick is 3 to 6 us with a liner in play (`traffic.liner_mean_us`), nothing with none; the
+    liner and its shuttles fly on the native rows as any capital and pooled ship.
+  - Console: `traffic liner [near|show] [stay_s]`; state in `traffic.liners`. Tests: `tests/unit/test_liner_schedule.gd`,
+    `tests/integration/test_liner_traffic.gd`, `test_liner_visit.gd` (slow: a whole visit, gate to gate).
 - **Cargo carried to the cargo bay (T30, maintainer 2026-11-14; the carriers are cargo pods since T34, below).** Any of the five Saturns (`DockingPlan.freighter_types()`;
   the traffic draws hull and unloading or loading from the session seed) holds at the cargo bay while the station's bots carry its
   cargo between it and the bay's back wall; nothing flies by itself.

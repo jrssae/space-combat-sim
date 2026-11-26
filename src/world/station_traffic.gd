@@ -26,12 +26,15 @@ extends Node
 ##
 ## - **No power** (M10-T65, Q78): nothing starts, and a civilian still on its way in turns away and leaves.
 ##
+## - **Liners** (M10-T53, Q85; `LinerTraffic`): an Asimov liner comes through the gate, holds off the docking sphere while its
+##   two shuttles fly into the docking bay and back twice, and leaves through the gate; about every 20 min while the run is on.
+##
 ## Console: command and provider `traffic`.
 
 const NODE_NAME: StringName = &"StationTraffic"
 const DATA_PATH: String = "res://data/station/traffic.json"
 const PROVIDER: StringName = &"traffic"
-const ACTIONS: Array[StringName] = [&"status", &"dock", &"undock", &"freighter", &"raid", &"scramble", &"auto", &"clear"]
+const ACTIONS: Array[StringName] = [&"status", &"dock", &"undock", &"freighter", &"liner", &"raid", &"scramble", &"auto", &"clear"]
 ## What the run's own starts may be (raids at the station come with the encounters).
 const KINDS: Array[StringName] = [&"dock", &"undock", &"freighter"]
 const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack"}
@@ -116,6 +119,8 @@ var reserved_ms: float = 0.0
 var last_event: String = "none"
 ## Control's shelter is on (M8-T34): see the class comment.
 var sheltering: bool = false
+## The Asimov liners and their shuttles (M10-T53).
+var liners: LinerTraffic = LinerTraffic.new(self)
 # One entry a ship: {combatant, brain, kind, state, cargo, loading, cargo_state} (the last three for freighters).
 var _own: Array[Dictionary] = []
 var _spawned: int = 0
@@ -215,21 +220,71 @@ func undock(type: StringName = &"", extra: Dictionary = {}) -> String:
 	var hull: StringName = _tunnel_type(type)
 	if hull == &"":
 		return "%s does not fit the docking tunnel (%s do)" % [type, ", ".join(DockingPlan.tunnel_types())]
-	var s: Station = station()
-	var xform: Transform3D = s.global_transform
-	var airlock: Vector3 = plan.airlock
-	var out_dir: Vector3 = ((plan.dock_out[0]["at"] as Vector3) - airlock).normalized()
-	# Lying square in the black void behind the inner doors as the drum has turned it, waiting there until they open (M7-T25).
-	var basis: Basis = Basis.looking_at(xform.basis * out_dir, s.drum_body.global_basis.y)
-	var wait: Array[Dictionary] = [{"at": airlock, "hold_s": UNDOCK_WAIT_S, "face": Vector3.ZERO, "spin": plan.spin}]
-	var route: Route = DockingPlan.route_of(wait, xform, main.world, DockingPlan.DOCK_CRUISE_MPS, "UNDOCKING")
-	var c: Combatant = _take(hull, route, xform * airlock, basis, main.world.rest_velocity(), &"undock", &"airlock", extra)
+	var at: Transform3D = _void_start()
+	var c: Combatant = _take(hull, _void_wait(), at.origin, at.basis, main.world.rest_velocity(), &"undock", &"airlock", extra)
 	if c == null:
 		return "no %s is free in the ship pool" % hull
-	c.ship.angular_velocity = xform.basis * plan.spin  # it comes out turning with the drum
+	c.ship.angular_velocity = station().global_basis * plan.spin  # it comes out turning with the drum
 	_shelter(_own[_own.size() - 1])  # inside the station from its first tick
 	_ask_doors(_own[_own.size() - 1])
 	return ""
+
+
+## A craft already in play (a liner's shuttle, M10-T53) joins the docking bay's queue as a docking ship flown by `brain`: to a
+## waiting point off the lane, then in by the lane in its turn. Returns its entry.
+func adopt_docking(c: Combatant, brain: PilotBrain, extra: Dictionary = {}) -> Dictionary:
+	var entry: Dictionary = _entry(c, brain, &"dock", &"transit", extra)
+	_requeue(entry)
+	_own.append(entry)
+	last_event = "dock %s" % c.display_name
+	return entry
+
+
+## Sends a craft kept inside the station (`LinerTraffic.shuttle_inside`) out through the docking bay as an undocking ship.
+func send_out(entry: Dictionary) -> void:
+	var c: Combatant = entry["combatant"]
+	c.ship.reset_to(_void_start())
+	c.ship.linear_velocity = main.world.rest_velocity()
+	c.ship.angular_velocity = station().global_basis * plan.spin
+	BehaviourFollowPath.attach(entry["brain"] as AiPilot, _void_wait())
+	entry["kind"] = &"undock"
+	entry["state"] = &"airlock"
+	entry.erase("through")
+	_shelter(entry)
+	_ask_doors(entry)
+
+
+## Sends one of the traffic's ships away as any leaving civilian (a shuttle whose liner is lost).
+func send_away(entry: Dictionary) -> void:
+	entry["kind"] = &"undock"
+	_leave(entry)
+
+
+## Lets go of an entry without touching its ship (its owner took the ship back: a shuttle home in its liner's bay).
+func forget(entry: Dictionary) -> void:
+	for i: int in _own.size():
+		if is_same(_own[i], entry):
+			_let_doors_go(entry)
+			_own.remove_at(i)
+			return
+
+
+## Whether the docking lane, the tunnel or the void is taken, or a fighter is cleared to dock: nobody else starts in or out.
+func lane_taken() -> bool:
+	return _bay_busy()
+
+
+# Where an undocking ship starts: lying square in the black void behind the inner doors as the drum has turned it (M7-T25).
+func _void_start() -> Transform3D:
+	var s: Station = station()
+	var out_dir: Vector3 = ((plan.dock_out[0]["at"] as Vector3) - plan.airlock).normalized()
+	return Transform3D(Basis.looking_at(s.global_basis * out_dir, s.drum_body.global_basis.y), s.global_transform * plan.airlock)
+
+
+# It waits there, turning with the drum, until the doors open.
+func _void_wait() -> Route:
+	var wait: Array[Dictionary] = [{"at": plan.airlock, "hold_s": UNDOCK_WAIT_S, "face": Vector3.ZERO, "spin": plan.spin}]
+	return DockingPlan.route_of(wait, station().global_transform, main.world, DockingPlan.DOCK_CRUISE_MPS, "UNDOCKING")
 
 
 ## A Saturn of `type` (any of `DockingPlan.freighter_types()`; "" picks one) flies the cargo bay's cycle, unloading or `loading`.
@@ -455,7 +510,7 @@ func _engage_at_will(wing_name: String) -> void:
 
 ## Every traffic ship back to its pool. Returns how many.
 func clear() -> int:
-	var n: int = 0
+	var n: int = liners.clear()
 	for i: int in range(_own.size() - 1, -1, -1):
 		if _still_ours(_own[i]):
 			_release(i)
@@ -478,6 +533,7 @@ func _physics_process(delta: float) -> void:
 		_turn_away(s)
 	for i: int in range(_own.size() - 1, -1, -1):
 		_step(i)
+	liners.step(delta)
 
 
 # The station lost power (Q78): every civilian still on its way in, the lane included, gives up and leaves; one already
@@ -840,15 +896,21 @@ func _take(type: StringName, route: Route, at: Vector3, basis: Basis, velocity: 
 	_spawned += 1
 	c.ship.tier_exempt = true  # a lane is flown in full, wherever the player is
 	c.targetable.broadcast_range_m = ShipPool.CIVILIAN_BROADCAST_RANGE_M
-	var entry: Dictionary = {"combatant": c, "brain": brain, "kind": kind, "state": state, "cargo": null, "loading": false,
-			"cargo_state": &"", "hold_index": plan.freighter_hold_index if plan != null else -1}
-	entry.merge(extra, true)
+	var entry: Dictionary = _entry(c, brain, kind, state, extra)
 	# A freighter come to load arrives without its pods.
 	if kind == &"freighter" and bool(entry["loading"]):
 		entry["cargo"] = FreighterCargo.attach(c.ship, false)
 	_own.append(entry)
 	last_event = "%s %s" % [kind, callsign]
 	return c
+
+
+# What the traffic keeps about one of its ships.
+func _entry(c: Combatant, brain: PilotBrain, kind: StringName, state: StringName, extra: Dictionary) -> Dictionary:
+	var entry: Dictionary = {"combatant": c, "brain": brain, "kind": kind, "state": state, "cargo": null, "loading": false,
+			"cargo_state": &"", "hold_index": plan.freighter_hold_index if plan != null else -1}
+	entry.merge(extra, true)
+	return entry
 
 
 # One more of the run's civilians: arriving through the gate (to the docking bay, or a Saturn to the cargo bay) or undocking.
@@ -901,7 +963,7 @@ func _step(i: int) -> void:
 		return
 	var c: Combatant = entry["combatant"]
 	var kind: StringName = entry["kind"]
-	if kind == &"raid":
+	if kind == &"raid" or kind == &"shuttle":  # a liner's shuttle inside the station or flying home is `LinerTraffic`'s
 		return
 	if kind == &"dock" or kind == &"undock":
 		_shelter(entry)
@@ -944,7 +1006,7 @@ func _step(i: int) -> void:
 			if kind == &"freighter" and entry["cargo_state"] == &"done":
 				_depart(entry)
 			if done:
-				if sheltering:
+				if sheltering and not entry.has("liner"):
 					_stand_off(entry)
 				else:
 					_leave(entry)
@@ -1055,6 +1117,8 @@ func _stand_off(entry: Dictionary) -> void:
 
 # The way out after a lane: through the gate when there is one, else straight on (or along `away`) to where it is let go.
 func _leave(entry: Dictionary, away: Vector3 = Vector3.ZERO) -> void:
+	if entry.has("liner") and liners.take_home(entry):
+		return  # a liner's shuttle flies back to its liner
 	var c: Combatant = entry["combatant"]
 	var brain: PilotBrain = entry["brain"]
 	entry["state"] = &"leave"
@@ -1140,6 +1204,10 @@ func _shelter(entry: Dictionary) -> void:
 func _docked(i: int) -> void:
 	docked_count += 1
 	docked.emit((_own[i]["combatant"] as Combatant).display_name)
+	if _own[i].has("liner"):
+		liners.shuttle_inside(_own[i])  # it waits inside and comes out again
+		if _own[i].has("liner"):
+			return
 	_release(i)
 
 
@@ -1213,6 +1281,8 @@ func _load_data() -> void:
 	if raw_weights is Dictionary:
 		for kind: StringName in KINDS:
 			weights[kind] = float((raw_weights as Dictionary).get(String(kind), 0.0))
+	if data.get("liner") is Dictionary:
+		liners.load_data(data["liner"])
 	var wings: Variant = data.get("scramble", [])
 	if wings is Array:
 		for wing: Variant in wings:
@@ -1247,10 +1317,16 @@ func _register_console() -> void:
 		&"cargo": {"get": _cargo_text, "doc": "Each freighter at the cargo bay: its hull, unloading or loading, and pods carried"},
 		&"raids": {"get": func() -> int: return raids, "doc": "Raids sent at the station"},
 		&"reserved_ms": {"get": func() -> float: return reserved_ms, "doc": "Milliseconds the load spent building the raids' and wings' ships"},
+		&"liners": {"get": liners.text, "doc": "Each Asimov liner calling at the station (M10-T53): its name, phase (gate, inbound, holding with the seconds of its stay left, outbound) and each shuttle's leg (aboard, launching, to_station, inside, from_station, home, berthing, done, lost) and trip"},
+		&"liner_next_s": {"get": liners.next_in_s, "unit": "s", "doc": "Seconds of the run's clock until the next scheduled liner (-1: none is timed, as while one is at the station or the run is off)"},
+		&"liners_left": {"get": func() -> int: return liners.liners_left, "doc": "Liners that left through the gate"},
+		&"liner_trips": {"get": func() -> int: return liners.trips_flown, "doc": "Shuttle trips flown from a liner into the docking bay and home"},
+		&"liner_us": {"get": func() -> int: return liners.last_us, "unit": "us", "doc": "What the liners and their shuttles cost on the last tick here (their own ships fly in the native core as any other)"},
+		&"liner_mean_us": {"get": liners.mean_us, "unit": "us", "doc": "Its mean over the ticks with a liner in play"},
 		&"last_event": {"get": func() -> String: return last_event, "doc": "The last thing the traffic started"},
 	}), self)
 	registry.register_command(ConsoleCommand.new(&"traffic",
-			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's cargo pods carry its cargo blocks or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the cargo pods on their way and you beside the lane to watch; type is one of %s, default each in turn), raid [n] (raiders at the station; a scrambled wing still out takes it, else the next wing launches), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.freighter_types()),
+			"Station traffic: status, dock [near] (a civilian into the main docking bay), undock (one out of it), freighter [type] [near|hold|show] [load] (a Saturn's cargo cycle: the station's cargo pods carry its cargo blocks or tanks into the cargo bay, or with load onto it; near starts it on the lane, hold already at the bay, show backing in its last 300 m with the cargo pods on their way and you beside the lane to watch; type is one of %s, default each in turn), liner [near|show] [stay_s] (an Asimov liner through the gate to its standoff spot off the docking sphere, its two shuttles into the docking bay and back twice, then out through the gate; near starts it at its spot, show also puts you beside it to watch; never more than two), raid [n] (raiders at the station; a scrambled wing still out takes it, else the next wing launches), scramble <wing>, auto <on|off>, clear" % ", ".join(DockingPlan.freighter_types()),
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"status"), _rest_arg()] as Array[ConsoleArg]),
 			_cmd_traffic, self)
 
@@ -1279,6 +1355,17 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 			var c: Combatant = last_ship()
 			var hull: String = String(main.ships.type_of(c)) if c != null and why.is_empty() and main.ships.type_of(c) != &"" else "a Saturn"
 			return _answer(why, "%s is on its way to the cargo bay to %s" % [hull, "load" if loading else "unload"])
+		&"liner":
+			var words: PackedStringArray = arg.split(" ", false)
+			var near: bool = words.has("near") or words.has("show")
+			var stay: float = -1.0
+			for word: String in words:
+				stay = float(word) if word.is_valid_float() else stay
+			why = liners.start(stay, near)
+			if why.is_empty() and words.has("show"):
+				why = liners.view()
+			return _answer(why, "a liner %s; its shuttles fly into the docking bay and back twice, then it leaves through the gate" % (
+					"holds off the docking sphere" if near else "is coming through the gate to its spot off the docking sphere"))
 		&"raid":
 			var n: int = int(arg) if arg.is_valid_int() else DEFAULT_RAID
 			why = raid(n)
@@ -1295,9 +1382,9 @@ func _cmd_traffic(args: Dictionary) -> ConsoleResult:
 			return ConsoleResult.line("traffic by itself %s (%d civilians on the run between the gate and the station)" % [arg, lane_ships])
 		&"clear":
 			return ConsoleResult.line("returned %d traffic ship(s) to their pools" % clear())
-	return ConsoleResult.line("traffic: %d in play%s (%d docking, %d undocking, %d inside, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, pods out %d, raids %d; auto %s; cargo: %s; last: %s" % [
+	return ConsoleResult.line("traffic: %d in play%s (%d docking, %d undocking, %d inside, %d freighters, %d raiders); docked %d, undocked %d, freighter cycles %d, pods in %d, pods out %d, raids %d; auto %s; cargo: %s; liners: %s; last: %s" % [
 			alive_count(), "" if _pending_gate == 0 else " + %d waiting for the gate to open" % _pending_gate, alive_of(&"dock"), alive_of(&"undock"), inside_count(), alive_of(&"freighter"), alive_of(&"raid"), docked_count,
-			undocked_count, freighters_done, pods_in, pods_out, raids, "on" if auto else "off", _cargo_text(), last_event])
+			undocked_count, freighters_done, pods_in, pods_out, raids, "on" if auto else "off", _cargo_text(), liners.text(), last_event])
 
 
 func _cargo_text() -> String:

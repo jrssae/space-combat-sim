@@ -75,7 +75,7 @@ func set_open(open: bool) -> void:
 	if power <= 0.0:
 		return
 	_target = 1.0 if open else 0.0
-	set_process(not is_equal_approx(amount, _target))
+	_settle()
 
 
 ## Jumps to open or shut at once (a test, or a freshly spawned hull).
@@ -104,8 +104,16 @@ func hold(at: float) -> void:
 func _process(delta: float) -> void:
 	amount = BayDoors.advance(amount, _target, delta)
 	_draw()
-	if is_equal_approx(amount, _target):
-		set_process(false)
+	_settle()
+
+
+# Stops rolling once it is there, exactly there: a hangar waits for a door that is fully open (at a fixed 60 frames a
+# second the roll ended a rounding short of open, and nothing launched).
+func _settle() -> void:
+	var there: bool = is_equal_approx(amount, _target)
+	if there:
+		amount = _target
+	set_process(not there)
 
 
 # A shut door shows no light: a dark plate behind the slats blocks the lit hall seen through their grooves.
