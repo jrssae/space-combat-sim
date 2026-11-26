@@ -1,5 +1,5 @@
 {"scenario_id": "liner_dock",
- "description": "A crew shuttle 1.5 km off the bow of an Asimov liner that holds station. Target its docking collars and hold X to dock; hold X again to leave. Nothing fights here.",
+ "description": "A crew shuttle 1.5 km off the bow of an Asimov liner that holds station. Target its docking collars and follow the prompt to dock; the same hold leaves again. Nothing fights here.",
  "system_id": "local",
  "anchor": {"place": "babylon5", "at": [9000, -3500, -14000]}, "epoch": 7482650,
  "player": {"type": "ea_shuttle", "position": [0, -40, 0], "forward": [0, 0, -1]},
