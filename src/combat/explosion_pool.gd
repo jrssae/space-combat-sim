@@ -18,7 +18,8 @@ extends Node3D
 ## A child of `World/Effects` at the World's origin (`attach`), its explosions in World-local metres, drifting with the velocity
 ## they were given and the frame's pull. The physics tick moves them (`step`), as it moves everything a rebase sees; `_process`
 ## ages and draws them a tick behind, between their last two places, as interpolated nodes are drawn (`advance`), so a paused
-## game freezes them. A rebase moves the explosions, a velocity rebase changes their velocity.
+## game freezes them. It is world-shiftable: a rebase moves the node with the world, and it goes back to the origin with its
+## explosions moved instead (as `FarFlashes` does); a velocity rebase changes their velocity.
 
 const NODE_NAME: String = "ExplosionPool"
 ## Explosions alive at once.
@@ -95,6 +96,7 @@ static func fireball_radius(radius_m: float, age_s: float) -> float:
 
 func _init() -> void:
 	name = NODE_NAME
+	add_to_group(WorldFrame.SHIFTABLE_GROUP)
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_alive.resize(CAPACITY)
 	_reduced.resize(CAPACITY)
@@ -409,8 +411,9 @@ func _on_boosted(dv: Vector3) -> void:
 			_pulls[i].reset()
 
 
-# A rebase moves the world's objects by `-offset`: the explosions go with them.
+# The rebase moved this node with the world; back to the origin, with the explosions moved instead.
 func _on_rebased(offset: Vector3) -> void:
+	position += offset
 	for i: int in CAPACITY:
 		if _alive[i] != 0:
 			_positions[i] -= offset
