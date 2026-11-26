@@ -208,7 +208,8 @@ func test_it_takes_fire_on_its_sections_and_dies_by_the_plan() -> void:
 	assert_false(cap.can_process())
 	assert_false(cap.surfaces_held(), "its sections are gone from the core")
 	assert_false(CapitalFlight.of(main.world).flown.has(cap), "and from the flight step")
-	assert_lt(main.director.last_blast_position.distance_to(cap.global_position), 1.0, "its blast where it died")
+	assert_lt(main.director.last_blast_position.distance_to(cap.global_position), cap.half_extents().length(),
+			"its blast where it died (M10-T11: on the section that goes first)")
 	for raw: Variant in MeshAssets.read_manifest("ea_omega").get("sections", []):
 		var section: Dictionary = raw
 		assert_not_null(cap.chunk_mesh(str(section["name"])), "a break-up chunk for %s (T11's plan)" % section["name"])

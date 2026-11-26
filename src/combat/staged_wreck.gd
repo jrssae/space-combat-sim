@@ -14,6 +14,7 @@ var spin: Vector3 = Vector3.ZERO
 var age_s: float = 0.0
 
 var _offsets: Array[Vector3] = []
+var _locals: Array[Transform3D] = []  # each chunk's pose in the body frame, when it is not upright at its offset (a turned rotor's)
 var _joints: Array[Vector3] = []
 var _released: PackedByteArray = PackedByteArray()
 var _released_count: int = 0
@@ -31,6 +32,14 @@ func _init(p_plan: BreakupPlan, offsets: Array[Vector3], joints: Array[Vector3],
 	velocity = p_velocity
 	spin = p_spin
 	_released.resize(offsets.size())
+
+
+## Each chunk's pose in the body frame (M10-T11): a capital's rotor stopped mid-turn holds its chunks turned. Their offsets
+## become the poses' origins.
+func set_local_poses(poses: Array[Transform3D]) -> void:
+	_locals = poses
+	for i: int in mini(poses.size(), _offsets.size()):
+		_offsets[i] = poses[i].origin
 
 
 ## Moves the wreck `delta` seconds on in `world` (its pull, M6-T07; null for none) and returns the chunks whose time has come,
@@ -67,7 +76,14 @@ func offset_of(chunk: int) -> Vector3:
 
 ## Where chunk `chunk`'s centroid sits now, World-local.
 func chunk_transform(chunk: int) -> Transform3D:
+	if chunk < _locals.size():
+		return Transform3D(basis, origin) * _locals[chunk]
 	return Transform3D(basis, origin + basis * _offsets[chunk])
+
+
+## The wreck's pose now, World-local.
+func pose() -> Transform3D:
+	return Transform3D(basis, origin)
 
 
 ## Where chunk `chunk`'s detachment point sits now, World-local.

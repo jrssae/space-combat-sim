@@ -7320,8 +7320,8 @@ src/combat/blast_resolver.gd  BlastResolver: queues blasts, drives the batch, an
   (spheres, surfaces, a turned hull, flags and order). M10-T76: `test_blast_landing_parity` (the recording from the GDScript
   landing, bit for bit: fighters, an Omega by section, Babylon 5, a 100-mine chain; 1 and 6 threads, `delayed`),
   `test_blast_batch` (unit: the shapes' numbers, a blast with no core) and Rust `damage_store::blasts::tests`.
-- **Known gaps.** The staged break-up's secondary blasts are T11's; a dead capital's unblown magazines and fuel do not yet
-  blow with it. Blasts do not see through or around hulls: a hull behind another takes the same blast.
+- **Known gaps.** Blasts do not see through or around hulls: a hull behind another takes the same blast. (A dead capital's
+  unblown magazines, fuel and reactor blow in its staged break-up since M10-T11, §22.13.)
 
 ### 22.5 Disabled hulks (D12.7; T10)
 
@@ -7870,3 +7870,45 @@ data/scenarios/liner_dock.json      the player in a crew shuttle (`player.type`)
 - Tests: `tests/unit/test_ship_dock_ports.gd`, `test_ship_dock_rules.gd`, `tests/integration/test_ship_dock.gd`; the collars
   and a crew shuttle swept onto each, and both shuttles swept down the bay's lanes, in
   `tools/procgen/tests/test_ea_asimov.py`.
+
+### 22.13 Staged break-up (D12.8; T11)
+
+A `CapitalShip`'s death is a plan played over seconds, not one blast (a stand-in, `CapitalStandin`, keeps the single blast
+until T45 replaces it).
+
+- **The plan.** `CapitalBreakup.from_ship` reads the dying ship once: its sections (kind, box, state), each section's break-up
+  chunk (`hardpoints.json` `chunks[]`: offset, piece; a rotor's chunk turned as the rotor stopped) and collision piece, and its
+  class's row of `breakup` in `data/capitals/capitals.json`. `BreakupPlan.for_sections` (pure, seeded from the ship's name and
+  type, so a death plays the same with any thread count) orders the sections: the one that blew first (else the one the
+  killing hit named or landed nearest, else, for a death with no point, the reactor, as T09's death blast was), the rest
+  outward from it nearest first, each `step_s` after the last, the reactors last after `reactor_after_s`. Each section blows as
+  it goes: an explosive kind with its `blasts.sections` row, any other with the class's `structure` row
+  (`BlastTable.capital_section`, scaled to the hull as the death is), a section that already blew with none. `one_blast` (the
+  ancients) makes the death one blast, the reactor's row, and the rest come apart silently. `StagedWreck` (M3's, now with
+  per-chunk poses) holds what has not gone yet on the ship's last motion.
+- **Playing it.** `CapitalWrecks` (a `World` child, physics priority 205: after the hit resolver, before the rams) advances
+  every plan each tick. A section that lets go releases its `CapitalChunk`, sets off its blast through `BlastResolver` (a D12.6
+  blast in the native batch: it hurts, pushes, sets off mines and chains like any other) and draws it at its level of
+  detail (`DestructionDirector.draw_explosion`: the pool near, a reduced one farther, a far flash with its energy past that;
+  the fireball is the section's size, at least `fireball_share` of the blast's reach). Loose chunks burn for `fire_s`: small
+  pooled fireballs at seeded points on their box, drawn only. The first step runs inside the death itself, so the death's
+  blast lands in its own tick and its `HitInfo` carries it (`set_blast`), as before.
+- **Chunks.** A `CapitalChunk` is a `RigidBody3D` of its section's share of the ship's mass, drawing its chunk's mesh on its
+  piece's maps (the ship's skin variant set) with its section's collision shapes (D12.5: one collision piece a section), zero
+  damping, the frame's pull read once a second. Held frozen (kinematic, placed by the wreck each tick) until its step, then
+  loose on the wreck's motion at its centre, a kick outward and its own tumble. Sister chunks never collide. Ships bounce off
+  chunks through Jolt only: no hit volumes, no rows in the core, no ram damage. They stay as wreckage; past `chunks_max` the
+  oldest wreck's are freed. A death in the low-attention tier plays its blasts on the wreck's motion with no bodies.
+- **Cost.** Building the chunks about 2 to 3 ms a death, the first blast 0.3 to 0.9 ms, a wreck's tick a few microseconds;
+  chunk meshes load at spawn (`CapitalShip._build`), once a type. Nine capitals dying at once among 24 fighters: 38 to 44 ms in
+  that tick, physics 5.6 ms a tick on average over the next 15 s against 4.9 ms before.
+- **Console.** `wrecks [list|clear]`, provider `breakups` (`info.md`).
+- **Tests.** `tests/unit/test_capital_breakup_plan.gd` (order, steps, the reactor's pause, blast kinds, one blast, seeds, turned
+  chunks), `tests/integration/test_capital_breakup.gd` (an Omega's magazine: the plan outward, the reactor last, a blast a
+  section, a later blast hurting a raider out of the first one's reach, chunks with collision drifting apart and staying, a
+  death in the tier, a Vorlon ship's one blast, a Hyperion, the console), `test_breakup_threads.gd` (1 vs 6 threads, the blast
+  hits byte for byte), `test_blast_landing_parity.gd` (re-recorded with the break-up; a 40 ms frame at a death changes nothing).
+- **Test pacing.** A test that scripts events one awaited physics frame at a time holds `physics_max_steps_per_frame` at 1:
+  `Main` sets the engine's catch-up from it (8 by default), and after a slow frame two ticks could pass between the script's
+  steps while the tier rows flew both. The capital guns' and interceptors' seeded spread is hashed on sim-time ticks
+  (`now_s / delta`), not the core's sync count, which also holds the ticks a scene ran before its clock started.

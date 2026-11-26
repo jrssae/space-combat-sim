@@ -942,6 +942,58 @@ on T75's damage store instead of one GDScript `apply_hit` and push a hull, with 
   the section that blew), as T75 does for beams; the queue, the mines and the order are the batch's. (3) `CapitalShip.section_hit`
   is no longer emitted for a blast's hit (beams already did not); nothing in the game listens to it.
 
+### M10-T11 Staged break-up and pooled explosions (D12.8, L10)
+
+**Goal.** A capital's death plays as a staged break-up with secondary blasts that hurt what is near (AC8), and every explosion
+comes from a pool with shared meshes and materials (roadmap L10).
+
+- **Done (2026-11-26, awaiting the maintainer).** *Pooled explosions* (bfa95f33, b3f3dad3; architecture §15.7): every explosion
+  (deaths, mines, buoys, the console's blast, now a missile's or torpedo's warhead too, and the break-ups) is a slot of
+  `World/Effects/ExplosionPool`: 64 slots drawn by two multimeshes (fireball and flash) sharing one mesh and one material each,
+  a `LightEmitter` a slot made once; the oldest gives its slot up when all are busy; world-shiftable. `Explosion` (node and
+  scene) is gone; tests read the pool through the `ExplosionView` fixture. 100 explosions with their particle bursts cost 89 to
+  102 us each before, 11 to 23 us after; Omega B's death and its 100-mine chain (the T76 readout) 4.85 to 4.94 ms before, 3.73
+  to 3.87 ms after.
+  *Staged break-up* (architecture §22.13): `CapitalBreakup` (one death's plan), `BreakupPlan.for_sections` (pure, seeded from
+  the ship's name), `StagedWreck` with per-chunk poses, `CapitalWrecks` (plays every plan at physics priority 205),
+  `CapitalChunk` (a section as a rigid body with its collision). The section that blew goes first (else the one the killing
+  hit named or landed nearest; a death with no point, the reactor, as T09's death blast was), the rest outward nearest first,
+  the reactors last; each blows as it goes (its explosive kind's row, else the new `structure` row of `blasts.sections`; one
+  that already blew, none) through the native batch, drawn at its level of detail with a far flash; loose chunks burn
+  (drawn only). The ancients' death is one blast (`one_blast`), the rest come apart silently. A death in the tier plays its
+  blasts with no bodies. Numbers in `data/capitals/capitals.json` `breakup`. Console `wrecks [list|clear]`, provider
+  `breakups` (`info.md`). An Omega's magazine: 12 blasts, the reactor's at 9.3 s; a Hyperion's: 11, the reactor's at 8.3 s.
+  *Fixes on the way* (HEAD green): the blast parity scene holds `physics_max_steps_per_frame` at 1 and its attackers clear of
+  the hull (9a0457c8: `Main` sets the engine's catch-up from the setting, so after a slow frame the per-tick script slipped a
+  tick; a new case with a 40 ms frame at a death guards it); the weapon-rows scene takes its mines' blast hits from the batch's
+  log (a5d78669: T76 stopped `hit_taken` for blasts; the simulation was unchanged); the capital guns' and interceptors' spread
+  is hashed on sim-time ticks, not the core's sync count, which differed between a process's first scene and the next
+  (fbd91804, `test_mine_flight_threads`); the beam and blast landing parities re-recorded on the rebuilt Omega (b2ab8214,
+  6f00bc58) and the blast one again with the break-up (this commit).
+  *Cost* (debug Godot, release library): a capital's death 3 to 4 ms in its tick (building the chunks 2 to 3 ms, the first
+  blast 0.3 to 0.9 ms), a wreck's tick a few microseconds; chunk meshes load at spawn, once a type (`CapitalShip._build`: before
+  that, `MeshAssets.chunk_mesh` parsed the whole manifest again for every chunk, 50 to 150 ms a death). Nine capitals dying at
+  once among 24 fighters: 38 to 44 ms in that tick, physics 5.6 ms a tick on average over the next 15 s against 4.9 ms before,
+  20 explosions given up by the pool. `bench_quick`: furball 500 / 500, spread 500 / 500, in budget (`reports/perf/t11`).
+  *GPU* (RX 6950 XT, Forward+, 143 to 145 FPS): an Omega's and a Hyperion's break-up from the cockpit,
+  `references/screenshots/M10-T11 break-up/` (bow-on, before, the first blast, 2 s, 6 s, 11 s, 21 s); how they look is (H).
+  *Tests (staged copy).* New: `test_capital_breakup_plan` 9, `test_capital_breakup` 7, `test_breakup_threads` 1 (1 vs 6
+  threads byte for byte); `test_explosion` 12 rewritten for the pool; `test_blast_landing_parity` 4 (re-recorded). Neighbours
+  green: blasts, blast model and batch, blast threads, capital damage and hulks, the Omega, Nova and Hyperion files, mines and
+  mine threads, capital guns, tier proxies, explosions and their LOD, destruction, last-hit and Starfury break-ups, rebases,
+  gravity movers, buoys, ship lights, station, sim core, native required, damage store, beam parity and threads, console list.
+- **Placeholders for the maintainer.** (1) The `breakup` rows: steps 0.4 to 1.3 s a section, the reactor's pause 1.2 to 2 s,
+  kicks, tumbles, fires (their length, rate and size), `fireball_per_box` 0.6, `fireball_share` 0.12, `chunks_max` 96. (2) The
+  `structure` blasts (cruiser 200 / 250 m, capital 400 / 400 m, dreadnought 550 / 500 m, scaled to the hull). (3) A death with no
+  hit point (the console's, a Vorlon's) starts at the reactor, so its reactor goes first, not last. (4) Every explosive section
+  blows in turn, so a capital's death now hurts more than T09's single blast. (5) Chunks are wreckage ships bounce off (Jolt
+  only): no hit volumes, no ram damage, not in the tier; they never fade, only the cap frees the oldest. (6) The ancients
+  break apart silently after their one blast.
+- **Open.** A hulk's chunks are drawn lit (its dimmed lights are copies on the hull); the band's bars are missing on chunks (the
+  shader finds them in the piece's frame); the strike carrier is still a stand-in, so its death is one blast (T45); break-up
+  sounds wait for T44 (`CapitalWrecks.blast_set_off`); seeds of other native kernels still read the core's sync count (the tier
+  beat, the station turrets): a second scene in one process can differ from the first wherever they matter.
+
 ### M10-T87 Our own Starfury gun sound (Q82)
 
 - **Goal:** the Starfury's shot made by our own synthesis (`tools/procgen/assets/sfx_combat.py`, `core/audio`), sounding very close to

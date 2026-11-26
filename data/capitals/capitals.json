@@ -164,6 +164,10 @@
      1800.0,
      1000.0
     ],
+    "structure": [
+     200.0,
+     250.0
+    ],
     "impulse": 6000.0
    },
    "capital": {
@@ -179,6 +183,10 @@
      4500.0,
      2500.0
     ],
+    "structure": [
+     400.0,
+     400.0
+    ],
     "impulse": 10000.0
    },
    "dreadnought": {
@@ -193,6 +201,10 @@
     "reactor": [
      7500.0,
      3500.0
+    ],
+    "structure": [
+     550.0,
+     500.0
     ],
     "impulse": 12000.0
    },
@@ -251,6 +263,18 @@
     "impulse": 1.25
    }
   }
+ },
+ "breakup": {
+  "_doc": "M10-T11 (D12.8): a capital's death is a staged break-up (BreakupPlan.for_sections, CapitalWrecks). The section that blew goes first (else the one the killing hit landed on, else one drawn from the seed); the others follow outward from it, nearest first, each step_s after the last, and the reactors last, reactor_after_s after the rest. Each section comes apart as its chunk on its own motion, kicked outward at kick_mps and tumbling at up to spin_deg_s, and blows as it goes: an explosive section (magazine, fuel, reactor) with its blasts.sections row, any other with that row's structure (a section that already blew, none). A chunk burns for fire_s (fire_radius_m fireballs every fire_every_s, drawn only, no damage). The fireball of a step is fireball_per_box times its section's box radius, at least fireball_share of its blast's radius. one_blast: the death is one blast, the reactor's row, and the rest come apart with none (the ancients, who explode rather than break up). classes: by blast class (blasts.classes and blasts.factions map a hull to one). Chunks stay as drifting wreckage with collision (no hit volumes); past chunks_max the oldest wreck's go. Placeholders until the maintainer sets them.",
+  "classes": {
+   "cruiser": {"step_s": [0.4, 0.9], "reactor_after_s": 1.2, "kick_mps": [2.0, 6.0], "spin_deg_s": 3.0, "fire_s": [3.0, 6.0], "fire_every_s": [0.8, 1.8], "fire_radius_m": 12.0},
+   "capital": {"step_s": [0.5, 1.1], "reactor_after_s": 1.6, "kick_mps": [1.5, 5.0], "spin_deg_s": 2.0, "fire_s": [4.0, 8.0], "fire_every_s": [0.8, 1.8], "fire_radius_m": 18.0},
+   "dreadnought": {"step_s": [0.6, 1.3], "reactor_after_s": 2.0, "kick_mps": [1.0, 4.0], "spin_deg_s": 1.5, "fire_s": [5.0, 10.0], "fire_every_s": [0.8, 1.8], "fire_radius_m": 24.0},
+   "ancients": {"step_s": [0.1, 0.25], "reactor_after_s": 0.3, "kick_mps": [8.0, 20.0], "spin_deg_s": 10.0, "fire_s": [0.0, 0.0], "fire_every_s": [1.0, 1.0], "fire_radius_m": 0.0, "one_blast": true}
+  },
+  "fireball_per_box": 0.6,
+  "fireball_share": 0.12,
+  "chunks_max": 96
  },
  "capital_brain": {
   "_doc": "M10-T16 (D12.10): the capital brain's numbers. think_hz thinks a second, staggered; engage_share of the main weapon's range is held; approach_mps and arrive_s pace closing and opening; sensor_m is how far it looks; an escort screens screen_min_m to screen_max_m off its charge; it withdraws under withdraw_hull of its hull or withdraw_reactor of its reactor (or with every main engine lost); outgunned_ratio of the target's dps over its own sends its heavy weapons at the mounts bearing on it; keep_bonus and attitude_margin hold a target and an attitude against near ties. launch_m (M10-T17): a carrier counts the hostiles within this for its hangar and holds its course while launching. class_value: a class's worth as a target. doctrine: per faction, threat_w and value_w are the exponents of threat and value in threat x value / time_to_kill, cripple aims at a withdrawing target's engines (default for any faction not listed). fighter_runs: the fighters' attack runs on a capital (fire_from_m to fire_to_m at a subsystem, open to open_m, re-plan every replan_s, regroup at regroup_m after the squadron loses abort_share).",

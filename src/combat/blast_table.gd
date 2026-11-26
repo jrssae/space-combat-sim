@@ -14,6 +14,8 @@ const DEFAULT_SOURCE: StringName = &"fighter_death"
 const SMALL_CRAFT: String = "small_craft"
 const SMALL_CRAFT_SOURCE: StringName = &"small_craft_death"
 const KINDS: Array[String] = ["magazine", "fuel", "reactor"]
+## What a section with no explosive kind blows with as it comes apart in a break-up (M10-T11, D12.8).
+const STRUCTURE: String = "structure"
 
 static var _cache: Dictionary = {}  # row name -> BlastSpec
 
@@ -55,8 +57,9 @@ static func names() -> PackedStringArray:
 	for key: String in (_blasts().get("sources", {}) as Dictionary):
 		out.append(key)
 	for cls: String in (_blasts().get("sections", {}) as Dictionary):
-		for kind: String in KINDS:
-			out.append("%s_%s" % [cls, kind])
+		for kind: String in KINDS + [STRUCTURE]:
+			if (_blasts()["sections"][cls] as Dictionary).has(kind):
+				out.append("%s_%s" % [cls, kind])
 	return out
 
 
@@ -90,6 +93,26 @@ static func capital_death(type_id: StringName, p_capital_class: StringName, fact
 	if row == null or is_equal_approx(k, 1.0):
 		return row
 	var key := StringName("death:%s:%s:%s" % [hull, cls, use_kind])
+	if _cache.has(key):
+		return _cache[key]
+	var radius_k: float = pow(k, float((_blasts().get("scaling", {}) as Dictionary).get("radius_exp", 0.5)))
+	var made: BlastSpec = row.scaled(k, radius_k, radius_k)
+	_cache[key] = made
+	return made
+
+
+## What a capital's section of `kind` blows with as it comes apart (M10-T11, D12.8): its explosive kind's row, or the class's
+## `structure` row for any other kind, scaled to the hull as `capital_death` is; null when the class has no such row.
+static func capital_section(type_id: StringName, p_capital_class: StringName, faction: StringName, kind: String) -> BlastSpec:
+	if KINDS.has(kind):
+		return capital_death(type_id, p_capital_class, faction, kind)
+	var cls: StringName = capital_class(type_id, p_capital_class, faction)
+	var row: BlastSpec = section(cls, STRUCTURE)
+	var hull: String = _scaling_hull(type_id, p_capital_class, faction)
+	var k: float = hull_scale(hull, cls)
+	if row == null or is_equal_approx(k, 1.0):
+		return row
+	var key := StringName("death:%s:%s:%s" % [hull, cls, STRUCTURE])
 	if _cache.has(key):
 		return _cache[key]
 	var radius_k: float = pow(k, float((_blasts().get("scaling", {}) as Dictionary).get("radius_exp", 0.5)))

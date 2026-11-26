@@ -142,6 +142,8 @@ func setup(p_world: WorldFrame, p_pool: ShipPool, p_debris: DebrisPool, p_effect
 	for combatant: Combatant in pool.all_ships():
 		watch(combatant)
 	watch(player)
+	if world != null:
+		CapitalWrecks.attach(world).director = self  # its console is there before the first break-up
 
 
 ## Reacts to this ship's `destroyed` from now on. Watching a ship twice is harmless.
@@ -234,14 +236,22 @@ func _on_destroyed(info: HitInfo, combatant: Combatant) -> void:
 func _on_capital_destroyed(info: HitInfo, cap: CapitalBody) -> void:
 	var xform: Transform3D = cap.global_transform
 	var velocity: Vector3 = cap.linear_velocity
-	if cap.is_tier_parked():
+	var spin: Vector3 = cap.angular_velocity
+	var tiered: bool = cap.is_tier_parked()
+	if tiered:
 		var pose: Array = TierDirector.row_pose(cap)
 		if not pose.is_empty():
 			xform = pose[0]
 			velocity = pose[1]
+			spin = pose[2]
 		var tier: TierDirector = TierDirector.current()
 		if tier != null:
 			tier.forget_capital(cap)
+	var breakup: CapitalBreakup = CapitalBreakup.from_ship(cap as CapitalShip, xform, velocity, spin, info)
+	if breakup != null:
+		cap.leave_play()
+		_break_up(breakup, not tiered, info, cap)
+		return
 	var blast: Array = capital_blast(cap, xform)
 	cap.leave_play()
 	var radius: float = cap.damageable.bounding_radius
@@ -254,6 +264,36 @@ func _on_capital_destroyed(info: HitInfo, cap: CapitalBody) -> void:
 	set_blast(info, blast[0], blast[1])
 	capital_destroyed.emit(cap, info)
 	BlastResolver.set_off(blast[0], blast[1], cap.faction)
+
+
+# A capital's staged break-up (M10-T11, D12.8): its first section lets go and blows now, the rest follow in `CapitalWrecks`.
+func _break_up(breakup: CapitalBreakup, with_bodies: bool, info: HitInfo, cap: CapitalBody) -> void:
+	var wrecks: CapitalWrecks = CapitalWrecks.attach(world) if world != null and is_instance_valid(world) else null
+	if wrecks == null:
+		return
+	wrecks.director = self
+	# The kill is announced before its blast lands, as every death's is, so its blast's own kills follow it.
+	var spec: BlastSpec = breakup.blast_of(breakup.plan.order[0])
+	last_blast_position = breakup.blast_point(breakup.plan.order[0])
+	set_blast(info, spec, last_blast_position)
+	capital_destroyed.emit(cap, info)
+	wrecks.start(breakup, with_bodies)
+
+
+## Draws an explosion of `radius` at `at` (World frame) drifting at `velocity` at its level of detail: from the pool near, a
+## reduced one farther, past that a far flash of `energy_j` when `far_flash` (a break-up's blasts, M10-T11), else nothing (its
+## fires). Returns whether anything was drawn.
+func draw_explosion(radius: float, at: Vector3, velocity: Vector3, energy_j: float, far_flash: bool = true) -> bool:
+	if radius <= 0.0:
+		return false
+	var level: ExplosionLod.Level = _level_at(radius, at)
+	if level == ExplosionLod.Level.FAR and not far_flash:
+		return false
+	if level == ExplosionLod.Level.FULL:
+		_add_explosion(radius, velocity, at, false)
+	else:
+		_spawn_far(level, at, velocity, radius, energy_j)
+	return true
 
 
 func _on_station_destroyed(_section: String, station: Station) -> void:

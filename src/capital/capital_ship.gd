@@ -347,7 +347,11 @@ func chunk_mesh(chunk_name: String) -> Mesh:
 		if str(chunk.get("name", "")) != chunk_name:
 			continue
 		var piece: Dictionary = (_manifest.get("pieces", {}) as Dictionary).get(str(chunk.get("piece", CapitalSections.HULL)), {})
-		return MeshAssets.chunk_mesh(_dir, str(chunk.get("mesh", "")), piece.get("mesh", {}) as Dictionary)
+		var piece_mesh: Dictionary = piece.get("mesh", {}) as Dictionary
+		# The manifest is already read: `MeshAssets.chunk_mesh` would parse it again for every chunk (M10-T11: a break-up's).
+		if not piece_mesh.is_empty() and piece_mesh != _manifest.get("mesh", {}):
+			return MeshAssets.section_mesh(_dir, piece_mesh, str(chunk.get("mesh", "")))
+		return MeshAssets.chunk_mesh(_dir, str(chunk.get("mesh", "")))
 	return null
 
 
@@ -426,6 +430,8 @@ func _build(loaded: ShipSpec, display_name: String) -> bool:
 	damage.drive_changed.connect(_refit_drive)
 	damageable.hit_router = route_hit
 	damageable.restored.connect(_on_restored)
+	for raw: Variant in _hardpoints.get("chunks", []):
+		chunk_mesh(str((raw as Dictionary).get("name", "")))  # loaded once a type at spawn, not in the frame it dies (M10-T11)
 	return true
 
 
