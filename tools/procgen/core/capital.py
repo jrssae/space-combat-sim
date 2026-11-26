@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -125,6 +125,7 @@ class CapitalSpec:
     detail_px: int = 1024
     notes: tuple[str, ...] = ()
     markings: tuple[tuple[str, Marking], ...] = ()  # painted or lit decals baked into the hull's maps, by the module they belong to
+    piece_surface: Mapping[str, Mapping[str, Any]] = dataclasses.field(default_factory=dict)  # more keys for one piece's opaque surface entries
 
 
 # --- the section model (pure) ------------------------------------------------------------------------------------------
@@ -365,6 +366,7 @@ def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
                 if detail:
                     surface["world_detail"] = dict(detail)
                 surface.update(spec.style.surface)
+                surface.update(spec.piece_surface.get(p.name, {}))
         at = piece.frame - offset  # the piece's origin in the body frame
         for chunk in piece.hull.chunks:
             joint = _joint(by_name[chunk["name"]], shapes[chunk["name"]], offset)

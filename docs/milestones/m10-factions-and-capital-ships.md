@@ -121,6 +121,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q92 | Minbari Flyer drive (2026-11-25) | A **gravitic drive** (Q51): no plume, but it glows. The front vertical stabilizers carry forward- and inward-vectored thrusters that make small plumes when used (hardpoints in T58's stage 2) |
 | Q93 | Centauri and Kestrel shuttles (2026-11-25) | For T58's and T57's stage 2: (1) the Centauri shuttle has **no tail fin** (built to the STL, confirmed); (2) it uses the EA ships' conventional **reaction** drive (Q51): visible plumes from its two main nozzles, retros as built; (3) **no weapons** on the Centauri shuttle or the EA shuttles (crew shuttle and Kestrel); (4) **no docking collar** on the Centauri shuttle: like the Kestrel it only lands in bays (no `docking_ports`); (5) **no RCS on the wing tips** of the Centauri shuttle or the Kestrel (`ea_atmo_shuttle`): the side thrust sits on the outside base of each wing (the wing root's outer face); the ports move on both craft in stage 2 (`assets/ea_shuttles.py`'s `atmo_ports` and its tests, the hardpoints test and the Kestrel's GUT test kept green); (6) the **wing-fold animation stays in T17**, which now also folds the Centauri shuttle's wings (it is an atmospheric shuttle too); (7) both shuttles' flight tuning is left until later |
 | Q94 | Damage state owner and the per-tick hit summary (2026-11-25, T75) | **Option A:** one native damage store owns every hull's, section's and part's points (capitals, stations with Babylon 5's sections and grid mounts, fighters' `HullHealth`) and applies the Q72 rules; every source calls it (bolts, rams and the console one call a hit, beams one batch a tick, T76's blasts later); `CapitalDamage`, `StationDamage` and `HullHealth` become thin readers and events are raised once each. Beam hits raise no per-hit `hit_taken`/`damaged`: each damaged ship gets **one summary a tick** listing **every attacker that hit it** that tick, the total damage and the sections and parts hit; the AI's attacker memory, `carrier_jumps`, the `section_hit` counters, the HUD's damage zones and the core's hull column read it. Tests read a native hit log; damage values byte for byte. Done in two pieces: the store (bolts, rams, console through it), then the beam batch |
+| Q95 | Asimov look, bars and forward cavity (2026-11-25) | After the A/B/C sheet (T53). **Look:** B's warmer white and denser, darker patches **with C's window rows on the band**; A and C are dropped. **Green layout as the show's:** a band-coloured **ring** round the forward face with a thin white rim inside it (between the face's grey collar and the ring), and **narrower bars** running aft from the ring across the band (not the whole forward cap, not 22.5 degree meridians). **Ring narrowed (the maintainer, 2026-11-25, after the round 2 sheet):** about as wide as one bar, with white panels between the bars behind it back to the aft window band; the skin behind the ring turns with the band so the bars meet it. **Six or eight bars, by ship:** the count is picked from the ship's name as the livery is (Q86) but apart from the colour, so the names give varied pairings; the *Asimov* has six (the stills). One atlas for all: the bars are drawn by the band's shader, not baked. **Forward cavity as the show's:** a deep bowl in the forward face with the spine running into it and structure on its walls, a **screen-plausible exception to the 90 % rule for the face only**: the silhouettes and every other part's sections still pass, the face's planes that cannot are exempted by name in `ea_asimov_fidelity.py` with this reason. The hexagonal shuttle-bay mouth stays (in the bowl's floor; stage 2's bay behind it, Q84) and the collision stays honest round the cavity. Break-up chunks wear their ship's livery. (The maintainer's brief called this row Q89; Q89 to Q94 were taken by then) |
 
 ## The hulls
 
@@ -1620,9 +1621,10 @@ On top of it:
 
 - **Goal:** the hull checklist ("Every hull task") for `ea_asimov`, and Q84's docking for both EA shuttles.
 - **Stage 1, the hull:** generator on the capital framework (variant option for T56); the 90 % rule with per-part sections
-  (the command hub, the spine, the forward face and its ring pods, the hex mouth, the band, the engine frame); the habitat band
-  a `CapitalRotor`; an A/B/C option sheet (the show's white sphere, green bands, blue window rows, grey hub and engines) for the
-  maintainer; the liveries (Q86: the show's green and at least three more band colours, one a ship by its name); `ShipSpec`
+  (the command hub, the spine, the forward face and its ring pods, the hex mouth, the band, the engine frame; the face's own
+  planes exempted by Q95 for the show's deep bowl); the habitat band a `CapitalRotor`; an A/B/C option sheet (the show's white
+  sphere, green bands, blue window rows, grey hub and engines) for the maintainer, then the look of Q95 (the ring, six or eight
+  bars by ship); the liveries (Q86: the show's green and at least three more band colours, one a ship by its name); `ShipSpec`
   (unarmed, T03's 9 000 hull points), catalogue entry with `random_pool: false`, names.
 - **Stage 2, the docks:** the bay hall behind the hex mouth on the interior layer (Q68), lit, with doors, two berths (crew
   shuttle, Kestrel with folded wings); four collar `docking_ports` on the forward ring pods; a clearance test sweeping both
@@ -1635,6 +1637,32 @@ On top of it:
   console action and its state in the `traffic` provider; GUT tests on a shortened clock.
 - **Done when:** the checklist for the hull, both shuttle types dock and relaunch in a headless test, a liner's whole visit runs
   headless in free flight, the maintainer has seen the look sheet.
+- **Stage 1 progress (2026-11-25, round 3, committed; the task stays in progress for stages 2 and 3).** Built: the generator
+  (`variant` option, only `liner` so far), the band a `CapitalRotor`, the patch skin in code (Q87) in the one look of Q95 (B with
+  C's window rows), the show's ring with its white rim, six or eight bars by the ship's name drawn by the band's shader (no
+  atlas a count; `band_bars`, `CapitalSpec.piece_surface`), five liveries as a tint on the same atlas (Q86: green, deep blue,
+  maroon, amber, teal; *Callisto* second, Q88), the deep forward bowl (three terraces to a floor 40 m below the collar's face,
+  ribs and lit ports on its walls, the spine running in, the hex mouth in its floor, its collision in 16 sectors a terrace), the
+  unarmed `ShipSpec` (9 000 hull points), the catalogue entry (`random_pool` false, not finalized) and the names. First five
+  names: Asimov green 6, Callisto blue 8, Heinlein maroon 6, Clarke amber 8, Bradbury teal 6.
+  **Round 3 (the maintainer, after the round 2 sheet):** the ring narrowed to a bar's width (187 to 202 m, 24.5 m over the
+  sphere), white between the bars from it back to the aft groove. So the bars meet the ring while the band turns, the skin
+  from 202 m to the forward groove (`band_lead`) and the forward clamps are the band piece's and turn with it; the forward
+  cap's structure and collision under it stay the hull's, and the running lights moved onto the ring. The shader's bars now
+  hold on the far meshes' flatter facets (they broke up in patches beyond about 600 m).
+  **Verified on a staged copy (f4bf53ac and T53's files only):** Python `test_ea_asimov` 18 of 18 with the reference STL (50
+  with `test_cli`, `test_budgets`, `test_parallel_build`); GUT `test_ea_asimov` 3 of 3, `test_band_tint_material` 6 of 6, and
+  its neighbours (`test_ship_names`, the four `test_ship_catalog*`, `test_capital_ship`, `test_mesh_assets`, `test_livery`,
+  `test_livery_hull`) 68 of 68; import and the compile check clean. Fidelity: silhouettes 0.972, 0.975, 0.996, sizes within
+  0.1 % (built 599.5 m long); 28 section planes, four of the face's exempt by Q95 (`face_collar_z178`, `face_rim_z182`,
+  `face_mouth_z200`, `mouth_z190`), the others at 0.90 or over. 18 848 triangles (hull 11 984, band 6 864); one liner 107 MB
+  of video memory, further liveries and the other bar count none.
+  **Awaits the maintainer `(H)`:** `references/screenshots/M10-T53 Asimov liner/look_sheet_r3.png` (the first still beside the
+  build at its angle, an eight-bar ship, the port side; round 2's sheet beside it has the bowl and the five names). Open: at
+  2.5 km the far mesh's window blocks notch a bar's edge by a few pixels; nothing in the game draws a capital's break-up
+  chunks loose yet, so there was nothing to recolour (the pieces of a broken liner keep the livery; a loose chunk of the band
+  will need its offset for the bars, `docs/assets-capital.md`); stage 2's bay has 2 m between the mouth's back and the
+  turning band's collision; stages 2 and 3.
 
 ### M10-T70 Clearance of the resized EA craft in B5's main docking bay
 

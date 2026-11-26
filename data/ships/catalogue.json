@@ -44,6 +44,8 @@
       "faction": "earth_alliance", "role": "capital", "capital_class": "dreadnought", "pooled": false, "name": "Nova-class dreadnought"},
     {"id": "ea_hyperion", "finalized": true, "spec": "res://assets/ships/ea_hyperion.tres", "asset": "ea_hyperion",
       "faction": "earth_alliance", "role": "capital", "capital_class": "destroyer", "pooled": false, "name": "Hyperion-class heavy cruiser"},
+    {"id": "ea_asimov", "spec": "res://assets/ships/ea_asimov.tres", "asset": "ea_asimov",
+      "faction": "earth_alliance", "role": "capital", "capital_class": "cruiser", "pooled": false, "random_pool": false, "name": "Asimov-class liner"},
     {"id": "ea_shuttle", "finalized": true, "spec": "res://assets/ships/ea_shuttle.tres", "asset": "ea_shuttle",
       "faction": "earth_alliance", "role": "civilian", "ai_profile": "civilian", "name": "EA shuttle",
       "look_sheet": "pool", "callsign": "SHUTTLE", "random_pool": false},

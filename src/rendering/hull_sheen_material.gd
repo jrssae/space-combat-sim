@@ -82,12 +82,13 @@ static func variant_for(sheen: Dictionary, ship_key: String) -> float:
 	return 1.0 if float(hash([VARIANT_SHARE, ship_key]) & 0xFFFFFF) / 16777216.0 < share else 0.0
 
 
-## The same for a hull's mesh entry (a manifest `mesh` section): its first sheen-wearing surface's answer, 0 with none.
+## The same for a hull's mesh entry (a manifest `mesh` section): its first sheen-wearing surface's answer, or for a hull with
+## band liveries (M10-T53) the ship's livery and bar count (`BandTintMaterial.variant`); 0 with neither.
 static func variant_of_mesh(mesh_entry: Dictionary, ship_key: String) -> float:
 	for surface: Dictionary in mesh_entry.get("surfaces", []):
 		if wants(surface):
 			return variant_for(surface["sheen"] as Dictionary, ship_key)
-	return 0.0
+	return float(BandTintMaterial.variant_of_mesh(mesh_entry, ship_key))
 
 
 ## Puts one drawn copy of a hull (its mesh node, a chunk's) in the colouring `variant` (0 or 1).

@@ -28,6 +28,7 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `ea_omega` | earth_alliance | capital (destroyer) | 1714.3 x 620.0 x 478.0 | 30000 | none | yes | no |
 | `ea_nova` | earth_alliance | capital (dreadnought) | 1502.1 x 382.0 x 443.7 | 36000 | none | yes | no |
 | `ea_hyperion` | earth_alliance | capital (destroyer) | 1069.2 x 254.4 x 319.5 | 17000 | none | yes | no |
+| `ea_asimov` | earth_alliance | capital (cruiser) | 599.5 x 347.4 x 347.4 | 9000 | none | no | no |
 | `ea_shuttle` | earth_alliance | civilian | 38.0 x 18.8 x 10.7 | 400 | none | no | no |
 | `ea_atmo_shuttle` | earth_alliance | civilian | 29.0 x 51.6 x 9.6 | 300 | none | no | no |
 | `ea_panama` | earth_alliance | civilian | 121.6 x 30.3 x 20.0 | 185 | none | no | no |
@@ -63,6 +64,7 @@ civilian's radio name.
 | `ea_omega` | `res://assets/ships/ea_omega.tres` | - | no | - | - | - | Omega-class destroyer | - |
 | `ea_nova` | `res://assets/ships/ea_nova.tres` | - | no | - | - | - | Nova-class dreadnought | - |
 | `ea_hyperion` | `res://assets/ships/ea_hyperion.tres` | - | no | - | - | - | Hyperion-class heavy cruiser | - |
+| `ea_asimov` | `res://assets/ships/ea_asimov.tres` | - | no | - | - | - | Asimov-class liner | - |
 | `ea_shuttle` | `res://assets/ships/ea_shuttle.tres` | civilian | yes | no | - | pool | EA shuttle | SHUTTLE |
 | `ea_atmo_shuttle` | `res://assets/ships/ea_atmo_shuttle.tres` | civilian | yes | no | - | pool | EA atmospheric shuttle | KESTREL |
 | `ea_panama` | `res://assets/ships/ea_panama.tres` | civilian | yes | no | - | pool | Panama transport | PANAMA |

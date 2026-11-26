@@ -220,9 +220,14 @@ static func _surface_named(surfaces: Array, name: String, index: int) -> Diction
 	return surfaces[index] if index < surfaces.size() else {}
 
 
-## A surface's material: the standard one, or the sheen layer's for a surface that names a `sheen` (M10-T06).
+## A surface's material: the standard one, the sheen layer's for a surface that names a `sheen` (M10-T06), or the per-ship band
+## colours' for one that names a `band_tint` (M10-T53).
 static func paint_material(dir: String, surface: Dictionary) -> Material:
-	return HULL_SHEEN.make(dir, surface) if HULL_SHEEN.wants(surface) else textured_material(dir, surface)
+	if HULL_SHEEN.wants(surface):
+		return HULL_SHEEN.make(dir, surface)
+	if BandTintMaterial.wants(surface):
+		return BandTintMaterial.make(dir, surface)
+	return textured_material(dir, surface)
 
 
 ## A PBR material for one surface of a textured mesh: the albedo (sRGB), the normal map, occlusion, roughness and metal from the

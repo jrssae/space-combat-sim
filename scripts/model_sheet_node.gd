@@ -4,10 +4,11 @@ extends Node
 ## ahead of the chase camera for each shot, held a few frames and saved. `scripts/model_sheet.sh` lays the shots out.
 ##
 ## Arguments after `--`: out=<dir> settle=<frames> shots=<shot>,<shot>,... where a shot is
-## `name|asset[:option]|distance_m|view|low or high|lit or dark|aim|livery`: `view` one of VIEWS; `aim` the model point
+## `name|asset[:option]|distance_m|view|low or high|lit or dark|aim|livery`: `view` one of VIEWS, or `turn:<yaw>:<pitch>` (degrees
+## from nose-on, to match a show still's angle); `aim` the model point
 ## (`x;y;z`, its own frame) held `distance_m` ahead of the camera (empty: its centre); `livery` a `wing:number` (empty: plain).
 ## `lit+bays` or `dark+bays` also lights every bay's red lamp, as an open door does in the game (M10-T22). A `livery` of
-## `name:<ship name>` paints the hull's name marks for that name (M10-T67).
+## `name:<ship name>` paints the hull's name marks for that name (M10-T67) and its per-ship paint (a liner's livery, M10-T53).
 ## An option is read from `<asset>_options/<option>/<asset>/`, as the hull sheets'. An asset of `-` is a shot of the empty
 ## scene, whose video memory is the baseline for the model's.
 
@@ -126,7 +127,23 @@ func _park(shot: PackedStringArray) -> String:
 		_add_bay_lamps(asset_id, root)
 	if shot.size() > 7 and shot[7].begins_with("name:"):
 		_add_marks(asset_id, root, shot[7].trim_prefix("name:"))
+		_paint_for(asset_id, root, shot[7].trim_prefix("name:"))
 	return ""
+
+
+# The per-ship paint a ship of that name wears (a liner's band livery, M10-T53), on the model and its rotating pieces.
+func _paint_for(asset_id: String, root: String, display_name: String) -> void:
+	var mesh_entry: Dictionary = MeshAssets.read_manifest(asset_id, root).get("mesh", {})
+	var painted: bool = false
+	for surface: Dictionary in mesh_entry.get("surfaces", []):
+		painted = painted or HullSheenMaterial.wants(surface) or BandTintMaterial.wants(surface)
+	if not painted:
+		return
+	var variant: float = HullSheenMaterial.variant_of_mesh(mesh_entry, display_name)
+	HullSheenMaterial.set_variant(_model, variant)
+	for child: Node in _model.get_children():
+		if child is MeshInstance3D:
+			HullSheenMaterial.set_variant(child as MeshInstance3D, variant)
 
 
 # The hull's painted name marks for a ship of that name (a capital's name letter, M10-T67), as the game paints them; the
@@ -187,6 +204,10 @@ func _light(camera: Camera3D, dark: bool) -> void:
 func _basis(camera: Camera3D, view: String) -> Basis:
 	var cam: Basis = camera.global_basis
 	var to_camera: Vector3 = cam.z
+	if view.begins_with("turn:"):
+		var yaw: float = deg_to_rad(float(view.get_slice(":", 1)))
+		var pitch: float = deg_to_rad(float(view.get_slice(":", 2)))
+		return Basis.looking_at(to_camera, cam.y).rotated(cam.y, yaw).rotated(cam.x, -pitch).orthonormalized()
 	match view:
 		"top":
 			return Basis.looking_at(cam.y, to_camera).orthonormalized()

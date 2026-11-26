@@ -780,6 +780,123 @@ broadside with the painted name and number, `in_game/broadside_name_number.png`)
 - The look against the stills: light grey, band widths, the white hull number's outline in shadow.
 - At the player's flank view the number is easily hidden by a Starfury; it reads best from the capital's own side.
 
+## `ea_asimov` (M10-T53)
+
+`tools/procgen/assets/ea_asimov.py` on `parts/ea_asimov.py` (measured off the reference; `ea_asimov_fidelity.py` holds the planes)
+and its own style `styles/ea_asimov.py`, on the Omega's machinery (`styles/ea_capital.capital_style`: blue-white engines). An
+unarmed Earth Alliance liner (Q84). The shape is in `docs/design-references.md`, "EA Asimov liner and mining transport". Option
+`variant`: only `liner` (T56 adds the mining transport; the band is built in two halves split at the equator, where its sphere parts).
+
+### Measurements
+
+| | |
+|---|---|
+| Reference | `EA Asimov liner 600m.stl`, mapping `-x +z +y`, 3.47 m a file unit (T01) |
+| Length | **600 m** (built 599.5: the saucer's nose) |
+| Span, height | 347.4 m x 347.4 m (the sphere, 173.7 m in radius, centre 331.5 m aft) |
+| Pieces | `hull` and `band` (the turning habitat band, 236 to 428 m, with the skin ahead of it from the ring's aft edge at 202 m; a `CapitalRotor` at 0.05 rad/s), a 4 096 px atlas each |
+| Triangles | 18 848 drawn (hull 11 984, band 6 864; capital budget 100 000) |
+| Texture sets | 109.3 MB high, 29.3 MB low (two 4 096 px atlases) |
+
+Bow to stern: the saucer bridge (a lens 93 m across at 0 to 94 m) with its ridge, the keel under it; the spine lofted through six
+measured stations (a skirt broadening to the face and a column with a crest above it) and a hexagonal pod each side; the forward
+face: the sphere cut flat at 183 m, a collar ring (174 m, 60 to 75 m out, its outside sloping back to the face's edge) with
+eleven teeth, and inside it the **bowl** (Q95, the show's deep cavity, not the reference's shallow disc): three terraces
+narrowing from 60 m to 42 m in radius down to a floor at 214 m (40 m below the collar's face), ribs down its walls and lit ports
+low on them, the skirt and the column running down into it, and in its floor the **hexagonal mouth** below the spine (45 x 27 m,
+centre y -21.5 m, open 20 m deep to a dark back at 234 m, 2 m ahead of the turning band; stage 2's shuttle bay goes behind it);
+the band with a groove each side; the aft cap with the dark window band (429.5 to 441.5 m); the engine frame (a cross of radiator bars, 465
+to 511 m) and six nacelles in two rows of three: the outer four the engines (oval drums, oval open bells), the middle pair the
+reactors with square exhausts.
+
+### Sections and hardpoints
+
+Sections: `bridge`, `spine`, `face`, `habitat` (on the band), `sphere_aft`, `reactor` (blast) and `engine_r`, `engine_l`. No weapons,
+interceptors or bays (the loadout, T03); four engines; running lights red and green on the ring's flanks, white on
+the saucer, red-orange beacons at the ring's keel and on the dorsal radiator bar. Collision budget 96 shapes a section (the face
+90: the collar and the bowl's three terraces in 16 sectors each, their walls a metre in so the ribs are inside, and six shapes
+round the open mouth, none across the bowl or the mouth); coverage 1.0 within 1 m (worst gap 0.93 m), every shape within 2.5 m
+of the skin (worst 0.87 m).
+
+### Fidelity (Q10)
+
+```
+.venv/bin/python3 -I tools/refview/compare.py "references/EA Asimov liner 600m.stl" ea_asimov --length 600 --right=-x --up=+z --aft=+y
+```
+
+| View | IoU | | Dimension | Mesh / STL |
+|---|---|---|---|---|
+| top | 0.971 | | length | 0.999 |
+| side | 0.974 | | width | 1.000 |
+| front | 0.996 | | height | 1.000 |
+
+**Per-part sections** (`parts/ea_asimov_fidelity.py`; `test_ea_asimov.py` holds them): the saucer (3 planes), the spine (4, and
+one along the centre line), the forward face (the collar and teeth by relief at 178 m: a plain cut there leaks stripes across the
+recessed disc from the reference's open shells; the rim; the disc with the mouth), the mouth (2), the sphere (6), the grooves
+(2), the engine frame (2, by outline: the reference's nacelles are inside-out where they run into the sphere) and the engines (4
+across, the bells' thin walls judged along their length): 28 planes. **Exempt (Q95, the face only):** `face_collar_z178` (0.838),
+`face_rim_z182` (0.811), `face_mouth_z200` (0.877) and `mouth_z190` (0.222), where the build has the show's bowl and the
+reference a shallow recessed disc (`EXEMPT` in the fidelity file, each with the reason; a test holds that nothing else is
+exempt). The other 24 are at 0.901 or over (lowest the engines at 520 m, 0.901, and at 575 m, 0.903; the spine 0.905 to 0.914);
+the mouth itself holds in the bowl's floor (`mouth_z215`, 0.984).
+
+### Surface: the patch skin, the liveries and the bars (Q86, Q87, Q95)
+
+No panel mosaic and no seam lines (Q87): `PatchSkin` plates the whole hull in the Agamemnon model's manner, made in code (the
+Agamemnon files are a style reference only): big plates wandering a few per cent in tone, darker patches at three sizes (14, 5 and
+1.8 m fields) overlapping, a few low plates standing proud, and fine scratches; no near tile. One look (Q95: option B's warmer
+white and denser, darker patches with option C's window rows on the band; A and C are gone): white sphere (`hull`), grey spine,
+face and engines (`hull_panel`), dark window band (`hull_dark`), the band colour (`stripe`) in the show's green, the windows a pale
+blue glow (groups of four every 15 degrees: one row on the aft cap's dark band, two on each half of the turning band).
+
+**The show's layout** (Q95): a band-coloured **ring** round the forward face, about as wide as a bar (187 to 202 m along the
+axis, 24.5 m over the sphere; narrowed by the maintainer on 2026-11-25 from the whole forward cap), behind a thin white rim
+(183 to 187 m) outside the grey collar, and **bars** 25 m wide running aft from the ring to the aft groove, white between them.
+So that the bars meet the ring whole while the band turns, the skin from the ring's aft edge to the forward groove
+(`band_lead`, 202 to 236 m) is the band piece's and turns with it, the forward clamps on it; the forward cap's structure and
+collision under it stay the hull's (a hit there is the `face` section's), and the running lights stand on the ring.
+A ship has **six or eight bars** (the *Asimov* six, as the stills). The bars are in no atlas:
+the band piece is baked white and its surface entries carry `band_bars` (the sphere's radius, the span along the axis, half a bar's
+width, in the band's own frame; `CapitalSpec.piece_surface` adds keys to one piece's entries), and the shader draws the ship's
+count on fragments of that sphere, in the livery's colour at the white's own shade (patches and wear show through). Both counts
+stand at multiples of 15 degrees, between the window groups.
+
+**Liveries** (Q86): one atlas for all. The bands are baked green; every opaque surface entry carries `band_tint` (the baked green,
+the liveries' colours, the names list); `BandTintMaterial` (`assets/shaders/hull_band_tint.gdshader`) repaints the texels whose
+hue is the band's in the ship's livery, keeping their shade (patches and wear survive), so video memory stays one ship's. The
+livery and the bar count are the ship's `skin_variant` (`BandTintMaterial.variant`: the livery's index plus 8 times the bar
+count's place in `bar_counts`; `HullSheenMaterial.variant_of_mesh` hands it on): both by its name's place in
+`data/ships/names.json` `ea_asimov` (science-fiction authors and, second, the show's *Callisto*, Q88), the livery going round the
+five colours (green, deep blue, maroon, amber, teal) and the count round 6 and 8, so ten names give every pairing: `EAS Asimov`
+green 6, `EAS Callisto` blue 8, `EAS Heinlein` maroon 6, `EAS Clarke` amber 8, `EAS Bradbury` teal 6, `EAS Le Guin` green 8; a
+name off the list stable ones from its letters.
+
+Break-up chunks: nothing in the game draws a capital's chunks loose yet (`CapitalShip.chunk_mesh` is read by tests only; a
+broken capital keeps its pieces, which wear the livery). A chunk shares its piece's material, so whoever spawns one sets the
+ship's `skin_variant` on it (`HullSheenMaterial.set_variant`) for the ring's colour; the band's bars need more, since a chunk's
+mesh is in its own frame and the shader finds the bars from the piece's (a per-node offset, when chunks are drawn).
+
+### In the game
+
+`assets/ships/ea_asimov.tres`, catalogue `ea_asimov` (class `cruiser`, `random_pool` false, not finalized until the look is
+approved): 2.4e8 kg (the skin's area at 260 kg/m2, the Omega's rule), inertia a solid box of that mass, 0.6 m/s2 on its four
+mains (120 m/s, the traffic's cruise, in under four minutes), retros at half a main, RCS for station keeping, 2 deg/s, 9 000 hull
+points (T03), no jump engine. `capital spawn ea_asimov` names it from the list.
+
+Look sheets (gitignored): `references/screenshots/M10-T53 Asimov liner/look_sheet_r3.png` (the narrowed ring: the first still
+beside the build at its angle, the port side, an eight-bar ship) and `look_sheet_r2.png` (the ring still over the whole cap:
+the show's two stills beside the build at their angles, the bowl close, the five first names lit and in shadow; `scripts/model_sheet.sh`, whose `turn:<yaw>:<pitch>`
+view matches a still's angle; Forward+ on the RX 6950 XT). The first round's `option_sheet.png` and `livery_sheet.png` are beside
+it. Video memory there: one liner 107 MB over the empty scene (870 to 977 MB, both 4 096 px sets); the five liveries and both
+bar counts one after another add nothing (one atlas, one material a piece).
+
+### Open for the human tester `(H)`
+
+- The look sheet (`look_sheet_r3.png`): the ring, the rim and the bars' width against the stills; the bowl's depth and the structure on its walls; the
+  liveries' colours against the white and in shadow.
+- Stage 2: the bay hall behind the mouth has 2 m to the turning band's collision (solid slabs from 236 m); it either spreads
+  sideways inside the forward cap or the band's collision is opened for it.
+
 ## M10 lengths (T01)
 
 Stage 1 of M10-T01 (Q4, Q22, Q48): every M10 hull's quoted length with its sources, the reference STL's proportions, the
