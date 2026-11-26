@@ -564,6 +564,7 @@ func _setup_perf() -> void:
 	CapitalFlight.attach(world)  # capital ships fly here, and its `capital` console is in every flight scene (M10-T07)
 	CapitalBeams.attach(world)  # their beams fire here, and its `beam` console is in every flight scene (M10-T12)
 	CapitalGuns.attach(world)  # their guns and launchers fire here, and its `gun` console is in every flight scene (M10-T14)
+	CapitalBrains.attach(world)  # their brains think here, and its `capbrain` console is in every flight scene (M10-T16)
 	_spawn_scenario_capitals()
 	perf_probe = PerfProbe.new()
 	perf_probe.name = "PerfProbe"
