@@ -1,7 +1,8 @@
-"""``ea_omega`` (M10-T21, Q53; D12.1): the Omega-class destroyer on the capital framework. Files and pieces, size, the
-sections and the rotating section's piece, the hardpoints against the loadout (32 mounts, one forward bay of 32 Starfuries), the
-lone sensor boom, collision coverage, the class budget, the looks and the renegade livery hook, and each part's sections
-against the reference STL (CLAUDE.md, "STL fidelity").
+"""``ea_omega`` (M10-T21, Q53; D12.1; rebuilt on the four-part kit in M10-T68): the Omega-class destroyer on the capital framework.
+Files and pieces, size, the sections and the rotating section's piece (its arms up and down at rest), the hardpoints against the
+loadout (32 mounts, one forward bay of 32 Starfuries), the lone sensor boom, collision coverage and its shape budget, the class
+budget, the looks and the renegade livery hook, and the 90 % rule against the assembled kit (CLAUDE.md, "STL fidelity"): three
+silhouettes and the sizes, each part's sections, and the open-frame bow's face sweeps and depth map.
 
 The expected numbers are typed in from docs/assets-capital.md, data/capitals/loadouts.json and the generator's docstring.
 """
@@ -31,9 +32,10 @@ from tools.procgen.tests.budget_table import read_budgets
 from tools.refview.sections import PASS_IOU, section_score
 
 ROOT = Path(__file__).resolve().parents[3]
-STL = ROOT / "references" / "EA Omega Destroyer.stl"
+KIT = ROOT / "references" / fid.KIT
 TEST_OPTIONS = {"atlas_px": 512, "detail_px": 128}  # the default sample spacing: the coverage check needs it
-LENGTH, SPAN, HEIGHT = 1714.3, 620.0, 478.0  # T01's length; the drum's reach across, the sensor mast to the keel mast
+LENGTH, SPAN, HEIGHT = 1714.3, 206.0, 616.0  # T01's length; the drum's arms across and their reach up and down (at rest)
+SHAPE_BUDGET = 400  # the hull's collision shapes, all sections (the maintainer, M10-T68)
 SECTIONS = ("bow", "bridge", "fuel", "spine_fore", "drum_hub", "hangar_r", "hangar_l", "magazine", "spine_aft", "reactor",
             "engine_r", "engine_l")
 DRUM_SECTIONS = ["drum_hub", "hangar_r", "hangar_l"]
@@ -67,6 +69,8 @@ class OmegaBuildTests(unittest.TestCase):
         manifest_io.validate_manifest(self.manifest)
         cover = self.manifest["collision"]["coverage"]
         self.assertEqual((cover["covered"], cover["within_reach"]), (1.0, 1.0))
+        shapes = sum(len(p["shapes"]) for p in self.manifest["collision"]["pieces"])
+        self.assertLess(shapes, SHAPE_BUDGET, "box hulls under the shape budget")
 
     def test_the_bays_are_on_the_interior_layer(self) -> None:
         """M10-T72 (Q68): its forward bay's hall out of the sun's light."""
@@ -184,12 +188,24 @@ class OmegaSpecTests(unittest.TestCase):
             low, high = m.part.mesh.bounds()
             self.assertFalse(bool(np.all(low < hi) and np.all(high > lo)), f"{m.name} stands ahead of the bay")
 
-    def test_the_drum_turned_for_the_compare_builds_both_arms_where_they_stand(self) -> None:
-        turned = [m for m in eo.modules(drum_deg=eo.REFERENCE_DRUM_DEG) if m.section in DRUM_SECTIONS]
-        self.assertTrue(turned and all(m.side == cp.LONE for m in turned))
-        self.assertEqual({m.section for m in turned}, set(DRUM_SECTIONS))
-        rest = [m for m in cp.with_twins(eo.modules()) if m.section in DRUM_SECTIONS]
-        self.assertEqual(len(turned), len(rest), "the same modules, only turned")
+    def test_the_drum_rests_with_its_arms_up_and_down(self) -> None:
+        """The kit's pose (M10-T68): both arms built where they stand, the starboard-built one up; turned to 0 the port arm
+        is the starboard one's twin, the same modules only turned."""
+        rest = [m for m in eo.modules() if m.section in DRUM_SECTIONS]
+        self.assertTrue(rest and all(m.side == cp.LONE for m in rest))
+        self.assertEqual({m.section for m in rest}, set(DRUM_SECTIONS))
+        top = [m for m in rest if m.section == "hangar_r"]
+        self.assertGreater(min(float(m.part.mesh.bounds()[0][1]) for m in top), 70.0, "hangar_r stands above the hub")
+        flat = [m for m in cp.with_twins(eo.modules(drum_deg=0.0)) if m.section in DRUM_SECTIONS]
+        self.assertEqual(len(rest), len(flat), "the same modules, only turned")
+
+    def test_the_bow_is_the_kits_open_frame(self) -> None:
+        """M10-T68 (Q62): the bay's octagonal frame and its wedge fins, the deck plates and the interior modules are there."""
+        names = {m.name for m in cp.with_twins(eo.modules())}
+        self.assertTrue({"bay_fore_frame", "bay_fin_top_r", "bay_fin_low_l", "deck_plate_top", "deck_plate_mid", "roof_frame_1"} <= names)
+        for name in eo.bow.INTERIOR_MODULES:
+            self.assertIn(name, names)
+        self.assertNotIn("command_head", names, "no solid plate round the bay")
 
     def test_the_looks_and_the_livery_hook(self) -> None:
         self.assertEqual(sorted(LOOKS), ["a", "b", "c"])
@@ -205,20 +221,30 @@ class OmegaSpecTests(unittest.TestCase):
             ea_capital(DEFAULT_LOOK, livery={"no_such_role": 0})
 
 
-@unittest.skipUnless(STL.is_file(), "the reference STL is gitignored; it is on the maintainer's machine")
+def _box(lo: tuple[float, float, float], hi: tuple[float, float, float]) -> np.ndarray:
+    """A closed box as triangles (n, 3, 3)."""
+    (x0, y0, z0), (x1, y1, z1) = lo, hi
+    v = np.array([[x0, y0, z0], [x1, y0, z0], [x1, y1, z0], [x0, y1, z0], [x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y1, z1]], float)
+    quads = ((0, 3, 2, 1), (4, 5, 6, 7), (0, 1, 5, 4), (3, 7, 6, 2), (0, 4, 7, 3), (1, 2, 6, 5))
+    return np.array([t for a, b, c, d in quads for t in ([v[a], v[b], v[c]], [v[a], v[c], v[d]])])
+
+
+@unittest.skipUnless(KIT.is_file(), "the assembled kit is gitignored: python3 -m tools.refview.kit build ea_omega (the STLs are on the maintainer's machine)")
 class OmegaSectionTests(unittest.TestCase):
-    """Each part's sections against the STL: IoU >= 0.90, or an exemption with its accepted reason."""
+    """The 90 % rule against the assembled kit: three silhouettes and the sizes, each part's sections (IoU >= 0.90, or an
+    exemption with its accepted reason) and the bow face's floors."""
 
     @classmethod
     def setUpClass(cls) -> None:
-        from tools.refview import refview  # noqa: PLC0415
-
-        raw, _ = refview.read_stl(STL)
-        axes = fid.REFERENCE_MAPPING
-        model, _ = refview.to_ship_frame(raw, refview.frame_matrix(axes["right"], axes["up"], axes["aft"]), LENGTH)
-        cls.stl = np.asarray(model).reshape(-1, 3, 3) - np.array([0.0, fid.REFERENCE_AXIS_Y, 0.0])
-        mesh = Mesh.concatenate([m.part.mesh for m in cp.with_twins(eo.modules(drum_deg=eo.REFERENCE_DRUM_DEG))])
+        cls.stl = np.load(KIT)
+        mesh = Mesh.concatenate([m.part.mesh for m in cp.with_twins(eo.modules())])
         cls.model = mesh.vertices[mesh.faces]
+
+    def test_silhouettes_and_sizes(self) -> None:
+        from tools.refview import compare  # noqa: PLC0415
+
+        comparison = compare.compare_shapes(self.stl, self.model, LENGTH)
+        self.assertEqual(compare.judge({k: v.iou for k, v in comparison.views.items()}, comparison.ratios), [])
 
     def test_every_part_passes(self) -> None:
         for part, planes in fid.PLANES.items():
@@ -226,6 +252,22 @@ class OmegaSectionTests(unittest.TestCase):
                 failures = [f"{p.name} {s.iou:.3f}" for p in planes if (s := section_score(self.stl, self.model, p)).iou < PASS_IOU
                             and p.name not in fid.EXEMPT]
                 self.assertEqual(failures, [], f"{part}: sections under {PASS_IOU}")
+
+    def test_the_bow_face_holds_its_floors(self) -> None:
+        """T66's sweeps and depth map over the open-frame bow (M10-T68, as the Nova's): each sweep's mean IoU (the x cuts by face
+        depth) and the face's depth agreement, the build's hall scored as closed at the kit's back wall."""
+        from tools.refview import fidelity  # noqa: PLC0415
+
+        model = np.concatenate([self.model, _box(*fid.BAY_PLUG)])
+        for axis, (span, step, window) in fid.FACE_SWEEPS.items():
+            by_depth = fid.FACE_BY_DEPTH[axis]
+            scores = fidelity.sweep(self.stl, model, "xyz".index(axis), span, step, 1.0, window, outline=not by_depth, face=by_depth)
+            with self.subTest(axis=axis):
+                self.assertGreaterEqual(float(np.mean([s.iou for s in scores])), fid.FACE_MEAN_IOU[axis])
+        maps = [fidelity.depth_map(m, "front", fid.FACE_BOX, 1.0) for m in (self.stl, model)]
+        summary = fidelity.depth_diff(*maps, fidelity.DEFAULT_TOLERANCE_M, 1.0).summary
+        self.assertGreaterEqual(summary["within_tolerance"], fid.FACE_DEPTH["within_tolerance"])
+        self.assertLessEqual(summary["mean_abs_depth_diff_m"], fid.FACE_DEPTH["mean_abs_depth_diff_m"])
 
     def test_every_exemption_names_a_plane_and_a_reason(self) -> None:
         names = {p.name for planes in fid.PLANES.values() for p in planes}

@@ -104,6 +104,14 @@ class KitTests(unittest.TestCase):
         asm = kt.assemble(kt.parse_kit(self.kit(metres_per_mm=5.0)), self.root)
         self.assertAlmostEqual(float(asm.tris[:, :, 2].max()), 150.0, places=6)
 
+    def test_a_fixed_scale_can_put_the_stern_at_the_length(self) -> None:
+        """M10-T68: a kit whose printed tips are short keeps its body's scale; its stern sits at the ship's length."""
+        asm = kt.assemble(kt.parse_kit(self.kit(metres_per_mm=5.0, anchor="stern")), self.root)
+        self.assertAlmostEqual(float(asm.tris[:, :, 2].max()), 300.0, places=6)
+        self.assertAlmostEqual(float(asm.tris[:, :, 2].min()), 150.0, places=6)
+        with self.assertRaises(ValueError):
+            kt.parse_kit(self.kit(anchor="middle"))
+
     def test_bad_kits_are_refused(self) -> None:
         data = self.kit()
         data["parts"][1]["follows"] = "wing"  # listed after it

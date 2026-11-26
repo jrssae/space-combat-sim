@@ -668,11 +668,12 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
   17.44 m/mm (tip to tip 1 714.3 m) its body (shield front to nozzle exits) is 1 493 m against 1 441 to 1 454 m in the lacking-detail
   STL, the current build and the Agamemnon model, and its head and drum sit 45 and 32 m forward; at 16.88 m/mm (body matched, tip to
   tip 1 659 m) it scores 0.912 / 0.913 / 0.922 (top, side, front) against the lacking-detail STL. The kit's bow is already the open
-  frame with the octagonal bay. The Agamemnon (`references/Agamemnon_B5_FBX/`, 381 480 triangles, Blender 2.79 export of
-  2018-03-21, no author, licence or readme in any file; a Sketchfab upload "EAS Agamemnon" by mohamedhussien, CC BY 4.0, 2022, has
-  the same triangle count but other textures, so its source is unconfirmed) is a style reference only. Numbers, sheets and
-  the recommendation: `references/screenshots/M10-T68 Omega review/` (`numbers.json`). The build reference and the scale wait on
-  the maintainer.
+  frame with the octagonal bay. The Agamemnon (`references/Agamemnon_B5_FBX/`, 381 480 triangles, a Blender 2.79 export of
+  2018-03-21) is by Chris Kuhn (artist/modeler), Creative Commons per the maintainer (no file names the variant; a similar model on
+  Sketchfab is not the source); a style reference only, nothing copied or sampled. Numbers and sheets: `references/screenshots/M10-T68
+  Omega review/` (`numbers.json`). **The maintainer's choices (2026-11-26):** the kit at 16.88 m a millimetre (body matched) with
+  the probe lengthened to keep 1 714.3 m tip to tip, the drum at rest in the kit's pose (arms up and down), the build from the kit
+  with the Agamemnon as the second reference for detail and paint.
 
 ### M10-T13 Interceptors: the native kernel against bolts and missiles (Q9, Q16, Q53, Q76, Q77)
 

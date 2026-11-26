@@ -40,10 +40,10 @@ except ImportError:  # run as a script
 ROOT = Path(__file__).resolve().parents[2]
 REFERENCES = ROOT / "references"
 # Per hull: the STL, the file's axes, the length the generator scales it to, the spine's axis in the ship frame (the box is centred, the
-# axis is not), the built asset and the span of z the STL's rotating section is turned over (the Omega's drum sits turned 45 degrees).
+# axis is not), the built asset and the span of z the STL's rotating section is turned over (none now); or an ``npy`` of triangles
+# already in the generator's frame.
 PRESETS: dict[str, dict] = {
-    "omega": {"stl": "EA Omega Destroyer.stl", "mapping": ("+y", "+z", "+x"), "length": 1714.3, "axis": (0.0, 35.58, 0.0),
-              "asset": "ea_omega", "turn": (560.0, 880.0, 45.0)},
+    "omega": {"npy": "EA Omega kit assembled.npy", "asset": "ea_omega"},  # the four-part kit, tools/refview/kit.py (M10-T68)
     "nova": {"stl": "EA_Nova_Dreadnought_(with_guns).stl", "mapping": ("-x", "+z", "+y"), "length": 1502.1, "axis": (0.25, 43.3, 0.0),
              "asset": "ea_nova", "turn": None},
     "nova1": {"stl": "EA Nova class destroyer.STL", "mapping": ("-x", "+z", "+y"), "length": 1502.1, "axis": (0.0, 43.3, 0.0),
@@ -82,6 +82,8 @@ def load_mesh(spec: str, rest_drum: bool = True) -> np.ndarray:
         p = PRESETS[name]
         if kind == "build":
             return compare.load_asset_mesh(compare.resolve_asset(p["asset"]))
+        if "npy" in p:  # triangles already in the generator's frame (an assembled kit)
+            return np.load(REFERENCES / p["npy"])
         tris = load_stl(REFERENCES / p["stl"], p["mapping"], p["length"], p["axis"])
         return turn_span(tris, *p["turn"]) if p["turn"] and rest_drum else tris
     path = Path(spec)

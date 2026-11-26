@@ -30,6 +30,7 @@ import dataclasses
 
 import numpy as np
 
+from ..core import collision as col
 from ..styles import Style
 from . import capital as cp
 from . import capital_bays as bays
@@ -41,36 +42,37 @@ LENGTH_M = 1714.3
 # The spine's cross-section, the octagon the command block and the housing's front share: half width, half height, and the
 # shallow cut of its corners (across, up).
 SPINE_W, SPINE_H, SPINE_CUT = 62.75, 61.6, (29.25, 11.6)
-COMMAND_Z = (207.0, 358.0)
+COMMAND_Z = (221.0, 358.0)  # the command block behind the open-frame bow (the kit's, M10-T68)
+BROW_Y, BROW_Z = 53.0, 229.0  # above this height the block's face stands further back
 NOTCH_Z = 334.0
-TANK_END_Z = 290.0  # the reactant tanks run aft under the command block to here  # from here aft the command block's roof and keel carry the spine's channel
-FORE_SPINE_Z = (356.0, 508.0)
-AFT_SPINE_Z = (920.0, 1225.0)
-RAILS_END_Z = 1085.0  # the aft spine's side rails stop here
-COLLAR_R, AXLE_R = 84.0, 44.8
-FORE_COLLAR_Z, AFT_COLLAR_Z = (506.0, 552.0), (884.0, 924.0)
-DRUM_Z = (555.2, 879.0)
-DRUM_PIVOT = (0.0, 0.0, 717.1)
-DRUM_REACH = 310.0  # the rim's outer face, from the axis
+
+FORE_SPINE_Z = (356.0, 528.0)
+AFT_SPINE_Z = (904.0, 1240.0)
+MAGAZINE_END_Z = 1085.0  # the magazine (the aft spine's forward part) ends here
+COLLAR_R, AXLE_R = 77.5, 44.8
+FORE_COLLAR_Z, AFT_COLLAR_Z = (526.0, 561.0), (875.0, 906.0)
+DRUM_Z = (562.0, 875.0)
+DRUM_PIVOT = (0.0, 0.0, 718.5)
+DRUM_REACH = 308.0  # the rim's outer face, from the axis
 HOUSING_Z = (1242.0, 1408.0)
-HOUSING_W, HOUSING_H = 102.0, 101.0  # the skirt's half width and half height at its stern edge
-CORE_END_Z = 1385.0
-CORE_BULGE = (1300.0, 70.0, 66.0)  # where the core is tallest: z, its half height there and at its end
+HOUSING_W, HOUSING_H = 98.0, 100.0  # the cage's half width and half height at its stern edge
+CORE_END_Z = 1385.0  # the thrust frame starts here, inside the reactor cage
+CAGE_Z = 1326.0  # where the housing's solid core ends and the reactor cage round the nacelles begins (the kit's)
 ENGINE_START_Z = 1310.0
-ENGINE_XY = (52.0, 45.5)
+ENGINE_XY = (40.0, 44.5)
 ENGINE_MOUTH_Z = 1660.0
-LUG_Z = (1409.0, 1452.0)
-# The one launch bay, in the command block's fore face above the retro thrusters (the maintainer, 2026-11-21): the
-# reference's octagonal hall, open from 182 to about 320 m, its housing standing out of the head as the reference's tube.
-# A Starfury is 11 m across and 7 m tall.
-BAY_MOUTH, BAY_DEPTH, BAY_WALL = (74.0, 34.0), 134.0, 2.0
-BAY_MOUTH_Z, BAY_Y = 182.0, 0.0
+LUG_Z = (1405.0, 1468.0)
+# The one launch bay, facing the bow above the retro thrusters (the maintainer, 2026-11-21): the kit's octagonal mouth in its
+# frame at the open bow's face (M10-T68), the hall reaching back through the command block. A Starfury is 11 m across and 7 m
+# tall; the kit's hall is a print's shallow 58 m, the build's keeps room for its 32 Starfuries.
+BAY_MOUTH, BAY_DEPTH, BAY_WALL = (72.0, 35.0), 134.0, 2.0
+BAY_MOUTH_Z, BAY_Y = 188.0, -3.0
 BAY_BACK_Z = BAY_MOUTH_Z + BAY_DEPTH + BAY_WALL
 BAY_CORNER = 7.0  # the fillets in the hall's corners that make its mouth the reference's octagon
 STARFURIES = 32
 CRAFT = "starfury_ally"  # the catalogue's pooled Starfury (data/capitals/loadouts.json, launches)
 # The retro thrusters' oval nozzles: open from their mouths to the throat, as the reference's.
-RETRO_Z, RETRO_THROAT_Z, RETRO_WALL, RETRO_NARROW = 168.0, 258.0, 6.0, 1.0
+RETRO_Z, RETRO_THROAT_Z, RETRO_WALL, RETRO_NARROW = 168.0, 196.0, 6.5, 1.0
 
 DECKED = HullRoles()
 PLAIN = HullRoles(deck="hull", keel="hull")  # a part with no deck: its top and bottom wear the side's paint
@@ -127,19 +129,6 @@ def around_hole(name: str, outline: list[tuple[float, float]], half_w: float, ys
     return [_put(section, cs.prism(n, pts, *z, s, roles), side_of) for n, pts, side_of in pieces if area(pts) > 0.01]
 
 
-def fore_bay(s: Style, mouth: tuple[float, float], depth: float, corner: float, at: tuple[float, float, float], section: str = "bow") -> list[cp.Module]:
-    """The one forward-facing launch bay, its mouth at ``at`` facing the bow, in the hull's paint and lit red (the
-    maintainer, 2026-11-21), and the fillets (legs ``corner``) that make its mouth an octagon. Its hardpoint is the first."""
-    x, y, z = at
-    bay = bays.launch_bay("bay_fore", mouth, depth, s, BAY_WALL, lit=True).transformed(np.eye(3), at)
-    w, h = 0.5 * mouth[0], 0.5 * mouth[1]
-    out = [_put(section, bay)]
-    for tag, sy in (("top", 1.0), ("low", -1.0)):
-        fillet = cs.prism(f"bay_fore_fillet_{tag}_r", [(x + w, y + sy * h), (x + w - corner, y + sy * h), (x + w, y + sy * (h - corner))], z, z + depth, s, PLAIN)
-        out.append(_put(section, fillet, cp.RIGHT))
-    return out
-
-
 def retro_nozzle(name: str, x: float, y: float, z: tuple[float, float], half: tuple[float, float], wall: float, s: Style, narrow: float = 0.0) -> cp.Module:
     """An oval retro thruster's nozzle (the reference's): a racetrack wall open at its mouth (``z[0]``), its opening
     ``narrow`` metres shorter at each end by the throat, and a dark throat plate closing it at ``z[1]``. ``half`` is the
@@ -160,6 +149,14 @@ def retro_nozzle(name: str, x: float, y: float, z: tuple[float, float], half: tu
     return cs.compound(name, [*ring, plate])
 
 
+def paired_hulls(m: cp.Module, group: int = 3) -> cp.Module:
+    """``m`` (a ring of hull pieces with one closing part last, as :func:`retro_nozzle`) with each ``group`` neighbouring pieces
+    joined in one hull: the ring in fewer shapes, its hole still open."""
+    *ring, last = m.shapes
+    joined = [col.hull(f"{m.name}_{k}", np.concatenate([q.points for q in ring[i:i + group]])) for k, i in enumerate(range(0, len(ring), group))]
+    return dataclasses.replace(m, shapes=(*joined, last.renamed(f"{m.name}_plate")))
+
+
 # --- the bow -------------------------------------------------------------------------------------------------------------
 MARK_HEIGHT_M = 40.0  # the show's letter stands about a sixth of the shield's height
 MARK_AT = 0.2  # how far up the lower panel the letter's centre sits, from its bottom edge
@@ -169,7 +166,7 @@ def shield_mark(x: float, top: tuple[float, float, float], bottom: tuple[float, 
     """The name letter in large white block print at the bottom of the shield (the show's), on the lower panel's outer face:
     ``top`` and ``bottom`` are the panel's two edges at the shield's face (y, and z from, z to, with the bottom edge leaning in)."""
     (ty, tz0, tz1), (by, bz0, bz1) = top, bottom
-    x_bottom = 26.0
+    x_bottom = 29.0
     along = np.array([x - x_bottom, ty - by, 0.5 * (tz0 + tz1) - 0.5 * (bz0 + bz1)])  # bottom edge to top edge, mid to mid
     normal = np.cross([0.0, 0.0, 1.0], np.array([x_bottom - x, by - ty, bz0 - tz0]))  # an edge of the panel with the along-z edge
     normal = normal / np.linalg.norm(normal) * (1.0 if normal[0] > 0.0 else -1.0)
@@ -188,16 +185,16 @@ def renegade_xs() -> dict[str, cp.Hardpoint]:
     def x(name: str, at: tuple[float, float, float], normal: tuple[float, float, float], up: tuple[float, float, float]) -> cp.Hardpoint:
         return fittings.hull_mark(name, at, normal, up, X_HEIGHT_M, colour=RENEGADE_RED, text="X", only_faction="renegades")
     return {"shield_mid_r": x("mark_x_r", (68.0, 0.0, 275.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)),
-            "command_roof": x("mark_x_roof", (0.0, 62.5, 238.0), (0.0, 1.0, 0.0), (0.0, 0.0, -1.0))}
+            "command_roof": x("mark_x_roof", (0.0, 64.0, 310.0), (0.0, 1.0, 0.0), (0.0, 0.0, -1.0))}
 
 
 def shields(s: Style) -> list[cp.Module]:
     """The starboard armour shield: a vertical panel and two leaning in above and below it, 5 m thick."""
-    thick, x = 4.0, 68.0
+    thick, x = 6.0, 68.0  # the kit's plates, 6 m
     inward = (-1.0, 0.0, 0.0)
     mid = cs.slab("shield_mid_r", [(x, 57.4, 193.0), (x, 57.4, 358.0), (x, -55.6, 358.0), (x, -55.6, 193.0)], thick, inward, s, PLAIN)
     upper = cs.slab("shield_upper_r", [(x, 57.4, 193.0), (x, 57.4, 358.0), (43.5, 95.4, 307.0), (43.5, 95.4, 214.0)], thick, inward, s, PLAIN)
-    lower = cs.slab("shield_lower_r", [(x, -55.6, 193.0), (x, -55.6, 358.0), (26.0, -195.6, 270.0), (26.0, -195.6, 214.0)], thick, inward, s, PLAIN)
+    lower = cs.slab("shield_lower_r", [(x, -55.6, 193.0), (x, -55.6, 358.0), (29.0, -195.6, 270.0), (29.0, -195.6, 214.0)], thick, inward, s, PLAIN)
     mid = dataclasses.replace(mid, hardpoints=(renegade_xs()["shield_mid_r"],))
     lower = dataclasses.replace(lower, hardpoints=(shield_mark(x, (-55.6, 193.0, 358.0), (-195.6, 214.0, 270.0)),))
     pod = cs.convex("beam_pod_r", [(px, py, pz) for px, c in ((68.0, 0.0), (88.0, 4.0)) for py in (-22.0 + c, 22.0 - c) for pz in (205.0 + c, 247.0 - c)],
@@ -206,58 +203,29 @@ def shields(s: Style) -> list[cp.Module]:
 
 
 def command_block(s: Style) -> list[cp.Module]:
-    """The command section between the shields: the octagon, its roof slab, the head with the bridge's window, the launch
-    bay through them in its tube (:func:`fore_bay`) and a strake along each flank."""
+    """The command section behind the open-frame bow (``parts/ea_omega_bow.py`` builds what stands ahead of it): the octagon with
+    the launch bay's hall through it, the roof deck, the waist behind the notch and a strake along each flank."""
     z0, z1 = COMMAND_Z
     hw, hh = 0.5 * BAY_MOUTH[0] + BAY_WALL, 0.5 * BAY_MOUTH[1] + BAY_WALL
     ys = (BAY_Y - hh, BAY_Y + hh)
     block = cs.prism("command_block", _octagon(SPINE_W, SPINE_H), BAY_BACK_Z - 0.5, NOTCH_Z, s, DECKED)
-    fore = around_hole("command_block_fore", _octagon(SPINE_W, SPINE_H), hw, ys, (z0, BAY_BACK_Z), s, DECKED, "bridge")
-    stripe = HullRoles(side="stripe", deck="stripe", keel="stripe", cap="stripe")
-    head = around_hole("command_head", [(57.0, -45.0), (57.0, 50.0), (-57.0, 50.0), (-57.0, -45.0)], hw, ys, (195.0, z0 + 1.0), s, stripe, "bridge")
+    fore = around_hole("command_block_fore", _clip(_octagon(SPINE_W, SPINE_H), lambda p: BROW_Y - p[1]), hw, ys, (z0, BAY_BACK_Z), s, DECKED, "bridge")
+    brow = cs.prism("command_brow", _clip(_octagon(SPINE_W, SPINE_H), lambda p: p[1] - BROW_Y), BROW_Z, BAY_BACK_Z, s, DECKED)
     waist = cs.box("command_aft", (-SPINE_W, -47.0, NOTCH_Z - 1.0), (SPINE_W, 47.0, z1), s, PLAIN)
     shoulder = cs.prism("command_shoulder_top_r", [(20.0, 46.0), (SPINE_W, 46.0), (SPINE_W, SPINE_H - SPINE_CUT[1]), (SPINE_W - SPINE_CUT[0], SPINE_H),
                                                    (26.0, SPINE_H)], NOTCH_Z - 1.0, z1, s, DECKED)
-    roof = cs.box("command_roof", (-57.0, 55.5, 214.0), (57.0, 62.5, 262.0), s, PANEL)
-    # The bridge's window in the head's face, above the bay's tube.
-    frame = cs.prism("bridge_window_frame", _octagon(27.0, 10.0, (6.0, 6.0)), 194.2, 195.5, s, DARK, skin=cp.SKIN_NONE)
-    glass = cs.prism("bridge_window", _octagon(24.0, 7.5, (5.0, 5.0)), 193.8, 194.5, s,
-                     HullRoles(side="canopy_glass", deck="canopy_glass", keel="canopy_glass"), skin=cp.SKIN_NONE)
-    frame, glass = (m.transformed(np.eye(3), (0.0, 35.0, 0.0)) for m in (frame, glass))
-    strake = cs.prism("command_strake_r", [(SPINE_W - 1.0, 8.0), (72.0, 3.5), (72.0, -3.5), (SPINE_W - 1.0, -8.0)], 200.0, 372.0, s, DARK)
+    roof = cs.box("command_roof", (-57.0, 55.5, 238.0), (57.0, 64.0, 325.0), s, PANEL)
+    strake = cs.prism("command_strake_r", [(SPINE_W - 1.0, 8.0), (72.0, 3.5), (72.0, -3.5), (SPINE_W - 1.0, -8.0)], 222.0, 372.0, s, DARK)
     sided = (strake, shoulder, _flip_y(shoulder, "command_shoulder_low_r"))
     roof = dataclasses.replace(roof, hardpoints=(renegade_xs()["command_roof"],))
-    bay, *fillets = fore_bay(s, BAY_MOUTH, BAY_DEPTH, BAY_CORNER, (0.0, BAY_Y, BAY_MOUTH_Z))
-    bay = bay.with_params(cp.BAY, craft=CRAFT, capacity=STARFURIES)
-    return ([_put("bridge", m) for m in (block, waist, roof, frame, glass)] + fore + head + [bay, *fillets]
-            + [_put("bridge", m, cp.RIGHT) for m in sided])
-
-
-def tankage(s: Style) -> list[cp.Module]:
-    """Under the command block: three reactant spheres at its lower front edge, the two oval retro thrusters below them
-    (each an open nozzle ahead of its tank), the cross beam that carries them and the keel pod where the shields meet."""
-    def sphere(name: str, centre: tuple[float, float, float], r: float) -> cp.Module:
-        arc = [(r - r * np.cos(a), r * np.sin(a)) for a in np.linspace(0.0, np.pi, 9)]
-        arc[0], arc[-1] = (0.0, 0.0), (2.0 * r, 0.0)
-        return cs.round_body(name, (centre[0], centre[1], centre[2] - r), (centre[0], centre[1], centre[2] + r), arc, s,
-                             s.material("hull_panel"), sides=12, skin=cp.SKIN_FITTING)
-
-    racetrack = [(14.0 * np.cos(a), 17.0 * np.sign(np.sin(a)) + 14.0 * np.sin(a)) for a in np.radians(np.arange(15.0, 360.0, 30.0))]
-    outline = [(18.5 + x, -95.0 + y) for x, y in racetrack]
-    tip = [(18.5 + dx, y, TANK_END_Z + 20.0) for dx in (-3.0, 3.0) for y in (-104.0, -120.0)]  # the aft end slopes back to a low point
-    tank = cs.convex("tank_r", _ring(outline, RETRO_THROAT_Z - 0.5) + _ring(outline, TANK_END_Z) + tip, s, PANEL)
-    retro = retro_nozzle("retro_r", 18.5, -95.0, (RETRO_Z, RETRO_THROAT_Z), (14.0, 31.0), RETRO_WALL, s, RETRO_NARROW)
-    beam = cs.box("tank_beam", (-40.0, -146.0, 214.0), (40.0, -128.0, TANK_END_Z), s, DARK)
-    keel = cs.box("keel_pod", (-12.0, -207.0, 200.0), (12.0, -194.0, 278.0), s, DARK)
-    return [_put("fuel", sphere("sphere_r", (42.0, -47.6, 190.0), 14.0), cp.RIGHT), _put("fuel", sphere("sphere_mid", (0.0, -50.0, 190.0), 11.0)),
-            _put("fuel", tank, cp.RIGHT), _put("fuel", retro, cp.RIGHT), _put("fuel", beam), _put("bow", keel)]
+    return [_put("bridge", m) for m in (block, waist, roof, brow)] + fore + [_put("bridge", m, cp.RIGHT) for m in sided]
 
 
 def aerials(s: Style) -> list[cp.Module]:
     """The sensor boom (port and low: the reference has one) and the masts."""
-    boom_at = (-28.7, -137.3)
-    profile = [(0.0, 0.0), (0.0, 1.0), (50.0, 1.0), (52.0, 2.2), (84.0, 2.2), (90.0, 8.0), (108.0, 8.0), (112.0, 5.0), (145.0, 5.0), (162.0, 8.6),
-               (207.0, 8.6), (207.0, 0.0)]
+    boom_at = (-19.0, -145.0)  # the kit's probe, run forward to the bow's tip (its print is short, M10-T68)
+    profile = [(0.0, 0.0), (0.0, 1.0), (50.0, 1.0), (52.0, 2.0), (93.0, 2.0), (96.0, 7.5), (111.0, 7.5), (113.0, 4.5), (154.0, 4.5), (157.0, 7.0),
+               (207.0, 7.0), (207.0, 0.0)]
     boom = cs.round_body("sensor_boom", (*boom_at, 0.0), (*boom_at, 207.0), profile, s, s.material("hull_dark"), sides=10,
                          creases={2, 3, 4, 5, 6, 7, 8, 9, 10}, skin=cp.SKIN_FITTING)
     out = [_put("bow", boom, cp.LONE),
@@ -272,22 +240,39 @@ def aerials(s: Style) -> list[cp.Module]:
 
 
 # --- the spines and the collars ------------------------------------------------------------------------------------------
-def spine(s: Style, name: str, section: str, z: tuple[float, float], rails: bool = True, strake: tuple[float, float] | None = None) -> list[cp.Module]:
-    """A spine's girder from ``z[0]`` to ``z[1]``: the core, the waist, an ear at each corner (a post and a fin) and, with
-    ``rails``, a rail above and below the waist on each side. ``strake`` (z from, to) adds a short strake on each flank."""
+# The spines' girder, the kit's section (top half; the lower is its mirror): the core, the deck plate over it reaching past the
+# core's sides, an ear on each corner and a flange down each flank (the kit's shallow side panels are left to the plating).
+SPINE_CORE = (41.0, 54.0)
+SPINE_DECK = [(61.0, 54.0), (56.0, 57.0), (-56.0, 57.0), (-61.0, 54.0)]
+SPINE_EAR = [(22.0, 56.5), (54.0, 56.5), (48.0, 61.0), (38.0, 64.5), (25.0, 65.0)]
+SPINE_FLANGE = ((SPINE_CORE[0] - 0.5, 17.5), (52.0, 20.0))
+SPINE_STRAKE = [(SPINE_CORE[0] - 0.5, 10.0), (70.0, 2.5), (70.0, -2.5), (SPINE_CORE[0] - 0.5, -10.0)]
+
+
+def spine(s: Style, name: str, section: str, z: tuple[float, float], strakes: tuple[tuple[float, float], ...] = ()) -> list[cp.Module]:
+    """A spine's girder from ``z[0]`` to ``z[1]`` (the kit's section): the core, the deck plates above and below, an ear on each
+    corner, a flange on each flank, and a strake along the flank's middle over each of ``strakes`` (z from, to)."""
     z0, z1 = z
-    core = cs.box(f"{name}_core", (-39.0, -45.5, z0), (39.0, 45.5, z1), s, DECKED)
-    waist = cs.box(f"{name}_waist", (-50.0, -18.0, z0), (50.0, 18.0, z1), s, DARK)
-    rail = cs.box(f"{name}_rail_top_r", (44.0, 18.0, z0), (50.0, 46.0, z1), s, PLAIN)
-    post = cs.prism("post", [(18.0, 45.0), (39.0, 45.0), (39.0, 62.0), (25.0, 62.0)], z0, z1, s, DECKED)
-    fin = cs.prism("fin", [(34.0, 62.0), (39.0, 50.0), (63.0, 50.5)], z0, z1, s, DECKED)
-    ear = cs.compound(f"{name}_ear_top_r", [post, fin])
-    out = [_put(section, core), _put(section, waist)]
-    for m, low in ((ear, f"{name}_ear_low_r"), *(((rail, f"{name}_rail_low_r"),) if rails else ())):
-        out += [_put(section, m, cp.RIGHT), _put(section, _flip_y(m, low), cp.RIGHT)]
-    if strake is not None:
-        out.append(_put(section, cs.prism(f"{name}_strake_r", [(49.0, 12.0), (72.0, 3.5), (72.0, -3.5), (49.0, -12.0)], *strake, s, DARK), cp.RIGHT))
+    w, h = SPINE_CORE
+    core = cs.box(f"{name}_core", (-w, -h, z0), (w, h, z1), s, DECKED)
+    deck = cs.prism(f"{name}_deck_top", SPINE_DECK, z0, z1, s, DECKED)
+    ear = cs.prism(f"{name}_ear_top_r", SPINE_EAR, z0, z1, s, DECKED)
+    flange = cs.box(f"{name}_flange_top_r", (*SPINE_FLANGE[0], z0), (*SPINE_FLANGE[1], z1), s, DARK)
+    out = [_put(section, core), _put(section, deck), _put(section, _flip_y(deck, f"{name}_deck_low"))]
+    for m in (ear, flange):
+        out += [_put(section, m, cp.RIGHT), _put(section, _flip_y(m, m.name.replace("_top_", "_low_")), cp.RIGHT)]
+    for k, (a, b) in enumerate(strakes):
+        out.append(_put(section, cs.prism(f"{name}_strake_{k + 1}_r", SPINE_STRAKE, a, b, s, DARK), cp.RIGHT))
     return out
+
+
+def spine_block(s: Style, name: str, section: str, z: tuple[float, float], half_w: float) -> cp.Module:
+    """A solid block where a spine meets a collar or the engine housing (the kit's): the channel between the ears filled, the
+    sides out to ``half_w``."""
+    w = half_w
+    top = [(w, 52.0), (w - 6.0, 57.0), (40.0, 63.0), (-40.0, 63.0), (-(w - 6.0), 57.0), (-w, 52.0)]
+    outline = top + [(x, -y) for x, y in reversed(top)]
+    return _put(section, cs.prism(name, outline, *z, s, DECKED))
 
 
 def collar(s: Style, name: str, section: str, z: tuple[float, float]) -> cp.Module:
@@ -296,8 +281,11 @@ def collar(s: Style, name: str, section: str, z: tuple[float, float]) -> cp.Modu
     bevel = 8.0
     profile = [(0.0, 0.0), (0.0, COLLAR_R - bevel), (bevel, COLLAR_R), (z1 - z0 - bevel, COLLAR_R), (z1 - z0, COLLAR_R - bevel), (z1 - z0, 0.0)]
     dark, hull = s.material("hull_dark"), s.material("hull")
-    return _put(section, cs.round_body(name, (0.0, 0.0, z0), (0.0, 0.0, z1), profile, s, [dark, hull, hull, hull, dark], sides=24,
-                                       creases={1, 2, 3, 4}))
+    ring = cs.round_body(name, (0.0, 0.0, z0), (0.0, 0.0, z1), profile, s, [dark, hull, hull, hull, dark], sides=24, creases={1, 2, 3, 4})
+    start, axis = np.array([0.0, 0.0, z0]), np.array([0.0, 0.0, 1.0])
+    steps = list(zip(profile[1:-1], profile[2:-1], strict=False))  # the bevels and the band between: one hull each
+    shapes = tuple(col.hull(f"{name}_{k}", col.prism_points(start, axis, [a, b], 12)) for k, (a, b) in enumerate(steps))
+    return _put(section, dataclasses.replace(ring, shapes=shapes))
 
 
 def axle(s: Style, section: str) -> cp.Module:
@@ -307,19 +295,48 @@ def axle(s: Style, section: str) -> cp.Module:
 
 
 # --- the rotating section ------------------------------------------------------------------------------------------------
+# The truss on each flank of an arm's inner lobe (the kit's lattice panels): rails along the arm at the flank's edges, posts
+# between bays and an X in each bay, standing proud of the flank.
+TRUSS_R, TRUSS_BAYS, TRUSS_BAR, TRUSS_PROUD = (104.0, 134.0), 10, 2.2, 2.0
+
+
+def _bar(name: str, a: tuple[float, float], b: tuple[float, float], y: float, s: Style) -> cp.Module:
+    """A square bar from ``a`` to ``b`` (radial, z) on the flank plane at ``y`` (tangential), ``TRUSS_BAR`` thick."""
+    d = np.array([b[0] - a[0], b[1] - a[1]])
+    n = np.array([-d[1], d[0]]) / np.linalg.norm(d) * 0.5 * TRUSS_BAR
+    pts = [(p[0] + sx * n[0], yy, p[1] + sx * n[1]) for p in (a, b) for sx in (-1.0, 1.0) for yy in (y, y + TRUSS_PROUD)]
+    return cs.convex(name, pts, s, DARK, skin=cp.SKIN_FITTING)
+
+
+def arm_truss(s: Style, name: str, y: float) -> cp.Module:
+    """The truss on the flank face at ``y`` (the starboard arm's frame: x radial, y tangential): one part with one hull."""
+    (r0, r1), (z0, z1) = TRUSS_R, DRUM_Z
+    zs = np.linspace(z0 + 6.0, z1 - 6.0, TRUSS_BAYS + 1)
+    bars = [_bar(f"{name}_rail_in", (r0, zs[0]), (r0, zs[-1]), y, s), _bar(f"{name}_rail_out", (r1, zs[0]), (r1, zs[-1]), y, s)]
+    for k, z in enumerate(zs):
+        bars.append(_bar(f"{name}_post_{k}", (r0, z), (r1, z), y, s))
+    for k, (za, zb) in enumerate(zip(zs, zs[1:], strict=False)):
+        bars += [_bar(f"{name}_x_{k}a", (r0, za), (r1, zb), y, s), _bar(f"{name}_x_{k}b", (r1, za), (r0, zb), y, s)]
+    truss = cs.compound(name, bars)
+    return dataclasses.replace(truss, shapes=(col.hull(name, truss.part.mesh.vertices),))
+
+
 def drum_arm(s: Style, section: str) -> list[cp.Module]:
-    """The starboard arm at rest (it reaches along +x): the body, the neck, the cap's bar and slope, and the rim, a panelled
-    band round its outer face (no bays: the ship launches from its bow, the maintainer, 2026-11-21)."""
+    """The starboard arm at rest in its own frame (it reaches along +x; the asset turns the rotating section so the arms stand
+    up and down, the kit's pose): the inner lobe with a truss on each flank, the neck, the outer lobe, its cap and the rim, a
+    panelled band round its outer face (no bays: the ship launches from its bow, the maintainer, 2026-11-21)."""
     z0, z1 = DRUM_Z
-    body = cs.prism("arm_body_r", [(79.0, -81.0), (79.0, 81.0), (111.0, 101.0), (139.0, 101.0), (186.0, 55.0), (186.0, -55.0), (139.0, -101.0),
-                                   (111.0, -101.0)], z0, z1, s, DECKED)
-    neck = cs.box("arm_neck_r", (185.0, -25.0, z0), (212.0, 25.0, z1), s, DARK)
-    bar = cs.prism("arm_bar_r", [(211.0, -55.0), (211.0, 55.0), (226.0, 74.0), (248.0, 74.0), (248.0, -74.0), (226.0, -74.0)], z0, z1, s, DECKED)
-    slope = cs.prism("arm_slope_r", [(247.0, 54.0), (272.5, 41.0), (272.5, -41.0), (247.0, -54.0)], z0, z1, s, PANEL)
-    half = 10.0  # the band through the rim, above and below the axis plane
-    rim_top = cs.prism("arm_rim_top_r", [(272.0, half), (272.0, 41.0), (294.6, 41.0), (DRUM_REACH, 25.0), (DRUM_REACH, half)], z0, z1, s, DECKED)
-    band = cs.box("arm_rim_band_r", (272.0, -half - 0.5, z0), (DRUM_REACH, half + 0.5, z1), s, PANEL)
-    return [_put(section, m, cp.RIGHT) for m in (body, neck, bar, slope, rim_top, _flip_y(rim_top, "arm_rim_low_r"), band)]
+    body = cs.prism("arm_body_r", [(77.0, -90.0), (77.0, 90.0), (100.0, 101.0), (138.0, 101.0), (181.0, 64.0), (181.0, -64.0), (138.0, -101.0),
+                                   (100.0, -101.0)], z0, z1, s, DECKED)
+    neck = cs.box("arm_neck_r", (180.0, -25.0, z0), (206.0, 25.0, z1), s, DARK)
+    bar = cs.prism("arm_bar_r", [(205.0, -55.0), (205.0, 55.0), (222.0, 78.0), (240.0, 78.0), (240.0, -78.0), (222.0, -78.0)], z0, z1, s, DECKED)
+    slope = cs.prism("arm_slope_r", [(239.5, -78.0), (239.5, 78.0), (250.0, 52.0), (262.0, 42.0), (262.0, -42.0), (250.0, -52.0)], z0, z1, s, PANEL)
+    half = 10.0  # the band through the rim, either side of the arm's middle
+    rim_top = cs.prism("arm_rim_top_r", [(261.5, half), (261.5, 41.0), (288.0, 40.0), (300.0, 30.0), (DRUM_REACH, 18.0), (DRUM_REACH, half)], z0, z1, s, DECKED)
+    band = cs.box("arm_rim_band_r", (261.5, -half - 0.5, z0), (DRUM_REACH, half + 0.5, z1), s, PANEL)
+    truss = arm_truss(s, "arm_truss_top_r", 101.0 - 0.2)
+    parts = (body, neck, bar, slope, rim_top, _flip_y(rim_top, "arm_rim_low_r"), band, truss, _flip_y(truss, "arm_truss_low_r"))
+    return [_put(section, m, cp.RIGHT) for m in parts]
 
 
 def drum_hub(s: Style, section: str) -> list[cp.Module]:
@@ -331,84 +348,117 @@ def drum_hub(s: Style, section: str) -> list[cp.Module]:
 
 
 # --- the engine housing and the engines ----------------------------------------------------------------------------------
+# The housing's core (the kit's): its outline at the front and where it ends, each as (half width, shoulder's height, roof's
+# half width, roof's height); the reactor cage behind it is the skirt's roof, corner and side plates round the nacelles.
+CORE_RINGS = ((HOUSING_Z[0], (62.0, 54.0, 37.0, 66.0)), (CAGE_Z, (79.0, 66.0, 20.0, 88.0)))
+SKIRT_FRONT = ((40.0, 88.0), (79.0, 66.0))  # the roof's and the corner's front edge, at the core's end: (x, y)
+SKIRT_BACK = ((50.0, 100.0), (98.0, 75.0))  # the same at the stern edge
+SIDE_WALL = ((88.0, 73.0, 1362.0), (98.0, 75.0, HOUSING_Z[1] + 4.0))  # the side plate's front and back: x, half height, z
+
+
 def _side_x(z: float) -> float:
-    """The housing's flank: its half width at ``z``."""
-    z0, z1 = HOUSING_Z
-    return SPINE_W + (HOUSING_W - SPINE_W) * (z - z0) / (z1 - z0)
+    """The housing's flank: its half width at ``z`` (the core's, then the cage's side wall)."""
+    (z0, (w0, *_)), (z1, (w1, *_)) = CORE_RINGS
+    return w0 + (w1 - w0) * (min(z, z1) - z0) / (z1 - z0)
+
+
+def _core_ring(z: float, w: float, shoulder: float, roof_w: float, roof_h: float) -> list[tuple[float, float, float]]:
+    top = [(w, shoulder), (roof_w, roof_h), (-roof_w, roof_h), (-w, shoulder)]
+    return [(x, y, z) for x, y in top + [(x, -y) for x, y in reversed(top)]]
 
 
 def housing(s: Style, section: str) -> list[cp.Module]:
-    """The engine housing: the solid core flaring sideways, the skirt's stand-off plates above, below and at the corners, a
-    short skirt plate on each flank past the core's end, three ribs and a strake on each flank."""
+    """The engine housing (the kit's): the core flaring from the spine to its pitched roof, then the reactor cage round the
+    nacelles' roots: the roof plate rising aft, a corner plate down to each side wall, the side walls, three ribs and a strake
+    on each flank."""
     z0, z1 = HOUSING_Z
-    bulge_z, bulge_h, end_h = CORE_BULGE
-    mid_ring = _ring(_octagon(_side_x(bulge_z), bulge_h, (24.0, 7.0)), bulge_z)
+    (za, ra), (zb, rb) = CORE_RINGS
     front = cs.prism("housing_front", _octagon(SPINE_W, SPINE_H), AFT_SPINE_Z[1], z0 + 1.0, s, DECKED)
-    core_a = cs.convex("housing_core_fore", _ring(_octagon(SPINE_W, SPINE_H), z0) + mid_ring, s, DECKED)
-    core_b = cs.convex("housing_core_aft", mid_ring + _ring(_octagon(_side_x(CORE_END_Z), end_h, (24.0, 5.0)), CORE_END_Z), s, DECKED)
-    thick = 2.5
-    top = cs.slab("skirt_top", [(-33.5, 64.0, z0), (33.5, 64.0, z0), (40.0, HOUSING_H, z1), (-40.0, HOUSING_H, z1)], thick, (0.0, -1.0, 0.0), s, PANEL)
-    corner = cs.slab("skirt_corner_top_r", [(33.5, 64.0, z0), (SPINE_W, 52.0, z0), (HOUSING_W, 75.0, z1), (40.0, HOUSING_H, z1)], thick,
-                     (-1.0, -1.5, 0.0), s, PANEL)
-    side = cs.slab("skirt_side_r", [(_side_x(1372.0) + 0.5, 72.0, 1372.0), (HOUSING_W, 75.0, z1), (HOUSING_W, -75.0, z1), (_side_x(1372.0) + 0.5, -72.0, 1372.0)],
-                   thick, (-1.0, 0.0, 0.0), s, PLAIN)
-    out = [_put(section, front), _put(section, core_a), _put(section, core_b), _put(section, top), _put(section, _flip_y(top, "skirt_low")), _put(section, corner, cp.RIGHT),
+    core = cs.convex("housing_core", _core_ring(za, *ra) + _core_ring(zb, *rb), s, DECKED)
+    thick = 8.0
+    (rx0, ry0), (cx0, cy0) = SKIRT_FRONT
+    (rx1, ry1), (cx1, cy1) = SKIRT_BACK
+    roof = cs.slab("skirt_top", [(-rx0, ry0, zb - 6.0), (rx0, ry0, zb - 6.0), (rx1, ry1, z1), (-rx1, ry1, z1)], thick, (0.0, -1.0, 0.0), s, PANEL)
+    corner = cs.slab("skirt_corner_top_r", [(rx0, ry0, zb - 6.0), (cx0, cy0, zb - 6.0), (cx1, cy1, z1), (rx1, ry1, z1)], thick, (-1.0, -1.6, 0.0), s, PANEL)
+    (wx0, wh0, wz0), (wx1, wh1, wz1) = SIDE_WALL
+    side = cs.slab("skirt_side_r", [(wx0, wh0, wz0), (wx1, wh1, wz1), (wx1, -wh1, wz1), (wx0, -wh0, wz0)], thick, (-1.0, 0.0, 0.0), s, PLAIN)
+    out = [_put(section, front), _put(section, core), _put(section, roof), _put(section, _flip_y(roof, "skirt_low")), _put(section, corner, cp.RIGHT),
            _put(section, _flip_y(corner, "skirt_corner_low_r"), cp.RIGHT), _put(section, side, cp.RIGHT)]
-    for k, (a, b) in enumerate(((1280.0, 1298.0), (1307.0, 1325.0), (1335.0, 1352.0))):
-        rib = cs.convex(f"housing_rib_{k + 1}_r", [(_side_x(z) + dx, y, z) for z in (a, b) for dx in (-2.0, 6.0) for y in (-56.0, 55.0)], s, DARK,
+    for k, (a, b) in enumerate(((1272.0, 1290.0), (1300.0, 1318.0), (1343.0, 1353.0))):
+        rib = cs.convex(f"housing_rib_{k + 1}_r", [(_side_x(z) + dx, y, z) for z in (a, b) for dx in (-2.0, 5.0) for y in (-56.0, 55.0)], s, DARK,
                         skin=cp.SKIN_FITTING)
         out.append(_put(section, rib, cp.RIGHT))
-    # The strake along the flank's middle: from the aft spine's side, thinning to its edge, running inside the skirt to the stern.
-    for name, (a, b), (tip_a, tip_b), root in (("strake_fore_r", (1182.0, z0), (70.0, 80.0), (49.0, 49.0)),
-                                               ("strake_aft_r", (z0, z1), (80.0, 108.0), (SPINE_W - 1.0, 60.0))):
+    # The strake along the flank's middle: from the aft spine's side, thinning to its edge, running to the stern.
+    for name, (a, b), (tip_a, tip_b), root in (("strake_fore_r", (1182.0, z0), (70.0, 72.0), (49.0, 49.0)),
+                                               ("strake_aft_r", (z0, z1), (72.0, 102.0), (SPINE_W - 1.0, 75.0))):
         pts = [(x, y, z) for z, tip, base in ((a, tip_a, root[0]), (b, tip_b, root[1])) for x, y in ((base, 8.0), (base, -8.0), (tip, 3.5), (tip, -3.5))]
         out.append(_put(section, cs.convex(name, pts, s, DARK), cp.RIGHT))
     return out
 
 
 def engine(s: Style, name: str, section: str, up: float) -> cp.Module:
-    """One starboard nacelle (``up`` +1 the upper, -1 the lower): a drum, a waist, a flared bell and its glowing bore, with
-    the engine's hardpoint at the mouth."""
+    """One starboard nacelle (``up`` +1 the upper, -1 the lower), the kit's: a drum out of the housing, a ring, a waist and a
+    second ring, tapering to the bell and its glowing bore, with the engine's hardpoint at the mouth."""
     z0 = ENGINE_START_Z
     x, y = ENGINE_XY[0], up * ENGINE_XY[1]
     length = ENGINE_MOUTH_Z - z0
     at = lambda z: z - z0  # noqa: E731 - the profile is written at the ship's z
-    profile = [(0.0, 0.0), (0.0, 28.0), (at(1445.0), 28.0), (at(1452.0), 37.0), (at(1478.0), 37.0), (at(1500.0), 22.0), (at(1520.0), 22.0),
-               (at(1522.0), 31.0), (at(1565.0), 24.0), (length, 19.5), (length, 16.5), (length - 15.0, 11.0), (length - 15.0, 0.0)]
+    profile = [(0.0, 0.0), (0.0, 26.0), (at(1470.0), 26.0), (at(1490.0), 32.5), (at(1504.0), 33.0), (at(1506.0), 27.5), (at(1522.0), 27.5),
+               (at(1526.0), 32.0), (at(1546.0), 28.0), (at(1566.0), 23.0), (at(1584.0), 22.0), (at(1588.0), 21.0), (length, 19.5), (length, 16.5),
+               (length - 24.0, 11.0), (length - 24.0, 0.0)]
     hull, dark, metal, glow = s.material("hull"), s.material("hull_dark"), s.material("nozzle"), s.material("nozzle_throat")
-    mats = [dark, hull, dark, hull, dark, dark, metal, metal, metal, metal, glow, glow]
-    body = cs.round_body(f"{name}_body", (x, y, z0), (x, y, ENGINE_MOUTH_Z), profile, s, mats, sides=20, creases={1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
-                         skin=cp.SKIN_FITTING, hollow_from=10)
-    # The mounting lugs either side of the drum, ahead of the flange: the band the reference carries at the nacelle's height.
-    lug = cs.box(f"{name}_lugs", (x - 37.0, y - 6.5, LUG_Z[0]), (x + 38.0, y + 6.5, LUG_Z[1]), s, DARK, skin=cp.SKIN_FITTING)
-    point = cp.Hardpoint(name, cp.ENGINE, (x, y, ENGINE_MOUTH_Z), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0), {"share": 0.25, "radius_m": 16.5})
+    mats = [dark, hull, hull, dark, dark, dark, hull, hull, hull, metal, metal, metal, metal, glow, glow]
+    body = cs.round_body(f"{name}_body", (x, y, z0), (x, y, ENGINE_MOUTH_Z), profile, s, mats, sides=20, creases=set(range(1, 15)),
+                         skin=cp.SKIN_FITTING, hollow_from=13)
+    # A few hulls follow the nacelle (the drum, the rings, the waist, the taper, the bell; the bore an open ring), so a side's
+    # two nacelles stay well inside the section's shape budget without merging over their waists.
+    start, axis = np.array([x, y, z0]), np.array([0.0, 0.0, 1.0])
+    deep = length - 24.0  # where the bore starts
+    bell_r = 21.0 + (19.5 - 21.0) * (deep - at(1588.0)) / (length - at(1588.0))
+    outside = [(0.0, 26.0), *(p for p in profile[2:12] if p[0] not in (at(1566.0), at(1584.0), at(1588.0))), (deep, bell_r)]  # the taper as one step
+    shapes = [col.hull(f"{name}_body_{k}", col.prism_points(start, axis, [(d0, r0), (d1, r1)], 12))
+              for k, ((d0, r0), (d1, r1)) in enumerate(zip(outside, outside[1:], strict=False)) if d1 - d0 > 1e-6]
+    for k, (a_, b_) in enumerate(zip(np.linspace(deep, length, 3)[:-1], np.linspace(deep, length, 3)[1:], strict=False)):
+        r_in = 11.0 + (16.5 - 11.0) * (a_ - deep) / (length - deep)  # the bore's wall at the step's inner end
+        shapes += col.ring_sectors(f"{name}_bore_{k}", start, axis, r_in, bell_r, a_, b_, 5)
+    body = dataclasses.replace(body, shapes=tuple(q.renamed(f"{name}_body_{k}") for k, q in enumerate(shapes)))
+    # The mounting lugs either side of the drum, the band the kit carries at the nacelle's height.
+    lug_y = y - up * 2.0  # a little inboard of the nacelle's axis, the kit's
+    lug = cs.box(f"{name}_lugs", (x - 38.0, lug_y - 6.0, LUG_Z[0]), (x + 38.0, lug_y + 6.0, LUG_Z[1]), s, DARK, skin=cp.SKIN_FITTING)
+    point = cp.Hardpoint(name, cp.ENGINE, (x, y, ENGINE_MOUTH_Z), (0.0, 0.0, -1.0), (0.0, 1.0, 0.0), {"share": 0.25, "radius_m": 17.0})
     return _put(section, dataclasses.replace(cs.compound(name, [body, lug]), hardpoints=(point,)), cp.RIGHT)
 
 
 def engine_frame(s: Style, section: str) -> list[cp.Module]:
-    """What holds a side's two nacelles: the boom between them, ending in a blade at the stern."""
-    boom = cs.box("engine_boom_r", (32.0, -17.5, 1548.0), (72.0, 17.5, ENGINE_MOUTH_Z), s, DARK)
-    blade = cs.convex("engine_blade_r", [(x, y, z) for z, h in ((ENGINE_MOUTH_Z - 1.0, 17.5), (LENGTH_M, 1.5)) for x in (32.0, 72.0) for y in (-h, h)], s, PLAIN)
-    return [_put(section, boom, cp.RIGHT), _put(section, blade, cp.RIGHT)]
+    """Between a side's two nacelles: the blade that runs out past the mouths to the stern, thinning to its edge."""
+    root = cs.convex("engine_blade_root_r", [(x, y, z) for z, h in ((1609.0, 9.5), (1666.0, 9.5)) for x in (20.0, 60.0) for y in (-h, h)], s, PLAIN)
+    blade = cs.convex("engine_blade_r", [(x, y, z) for z, h in ((1665.0, 9.5), (LENGTH_M, 2.5)) for x in (20.0, 60.0) for y in (-h, h)], s, PLAIN)
+    return [_put(section, root, cp.RIGHT), _put(section, blade, cp.RIGHT)]
 
 
 def tail(s: Style, section: str) -> list[cp.Module]:
-    """Between the engines: the thrust frame behind the core and the thin tail plates above and below, from the skirt's
-    edge down to the nacelles' backs."""
-    frame = cs.box("thrust_frame", (-76.0, -14.0, CORE_END_Z - 2.0), (76.0, 14.0, 1470.0), s, DARK)
-    link = cs.box("thrust_link", (-37.0, -4.0, 1469.0), (37.0, 4.0, 1523.0), s, DARK)
-    cross = cs.box("cross_beam", (-86.0, -12.0, 1522.0), (86.0, 12.0, 1549.0), s, DARK)
-    runs = ((HOUSING_Z[1] - 2.0, HOUSING_H, 40.0), (1490.0, 99.0, 34.0), (1565.0, 72.0, 30.0), (1650.0, 70.0, 25.0))
-    fin = cs.prism("thrust_fin_r", [(75.0, -8.0), (86.0, -8.0), (99.0, -5.0), (99.0, 5.0), (86.0, 8.0), (75.0, 8.0)], CORE_END_Z - 2.0, 1456.0, s, DARK)
-    post = cs.box("tail_post_top_r", (74.0, 75.0, HOUSING_Z[1] - 1.0), (84.0, 84.0, 1465.0), s, DARK)  # the skirt's corner strut aft
-    out = [_put(section, m) for m in (frame, link, cross)] + [_put(section, m, cp.RIGHT) for m in (fin, post, _flip_y(post, "tail_post_low_r"))]
+    """Between the engines: the thrust frame behind the core, the cross beam, the thrust plate between the nacelles and the
+    thick tail plates above and below, stepping down from the skirt's edge to the nacelles' backs (the kit's)."""
+    frame = cs.box("thrust_frame", (-76.0, -13.0, CORE_END_Z - 2.0), (76.0, 13.0, 1470.0), s, DARK)
+    cross = cs.box("cross_beam", (-98.0, -4.0, 1430.0), (98.0, 4.0, 1462.0), s, DARK)
+    plate = cs.box("thrust_plate", (-66.0, -13.0, 1469.0), (66.0, 13.0, 1553.0), s, DARK)
+    # The cap over the cage's stern, out to the nacelles' backs: the roof plate's run aft with its chamfers and the ridge along it.
+    cap = cs.prism("tail_cap_top", [(54.0, 90.0), (55.0, 96.0), (34.0, 109.0), (-34.0, 109.0), (-55.0, 96.0), (-54.0, 90.0)], HOUSING_Z[1] - 2.0, 1462.0, s, PANEL)
+    plate_aft = cs.box("thrust_plate_aft", (-76.0, -9.5, 1552.0), (76.0, 9.5, 1610.0), s, DARK)
+    runs = ((1461.0, 106.0, 33.0), (1500.0, 106.0, 33.0), (1540.0, 91.0, 33.0), (1585.0, 79.0, 32.0), (1650.0, 76.0, 26.0))
+    post = cs.box("tail_post_top_r", (73.0, 64.0, HOUSING_Z[1] - 1.0), (86.0, 75.0, 1502.0), s, DARK)  # the skirt's corner strut aft
+    # Under each nacelle a cradle off the thrust frame, and between each side's nacelles a block ahead of the bells (the kit's).
+    cradle = cs.prism("engine_cradle_top_r", [(3.0, 12.5), (76.0, 12.5), (76.0, 24.0), (68.0, 35.0), (12.0, 35.0), (3.0, 24.0)], 1400.0, 1470.0, s, DARK)
+    block = cs.prism("engine_block_top_r", [(5.0, 8.0), (76.0, 8.0), (74.0, 25.0), (69.0, 34.0), (12.0, 34.0), (6.0, 25.0)], 1552.0, 1606.0, s, DECKED)
+    sided = (post, _flip_y(post, "tail_post_low_r"), cradle, _flip_y(cradle, "engine_cradle_low_r"), block, _flip_y(block, "engine_block_low_r"))
+    out = [_put(section, m) for m in (frame, cross, plate, plate_aft, cap, _flip_y(cap, "tail_cap_low"))] + [_put(section, m, cp.RIGHT) for m in sided]
     for k, ((za, ya, wa), (zb, yb, wb)) in enumerate(zip(runs, runs[1:], strict=False)):
-        plate = cs.slab(f"tail_plate_top_{k + 1}", [(-wa, ya, za), (wa, ya, za), (wb, yb, zb), (-wb, yb, zb)], 2.5, (0.0, -1.0, 0.0), s, PANEL)
-        out += [_put(section, plate), _put(section, _flip_y(plate, f"tail_plate_low_{k + 1}"))]
+        top = cs.slab(f"tail_plate_top_{k + 1}", [(-wa, ya, za), (wa, ya, za), (wb, yb, zb), (-wb, yb, zb)], 10.0, (0.0, -1.0, 0.0), s, PANEL)
+        out += [_put(section, top), _put(section, _flip_y(top, f"tail_plate_low_{k + 1}"))]
     return out
 
 
-__all__ = ["AFT_COLLAR_Z", "AFT_SPINE_Z", "AXLE_R", "BAY_BACK_Z", "BAY_CORNER", "BAY_DEPTH", "BAY_MOUTH", "BAY_MOUTH_Z", "BAY_Y", "COLLAR_R", "COMMAND_Z", "CORE_END_Z", "DRUM_PIVOT", "ENGINE_START_Z", "NOTCH_Z", "RAILS_END_Z",
+__all__ = ["AFT_COLLAR_Z", "AFT_SPINE_Z", "AXLE_R", "BAY_BACK_Z", "BAY_CORNER", "BAY_DEPTH", "BAY_MOUTH", "BAY_MOUTH_Z", "BAY_WALL", "BAY_Y", "CRAFT", "COLLAR_R", "COMMAND_Z", "CORE_END_Z", "DRUM_PIVOT", "ENGINE_START_Z", "NOTCH_Z", "MAGAZINE_END_Z",
            "DRUM_REACH", "DRUM_Z", "ENGINE_MOUTH_Z", "ENGINE_XY", "FORE_COLLAR_Z", "FORE_SPINE_Z", "HOUSING_H", "HOUSING_W", "HOUSING_Z", "LENGTH_M",
            "SPINE_H", "SPINE_W", "STARFURIES", "aerials", "around_hole", "axle", "collar", "command_block", "drum_arm", "drum_hub", "engine",
-           "engine_frame", "fore_bay", "housing", "retro_nozzle", "shields", "spine", "tail", "tankage"]
+           "engine_frame", "housing", "retro_nozzle", "shields", "paired_hulls", "spine", "spine_block", "tail"]

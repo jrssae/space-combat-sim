@@ -70,6 +70,7 @@ class Kit:
     out: str | None = None
     guide: dict | None = None
     metres_per_mm: float | None = None  # a fixed scale in place of ``length_m`` (the kit's thin tips may be printed short)
+    anchor: str = "bow"  # with a fixed scale, which end sits at its place: the bow at z = 0 or the stern at z = length_m
 
 
 def _vec(values, n: int, what: str) -> tuple[float, ...]:
@@ -94,7 +95,14 @@ def parse_kit(data: dict) -> Kit:
             raise ValueError(f"{p.label} follows {p.follows!r}, which is not listed before it")
         seen.add(p.label)
     return Kit(data["name"], float(data["length_m"]), parts, float(data.get("rotor_roll_deg", 0.0)), bool(data.get("drop_voids", True)),
-               data.get("out"), data.get("guide"), float(data["metres_per_mm"]) if data.get("metres_per_mm") else None)
+               data.get("out"), data.get("guide"), float(data["metres_per_mm"]) if data.get("metres_per_mm") else None,
+               _anchor(data.get("anchor", "bow")))
+
+
+def _anchor(value: str) -> str:
+    if value not in ("bow", "stern"):
+        raise ValueError(f"kit anchor {value!r}: expected bow or stern")
+    return value
 
 
 def load_kit(path: Path) -> Kit:
@@ -191,6 +199,8 @@ def assemble(kit: Kit, root: Path = REFERENCES, cache: dict[str, np.ndarray] | N
     scale = kit.metres_per_mm or kit.length_m / (z1 - z0)
     tris = tris * scale
     tris[:, :, 2] -= z0 * scale
+    if kit.anchor == "stern":  # the stern at the ship's length, whatever the printed tips leave short ahead
+        tris[:, :, 2] += kit.length_m - (z1 - z0) * scale
     return Assembly(tris, np.concatenate(labels), scale, z1 - z0)
 
 

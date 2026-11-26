@@ -33,6 +33,7 @@ from ..parts import capital_fittings as fittings
 from ..parts import capital_solids as cs
 from ..parts import capital_weapons as weapons
 from ..parts import ea_omega as om
+from ..parts import ea_omega_bow as bow
 from ..styles import Style
 from ..styles.ea_capital import DEFAULT_LOOK, ea_capital
 
@@ -41,8 +42,9 @@ GENERATOR_VERSION = 1
 SHIP_CLASS = "capital"
 LENGTH_M = om.LENGTH_M
 DRUM_SPIN_RAD_S = 0.1  # about a third of a g at the arms' bodies, a turn a minute as the show's
-REFERENCE_DRUM_DEG = -45.0  # how the reference model has the rotating section turned: its starboard arm low
+REST_DRUM_DEG = 90.0  # the rotating section at rest: its arms up and down, the kit's pose (M10-T68)
 ATLAS_PX = 4096
+FINISH = "soft"  # the Hyperion's skin in the fleet's colours (Q64, M10-T68)
 
 # Blast energies (docs/assets-capital.md, "Sections, mounts and blasts": 5e6 J a point of D0; a capital's rows).
 BLAST_J = {"magazine": 5.0e6 * 1800.0, "fuel": 5.0e6 * 1200.0, "reactor": 5.0e6 * 4500.0}
@@ -59,7 +61,7 @@ SECTIONS = (
     cap.Section("engine_r", "engine", 0.075),  # and its port twin, engine_l
 )
 PIECES = (cap.PieceSpec(cap.HULL_PIECE, ATLAS_PX), cap.PieceSpec("drum", ATLAS_PX, om.DRUM_PIVOT, (0.0, 0.0, 1.0), DRUM_SPIN_RAD_S))
-MAGAZINE_Z = (om.AFT_SPINE_Z[0], om.RAILS_END_Z)
+MAGAZINE_Z = (om.AFT_SPINE_Z[0], om.MAGAZINE_END_Z)
 
 TURRET_ARC = (-10.0, 90.0)  # T: a 200 degree cone round the mount's up
 HEMISPHERE_DEG = 90.0
@@ -87,8 +89,8 @@ def weapon_modules(s: Style) -> list[cp.Module]:
         out.append(m.in_section(section).on_side(side))
 
     for k, z in enumerate((388.0, 474.0)):
-        add("spine_fore", _turret(f"plasma_top_{k + 1}", (0.0, 45.0, z), UP, 24.0, PLASMA, s, (15.0, 21.0)))
-        add("spine_fore", _turret(f"plasma_low_{k + 1}", (0.0, -45.0, z), DOWN, 24.0, PLASMA, s, (15.0, 21.0)))
+        add("spine_fore", _turret(f"plasma_top_{k + 1}", (0.0, 57.0, z), UP, 24.0, PLASMA, s, (12.0, 9.0)))
+        add("spine_fore", _turret(f"plasma_low_{k + 1}", (0.0, -57.0, z), DOWN, 24.0, PLASMA, s, (12.0, 9.0)))
     for tag, section, z in (("fore", "spine_fore", 420.0), ("mid", "magazine", 1030.0), ("aft", "spine_aft", 1135.0)):
         add(section, _turret(f"pulse_{tag}_top_r", (46.0, 60.0, z), UP, 20.0, PULSE, s, (16.0, 6.0)), cp.RIGHT)
         add(section, _turret(f"pulse_{tag}_low_r", (46.0, -60.0, z), DOWN, 20.0, PULSE, s, (16.0, 6.0)), cp.RIGHT)
@@ -97,16 +99,16 @@ def weapon_modules(s: Style) -> list[cp.Module]:
     fore = weapons.beam_emitter("beam_fore_r", 34.0, s, arc_deg=HEMISPHERE_DEG).mounted((88.0, 0.0, 226.0), RIGHT)
     add("bow", fore.with_params(weapon=BEAM), cp.RIGHT)
     for tag, sign in (("top", 1.0), ("low", -1.0)):
-        normal = (0.387, 0.922 * sign, 0.0)
-        aft = weapons.beam_emitter(f"beam_aft_{tag}_r", 30.0, s, arc_deg=HEMISPHERE_DEG).mounted((68.2, 84.7 * sign, 1385.0), normal, (0.0, 0.0, 1.0))
+        normal = (0.47, 0.88 * sign, 0.0)  # off the reactor cage's corner plate
+        aft = weapons.beam_emitter(f"beam_aft_{tag}_r", 30.0, s, arc_deg=HEMISPHERE_DEG).mounted((70.0, 84.6 * sign, 1385.0), normal, (0.0, 0.0, 1.0))
         add("reactor", aft.with_params(weapon=BEAM), cp.RIGHT)
 
-    for tag, up, y in (("top", UP, 51.0), ("low", DOWN, -51.0)):
-        battery = weapons.missile_launcher(f"missile_{tag}", (3, 4), 5.0, s).mounted((0.0, y, 975.0), up)
+    for tag, up, y in (("top", UP, 57.0), ("low", DOWN, -57.0)):
+        battery = weapons.missile_launcher(f"missile_{tag}", (3, 4), 5.0, s).mounted((0.0, y, 975.0), up)  # on the deck plate
         add("magazine", battery.with_params(weapon=MISSILE))
 
-    for name, section, at in (("interceptor_bow_r", "bow", (68.0, 30.0, 310.0)), ("interceptor_fore_r", "spine_fore", (50.0, 0.0, 400.0)),
-                              ("interceptor_aft_r", "spine_aft", (50.0, 0.0, 1150.0)), ("interceptor_stern_r", "engine_r", (72.0, 0.0, 1560.0))):
+    for name, section, at in (("interceptor_bow_r", "bow", (68.0, 30.0, 310.0)), ("interceptor_fore_r", "spine_fore", (41.0, 0.0, 400.0)),
+                              ("interceptor_aft_r", "spine_aft", (41.0, 0.0, 1150.0)), ("interceptor_stern_r", "engine_r", (68.0, 0.0, 1560.0))):
         add(section, weapons.interceptor_dome(name, 4.5, s).mounted(at, RIGHT).with_params(weapon=INTERCEPTOR), cp.RIGHT)
     return out
 
@@ -125,8 +127,8 @@ def light_modules() -> list[cp.Module]:
 
 
 def _drum(s: Style, deg: float) -> list[cp.Module]:
-    """The rotating section's modules. At rest the arms reach to port and starboard and the port arm is the starboard one's
-    twin; turned by ``deg`` both arms are built where they stand."""
+    """The rotating section's modules, its arms turned ``deg`` from port and starboard (at rest they stand up and down, the kit's
+    pose), both built where they stand; at 0 the port arm is the starboard one's twin."""
     parts = [*om.drum_hub(s, "drum_hub"), *om.drum_arm(s, "hangar_r")]
     if deg == 0.0:
         return parts
@@ -135,31 +137,40 @@ def _drum(s: Style, deg: float) -> list[cp.Module]:
     return [m.transformed(turn).on_side(cp.LONE) for m in both]
 
 
-def modules(look: str = DEFAULT_LOOK, drum_deg: float = 0.0) -> list[cp.Module]:
+def style(look: str = DEFAULT_LOOK) -> cap.CapitalStyle:
+    """The fleet's look in the soft finish (Q64): the Hyperion's skin in the Omega's colours, the bay lined in grey metal."""
+    return ea_capital(look, finish=FINISH)
+
+
+def modules(look: str = DEFAULT_LOOK, drum_deg: float = REST_DRUM_DEG) -> list[cp.Module]:
     """Every module in its place and section (centre modules and the starboard one of each pair)."""
-    s = ea_capital(look).style
+    s = style(look).style
     aft_a, aft_b = (om.AFT_SPINE_Z[0], MAGAZINE_Z[1]), (MAGAZINE_Z[1], om.AFT_SPINE_Z[1])
     return [
-        *om.shields(s), *om.command_block(s), *om.tankage(s), *om.aerials(s),
-        *om.spine(s, "spine_fore", "spine_fore", om.FORE_SPINE_Z, strake=(472.0, 504.0)),
+        *om.shields(s), *om.command_block(s), *bow.bay(s), *bow.decks(s), *bow.under_bay(s), *om.aerials(s),
+        *om.spine(s, "spine_fore", "spine_fore", om.FORE_SPINE_Z, strakes=((471.0, om.FORE_SPINE_Z[1]),)),
+        om.spine_block(s, "spine_fore_block", "spine_fore", (494.0, om.FORE_SPINE_Z[1]), 55.0),
         om.collar(s, "collar_fore", "spine_fore", om.FORE_COLLAR_Z), om.axle(s, "spine_fore"),
         *_drum(s, drum_deg),
         om.collar(s, "collar_aft", "magazine", om.AFT_COLLAR_Z),
-        *om.spine(s, "spine_mid", "magazine", aft_a), *om.spine(s, "spine_aft", "spine_aft", aft_b, rails=False),
+        *om.spine(s, "spine_mid", "magazine", aft_a, strakes=((aft_a[0], 961.0), (1053.0, aft_a[1]))),
+        om.spine_block(s, "spine_mid_block", "magazine", (aft_a[0], 932.0), 55.0),
+        *om.spine(s, "spine_aft", "spine_aft", aft_b, strakes=((aft_b[0], 1106.0), (1196.0, aft_b[1]))),
+        om.spine_block(s, "spine_aft_block", "spine_aft", (1196.0, aft_b[1]), 62.0),
         *om.housing(s, "reactor"), *om.tail(s, "reactor"),
         om.engine(s, "engine_top_r", "engine_r", 1.0), om.engine(s, "engine_low_r", "engine_r", -1.0), *om.engine_frame(s, "engine_r"),
         *weapon_modules(s), *light_modules(),
     ]  # fmt: skip
 
 
-def spec(look: str = DEFAULT_LOOK, drum_deg: float = 0.0) -> cap.CapitalSpec:
+def spec(look: str = DEFAULT_LOOK, drum_deg: float = REST_DRUM_DEG) -> cap.CapitalSpec:
     return cap.CapitalSpec(
         asset_id=ASSET_ID,
         generator_version=GENERATOR_VERSION,
         ship_class=SHIP_CLASS,
         modules=tuple(modules(look, drum_deg)),
         sections=SECTIONS,
-        style=ea_capital(look),
+        style=style(look),
         bridge=cap.Pose((0.0, 0.0, 180.0)),
         pieces=PIECES,
         jump_point=cap.JumpPoint(ahead_m=1500.0, mouth_radius_m=450.0),
@@ -169,7 +180,7 @@ def spec(look: str = DEFAULT_LOOK, drum_deg: float = 0.0) -> cap.CapitalSpec:
 
 def build(ctx: BuildContext) -> AssetOutputs:
     """Generate the Omega into ``ctx.out_dir``."""
-    return cap.build(spec(str(ctx.option("look", DEFAULT_LOOK)), float(ctx.option("drum_deg", 0.0))), ctx)
+    return cap.build(spec(str(ctx.option("look", DEFAULT_LOOK)), float(ctx.option("drum_deg", REST_DRUM_DEG))), ctx)
 
 
-__all__ = ["ASSET_ID", "GENERATOR_VERSION", "LENGTH_M", "PIECES", "REFERENCE_DRUM_DEG", "SECTIONS", "SHIP_CLASS", "build", "modules", "spec"]
+__all__ = ["ASSET_ID", "GENERATOR_VERSION", "LENGTH_M", "PIECES", "REST_DRUM_DEG", "SECTIONS", "SHIP_CLASS", "build", "modules", "spec"]
