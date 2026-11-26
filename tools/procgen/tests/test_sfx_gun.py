@@ -15,10 +15,12 @@ SR = audio.SAMPLE_RATE
 REFERENCE = Path(__file__).resolve().parents[3] / "references" / "starfurybolt.wav"
 
 
-def centroid(samples: np.ndarray) -> float:
+def centroid(samples: np.ndarray, pitch: float = 1.0) -> float:
+    """Spectral centroid above 200 Hz times ``pitch`` (the rumble under it sits at the edge of resolution when pitched down)."""
     power = np.abs(np.fft.rfft(samples)) ** 2
     freqs = np.fft.rfftfreq(len(samples), 1.0 / SR)
-    return float(np.sum(power * freqs) / np.sum(power))
+    band = (freqs >= 200.0 * pitch) & (freqs <= 11000.0 * pitch)
+    return float(np.sum(power[band] * freqs[band]) / np.sum(power[band]))
 
 
 class GunShotTests(unittest.TestCase):
@@ -30,7 +32,12 @@ class GunShotTests(unittest.TestCase):
         self.assertEqual(sfx_gun.LEVELS_DB.shape, (len(sfx_gun.BANDS_HZ), len(sfx_gun.TIMES_S)))
         self.assertTrue(np.all(np.diff(sfx_gun.BANDS_HZ) > 0) and np.all(np.diff(sfx_gun.TIMES_S) > 0))
         self.assertEqual(sfx_gun.TIMES_S[-1], sfx_gun.DURATION_S)
-        self.assertEqual(float(sfx_gun.LEVELS_DB.max()), 0.0)
+        self.assertEqual(sfx_gun.HIGH_LEVELS_DB.shape, (len(sfx_gun.HIGH_BANDS_HZ), len(sfx_gun.HIGH_TIMES_S)))
+        self.assertGreater(sfx_gun.HIGH_BANDS_HZ[0], sfx_gun.BANDS_HZ[-1], "the fine top sits above the coarse map")
+        self.assertEqual(sfx_gun.HIGH_TIMES_S[-1], sfx_gun.DURATION_S)
+        self.assertEqual(max(float(sfx_gun.LEVELS_DB.max()), float(sfx_gun.HIGH_LEVELS_DB.max())), 0.0)
+        self.assertEqual(len(sfx_gun.TONE_TIMES_S), len(sfx_gun.TONE_HZ))
+        self.assertEqual(len(sfx_gun.TONE_TIMES_S), len(sfx_gun.TONE_DB))
 
     def test_full_length_and_seeded(self) -> None:
         self.assertEqual(len(self.shot), round(sfx_gun.DURATION_S * SR))
@@ -43,18 +50,35 @@ class GunShotTests(unittest.TestCase):
         reference, rate = audio.read_wav(REFERENCE)
         m = sound_match.compare(reference, self.shot, rate)
         self.assertGreaterEqual(m.mel, 0.95)
+        self.assertGreaterEqual(m.high, 0.95, "the top in the middle of the shot (the maintainer's A/B, round 2)")
         self.assertGreaterEqual(m.envelope, 0.95)
         self.assertLessEqual(abs(m.length_ratio - 1.0), 0.05)
 
     def test_the_raiders_shot_is_three_semitones_up_and_as_long(self) -> None:
         raider = sfx_gun.weapon_shot(np.random.default_rng(87), "raider")
         self.assertEqual(len(raider), len(self.shot))
-        self.assertAlmostEqual(centroid(raider) / centroid(self.shot), 2.0 ** (3.0 / 12.0), delta=0.06)
+        self.assertAlmostEqual(centroid(raider, 2.0 ** (3.0 / 12.0)) / centroid(self.shot), 2.0 ** (3.0 / 12.0), delta=0.06)
 
     def test_a_bigger_gun_is_lower_and_longer(self) -> None:
         heavy = sfx_gun.gun_shot(np.random.default_rng(87), sfx_gun.semitones(-12.0), 2.0)
         self.assertEqual(len(heavy), 2 * len(self.shot))
-        self.assertAlmostEqual(centroid(heavy) / centroid(self.shot), 0.5, delta=0.06)
+        self.assertAlmostEqual(centroid(heavy, 0.5) / centroid(self.shot), 0.5, delta=0.04)
+
+    def test_the_ping_moves_with_the_pitch(self) -> None:
+        def ping_hz(shot: np.ndarray, at_s: float, stretch: float = 1.0, pitch: float = 1.0) -> float:
+            n = 8192
+            i = int(at_s * stretch * SR) - n // 2
+            power = np.abs(np.fft.rfft(shot[i : i + n] * np.hanning(n))) ** 2
+            freqs = np.fft.rfftfreq(n, 1.0 / SR)
+            band = (freqs > 900.0 * pitch) & (freqs < 1700.0 * pitch)  # an octave around the ping
+            return float(freqs[band][np.argmax(power[band])])
+
+        self.assertAlmostEqual(ping_hz(self.shot, 0.92), 1225.0, delta=40.0)
+        low = sfx_gun.gun_shot(np.random.default_rng(87), sfx_gun.semitones(-12.0), 2.0)
+        self.assertAlmostEqual(ping_hz(low, 0.92, 2.0, 0.5), 612.0, delta=25.0)
+
+    def test_particle_cannons_keep_the_beam_sound(self) -> None:
+        self.assertFalse([name for name in sfx_gun.WEAPONS if "particle" in name])
 
     def test_the_family_keeps_its_order(self) -> None:
         self.assertEqual(sfx_gun.WEAPONS["starfury"][:2], (0.0, 1.0))

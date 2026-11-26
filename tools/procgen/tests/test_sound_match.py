@@ -49,6 +49,21 @@ class SoundMatchTests(unittest.TestCase):
         self.assertLess(m.length_ratio, 0.8)
         self.assertFalse(m.passes())
 
+    def test_a_dull_middle_fails_on_the_top_alone(self) -> None:
+        # The maintainer's A/B, round 2: a shot whose top dips mid-way can pass the whole-sound number.
+        t = audio.time_axis(1.0)
+        rng = np.random.default_rng(5)
+        body = audio.lowpass(audio.white_noise(rng, len(t)), 2000.0, order=4) * audio.exp_decay(t, 0.4)
+        top = audio.highpass(audio.white_noise(rng, len(t)), 3500.0, order=4) * 0.3 * audio.exp_decay(t, 0.4)
+        swell = 1.0 + 3.0 * np.exp(-0.5 * ((t - 0.5) / 0.08) ** 2)  # the top brightens through the middle
+        reference = body + top * swell
+        dull = body + top
+        m = sound_match.compare(reference, dull)
+        self.assertLess(m.high, 0.95)
+        self.assertGreater(m.mel, m.high, "the whole-sound number misses most of it")
+        self.assertFalse(m.passes())
+        self.assertGreaterEqual(sound_match.compare(reference, reference).high, 0.999)
+
     def test_resampling_keeps_a_tones_pitch_and_level(self) -> None:
         rate = 22_050
         t = np.arange(rate // 2) / rate

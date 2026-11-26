@@ -813,6 +813,15 @@ fly attack runs on capitals; B10 and B1 run and reported (Q77). Launch (carriers
   *Family.* `WEAPONS` proposes semitones and length per gun (raider +3/x1, turret -2/x1.1, light -3/x1.2, medium -5/x1.4,
   railgun -7/x1.25, particle -8/x1.6, heavy plasma -10/x1.8, heavy particle -12/x2), rendered with the A/B pair and an 8 shots/s
   burst under `references/sounds/M10-T87/`. Not yet in the game: `pulse_fire` and `raider_fire` stay until the A/B passes.
+- **Round 2 (2026-11-25).** The maintainer's A/B: close, but "missing a little bit of the higher pitch in the middle"; the level
+  table, the weapon table, the ±4 % pitch and raiders +3 semitones approved; particle cannons keep the beam sound (dropped
+  from `WEAPONS`); the raiders' file keeps the name `raider_fire`. The top's level was right (within 2 dB over 0.2-0.8 s); what
+  was missing was its texture: the reference's 3-11 kHz is full of short tonal grains (15-40 ms) and its brightness moves
+  quickly, and a faint ping near 1.25 kHz sounds at 0.56 s and 0.86-0.99 s. v2 adds a fine map for 2.5-11 kHz (16 bands, every
+  30 ms through 0.15-0.9 s), a sparkle layer of sine grains (`GRAIN_*`, 600 a second at -42 dB against the map) and the ping
+  (`TONE_*`). New gate in `sound_match`: `high`, the log-mel correlation over bands from 3 kHz in 0.2-0.8 s, >= 0.95: v1 0.900,
+  v2 0.958; log-mel 0.957 -> 0.963, envelope 0.999, length 1.080 s. Tonality at 2-10 kHz (flatness) 0.230 -> 0.191 (reference
+  0.198). v2 listening set and an A | v1 | v2 spectrogram rendered; still awaiting the A/B.
 
 ### M10-T65 Subsystems targeted by kind (Q60)
 

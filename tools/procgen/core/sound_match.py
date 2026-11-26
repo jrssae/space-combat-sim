@@ -5,6 +5,8 @@ Three numbers, on both sounds brought to 48 kHz and the candidate to the referen
 * ``mel``: the Pearson correlation of the two log-mel spectrograms (64 bands, 40 Hz to 11 kHz, 43 ms frames every 11 ms,
   in dB with an 80 dB floor under the reference's loudest cell), lightly smoothed over 3 frames so two noises with the same
   spectrum read as alike.
+* ``high``: the same correlation over the top only (bands from 3 kHz) in the middle of the shot (0.2-0.8 s), where the whole-sound
+  number can pass while the brightness is off (M10-T87, the maintainer's A/B, round 2).
 * ``envelope``: the Pearson correlation of the two K-weighted loudness envelopes (``loudness.block_powers``, 50 ms blocks every
   12.5 ms), in dB with a 60 dB floor under the reference's loudest block.
 * ``length``: each sound's audible length (until its envelope last passes 50 dB under its own peak) and their ratio.
@@ -31,11 +33,14 @@ MEL_FLOOR_DB = 80.0
 MEL_SMOOTH_FRAMES = 3
 ENVELOPE_FLOOR_DB = 60.0
 AUDIBLE_DB = 50.0
+HIGH_FROM_HZ = 3000.0
+MIDDLE_S = (0.2, 0.8)
 
 
 @dataclass(frozen=True)
 class Match:
     mel: float
+    high: float
     envelope: float
     length_ref_s: float
     length_s: float
@@ -44,8 +49,9 @@ class Match:
     def length_ratio(self) -> float:
         return self.length_s / self.length_ref_s if self.length_ref_s > 0.0 else float("inf")
 
-    def passes(self, mel: float = 0.95, envelope: float = 0.95, length_tolerance: float = 0.05) -> bool:
-        return self.mel >= mel and self.envelope >= envelope and abs(self.length_ratio - 1.0) <= length_tolerance
+    def passes(self, mel: float = 0.95, envelope: float = 0.95, length_tolerance: float = 0.05, high: float = 0.95) -> bool:
+        return (self.mel >= mel and self.high >= high and self.envelope >= envelope
+                and abs(self.length_ratio - 1.0) <= length_tolerance)
 
 
 def resample(samples: np.ndarray, rate: int, target: int = SAMPLE_RATE) -> np.ndarray:
@@ -113,13 +119,28 @@ def _frames_for(n: int) -> int:
     return max(1, 1 + (n - 1) // HOP)
 
 
-def mel_similarity(reference: np.ndarray, candidate: np.ndarray) -> float:
+def _log_mels(reference: np.ndarray, candidate: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Both smoothed log-mel spectrograms over the same frames, floored under the reference's loudest cell."""
     frames = _frames_for(max(len(reference), len(candidate)))
     ref = _smooth(mel_power(reference, frames), MEL_SMOOTH_FRAMES)
     cand = _smooth(mel_power(candidate, frames), MEL_SMOOTH_FRAMES)
     floor = 10.0 * np.log10(max(float(ref.max()), 1e-20)) - MEL_FLOOR_DB
     to_db = lambda m: np.maximum(10.0 * np.log10(np.maximum(m, 1e-20)), floor)  # noqa: E731
-    return _corr(to_db(ref), to_db(cand))
+    return to_db(ref), to_db(cand)
+
+
+def mel_similarity(reference: np.ndarray, candidate: np.ndarray) -> float:
+    return _corr(*_log_mels(reference, candidate))
+
+
+def high_similarity(reference: np.ndarray, candidate: np.ndarray) -> float:
+    """``mel_similarity`` over the bands from ``HIGH_FROM_HZ`` and the frames centred in ``MIDDLE_S``."""
+    ref, cand = _log_mels(reference, candidate)
+    centres = _hz(np.linspace(_mel(MEL_LOW_HZ), _mel(MEL_HIGH_HZ), MEL_BANDS + 2))[1:-1]
+    times = (np.arange(ref.shape[1]) * HOP + N_FFT / 2) / SAMPLE_RATE
+    bands = centres >= HIGH_FROM_HZ
+    middle = (times >= MIDDLE_S[0]) & (times <= MIDDLE_S[1])
+    return _corr(ref[bands][:, middle], cand[bands][:, middle])
 
 
 def envelope_db(samples: np.ndarray, blocks: int | None = None) -> np.ndarray:
@@ -151,7 +172,8 @@ def compare(reference: np.ndarray, candidate: np.ndarray, reference_rate: int = 
             candidate_rate: int = SAMPLE_RATE) -> Match:
     ref = resample(reference, reference_rate)
     cand = loudness.normalize_loudness(resample(candidate, candidate_rate), loudness.loudness_lufs(ref), 60.0)
-    return Match(mel_similarity(ref, cand), envelope_correlation(ref, cand), audible_length(ref), audible_length(cand))
+    return Match(mel_similarity(ref, cand), high_similarity(ref, cand), envelope_correlation(ref, cand), audible_length(ref),
+                 audible_length(cand))
 
 
 def compare_files(reference: Path, candidate: Path) -> Match:
@@ -167,5 +189,5 @@ if __name__ == "__main__":
         sys.exit("usage: python3 -m tools.procgen.core.sound_match REFERENCE.wav CANDIDATE.wav")
     m = compare_files(Path(sys.argv[1]), Path(sys.argv[2]))
     verdict = "PASS" if m.passes() else "FAIL"
-    print(f"log-mel {m.mel:.4f}  envelope {m.envelope:.4f}  length {m.length_s:.3f} s vs {m.length_ref_s:.3f} s "
+    print(f"log-mel {m.mel:.4f}  high {m.high:.4f}  envelope {m.envelope:.4f}  length {m.length_s:.3f} s vs {m.length_ref_s:.3f} s "
           f"({100.0 * (m.length_ratio - 1.0):+.1f} %)  {verdict}")
