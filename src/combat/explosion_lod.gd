@@ -1,7 +1,7 @@
 class_name ExplosionLod
 extends RefCounted
 ## The explosion level of detail (M4-T23, fix round 1; architecture §17.14): how a death is drawn from how big its fireball is
-## on the current picture. While the fireball's radius is `FULL_PX` or more it is the full `Explosion` (light, flash, fireball,
+## on the current picture. While the fireball's radius is `FULL_PX` or more it is the full explosion (`ExplosionPool`: light, flash, fireball,
 ## sparks, fragments, gas, debris); down to `REDUCED_PX` a reduced one (no light, the gas shell only, no debris); smaller, a
 ## point flash in one shared multimesh (`FarFlashes`), with no node and no particle. The switches are in pixels, so they move
 ## with the resolution and the field of view.
@@ -19,8 +19,8 @@ enum Level { FULL, REDUCED, FAR }
 const FULL_PX: float = 8.0
 const REDUCED_PX: float = 2.0
 ## The fireball's final radius in bounding radii: the flash's radius.
-const FIREBALL_RADII: float = Explosion.FIREBALL_FINAL_SCALE
-## The flash's brightness (linear, HDR): the explosion's glow (`Explosion`'s flash quad, 2.4 / 1.7 / 1.0 in `COLOR` times this).
+const FIREBALL_RADII: float = ExplosionPool.FIREBALL_FINAL_SCALE
+## The flash's brightness (linear, HDR): the explosion's glow (`ExplosionPool`'s flash quad, 2.4 / 1.7 / 1.0 in `COLOR` times this).
 const PEAK: float = 2.0
 const COLOR: Color = Color(1.2, 0.85, 0.5)
 ## A flash reads while the light it delivers (brightness times its pixel area) is above this: a pixel at a quarter of its peak.

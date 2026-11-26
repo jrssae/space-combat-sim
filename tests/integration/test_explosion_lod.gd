@@ -27,12 +27,8 @@ func _raider(distance_m: float) -> Combatant:
 	return alive[alive.size() - 1]
 
 
-func _explosions() -> Array[Explosion]:
-	var out: Array[Explosion] = []
-	for child: Node in main.effects.get_children():
-		if child is Explosion and not child.is_queued_for_deletion():
-			out.append(child as Explosion)
-	return out
+func _explosions() -> Array[ExplosionView]:
+	return ExplosionView.live(main.effects)
 
 
 func _flash_count() -> int:
@@ -66,7 +62,7 @@ func test_a_near_death_is_the_full_explosion_as_before() -> void:
 	await _ticks(1)
 	var debris_before: int = main.debris.active_chunk_count()
 	raider.damageable.kill()
-	var made: Array[Explosion] = _explosions()
+	var made: Array[ExplosionView] = _explosions()
 	assert_eq(made.size(), 1, "one explosion")
 	assert_false(made[0].reduced, "the full effect")
 	assert_eq(_flash_count(), 0, "no far flash")
@@ -81,7 +77,7 @@ func test_a_death_between_is_a_reduced_explosion_with_no_light_and_no_debris() -
 	assert_eq(_level(r, raider.ship.global_position), ExplosionLod.Level.REDUCED, "(the raider sits in the reduced band)")
 	var debris_before: int = main.debris.active_chunk_count()
 	raider.damageable.kill()
-	var made: Array[Explosion] = _explosions()
+	var made: Array[ExplosionView] = _explosions()
 	assert_eq(made.size(), 1)
 	assert_true(made[0].reduced, "the reduced effect")
 	assert_false(made[0].lit(), "no light")

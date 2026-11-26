@@ -898,7 +898,7 @@ off and comes back. In `combat_sandbox` the PATROL wave's five raiders start dar
 nodes. Main pod nozzles (`ThrusterVisuals`): one emitter each, 1.5 m out along the exhaust so it falls on the pod and strut, energy
 from the smoothed plume level (0 at idle, 2.5 at full thrust), the plume's colour at display brightness, range 15 m; the player's
 own are class 16. RCS and retro nozzles and bolts give none. A shot (`MuzzleFlash`): the flash owns one emitter for life, 1 m ahead of
-the muzzle, in the competition for 60 ms per shot, so a shot allocates nothing. The explosion (`Explosion`): its old `OmniLight3D`
+the muzzle, in the competition for 60 ms per shot, so a shot allocates nothing. The explosion (an `ExplosionPool` slot since M10-T11): its old `OmniLight3D`
 is now an emitter with the same curve (0 to 8 to 0 over 0.25 s, range 4 x radius), in the competition only while it shines. Emitters
 follow their node's drawn pose each frame, so a rebase moves them with it. A ship that is parked, freed or out of the tree takes its
 emitters out (`ThrusterVisuals` and `MuzzleFlash` watch the node's disable and exit), and the frame's pass puts them back when it
@@ -1555,7 +1555,7 @@ src/combat/intercept_math.gd      RefCounted, pure: lead solution for bolts that
 src/combat/damageable.gd          Node component, group "damageable": HullHealth + HitShapes, signals
 src/combat/hit_resolver.gd        Node: per-tick swept hits, damage, impact flashes; console `combat`, `damage`, `heal`
 src/combat/impact_flash.gd        short additive flash, one pooled node on the hit ship at the hit point (sparks: FxPool; §17.21)
-src/combat/explosion.tscn|.gd     generated explosion (fireball shader, light emitter since M3-T22; its sparks come from the FxPool since M3-T23); drifts, self-frees
+src/combat/explosion_pool.gd       every explosion, pooled (M10-T11, L10): fixed slots, two multimeshes (fireball and flash shaders), a light emitter a slot; sparks from the FxPool
 src/combat/explosion_fireball.gdshader
 src/combat/debris_chunk.tscn|.gd  one chunk: its textured mesh (the OBJ for an entry without one)
 src/combat/debris_pool.gd         Node: pooled chunk sets, one-shot chunks and generic shards; drift, spin, shrink-out
@@ -1642,7 +1642,7 @@ PilotBrain <-Perception- AiPilotDriver --+          InputAdapter (player) --+
                                                |- PulseCannon (WeaponSpec) -> Projectile (shooter, faction, damage, last_step)
                                                '- TargetingController (hostile first)
 Projectiles + active Damageables -> HitResolver (SweepMath) -> Damageable.apply_hit -> hit_taken / damaged / destroyed
-destroyed -> DestructionDirector -> Explosion, DebrisPool, ShipPool.release | player respawn -> WaveDirector
+destroyed -> DestructionDirector -> ExplosionPool, DebrisPool, ShipPool.release | player respawn -> WaveDirector
 player ship + selected target + active camera -> HudLayout (InterceptMath) -> Hud
 ```
 
@@ -1730,7 +1730,7 @@ hit point (World-local) = t0 + v_t * dt * t + B * (a + t * (b - a))
 ### 15.7 Destruction
 
 `DestructionDirector` listens to every `Damageable.destroyed`. Raider: hide and disable it in the same tick, spawn
-an `Explosion` at its position with its velocity (scaled by `bounding_radius`), and `DebrisPool.burst` its chunks
+an explosion at its position with its velocity (scaled by `bounding_radius`), and `DebrisPool.burst` its chunks
 (from hardpoints `chunks[]`) at its pose: velocity = ship velocity + `w × r` + 4-15 m/s outward, spin up to
 90 °/s, an RNG seeded from the ship id and the tick (reproducible). The raider goes straight back to the pool;
 debris lives 8 s, shrinks to zero over 0.5 s and hides. Assets without `chunks[]` (the Starfury in M2) get the
@@ -1739,10 +1739,21 @@ after 3 s of sim time with a full hull, and `WaveDirector.on_player_respawned()`
 raiders re-target the player; maintainer decision).
 `kill` (console) bypasses god mode.
 
+**Pooled explosions (M10-T11, roadmap L10).** Every explosion (a death, a mine, a missile's or torpedo's warhead, a capital's
+break-up blasts) is a slot of the world's `ExplosionPool` (`World/Effects/ExplosionPool`, made on first use): 64 slots, drawn
+by two `MultiMeshInstance3D`s that share one sphere and one `explosion_fireball.gdshader` material (age and noise seed in each
+instance's custom data) and one quad and one `explosion_flash.gdshader` material (a camera-facing additive glow). An explosion
+builds no node, mesh or material: two draw calls for any number. Each slot owns one `LightEmitter`, made once, in the rig's
+competition for the light's 0.25 s. The physics tick moves the slots (drift and pull), `_process` ages them and draws them a
+tick behind between their last two places, as interpolated nodes are. A slot is free again at 1.5 s, when the fireball is
+gone (the sparks, fragments and gas are the `FxPool`'s and live on). With all 64 busy, the oldest gives its slot to the new
+one (`stolen`). The reduced effect is a slot with no light and the gas shell only. Mines keep their cap of 12 live
+explosions, counted by the pool's tag.
+
 **A Starfury dies where it was hit (M3-T28, Q28).** For a ship with the X-fighter damage layout (the player, the allies,
 the instructor) the director takes the killing `HitInfo.point` (`World`-local), puts it in the ship's frame with the
 transform it read before the ship left play, and `DamageZones.zone_for` names the part: the cabin or one of the four
-arms, which are the five chunks. The main `Explosion` (same size, light and sound as before) starts at that chunk's
+arms, which are the five chunks. The main explosion (same size, light and sound as before) starts at that chunk's
 `joint` (`hardpoints.json` `chunks[].joint`, `docs/assets-starfury.md`) and `DestructionDirector.last_blast_position`
 carries the place to `AudioDirector`. A console `kill` has no point: the blast is at the ship's centre and the order
 is drawn from the seed alone. A ram is a hit with its contact point. Raiders, buoys and shards break up as before.
@@ -2054,7 +2065,7 @@ M3-T21: provider `lights` (`picked`, `candidates`, `active`, `cost_us`). M3-T25:
 Hull hits, rams, explosions and debris throw sparks and glowing fragments from `GPUParticles3D` (D8).
 `FxPool` (`World/Fx`) holds a fixed set of one-shot emitters per effect (`FxSpecs`: `hit` 12, `ram` 6, `explosion_sparks` 4,
 `explosion_fragments` 4, `explosion_gas` 4, `debris` 16), built once in `_ready` and restarted for each burst, so the particle node
-count never changes. `HitResolver`, `RamResolver`, `Explosion` (through `DestructionDirector`) and `DebrisPool` hold a reference
+count never changes. `HitResolver`, `RamResolver`, `ExplosionPool` (through `DestructionDirector`) and `DebrisPool` hold a reference
 (`fx`, set by `Main`) and call `FxPool.burst(effect, position, direction, velocity, duration)` in the physics tick.
 
 - **Newtonian.** The process materials (`assets/fx/fx_*.tres`) have zero gravity and zero damping (the damping guard test checks

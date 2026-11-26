@@ -440,7 +440,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T08 | C | Sections and subsystems: hits by section, losses take what they hold, disabled or destroyed | T07 | Opus | done |
 | T09 | C | The blast model: falloff damage and push for every explosion, death blasts by class and cargo | T08, T03 | Opus | done |
 | T10 | C | Disabled hulks: staged loss of power, control and thrust; drifting rows | T08 | Opus | done |
-| T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | not started |
+| T11 | C | Staged break-up with secondary blasts; pooled explosions (L10) | T09, T10 | Opus | in progress |
 | T12 | D | Beams as native rows: pulsed and sustained kinds, batched drawing | T07, T03 | Opus | done |
 | T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | done |
 | T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | done |

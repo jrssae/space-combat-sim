@@ -125,18 +125,17 @@ func test_a_held_wreck_an_explosion_and_a_projectile_node_fall_too() -> void:
 	var offsets: Array[Vector3] = [Vector3.ZERO]
 	var wreck := StagedWreck.new(BreakupPlan.make(1, 0, 1), offsets, offsets, Transform3D(Basis.IDENTITY, at), Vector3.ZERO,
 			Vector3.ZERO)
-	var blast: Explosion = Explosion.create(20.0, Vector3.ZERO)
-	world.add_child(blast)
-	blast.global_position = at
+	var blast: ExplosionPool = ExplosionPool.attach(world)
+	var slot: int = blast.spawn(20.0, Vector3.ZERO, world.to_local(at))
 	var bolt := (load(Projectile.SCENE_PATH) as PackedScene).instantiate() as Projectile
 	world.add_child(bolt)
 	bolt.configure(WeaponSpec.new())
 	bolt.launch(at, Vector3.ZERO, SimClock.now())
 	for i: int in 60:
 		wreck.advance(DT, world)
-		blast._physics_process(DT)
+		blast.step(DT)
 		bolt._physics_process(DT)
-	for moved: Array in [["wreck", wreck.velocity], ["explosion", blast.velocity], ["projectile", bolt.velocity]]:
+	for moved: Array in [["wreck", wreck.velocity], ["explosion", blast.velocity_of(slot)], ["projectile", bolt.velocity]]:
 		assert_almost_eq(moved[1] as Vector3, pull, Vector3.ONE * 1e-5, "%s: one second of the pull in one second" % moved[0])
 	assert_gt(pull.x, 0.0, "outward, as the tide pulls 3 km out")
 

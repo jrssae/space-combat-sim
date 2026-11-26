@@ -1,15 +1,16 @@
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_back;
-// The fireball of a destroyed ship (architecture §15.7): unshaded and additive, animated 3D value noise, a blackbody
+// The fireball of an explosion (architecture §15.7): unshaded and additive, animated 3D value noise, a blackbody
 // ramp from white-blue (about 6 000 K) through yellow and orange (3 000 to 1 500 K) to smoke dark, and a soft fresnel
-// edge so the sphere does not read as a sphere. `age` (seconds) drives everything; the sphere's scale is the caller's.
+// edge so the sphere does not read as a sphere. One instance of `ExplosionPool`'s multimesh (M10-T11): its custom data holds
+// its age in seconds (r), which drives everything, and a noise seed (g), so neighbours do not boil alike; the scale is the pool's.
 
-uniform float age = 0.0;
 uniform float duration = 1.5;
 uniform float intensity = 3.0;
 uniform float noise_scale = 2.6;
 
 varying vec3 v_obj;
+varying float age;
 
 float hash(vec3 p) {
 	p = fract(p * 0.3183099 + vec3(0.1, 0.2, 0.3));
@@ -46,7 +47,8 @@ vec3 blackbody_ramp(float heat) {
 }
 
 void vertex() {
-	v_obj = VERTEX;
+	v_obj = VERTEX + vec3(INSTANCE_CUSTOM.g * 17.0);
+	age = INSTANCE_CUSTOM.r;
 }
 
 void fragment() {

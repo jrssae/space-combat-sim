@@ -558,7 +558,11 @@ func _land(i: int, delta: float) -> void:
 		_throw_sparks(info, t0 + move * t, move / maxf(delta, 1e-6))
 	hit_resolved.emit(info)
 	if not warhead.is_empty():
-		BlastResolver.set_off(BlastTable.spec(warhead), info.point, info.faction, shooter_id)  # on top of the impact (D12.6)
+		var blast: BlastSpec = BlastTable.spec(warhead)
+		var director: DestructionDirector = DestructionDirector.current()
+		if director != null:
+			director.draw_blast(blast, info.point)
+		BlastResolver.set_off(blast, info.point, info.faction, shooter_id)  # on top of the impact (D12.6)
 
 
 # The blast row of candidate `c`'s warhead, which blasts where it strikes (M10-T09): a missile node's, or a capital launcher's

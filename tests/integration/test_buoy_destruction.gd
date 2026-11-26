@@ -45,7 +45,7 @@ func test_shooting_a_buoy_destroys_it_with_effects_and_takes_it_out_of_play() ->
 	var buoy: NavBuoy = _buoy_in_the_sights()
 	var destroyed: Array[bool] = [false]
 	main.director.buoy_destroyed.connect(func(_b: NavBuoy, _i: HitInfo) -> void: destroyed[0] = true)
-	var effects_before: int = main.effects.get_child_count()
+	var started_before: int = main.director.explosions().started
 	assert_true(main.ship.targeting.select_by_name(buoy.display_name), "targetable before")
 	source.hold(InputAdapter.FIRE)
 	var low_point: float = 1.0
@@ -61,7 +61,7 @@ func test_shooting_a_buoy_destroys_it_with_effects_and_takes_it_out_of_play() ->
 	assert_false(buoy.visible, "hidden")
 	assert_true(buoy.is_inside_tree(), "but never freed: it comes back on the player's respawn")
 	await _ticks(2)
-	assert_gt(main.effects.get_child_count(), effects_before, "an explosion appeared")
+	assert_gt(main.director.explosions().started, started_before, "an explosion appeared")
 	assert_false(buoy.targetable.is_active(), "nothing can target it any more")
 	assert_false(buoy.damageable.is_active(), "or hit it")
 

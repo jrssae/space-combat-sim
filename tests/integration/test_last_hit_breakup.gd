@@ -60,12 +60,8 @@ func _joint_of(chunk_name: StringName) -> Vector3:
 	return chunk_entries[_chunk_index(chunk_name)]["joint"]
 
 
-func _explosions() -> Array[Explosion]:
-	var out: Array[Explosion] = []
-	for child: Node in main.effects.get_children():
-		if child is Explosion and not child.is_queued_for_deletion():
-			out.append(child as Explosion)
-	return out
+func _explosions() -> Array[ExplosionView]:
+	return ExplosionView.live(main.effects)
 
 
 ## The killing hit: a bolt (or a ram) that removes the whole hull at `local_point` of the ship.
@@ -134,9 +130,9 @@ func test_the_part_hit_last_leaves_first_and_the_blast_starts_at_its_joint_for_t
 		assert_false(main.player_alive, "%s: the player is dead" % part_name)
 		var wreck: StagedWreck = main.debris.last_wreck
 		assert_eq(wreck.plan.order[0], _chunk_index(part_name), "%s leaves first" % part_name)
-		var blast: Explosion = _explosions()[_explosions().size() - 1]
-		assert_lt(blast.global_position.distance_to(xform * _joint_of(part_name)), 0.5, "%s: the blast starts at its joint" % part_name)
-		assert_eq(main.director.last_blast_position, blast.position, "the sound follows the blast")
+		var blast: ExplosionView = _explosions()[_explosions().size() - 1]
+		assert_lt(blast.position().distance_to(xform * _joint_of(part_name)), 0.5, "%s: the blast starts at its joint" % part_name)
+		assert_eq(main.director.last_blast_position, blast.position(), "the sound follows the blast")
 		assert_almost_eq(info.point.distance_to(xform * PART_POINTS[part_name]), 0.0, 1e-4)
 		var held: Array[DebrisChunk] = _held_chunks()
 		assert_eq(held.size(), 4, "%s: the other four stay with the wreck" % part_name)
@@ -147,8 +143,8 @@ func test_the_part_hit_last_leaves_first_and_the_blast_starts_at_its_joint_for_t
 		await _ticks(1)
 		for chunk: DebrisChunk in _chunk_nodes():
 			chunk.park()
-		for explosion: Explosion in _explosions():
-			explosion.free()
+		if ExplosionPool.of(main.effects) != null:
+			ExplosionPool.of(main.effects).clear()
 
 
 func test_the_same_holds_for_an_ally_and_for_a_ram() -> void:
@@ -157,14 +153,14 @@ func test_the_same_holds_for_an_ally_and_for_a_ram() -> void:
 		var xform: Transform3D = ally.ship.global_transform
 		_kill_at(ally, PART_POINTS[part_name], HitInfo.CAUSE_RAM if part_name == &"arm_ul" else HitInfo.CAUSE_BOLT)
 		assert_eq(main.debris.last_wreck.plan.order[0], _chunk_index(part_name), "%s leaves first (ally)" % part_name)
-		var blast: Explosion = _explosions()[_explosions().size() - 1]
-		assert_lt(blast.global_position.distance_to(xform * _joint_of(part_name)), 0.5, "%s: ally blast at its joint" % part_name)
+		var blast: ExplosionView = _explosions()[_explosions().size() - 1]
+		assert_lt(blast.position().distance_to(xform * _joint_of(part_name)), 0.5, "%s: ally blast at its joint" % part_name)
 		for i: int in 200:
 			_step()
 		for chunk: DebrisChunk in _chunk_nodes():
 			chunk.park()
-		for explosion: Explosion in _explosions():
-			explosion.free()
+		if ExplosionPool.of(main.effects) != null:
+			ExplosionPool.of(main.effects).clear()
 
 
 func test_the_instructors_hull_type_breaks_up_the_same_way() -> void:
@@ -188,8 +184,8 @@ func test_a_console_kill_blasts_from_the_centre_with_a_seeded_order() -> void:
 	var ally: Combatant = _spawn_ally()
 	var centre: Vector3 = ally.ship.global_position
 	assert_true(ally.damageable.kill())
-	var blast: Explosion = _explosions()[_explosions().size() - 1]
-	assert_almost_eq(blast.global_position, centre, Vector3.ONE * 1e-3)
+	var blast: ExplosionView = _explosions()[_explosions().size() - 1]
+	assert_almost_eq(blast.position(), centre, Vector3.ONE * 1e-3)
 	var wreck: StagedWreck = main.debris.last_wreck
 	assert_eq(wreck.plan.order.size(), 5)
 	assert_eq(wreck.plan.release_s[wreck.plan.order[0]], 0.0)
@@ -312,8 +308,8 @@ func test_a_death_on_a_rebased_world_still_blasts_at_the_joint() -> void:
 	main.world.rebase(Vector3(6000.0, 0.0, -3000.0))
 	var xform: Transform3D = ally.ship.global_transform
 	_kill_at(ally, PART_POINTS[&"arm_ul"])
-	var blast: Explosion = _explosions()[_explosions().size() - 1]
-	assert_lt(blast.global_position.distance_to(xform * _joint_of(&"arm_ul")), 0.5)
+	var blast: ExplosionView = _explosions()[_explosions().size() - 1]
+	assert_lt(blast.position().distance_to(xform * _joint_of(&"arm_ul")), 0.5)
 	assert_eq(main.debris.last_wreck.plan.order[0], _chunk_index(&"arm_ul"))
 
 

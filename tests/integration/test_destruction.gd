@@ -1,6 +1,6 @@
 extends TestSteps
 ## Destruction (M2-T06, AC7, architecture §15.7): a raider at zero hull is destroyed once, leaves play in the same tick, and
-## becomes an `Explosion` plus a set of debris chunks while it goes back to the pool; the player's death hides the ship,
+## becomes an explosion (`ExplosionPool`) plus a set of debris chunks while it goes back to the pool; the player's death hides the ship,
 ## ignores input and respawns it after 3 s of sim time with a full hull. Runs the real main scene; bolts and the resolver are
 ## stepped by hand where a tick matters.
 
@@ -63,12 +63,8 @@ func _step_bolts_and_resolve() -> void:
 	resolver.resolve(DT)
 
 
-func _effects() -> Array[Explosion]:
-	var out: Array[Explosion] = []
-	for child: Node in main.effects.get_children():
-		if child is Explosion and not child.is_queued_for_deletion():
-			out.append(child as Explosion)
-	return out
+func _effects() -> Array[ExplosionView]:
+	return ExplosionView.live(main.effects)
 
 
 # --- a raider --------------------------------------------------------------------------------------------------
@@ -134,13 +130,13 @@ func test_an_explosion_appears_at_the_raider_and_drifts_with_its_velocity() -> v
 	raider.ship.linear_velocity = Vector3(12.0, 0.0, -35.0)
 	var position: Vector3 = raider.ship.global_position
 	raider.damageable.kill()
-	var explosions: Array[Explosion] = _effects()
+	var explosions: Array[ExplosionView] = _effects()
 	assert_eq(explosions.size(), 1)
-	assert_eq(explosions[0].velocity, Vector3(12.0, 0.0, -35.0))
-	assert_almost_eq(explosions[0].global_position, position, Vector3.ONE * 1e-3)
+	assert_eq(explosions[0].velocity(), Vector3(12.0, 0.0, -35.0))
+	assert_almost_eq(explosions[0].position(), position, Vector3.ONE * 1e-3)
 	assert_almost_eq(explosions[0].radius_m, raider.damageable.bounding_radius, 1e-5)
-	explosions[0].advance(3.2)
-	assert_true(explosions[0].is_queued_for_deletion(), "frees itself")
+	explosions[0].pool.advance(ExplosionPool.FIREBALL_S + 0.01)
+	assert_false(explosions[0].alive(), "its slot is free again")
 
 
 func test_a_chunk_set_leaves_the_pool_and_flies_with_the_ship_then_returns() -> void:
@@ -214,7 +210,7 @@ func test_the_players_death_hides_the_ship_ignores_input_and_respawns_after_thre
 	assert_false(main.ship.visible)
 	assert_eq(main.ship.process_mode, Node.PROCESS_MODE_DISABLED)
 	assert_eq(_effects().size(), 1, "an explosion at the ship")
-	assert_almost_eq(_effects()[0].global_position, death_position, Vector3.ONE * 1.0)
+	assert_almost_eq(_effects()[0].position(), death_position, Vector3.ONE * 1.0)
 	# The Starfury's chunks (M3-T03: cabin and four arms), flown as the pooled Starfury set (M3-T08).
 	var starfury_chunks: int = Hardpoints.load_file(main.ship.spec.hardpoints_path()).chunks.size()
 	assert_eq(starfury_chunks, 5, "the Starfury has its cabin and four arms")

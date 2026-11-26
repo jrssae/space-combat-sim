@@ -36,11 +36,11 @@ func test_a_muzzle_flash_lasts_sixty_milliseconds() -> void:
 
 
 func test_the_explosion_light_is_a_triangle_up_to_8_and_out_by_a_quarter_second() -> void:
-	assert_eq(Explosion.light_energy(0.0), 0.0)
-	assert_almost_eq(Explosion.light_energy(Explosion.LIGHT_S / 3.0), 8.0, 1e-5, "the peak at a third")
-	assert_almost_eq(Explosion.light_energy(Explosion.LIGHT_S * 0.5), 6.0, 1e-5, "falling")
-	assert_almost_eq(Explosion.light_energy(Explosion.LIGHT_S), 0.0, 1e-5)
-	assert_eq(Explosion.light_energy(2.0), 0.0)
+	assert_eq(ExplosionPool.light_energy(0.0), 0.0)
+	assert_almost_eq(ExplosionPool.light_energy(ExplosionPool.LIGHT_S / 3.0), 8.0, 1e-5, "the peak at a third")
+	assert_almost_eq(ExplosionPool.light_energy(ExplosionPool.LIGHT_S * 0.5), 6.0, 1e-5, "falling")
+	assert_almost_eq(ExplosionPool.light_energy(ExplosionPool.LIGHT_S), 0.0, 1e-5)
+	assert_eq(ExplosionPool.light_energy(2.0), 0.0)
 
 
 func test_an_anchor_that_left_the_tree_is_given_up_without_an_error() -> void:

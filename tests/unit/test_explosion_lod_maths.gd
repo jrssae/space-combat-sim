@@ -108,7 +108,7 @@ func test_a_cruisers_switches_at_2160_lines_are_where_the_maths_puts_them() -> v
 
 
 func test_the_flash_is_as_big_as_the_explosions_fireball() -> void:
-	assert_eq(ExplosionLod.FIREBALL_RADII, Explosion.FIREBALL_FINAL_SCALE, "one number for both")
+	assert_eq(ExplosionLod.FIREBALL_RADII, ExplosionPool.FIREBALL_FINAL_SCALE, "one number for both")
 
 
 func test_the_picture_lines_follow_the_window_and_the_3d_scale() -> void:

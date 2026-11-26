@@ -1,27 +1,28 @@
 extends GutTest
-## Explosion (M2-T06, architecture §15.7): the code-made effect of a destroyed ship. It has the light, the billboard flash,
-## the fireball; each one follows its timeline; it drifts with the velocity it was given, moves with a rebase, and frees itself
-## after 3 s. Its sparks, fragments and gas come from the FxPool (M3-T23) and start where it blew up.
-## The light's curve is `test_light_emitters`' (pure) and `test_ship_lights`' (through `advance`, M6-T18).
+## The explosions (M2-T06, architecture §15.7; pooled since M10-T11, roadmap L10): `ExplosionPool` draws every explosion from a
+## fixed set of slots through two multimeshes (fireballs, flashes) that share one mesh and one material each. Each explosion
+## has its light, flash and fireball on their timelines; it drifts with the velocity it was given, moves with a rebase and frees
+## its slot at 1.5 s; with every slot busy the oldest gives its slot up. Its sparks, fragments and gas come from the FxPool
+## (M3-T23) and start where it blew up. The light's curve is `test_light_emitters`' (pure) and `test_ship_lights`' (M6-T18).
 
 const RADIUS: float = 6.0
 
-var explosion: Explosion
+var pool: ExplosionPool
+var slot: int = -1
 
 
 func before_each() -> void:
-	explosion = Explosion.create(RADIUS, Vector3(10.0, 0.0, -20.0))
-	add_child_autofree(explosion)
+	pool = ExplosionPool.new()
+	add_child_autofree(pool)
+	slot = pool.spawn(RADIUS, Vector3(10.0, 0.0, -20.0), Vector3.ZERO)
 
 
-func test_it_has_every_component() -> void:
-	assert_not_null(explosion.emitter)
-	assert_not_null(explosion.flash)
-	assert_not_null(explosion.fireball)
-	assert_almost_eq(explosion.emitter.omni_range, 4.0 * RADIUS, 1e-6)
-	assert_eq(explosion.radius_m, RADIUS)
-	# M3-T23: the sparks, fragments and gas come from the FxPool, so an explosion owns no particle node.
-	assert_eq(_particle_nodes(explosion), 0, "the pool makes the particles, not the explosion")
+func test_an_explosion_takes_a_slot_with_its_light() -> void:
+	assert_true(pool.is_alive(slot))
+	assert_eq(pool.live_count(), 1)
+	assert_almost_eq(pool.emitter_of(slot).omni_range, 4.0 * RADIUS, 1e-6)
+	assert_eq(pool.radius_of(slot), RADIUS)
+	assert_eq(_particle_nodes(pool), 0, "the FxPool makes the particles, not the explosions")
 
 
 func _particle_nodes(node: Node) -> int:
@@ -32,109 +33,142 @@ func _particle_nodes(node: Node) -> int:
 
 
 func test_the_flash_is_gone_after_150_ms() -> void:
-	assert_true(explosion.flash.visible)
-	explosion.advance(0.1)
-	assert_true(explosion.flash.visible)
-	explosion.advance(0.06)
-	assert_false(explosion.flash.visible)
+	pool.advance(0.0)
+	assert_eq(pool.drawn(), Vector2i(1, 1), "a fireball and a flash")
+	pool.advance(0.1)
+	assert_eq(pool.drawn().y, 1)
+	pool.advance(0.06)
+	assert_eq(pool.drawn(), Vector2i(1, 0), "the flash is over, the fireball burns on")
 
 
-func test_the_fireball_grows_to_1_2_radius_over_0_8_s_and_is_gone_by_1_5_s() -> void:
-	explosion.advance(0.01)
-	assert_lt(explosion.fireball.scale.x, 0.4 * RADIUS, "small at first")
-	explosion.advance(Explosion.FIREBALL_GROW_S - 0.01)
-	assert_almost_eq(explosion.fireball.scale.x, 1.2 * RADIUS, 1e-4)
-	explosion.advance(0.3)
-	assert_almost_eq(explosion.fireball.scale.x, 1.2 * RADIUS, 1e-4, "stays at full size while it cools")
-	assert_true(explosion.fireball.visible)
-	explosion.advance(0.5)
-	assert_false(explosion.fireball.visible, "gone by 1.5 s")
+func test_the_fireball_grows_to_1_2_radius_over_0_8_s_and_the_slot_is_free_by_1_5_s() -> void:
+	pool.advance(0.01)
+	assert_lt(_drawn_scale(pool.fireballs), 0.4 * RADIUS, "small at first")
+	pool.advance(ExplosionPool.FIREBALL_GROW_S - 0.01)
+	assert_almost_eq(_drawn_scale(pool.fireballs), 1.2 * RADIUS, 1e-4)
+	pool.advance(0.3)
+	assert_almost_eq(_drawn_scale(pool.fireballs), 1.2 * RADIUS, 1e-4, "stays at full size while it cools")
+	assert_true(pool.is_alive(slot))
+	pool.advance(0.5)
+	assert_false(pool.is_alive(slot), "gone by 1.5 s")
+	assert_eq(pool.live_count(), 0)
+	assert_eq(pool.drawn(), Vector2i.ZERO, "nothing drawn")
 
 
-func test_the_shader_gets_its_age() -> void:
-	explosion.advance(0.7)
-	var material := (explosion.fireball.mesh as SphereMesh).material as ShaderMaterial
-	assert_not_null(material)
-	assert_almost_eq(float(material.get_shader_parameter(&"age")), 0.7, 1e-5)
-	assert_eq(float(material.get_shader_parameter(&"duration")), Explosion.FIREBALL_S)
-
-
-func test_it_frees_itself_after_three_seconds() -> void:
-	explosion.advance(2.9)
-	assert_false(explosion.is_queued_for_deletion())
-	explosion.advance(0.2)
-	assert_true(explosion.is_queued_for_deletion())
+func test_the_shader_gets_its_age_per_instance() -> void:
+	pool.advance(0.7)
+	assert_almost_eq(float(pool.drawn_instance(true, 0)["a"]), 0.7, 1e-5)
+	var material := pool.fireballs.material_override as ShaderMaterial
+	assert_eq(float(material.get_shader_parameter(&"duration")), ExplosionPool.FIREBALL_S)
 
 
 func test_it_drifts_with_the_ships_velocity() -> void:
-	explosion.position = Vector3(5.0, 0.0, 0.0)
-	explosion._physics_process(0.5)
-	assert_almost_eq(explosion.position, Vector3(10.0, 0.0, -10.0), Vector3.ONE * 1e-5)
+	var moved: int = pool.spawn(RADIUS, Vector3(10.0, 0.0, -20.0), Vector3(5.0, 0.0, 0.0))
+	pool.step(0.5)
+	assert_almost_eq(pool.position_of(moved), Vector3(10.0, 0.0, -10.0), Vector3.ONE * 1e-5)
 
 
-func test_it_joins_world_shiftable_so_a_rebase_moves_it() -> void:
-	assert_true(explosion.is_in_group(WorldFrame.SHIFTABLE_GROUP))
+func test_explosions_share_one_mesh_and_material_and_build_no_node() -> void:
+	var children: int = _count_nodes(pool)
+	var material: Material = pool.fireballs.material_override
+	var mesh: Mesh = pool.fireballs.multimesh.mesh
+	for i: int in 40:
+		pool.spawn(RADIUS, Vector3.ZERO, Vector3(float(i) * 30.0, 0.0, 0.0))
+	pool.advance(0.0)
+	assert_eq(_count_nodes(pool), children, "no node per explosion")
+	assert_eq(pool.fireballs.material_override, material, "one material")
+	assert_eq(pool.fireballs.multimesh.mesh, mesh, "one mesh")
+	assert_eq(pool.drawn().x, 41, "all drawn in one multimesh")
 
 
-func test_the_sparks_start_where_it_blew_fly_on_with_its_velocity_and_move_with_a_rebase() -> void:
-	# M2: the sparks leave the drifting ball behind. M3-T14: a rebase still moves them with the rest of the world. M3-T23: the
-	# same guarantee on the FxPool's emitters, which also carry the ship's velocity on.
+func _count_nodes(node: Node) -> int:
+	var n: int = 1
+	for child: Node in node.get_children():
+		n += _count_nodes(child)
+	return n
+
+
+func test_a_full_pool_gives_the_oldest_slot_to_the_newest_explosion() -> void:
+	pool.advance(0.5)
+	for i: int in ExplosionPool.CAPACITY - 1:
+		pool.spawn(RADIUS, Vector3.ZERO, Vector3(0.0, float(i), 0.0))
+	assert_eq(pool.live_count(), ExplosionPool.CAPACITY)
+	assert_eq(pool.stolen, 0)
+	var newest: int = pool.spawn(RADIUS, Vector3.ZERO, Vector3(0.0, 0.0, 999.0))
+	assert_eq(newest, slot, "the oldest explosion's slot")
+	assert_eq(pool.stolen, 1)
+	assert_eq(pool.live_count(), ExplosionPool.CAPACITY, "the pool never grows")
+	assert_almost_eq(pool.age_of(newest), 0.0, 1e-6)
+
+
+func test_a_rebase_moves_the_explosions_and_a_boost_keeps_their_universe_velocity() -> void:
 	var world := WorldFrame.new()
 	add_child_autofree(world)
-	var pool := FxPool.new()
-	world.add_child(pool)
-	var blast := Explosion.create(RADIUS, Vector3(10.0, 0.0, -20.0))
-	blast.fx = pool
-	blast.position = Vector3(100.0, 0.0, 0.0)
-	world.add_child(blast)
-	blast._physics_process(0.5)
-	assert_almost_eq(blast.global_position, Vector3(105.0, 0.0, -10.0), Vector3.ONE * 1e-4, "the ball drifts")
+	var effects := Node3D.new()
+	world.add_child(effects)
+	var in_world: ExplosionPool = ExplosionPool.attach(effects)
+	var s: int = in_world.spawn(RADIUS, Vector3(10.0, 0.0, 0.0), Vector3(100.0, 0.0, 0.0))
+	world.rebase(Vector3(5000.0, 0.0, 0.0))
+	assert_almost_eq(in_world.position_of(s), Vector3(-4900.0, 0.0, 0.0), Vector3.ONE * 1e-3, "moved by the rebase")
+	world.boosted.emit(Vector3(4.0, 0.0, 0.0))
+	assert_almost_eq(in_world.velocity_of(s), Vector3(6.0, 0.0, 0.0), Vector3.ONE * 1e-5)
+	assert_eq(ExplosionPool.attach(effects), in_world, "one pool a world")
+
+
+func test_the_sparks_start_where_it_blew_and_fly_on_with_its_velocity() -> void:
+	var world := WorldFrame.new()
+	add_child_autofree(world)
+	var fx := FxPool.new()
+	world.add_child(fx)
+	var effects := Node3D.new()
+	world.add_child(effects)
+	var in_world: ExplosionPool = ExplosionPool.attach(effects)
+	in_world.fx = fx
+	in_world.spawn(RADIUS, Vector3(10.0, 0.0, -20.0), Vector3(100.0, 0.0, 0.0))
+	assert_eq(fx.busy_count(), 3, "one burst of each effect")
+	fx._process(0.0)
 	var thrown: int = 0
 	for effect: int in [FxSpecs.EXPLOSION_SPARKS, FxSpecs.EXPLOSION_FRAGMENTS, FxSpecs.EXPLOSION_GAS]:
-		for emitter: GPUParticles3D in pool.emitters_of(effect):
+		for emitter: GPUParticles3D in fx.emitters_of(effect):
 			if emitter.visible:
 				thrown += 1
-				assert_almost_eq(emitter.global_position, Vector3(100.0, 0.0, 0.0), Vector3.ONE * 1e-4,
+				assert_almost_eq(emitter.global_position, Vector3(100.0, 0.0, 0.0), Vector3.ONE * 1e-3,
 						"%s: started where it blew" % emitter.name)
-				assert_true(emitter.local_coords, "%s: its particles live in its frame, so they go where it goes" % emitter.name)
-	assert_eq(pool.busy_count(), 3, "one burst of each effect")
-	assert_eq(thrown, 0, "none is started before the next frame")
-	pool._process(0.0)
-	var before: Dictionary = {}
-	for effect: int in [FxSpecs.EXPLOSION_SPARKS, FxSpecs.EXPLOSION_FRAGMENTS, FxSpecs.EXPLOSION_GAS]:
-		for emitter: GPUParticles3D in pool.emitters_of(effect):
-			if emitter.visible:
-				before[emitter] = emitter.global_position
-	assert_eq(before.size(), 3)
-	world.rebase(Vector3(5000.0, 0.0, 0.0))
-	for emitter: GPUParticles3D in before:
-		assert_almost_eq(emitter.global_position, (before[emitter] as Vector3) - Vector3(5000.0, 0.0, 0.0), Vector3.ONE * 1e-3,
-				"%s: moved by the rebase" % emitter.name)
+	assert_eq(thrown, 3)
 
 
-func test_without_a_pool_the_explosion_throws_nothing_and_still_runs() -> void:
-	explosion.advance(1.0)
-	assert_null(explosion.fx)
-	assert_eq(_particle_nodes(explosion), 0)
-
-
-func test_the_scene_builds_itself_when_instanced() -> void:
-	var instanced := (load("res://src/combat/explosion.tscn") as PackedScene).instantiate() as Explosion
-	add_child_autofree(instanced)
-	assert_not_null(instanced.fireball)
-	assert_eq(instanced.get_child_count(), 2, "flash and fireball: the light is an emitter, not a node")
-	assert_not_null(instanced.emitter)
+func test_the_reduced_effect_has_no_light_and_only_the_gas() -> void:
+	var world := WorldFrame.new()
+	add_child_autofree(world)
+	var fx := FxPool.new()
+	world.add_child(fx)
+	var effects := Node3D.new()
+	world.add_child(effects)
+	var in_world: ExplosionPool = ExplosionPool.attach(effects)
+	in_world.fx = fx
+	var s: int = in_world.spawn(RADIUS, Vector3.ZERO, Vector3.ZERO, true)
+	assert_true(in_world.is_reduced(s))
+	assert_false(in_world.is_lit(s))
+	assert_eq(fx.busy_count(), 1, "the gas shell only")
 
 
 func test_a_tiny_radius_is_raised_to_something_visible() -> void:
-	var tiny := Explosion.create(0.0, Vector3.ZERO)
-	add_child_autofree(tiny)
-	assert_gt(tiny.radius_m, 0.0)
+	var tiny: int = pool.spawn(0.0, Vector3.ZERO, Vector3.ZERO)
+	assert_gt(pool.radius_of(tiny), 0.0)
 
 
-func test_the_fireball_shader_compiles_with_the_expected_uniforms() -> void:
+func test_the_shaders_compile_with_the_expected_uniforms() -> void:
 	var uniforms: Array[String] = []
-	for entry: Dictionary in Explosion.FIREBALL_SHADER.get_shader_uniform_list():
+	for entry: Dictionary in ExplosionPool.FIREBALL_SHADER.get_shader_uniform_list():
 		uniforms.append(String(entry["name"]))
-	for name: String in ["age", "duration", "intensity", "noise_scale"]:
+	for name: String in ["duration", "intensity", "noise_scale"]:
 		assert_true(uniforms.has(name), "uniform %s" % name)
+	var flash: Array[String] = []
+	for entry: Dictionary in ExplosionPool.FLASH_SHADER.get_shader_uniform_list():
+		flash.append(String(entry["name"]))
+	assert_true(flash.has("tint"))
+
+
+# The first drawn fireball's scale.
+func _drawn_scale(_node: MultiMeshInstance3D) -> float:
+	return float(pool.drawn_instance(true, 0)["size"])

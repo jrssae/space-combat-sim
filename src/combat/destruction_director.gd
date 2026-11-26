@@ -4,7 +4,7 @@ extends Node
 ##
 ## - a **pooled ship**, raider or ally alike: its pose and velocity are read, then it is released to the `ShipPool` in the same
 ##   tick (hidden, not processing, `Targetable` and `Damageable` inactive, so nothing targets or hits it afterwards); an
-##   `Explosion` (radius = its bounding radius) appears under `effects` at its position, drifting with its velocity, and
+##   explosion (radius = its bounding radius, from the `ExplosionPool`) appears at its position, drifting with its velocity, and
 ##   `DebrisPool.burst` breaks it into its asset's chunks (the raider's wings and hump; generic shards for an asset without
 ##   any). A **Starfury** (an ally or the player) dies where it was hit (M3-T28): the killing hit's point picks the cabin or arm
 ##   that leaves first, the explosion starts at that chunk's joint and `DebrisPool.stage_wreck` frees the rest one by one over
@@ -58,8 +58,9 @@ const ZONE_CHUNKS: Dictionary[int, StringName] = {
 	DamageZones.LOWER_LEFT: &"arm_ll", DamageZones.LOWER_RIGHT: &"arm_lr",
 }
 const KILL_CHOICES: Array[StringName] = [&"target", &"all", &"allies", &"player"]
-## Mine explosions alive at once (M7-T64); past it a mine's blast is a far flash.
+## Mine explosions alive at once (M7-T64); past it a mine's blast is a far flash. Mine explosions carry `MINE_TAG` in the pool.
 const MINE_BLASTS_MAX: int = 12
+const MINE_TAG: int = 1
 ## A station's fireball against its blast's reach (M10-T65; to judge in play).
 const STATION_FIREBALL_SHARE: float = 0.25
 
@@ -80,7 +81,6 @@ var mine_blasts := PackedInt32Array([0, 0, 0])
 var _watched: Array[Combatant] = []
 var _watched_capitals: Array[CapitalBody] = []
 var _respawn_at_s: float = INF
-var _mine_explosions: Array[Explosion] = []
 var _mine_sound_frame: int = -1
 
 static var _current: DestructionDirector = null
@@ -283,17 +283,16 @@ func _on_mine_detonated(_slot: int, kind_index: int, at: Vector3) -> void:
 ## capped so a battle's chains stay cheap. Returns the level it was drawn at.
 func draw_mine_blast(at: Vector3, kind_index: int = MineKinds.PROX) -> ExplosionLod.Level:
 	var blast: BlastSpec = MineKinds.blast(kind_index)
-	var radius: float = (blast.radius_m if blast != null else 100.0) / Explosion.FIREBALL_FINAL_SCALE
+	var radius: float = (blast.radius_m if blast != null else 100.0) / ExplosionPool.FIREBALL_FINAL_SCALE
 	var velocity: Vector3 = world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
 	var level: ExplosionLod.Level = _level_at(radius, at)
-	if level != ExplosionLod.Level.FAR and _mine_explosions_alive() >= MINE_BLASTS_MAX:
+	var pool: ExplosionPool = ExplosionPool.of(effects)
+	if level != ExplosionLod.Level.FAR and pool != null and pool.live_count(MINE_TAG) >= MINE_BLASTS_MAX:
 		level = ExplosionLod.Level.FAR
 	if level == ExplosionLod.Level.FAR:
 		_spawn_far(level, at, velocity, radius, blast.energy_j() if blast != null else 0.0)
 	else:
-		var explosion: Explosion = _add_explosion(radius, velocity, at, level == ExplosionLod.Level.REDUCED)
-		if explosion != null:
-			_mine_explosions.append(explosion)
+		_add_explosion(radius, velocity, at, level == ExplosionLod.Level.REDUCED, MINE_TAG)
 		var frame: int = Engine.get_physics_frames()
 		if level == ExplosionLod.Level.FULL and frame != _mine_sound_frame:
 			_mine_sound_frame = frame
@@ -302,14 +301,17 @@ func draw_mine_blast(at: Vector3, kind_index: int = MineKinds.PROX) -> Explosion
 	return level
 
 
-# Mine explosions still showing; drops the finished ones.
-func _mine_explosions_alive() -> int:
-	var still: Array[Explosion] = []
-	for explosion: Explosion in _mine_explosions:
-		if is_instance_valid(explosion) and not explosion.is_queued_for_deletion():
-			still.append(explosion)
-	_mine_explosions = still
-	return still.size()
+## A blast that is not a death (a missile's or torpedo's warhead, M10-T11) drawn at `at` (World frame) at its level of detail,
+## its fireball as big as its reach. Returns the level it was drawn at.
+func draw_blast(spec: BlastSpec, at: Vector3) -> ExplosionLod.Level:
+	var radius: float = (spec.radius_m if spec != null else 10.0) / ExplosionPool.FIREBALL_FINAL_SCALE
+	var velocity: Vector3 = world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
+	var level: ExplosionLod.Level = _level_at(radius, at)
+	if level == ExplosionLod.Level.FULL:
+		_add_explosion(radius, velocity, at, false)
+	else:
+		_spawn_far(level, at, velocity, radius, spec.energy_j() if spec != null else 0.0)
+	return level
 
 
 # How a death of a hull of `radius` at `at` is drawn: from its fireball's size on the current picture (the full effect with no
@@ -331,15 +333,19 @@ func _spawn_far(level: ExplosionLod.Level, at: Vector3, velocity: Vector3, radiu
 		flashes.add(at, velocity, radius, energy_j)
 
 
-func _add_explosion(radius: float, velocity: Vector3, at: Vector3, reduced: bool) -> Explosion:
+## The world's explosions (`World/Effects/ExplosionPool`, made on first use), or null with no effects node.
+func explosions() -> ExplosionPool:
 	if effects == null or not is_instance_valid(effects):
 		return null
-	var explosion: Explosion = Explosion.create(radius, velocity, reduced)
-	explosion.fx = fx
-	explosion.position = at
-	effects.add_child(explosion)
-	explosion.reset_physics_interpolation()
-	return explosion
+	var pool: ExplosionPool = ExplosionPool.attach(effects)
+	pool.fx = fx
+	return pool
+
+
+# An explosion of `radius` at `at` (World-local) drifting at `velocity`, from the pool. Returns its slot, -1 with no pool.
+func _add_explosion(radius: float, velocity: Vector3, at: Vector3, reduced: bool, tag: int = 0) -> int:
+	var pool: ExplosionPool = explosions()
+	return pool.spawn(radius, velocity, at, reduced, tag) if pool != null else -1
 
 
 func _on_buoy_destroyed(info: HitInfo, buoy: NavBuoy) -> void:
@@ -354,12 +360,7 @@ func _on_buoy_destroyed(info: HitInfo, buoy: NavBuoy) -> void:
 
 
 func _spawn_buoy_effects(xform: Transform3D, radius: float, velocity: Vector3, spin: Vector3, buoy_id: int) -> void:
-	if effects != null and is_instance_valid(effects):
-		var explosion: Explosion = Explosion.create(radius, velocity)
-		explosion.fx = fx
-		explosion.position = xform.origin
-		effects.add_child(explosion)
-		explosion.reset_physics_interpolation()
+	_add_explosion(radius, velocity, xform.origin, false)
 	if debris != null and is_instance_valid(debris):
 		debris.burst(&"nav_buoy", [] as Array[Dictionary], xform, velocity, spin, hash([buoy_id, Engine.get_physics_frames()]))
 
@@ -437,7 +438,7 @@ func _cmd_blast(args: Dictionary) -> ConsoleResult:
 		return ConsoleResult.failure("blast: no row %s in the table" % args[&"source"])
 	var at: Vector3 = ship.global_position - ship.global_basis.z * float(args[&"ahead_m"])
 	var velocity: Vector3 = world.rest_velocity() if world != null and is_instance_valid(world) else Vector3.ZERO
-	_add_explosion(spec.radius_m / Explosion.FIREBALL_FINAL_SCALE, velocity, at, false)
+	_add_explosion(spec.radius_m / ExplosionPool.FIREBALL_FINAL_SCALE, velocity, at, false)
 	BlastResolver.set_off(spec, at, Factions.NEUTRAL)
 	return ConsoleResult.line("%s %.0f m ahead: d0 %.0f, radius %.0f m; %d reached, %d hurt (%d us)" % [spec.source,
 			float(args[&"ahead_m"]), spec.d0, spec.radius_m, BlastResolver.last_reached, BlastResolver.last_hurt,

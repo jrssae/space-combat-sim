@@ -27,7 +27,8 @@ var far: Combatant
 var cap: CapitalStandin
 var far_cap: CapitalStandin
 var bolt: Projectile
-var explosion: Explosion
+var explosions: ExplosionPool
+var explosion: int = -1
 var shards: Array[DebrisChunk] = []
 var wreck: StagedWreck
 var emitter: int = 0
@@ -108,9 +109,8 @@ func _populate() -> void:
 	var hardpoints: Hardpoints = Hardpoints.load_file((load(STARFURY_SPEC) as ShipSpec).hardpoints_path())
 	wreck = debris.stage_wreck(&"starfury_aurora", hardpoints.chunks, Transform3D(Basis.IDENTITY, Vector3(-300.0, 80.0, 40.0)),
 			Vector3(-35.0, 0.0, 70.0), Vector3(0.2, 0.0, 0.0), 11)
-	explosion = Explosion.create(12.0, Vector3(55.0, -5.0, 20.0), true)
-	world.add_child(explosion)
-	explosion.global_position = Vector3(220.0, 0.0, -310.0)
+	explosions = ExplosionPool.attach(world)
+	explosion = explosions.spawn(12.0, Vector3(55.0, -5.0, 20.0), world.to_local(Vector3(220.0, 0.0, -310.0)), true)
 	emitter = fx.burst(FxSpecs.HIT, Vector3(10.0, 20.0, 30.0), Vector3.UP, Vector3(70.0, 0.0, -10.0), 5.0)
 	flashes.add(Vector3(-5000.0, 100.0, 8000.0), Vector3(0.0, 90.0, -40.0), 30.0, 1.0e9)
 	await get_tree().physics_frame  # the start of a tick: Jolt's last step is in, nothing of this tick has run
@@ -142,7 +142,7 @@ func _movers() -> Dictionary:
 	for i: int in shards.size():
 		_add(out, "shard %d" % i, world, shards[i].global_position, shards[i].velocity)
 	_add(out, "wreck", world, wreck.origin, wreck.velocity)
-	_add(out, "explosion", world, explosion.global_position, explosion.velocity)
+	_add(out, "explosion", world, explosions.position_of(explosion), explosions.velocity_of(explosion))
 	_add(out, "emitter", world, fx._nodes[fx._slot_of(emitter)].global_position, fx.velocity_of(emitter))
 	if not flashes._positions.is_empty():  # a flash is over in a moment
 		_add(out, "far flash", world, flashes._positions[0] + flashes.position, flashes._velocities[0])

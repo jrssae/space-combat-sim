@@ -245,48 +245,52 @@ func test_shots_reuse_one_record_and_never_pile_up() -> void:
 # --- explosions -----------------------------------------------------------------------------------------------------
 
 
-func _explode(at: Vector3) -> Explosion:
-	var explosion := Explosion.create(6.0, Vector3.ZERO)
-	main.world.add_child(explosion)
-	explosion.global_position = at
-	return explosion
+# An explosion of radius 6 m at `at` (global) from the world's pool; its slot.
+func _explode(at: Vector3) -> int:
+	return _pool().spawn(6.0, Vector3.ZERO, main.effects.to_local(at))
+
+
+func _pool() -> ExplosionPool:
+	return ExplosionPool.attach(main.effects)
 
 
 func test_an_explosions_light_goes_through_the_picker_on_its_curve() -> void:
 	var baseline: int = rig.candidate_count()
-	var explosion: Explosion = _explode(main.ship.global_position + Vector3(0.0, 0.0, 30.0))
+	var slot: int = _explode(main.ship.global_position + Vector3(0.0, 0.0, 30.0))
+	var emitter: LightEmitter = _pool().emitter_of(slot)
 	assert_eq(rig.candidate_count(), baseline + 1)
-	explosion.advance(Explosion.LIGHT_S / 3.0)
+	_pool().advance(ExplosionPool.LIGHT_S / 3.0)
 	rig.update(_camera_position())
-	assert_true(rig.picked().has(explosion.emitter))
-	assert_eq(explosion.emitter.priority, LightEmitter.PRIORITY_EXPLOSION)
-	assert_almost_eq(explosion.emitter.energy, 8.0, 1e-4)
-	assert_almost_eq(explosion.emitter.omni_range, 24.0, 1e-6, "4 x radius")
+	assert_true(rig.picked().has(emitter))
+	assert_eq(emitter.priority, LightEmitter.PRIORITY_EXPLOSION)
+	assert_almost_eq(emitter.energy, 8.0, 1e-4)
+	assert_almost_eq(emitter.omni_range, 24.0, 1e-6, "4 x radius")
 	assert_eq(_lights(main).size(), 8, "the rig's eight, and no light of the explosion's own")
-	explosion.advance(Explosion.LIGHT_S)
-	assert_eq(explosion.emitter.energy, 0.0)
+	_pool().advance(ExplosionPool.LIGHT_S)
+	assert_eq(emitter.energy, 0.0)
 	assert_eq(rig.candidate_count(), baseline, "out of the competition when the light is over")
 
 
-func test_a_freed_explosion_leaves_the_competition() -> void:
+func test_a_cleared_explosion_leaves_the_competition() -> void:
 	var baseline: int = rig.candidate_count()
-	var explosion: Explosion = _explode(Vector3(0.0, 0.0, -50.0))
-	explosion.advance(0.05)
+	_explode(Vector3(0.0, 0.0, -50.0))
+	_pool().advance(0.05)
 	assert_eq(rig.candidate_count(), baseline + 1)
-	explosion.free()
+	_pool().clear()
 	rig.update(_camera_position())
 	assert_eq(rig.candidate_count(), baseline)
 
 
 func test_an_explosions_light_survives_a_rebase() -> void:
-	var explosion: Explosion = _explode(main.ship.global_position + Vector3(20.0, 0.0, 20.0))
-	explosion.advance(Explosion.LIGHT_S / 3.0)
+	var slot: int = _explode(main.ship.global_position + Vector3(20.0, 0.0, 20.0))
+	var emitter: LightEmitter = _pool().emitter_of(slot)
+	_pool().advance(ExplosionPool.LIGHT_S / 3.0)
 	main.world.rebase(Vector3(300.0, 0.0, -80.0))
 	rig.update(_camera_position())
-	var slot: int = rig.picked().find(explosion.emitter)
-	assert_gte(slot, 0, "still picked")
-	var light: Light3D = rig.slots()[slot + 1]
-	assert_lt(light.global_position.distance_to(explosion.global_position), 1e-3, "where the explosion is now")
+	var picked: int = rig.picked().find(emitter)
+	assert_gte(picked, 0, "still picked")
+	var light: Light3D = rig.slots()[picked + 1]
+	assert_lt(light.global_position.distance_to(main.effects.to_global(_pool().position_of(slot))), 1e-3, "where the explosion is now")
 
 
 # --- pooled ships ---------------------------------------------------------------------------------------------------

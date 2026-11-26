@@ -67,12 +67,8 @@ func _mines(offsets: Array[Vector3]) -> MineField:
 	return standins.add_mines(rows, world.to_universe(Vector3.ZERO))
 
 
-func _explosions() -> Array[Explosion]:
-	var out: Array[Explosion] = []
-	for child: Node in effects.get_children():
-		if child is Explosion and not child.is_queued_for_deletion():
-			out.append(child as Explosion)
-	return out
+func _explosions() -> Array[ExplosionView]:
+	return ExplosionView.live(effects)
 
 
 func _flash_count() -> int:
@@ -86,7 +82,7 @@ func _blast_m() -> float:
 
 
 func _radius() -> float:
-	return _blast_m() / Explosion.FIREBALL_FINAL_SCALE
+	return _blast_m() / ExplosionPool.FIREBALL_FINAL_SCALE
 
 
 # Where a mine's fireball is `px` pixels in radius on this picture, m.
@@ -99,11 +95,11 @@ func test_a_mine_that_goes_off_shows_one_explosion_at_its_place() -> void:
 	assert_true(mines.strike(0))
 	_step()
 	assert_false(mines.is_alive(0), "(it went off)")
-	var made: Array[Explosion] = _explosions()
+	var made: Array[ExplosionView] = _explosions()
 	assert_eq(made.size(), 1, "one explosion")
 	assert_false(made[0].reduced, "the full effect near")
-	assert_almost_eq(made[0].global_position.distance_to(mines.position_of(0)), 0.0, 0.5, "at the mine")
-	assert_almost_eq(made[0].radius_m * Explosion.FIREBALL_FINAL_SCALE, _blast_m(), 1e-3,
+	assert_almost_eq(made[0].position().distance_to(mines.position_of(0)), 0.0, 0.5, "at the mine")
+	assert_almost_eq(made[0].radius_m * ExplosionPool.FIREBALL_FINAL_SCALE, _blast_m(), 1e-3,
 			"its fireball as big as the blast")
 	assert_eq(director.mine_blasts, PackedInt32Array([1, 0, 0]))
 	assert_eq(sounds.size(), 1, "and a sound")
@@ -115,12 +111,12 @@ func test_a_chain_draws_one_explosion_per_mine_and_sounds_once() -> void:
 			Vector3(400.0, 0.0, -1000.0)])
 	assert_true(mines.strike(0))
 	_step()
-	var made: Array[Explosion] = _explosions()
+	var made: Array[ExplosionView] = _explosions()
 	assert_eq(made.size(), 3, "one per mine of the chain")
 	for i: int in 3:
 		var nearest: float = INF
-		for explosion: Explosion in made:
-			nearest = minf(nearest, explosion.global_position.distance_to(mines.position_of(i)))
+		for explosion: ExplosionView in made:
+			nearest = minf(nearest, explosion.position().distance_to(mines.position_of(i)))
 		assert_lt(nearest, 0.5, "mine %d has its explosion" % i)
 	assert_true(mines.is_alive(3), "(the far one stays)")
 	assert_eq(sounds.size(), 1, "the chain sounds as one blast")
@@ -131,7 +127,7 @@ func test_a_mine_between_is_a_reduced_explosion() -> void:
 	var mines: MineField = _mines([Vector3(0.0, 0.0, -at)])
 	assert_true(mines.strike(0))
 	_step()
-	var made: Array[Explosion] = _explosions()
+	var made: Array[ExplosionView] = _explosions()
 	assert_eq(made.size(), 1)
 	assert_true(made[0].reduced, "the reduced effect")
 	assert_eq(sounds.size(), 0, "too far to hear")

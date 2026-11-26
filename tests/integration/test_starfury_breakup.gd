@@ -73,12 +73,8 @@ func _active_chunks() -> Array[DebrisChunk]:
 	return out
 
 
-func _effects() -> Array[Explosion]:
-	var out: Array[Explosion] = []
-	for child: Node in main.effects.get_children():
-		if child is Explosion and not child.is_queued_for_deletion():
-			out.append(child as Explosion)
-	return out
+func _effects() -> Array[ExplosionView]:
+	return ExplosionView.live(main.effects)
 
 
 ## Runs every chunk in flight to the end of its life (a Starfury's wreck lets its chunks go first, M3-T28).
@@ -171,10 +167,10 @@ func test_a_destroyed_ally_explodes_into_starfury_chunks_and_returns_to_the_pool
 	assert_false(ally.damageable.is_active())
 	assert_eq(main.ships.free_count(ShipPool.ALLY_TYPE), main.ships.pool_size(ShipPool.ALLY_TYPE), "back in the pool")
 	assert_eq(main.ships.alive(ShipPool.ALLY_TYPE).size(), 0)
-	var explosions: Array[Explosion] = _effects()
+	var explosions: Array[ExplosionView] = _effects()
 	assert_eq(explosions.size(), 1)
-	assert_almost_eq(explosions[0].global_position, position, Vector3.ONE * 1e-3)
-	assert_eq(explosions[0].velocity, Vector3(5.0, 0.0, -40.0))
+	assert_almost_eq(explosions[0].position(), position, Vector3.ONE * 1e-3)
+	assert_eq(explosions[0].velocity(), Vector3(5.0, 0.0, -40.0))
 	assert_almost_eq(explosions[0].radius_m, ally.damageable.bounding_radius, 1e-5)
 	var chunks: Array[DebrisChunk] = _active_chunks()
 	_assert_starfury_chunks(chunks, "ally")

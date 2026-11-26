@@ -59,10 +59,8 @@ func _run(line: String) -> ConsoleResult:
 
 
 func _explosions() -> int:
-	var n: int = 0
-	for child: Node in main.effects.get_children():
-		n += 1 if child is Explosion else 0
-	return n
+	var pool: ExplosionPool = ExplosionPool.of(main.effects)
+	return pool.live_count() if pool != null else 0
 
 
 # Waits until every raid carrier has left through its own point (M12-T19: the strike carrier stands off, recalls and only then
