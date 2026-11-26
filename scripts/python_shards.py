@@ -25,34 +25,43 @@ ROOT = Path(__file__).resolve().parent.parent
 TESTS_DIR = ROOT / "tools" / "procgen" / "tests"
 PACKAGE = "tools.procgen.tests"
 
-# Rough seconds per module on a CI runner, from the run log of 2026-11-13 and a local timing of each module on its own.
-# Only the heavy modules need an entry; the balance is a heuristic, coverage never depends on it. A module with no
-# entry counts as DEFAULT_WEIGHT, so a new heavy test file lands somewhere sensible even before someone adds it here.
+# Rough seconds per module on a CI runner, measured from the run log of 2026-11-26 (M10-T53). Only the heavy modules need
+# an entry; the balance is a heuristic, coverage never depends on it. A module with no entry counts as DEFAULT_WEIGHT, so a
+# new heavy test file lands somewhere sensible even before someone adds it here.
 WEIGHTS: dict[str, float] = {
-    "test_saturn_family": 460,
-    "test_starfury_aurora": 440,
-    "test_raider_fighter": 360,
-    "test_textured_hulls": 350,
-    "test_textured_mesh": 250,
-    "test_babylon5_station": 200,
-    "test_jumpgate": 100,
-    "test_render_pieces": 100,
-    "test_asteroids": 90,
-    "test_planet": 53,
-    "test_textures": 40,
-    "test_skylark_transport": 35,
-    "test_sky_default": 31,
-    "test_centauri_brezebel": 24,
-    "test_brakiri_bokmai": 21,
+    "test_saturn_family": 445,
+    "test_station_sections": 390,
+    "test_babylon5_station": 355,
+    "test_starfury_aurora": 340,
+    "test_ea_asimov": 310,
+    "test_ea_nova": 285,
+    "test_textured_hulls": 235,
+    "test_ea_hyperion": 230,
+    "test_raider_fighter": 210,
+    "test_textured_mesh": 155,
+    "test_ea_omega": 150,
+    "test_station_hardpoints": 130,
+    "test_b5_interior": 100,
+    "test_organic_test_hull": 92,
+    "test_jumpgate": 43,
+    "test_skylark_transport": 30,
+    "test_planet": 27,
+    "test_cargo_pod_craft": 26,
+    "test_ea_work_ships": 23,
+    "test_centauri_brezebel": 22,
+    "test_raider_strike_carrier": 22,
+    "test_station_sealed": 21,
     "test_parallel_build": 21,
-    "test_narn_transport": 19,
-    "test_nav_buoy": 17,
+    "test_capital_test_cruiser": 19,
+    "test_glyphs": 18,
+    "test_brakiri_bokmai": 18,
+    "test_centauri_minbari_craft": 17,
 }
 DEFAULT_WEIGHT = 10.0
 
-# Four shards: the whole suite took about 24 minutes on one runner (the 30-minute job limit), so each shard stays
-# far under its timeout with room for the station and raider tests.
-SHARDS = 4
+# Five shards: the suite grew to about 65 minutes of tests (the capitals' builds), and shard 3 of four hit the 25-minute
+# job limit (M10-T53), so each shard now carries about 13 minutes.
+SHARDS = 5
 
 
 def discover() -> list[str]:
