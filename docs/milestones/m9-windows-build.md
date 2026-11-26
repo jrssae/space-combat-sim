@@ -110,6 +110,24 @@ Digests stay comparable across platforms once the bits are: `JSON.stringify(...,
 | AC8 | Docs: `CLAUDE.md`, `docs/architecture.md`, `docs/research-notes.md`, `docs/playtest.md` "M9 acceptance checklist", `docs/third-party.md`, `info.md` and the roadmap row as built | A | |
 | AC9 | (H) On the RTX 3060 PC from the release zip: the tutorial start to finish with the gamepad and again with the keyboard; Vulkan in use; settings persist in `%APPDATA%`; no error in the log; fps noted | H | |
 
+## Verified fine
+
+The planning review found nothing to port here (details and evidence in `docs/research/m9-windows-review.md` §6; the parity
+study behind Q1 is `docs/research/m9-parity-libm.md`):
+
+- No per-OS branches in `src/`; `res://` and `user://` paths use `path_join` or `/`, and timestamps in file names strip `:`.
+- No `res://` path whose case differs from the file on disk, no names differing only by case, no names illegal on Windows, no
+  symlinks; the longest path is 59 characters.
+- No CRLF files, and `.gitattributes` forces LF; the console tokenizer, the joypad mappings, JSON loading and `run_tests.sh`'s
+  shard paths already tolerate `\r`.
+- The native core has no `cfg(unix)`, `libc`, `std::os`, SIMD, `asm` or `build.rs`; threads are rayon and `std::thread`; the
+  sysfs and `/proc` reads fall back quietly (the VRAM overlay shows "total unknown").
+- 1 vs 6 threads and threaded vs delayed hold nothing platform-specific (no float reductions across threads; default-hasher maps
+  are lookups only).
+- Keyboard bindings use physical keys; `display_server/driver.linuxbsd` only affects Linux; `addons/scs_export` and the GLSL
+  compute shaders are platform-neutral.
+- Wall-clock limits in tests are reported on CI, not asserted, so a slower Windows runner does not fail them.
+
 ## Risks and open checks
 
 Only a Windows machine settles these; T10 (confirm on the runner) or T12 (the play-test) records each answer.
