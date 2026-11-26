@@ -65,6 +65,9 @@ static func build(spec: ShipSpec, world: WorldFrame, projectiles_parent: Node3D,
 	var thrusters := ThrusterVisuals.new()
 	thrusters.name = "ThrusterVisuals"
 	thrusters.glow_color = spec.engine_glow_color
+	thrusters.main_plumes = not CapitalPropulsion.is_gravitic(spec)
+	thrusters.main_length_m *= spec.main_plume_scale
+	thrusters.main_radius_m *= spec.main_plume_scale
 	thrusters.own_ship = combatant.is_player
 	thrusters.instanced = ship.lean
 	if ship.lean:

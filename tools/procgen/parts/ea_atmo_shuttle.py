@@ -195,6 +195,16 @@ def wing_ring(x: float, lead: float, flat0: float, flat1: float, trail: float, y
                      [x, y + half, flat0], [x, y + nose, lead]])
 
 
+ROOT_PORT_X = 11.0  # just outboard of the body's rim, on the wing's root
+
+
+def wing_root_port() -> tuple[float, float, float]:
+    """Where the side thruster sits: on the outer (lower) face of the wing's root, at the middle of its flat (M10 Q93)."""
+    x, lead, flat0, flat1, trail, y, half, droop = (float(np.interp(ROOT_PORT_X, [s[0] for s in WING_STATIONS], [s[k] for s in WING_STATIONS]))
+                                                    for k in range(8))
+    return (x, y - half, 0.5 * (flat0 + flat1))
+
+
 def swept_box(rings: Sequence[np.ndarray], name: str, swept: bool = True) -> Collision:
     """A box round a run of a swept surface's sections, lying along the run so it follows the sweep and the dihedral;
     not ``swept``, it follows the dihedral alone (a tip, where a swept box would reach past the surface's own box)."""

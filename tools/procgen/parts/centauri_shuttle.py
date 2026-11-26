@@ -168,6 +168,16 @@ def wing_ring(x: float, lead_z: float, lead_y: float, trail_z: float, trail_y: f
                      [x, lead_y + 0.3 * half, lead_z]])
 
 
+ROOT_PORT_X = 16.0  # a metre outboard of the body's rim, on the wing's root
+
+
+def wing_root_port() -> tuple[float, float, float]:
+    """Where the side thruster sits: on the outer (lower) face of the wing's root, at its thickest point (M10 Q93)."""
+    x, lead_z, lead_y, trail_z, trail_y, half = (float(np.interp(ROOT_PORT_X, [s[0] for s in WING_STATIONS], [s[k] for s in WING_STATIONS]))
+                                                 for k in range(6))
+    return (x, lead_y + 0.4 * (trail_y - lead_y) - half, lead_z + 0.4 * (trail_z - lead_z))
+
+
 LIGHTS = 9  # running lights along each wing's trailing edge, for a style that has them
 LIGHT_R = 0.28
 
@@ -194,14 +204,15 @@ def wing_pieces(style: Style) -> list[Piece]:
     hull, panel, stripe = style.material("hull"), style.material("hull_panel"), style.material("stripe")
     rings = [wing_ring(*s) for s in WING_STATIONS]
     mesh = faceted(rings, [hull, hull, hull, panel, stripe], cap_start=hull, cap_end=stripe)
+    # A box per pair of sections, leaning with the wing's rise but square to the hull's length: the trailing edge is
+    # straight, so a box turned with the sweep would stand past it. The tip's box stands upright, or its corner would
+    # reach past the tip.
     boxes = []
-    for k, (a, b) in enumerate(((0, 2), (2, 4), (4, 6), (6, 7))):
-        run = np.concatenate(rings[a : b + 1])
-        along = rings[b].mean(axis=0) - rings[a].mean(axis=0)
-        u = along / np.linalg.norm(along)
-        n = np.cross(Z_AXIS, u)
-        n /= np.linalg.norm(n)
-        boxes.append(box_of(run, f"span{k}", np.column_stack([u, n, np.cross(u, n)])))
+    for k in range(len(rings) - 1):
+        along = rings[k + 1].mean(axis=0) - rings[k].mean(axis=0)
+        along[2] = 0.0
+        u = along / np.linalg.norm(along) if k < len(rings) - 2 else np.array([1.0, 0.0, 0.0])
+        boxes.append(box_of(np.concatenate(rings[k : k + 2]), f"span{k}", np.column_stack([u, np.cross(Z_AXIS, u), Z_AXIS])))
     tip = WING_STATIONS[-1]
     lights = running_lights(style)
     return [piece("wing_r", "wing_r", [mesh, *lights], 5000.0, RIGHT, collision=boxes, fine=0.7,

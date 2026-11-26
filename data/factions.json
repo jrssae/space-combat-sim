@@ -23,7 +23,7 @@
      "mine": "centauri_mine", "battle_mine": "centauri_guided_mine", "marking": ""},
     {"id": "minbari", "name": "Minbari Federation",
      "style": "minbari", "fighters": ["minbari_nial"],
-     "weapons": ["minbari_neutron_cannon", "minbari_fusion_cannon", "minbari_em_pulse", "nial_fusion"],
+     "weapons": ["minbari_neutron_cannon", "minbari_fusion_cannon", "minbari_em_pulse", "nial_fusion", "minbari_flyer_plasma"],
      "mine": "", "battle_mine": "", "marking": ""},
     {"id": "drazi", "name": "Drazi Freehold",
      "style": "drazi", "fighters": ["drazi_sky_serpent"],

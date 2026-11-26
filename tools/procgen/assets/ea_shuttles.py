@@ -10,7 +10,8 @@ maintainer's lengths (M10 Q65, T69: 38 m and 29 m), each in its look from
 a low texture set, the fallback mesh, the break-up chunks as cuts of the hull, ``hardpoints.json`` and the manifest,
 every output derived from the placed pieces so they agree by construction. Neither craft carries a turret.
 ``hardpoints.json`` adds ``docking_ports[]`` to the civilians' contract: where another hull's lock meets this one (the
-shuttle's stern hatch; the atmospheric shuttle has none).
+shuttle's stern hatch; the atmospheric shuttle has none). A craft built through ``build_craft`` may name gun muzzles (the
+Minbari Flyer, M10-T58); the shuttles have none.
 """
 
 from __future__ import annotations
@@ -54,6 +55,11 @@ GLASS_SRGB = 0x10161C
 INF = float("inf")
 FLIP = np.array([-1.0, 1.0, 1.0])
 Port = tuple[str, Sequence[float], Sequence[float]]  # an RCS port: name, position, exhaust
+Muzzle = tuple[str, Sequence[float]]  # a fixed gun firing forward: name, position
+
+
+def no_muzzles(by_name: dict[str, Part]) -> list[Muzzle]:
+    return []
 
 
 @dataclass(frozen=True)
@@ -78,6 +84,7 @@ class Craft:
     ship_class: str = SHIP_CLASS  # the class budget it is held to
     atlas_px: int = cv.HULL_ATLAS_PX
     scale: float = 1.0  # built this many times the authored size (M10-T69, Q65); every authored number above is at 1
+    muzzles: Callable[[dict[str, Part]], list[Muzzle]] = no_muzzles  # fixed forward guns (``r_`` names are mirrored)
 
 
 # --- surfaces ------------------------------------------------------------------------------------------------------------------
@@ -183,13 +190,11 @@ def shuttle_docks(by_name: dict[str, Part]) -> list[tuple[str, np.ndarray, np.nd
 
 
 def atmo_ports(by_name: dict[str, Part]) -> list[Port]:
-    """Cosmetic RCS (authored frame; ``r_`` names are mirrored): at the wing tips, on the nose and at the stern's corners."""
-    tip = by_name["wing_r"].anchor("tip").position
+    """Cosmetic RCS (authored frame; ``r_`` names are mirrored): on the nose and, for the side thrust, on the outer face of
+    each wing's root; none at the wing tips (M10 Q93)."""
     return [
-        ("r_tip_up", tip + np.array([-0.3, 0.1, 0.0]), sp.Y_AXIS),
-        ("r_tip_down", tip + np.array([-0.3, -0.1, 0.0]), (0.0, -1.0, 0.0)),
         ("r_nose", (2.25, ap.EDGE_Y, 1.0), sp.X_AXIS),
-        ("r_stern", (10.27, ap.EDGE_Y, 17.0), sp.X_AXIS),
+        ("r_root", ap.wing_root_port(), sp.X_AXIS),
         ("nose_up", (0.0, ap.body_top(0.0, 1.0), 1.0), sp.Y_AXIS),
         ("nose_down", (0.0, -0.65, 1.0), (0.0, -1.0, 0.0)),
     ]
@@ -225,7 +230,8 @@ ATMO = Craft(ATMO_ID, 0.25, ("body", "wing_l", "wing_r", "tail", "engines"), ATM
 
 def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]], offset: np.ndarray) -> dict[str, Any]:
     """The hardpoints document in the body frame (authored positions at the craft's scale, minus ``offset``); ``pieces`` are
-    the authored ones, ``chunks`` the ``write_chunks`` entries. No turrets and no muzzles: the shuttles are unarmed."""
+    the authored ones, ``chunks`` the ``write_chunks`` entries. No turrets; muzzles only where the craft names them (the
+    shuttles are unarmed)."""
     k = craft.scale
     authored = [p.part for p in cv.with_twins(pieces)]
     by_name = {p.name: p for p in authored}  # the craft's hardpoint helpers read authored numbers
@@ -261,6 +267,12 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
             rcs.append({"name": n, "pod": "l" if spot[0] < -1e-6 else "r", "position": at(spot), "exhaust": cv.r(out),
                         "tags": pilot_tags(k * spot, out, com)})  # fmt: skip
 
+    muzzles = []
+    for name, position in craft.muzzles(by_name):
+        p = np.asarray(position, dtype=float)
+        for n, spot in [(name, p)] + ([("l_" + name[2:], p * FLIP)] if name.startswith("r_") else []):
+            muzzles.append({"name": n, "position": at(spot), "direction": [0.0, 0.0, -1.0]})
+
     lights = craft.lights(by_name)
     joints = craft.joints(by_name)
     eye = lights["cabin"]
@@ -277,7 +289,7 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
         "center_of_mass": cv.r(com - offset),
         "cockpit_camera": {"position": at(eye), "forward": [0.0, 0.0, -1.0], "up": [0.0, 1.0, 0.0]},
         "chase_anchor": {"position": cv.r((0.0, CHASE_ANCHOR_SHARE[0] * length, CHASE_ANCHOR_SHARE[1] * length))},
-        "muzzles": [],
+        "muzzles": muzzles,
         "pods": pods,
         "rcs": rcs,
         "collision": cv.collision_json(parts, offset),

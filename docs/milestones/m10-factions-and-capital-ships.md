@@ -1548,6 +1548,27 @@ On top of it:
   sheets, look sheets and compare overlays: `references/screenshots/M10-T58 Centauri shuttle and Minbari Flyer/`. Stage 2
   (the chosen looks, collision checked against the surface, docking, `ShipSpec`s, catalogue entries with
   `random_pool: false`, the GUT test) follows the maintainer's choice.
+- **T58 stage 2 (2026-11-25), in progress until the maintainer closes it.** The looks are the chosen ones (Q89 D2, Q90 P1).
+  **Centauri shuttle (Q93):** reaction drive, plumes from its two main nozzles sized to them (`ShipSpec.main_plume_scale`, new:
+  3.2), retros at the nose, no weapons, no `docking_ports`; the wing-tip RCS is gone and the side thrust sits on the outer face
+  of each wing's root, the same on the Kestrel (`atmo_ports`). **Minbari Flyer (Q91, Q92):** `propulsion` gravitic, which on a
+  small craft now means its main nozzles draw no plume (`ThrusterVisuals.main_plumes`; their lights still follow the thrust and
+  the spindles' tails glow on the hull); its only thrusters that plume are on the bow blades, one firing forward from each
+  blade's nose (the braking pair) and two firing inward from its intake pods; two forward plasma guns on the fuselage's lower
+  bow (`assets/weapons/minbari_flyer_plasma.tres`, the Starfury's numbers, `minbari_flyer_plasma` in `loadouts.json`); 17.8 m/s²
+  and 40/40/55 deg/s against a Starfury's 30 and 60/60/90. Collision checked against the surface and its gaps closed (28 and 35
+  boxes). `ShipSpec`s `assets/ships/centauri_shuttle.tres` (87 t) and `minbari_flyer.tres` (73 t), first numbers (Q93 (7));
+  catalogue civilians of `centauri` and `minbari` with `random_pool: false`, not yet `finalized`. As built:
+  `docs/assets-civilian.md`, "`centauri_shuttle` and `minbari_flyer`". Tests on a staged copy with the native library built
+  from it: Python `test_centauri_minbari_craft` 69 (with `test_ea_shuttles`, `test_capital_loadouts`, `test_faction_data`,
+  `test_ea_craft_bay_clearance`, `test_seam_defaults`, `test_ea_work_ships`, `test_cli`, `test_budgets` 233 of 233;
+  `test_ea_hyperion` 29); GUT `test_centauri_minbari_craft` 5 of 5, `test_ea_shuttles` 3, `test_ship_showcase` 4, the thruster
+  files 61, the four `test_ship_catalog*` 29, and the weapon, faction, civilian, wing-fold and carrier-launch neighbours, 222 of
+  222; compile check clean.
+  In flight: `references/screenshots/M10-T58 Centauri shuttle and Minbari Flyer/stage2/`. **For the maintainer:** whether the
+  Flyer should fight (it is a `civilian` with the fleeing profile; its guns serve a mission's pilot or the player), whether its
+  guns get modelled barrels, whether roll and heave want ports back on the shuttles (only side-thrust ports remain aft), and
+  `finalized` with a place in the ship line-up.
 - **T51 and T55 done (2026-11-21).** `ea_panama` (180 m, 3 862 triangles) and `ea_construction_tender` (50 m, 69.7 m
   across its boom, 11 712 triangles): `tools/procgen/assets/ea_work_ships.py`, `parts/ea_panama.py`,
   `parts/ea_construction_tender.py`, `styles/ea_work_ships.py`, through the shuttles' `build_craft`; as built in

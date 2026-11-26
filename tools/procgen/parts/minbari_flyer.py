@@ -20,7 +20,7 @@ import numpy as np
 from ..core.civilian import RIGHT, Piece
 from ..core.geometry import Material, Mesh, lathe, loft
 from ..styles import Style
-from . import Anchor
+from . import Anchor, Collision
 from .ea_shuttle import Z_AXIS, box_of, faceted, loft_solid, piece
 from .solids import lathe_solid
 
@@ -105,6 +105,11 @@ def smooth_loft(stations: Sequence[tuple[float, float, float, float, float]], ma
     return loft(rings, material), [r for r in rings if len(r) > 1]
 
 
+def station_box(stations: Sequence[tuple[float, float, float, float, float]], name: str) -> Collision:
+    """The hit volume round a run of a loft's stations (z, centre x, centre y, half width, half height), pointed ends included."""
+    return box_of(np.array([[cx + sx * rx, cy + sy * ry, z] for z, cx, cy, rx, ry in stations for sx in (-1.0, 1.0) for sy in (-1.0, 1.0)]), name)
+
+
 def body_pieces(style: Style) -> list[Piece]:
     """The fuselage, its nose a ring of petals."""
     hull = style.material("hull")
@@ -134,17 +139,21 @@ def bow_pieces(style: Style) -> list[Piece]:
     pod_rings = [ellipse_ring(z, x, 0.0, 0.8 * rx, 0.8 * ry) for z, x, rx, ry in POD_STATIONS[1:-1]]
     web_rings = [np.array([[xi, -t, z], [xo, -t, z], [xo, t, z], [xi, t, z]]) for z, xi, xo, t in WEB_STATIONS]
     web = faceted(web_rings, panel, cap_start=panel, cap_end=panel)
-    blade = loft([ellipse_ring(z, x, 0.0, rx, ry, points=24, power=BLADE_POWER) for z, x, rx, ry in BLADE_STATIONS], hull)
+    blade = [(z, x, 0.0, rx, ry) for z, x, rx, ry in BLADE_STATIONS]
+    blade_mesh = loft([ellipse_ring(*s, points=24, power=BLADE_POWER) for s in blade], hull)
     blade_rings = [ellipse_ring(z, x, 0.0, rx, ry) for z, x, rx, ry in BLADE_STATIONS[1:-1]]
     lobe, _ = smooth_loft([(z, LOBE_X, 0.0, rx, ry) for z, rx, ry in LOBE_STATIONS], hull, points=16)
     intakes = [lathe(list(INTAKE_PROFILE), 14, [dark, hull, hull, hull]).translated((INTAKE_AT[0], sy * INTAKE_AT[1], 0.0)) for sy in (1.0, -1.0)]
     return [
         piece("pod_r", "bow", pod, 3000.0, RIGHT, solid=loft_solid(2, pod_rings), fine=0.7,
-              collision=[box_of(np.concatenate(pod_rings), "pod")]),
+              collision=[station_box([(z, x, 0.0, rx, ry) for z, x, rx, ry in POD_STATIONS], "pod")]),
         piece("web_r", "bow", web, 1200.0, RIGHT, solid=loft_solid(2, web_rings), fine=0.6,
               collision=[box_of(np.concatenate(web_rings), "web")]),
-        piece("blade_r", "bow", [blade, lobe, *intakes], 1800.0, RIGHT, solid=loft_solid(2, blade_rings), fine=0.6,
-              collision=[box_of(np.concatenate(blade_rings[:6]), "blade_fore"), box_of(np.concatenate(blade_rings[5:]), "blade_aft")]),
+        piece("blade_r", "bow", [blade_mesh, lobe, *intakes], 1800.0, RIGHT, solid=loft_solid(2, blade_rings), fine=0.6,
+              collision=[station_box(blade[:7], "blade_fore"), station_box(blade[6:9], "blade_mid"), station_box(blade[8:], "blade_aft"),
+                         station_box([(z, LOBE_X, 0.0, rx, ry) for z, rx, ry in LOBE_STATIONS], "lobe"),
+                         *(station_box([(z, INTAKE_AT[0], sy * INTAKE_AT[1], r, r) for z, r in INTAKE_PROFILE], name)
+                           for sy, name in ((1.0, "intake_up"), (-1.0, "intake_down")))]),
     ]
 
 
@@ -158,18 +167,13 @@ def waist_pieces(style: Style) -> list[Piece]:
     strake = faceted(strake_rings, panel, cap_start=panel, cap_end=panel)
     rod = lathe(list(TAIL_ROD), 10, panel).translated((TAIL_ROD_X, 0.0, 0.0))
     x, y = WAIST_AT
-    pods = []
-    rings_all = []
-    for sy in (1.0, -1.0):
-        mesh, rings = smooth_loft([(z, x, sy * y, rx, ry) for z, rx, ry in WAIST_STATIONS], hull, points=16)
-        pods.append(mesh)
-        rings_all.append(rings)
+    pods = [smooth_loft([(z, x, sy * y, rx, ry) for z, rx, ry in WAIST_STATIONS], hull, points=16)[0] for sy in (1.0, -1.0)]
     return [
         piece("strake_r", "tail", [strake, rod], 1000.0, RIGHT, fine=0.6,
               collision=[box_of(np.concatenate(strake_rings[:8]), "strake"),
                          box_of(np.array([[TAIL_ROD_X - 0.2, -0.2, 29.5], [TAIL_ROD_X + 0.2, 0.2, 39.6]]), "rod")]),
         piece("waist_r", "tail", pods, 1200.0, RIGHT, fine=0.7,
-              collision=[box_of(np.concatenate(r), f"waist{k}") for k, r in enumerate(rings_all)]),
+              collision=[station_box([(z, x, sy * y, rx, ry) for z, rx, ry in WAIST_STATIONS], name) for sy, name in ((1.0, "waist_up"), (-1.0, "waist_down"))]),
     ]
 
 
@@ -198,7 +202,7 @@ def crossbar_pieces(style: Style) -> list[Piece]:
         piece("crossbar", "crossbar", bar, 1500.0, solid=loft_solid(0, bar_rings), fine=0.6,
               collision=[box_of(np.concatenate(bar_rings), "crossbar")]),
         piece("spindle_r", "spindle_r", [spindle, tail, tube], 2500.0, RIGHT, solid=loft_solid(2, all_rings), fine=0.6, anchors=anchors,
-              collision=[box_of(np.concatenate(all_rings[:6]), "spindle_fore"), box_of(np.concatenate(all_rings[5:]), "spindle_aft"),
+              collision=[station_box(stations[:7], "spindle_fore"), station_box(stations[6:], "spindle_aft"),
                          box_of(np.array([[SPINDLE_X - 0.34, TUBE_Y - 0.34, 25.4], [SPINDLE_X + 0.34, TUBE_Y + 0.34, 29.8]]), "tube")]),
     ]
 

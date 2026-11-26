@@ -92,6 +92,9 @@ const SETTLE_LEVEL: float = 1e-4
 @export var smoothing_s: float = 0.08
 ## Plumes with a smoothed level under this are hidden.
 @export var hide_below: float = 0.01
+## Whether the main nozzles draw a plume. A gravitic drive's do not (M10 Q92): they keep their light, which still follows
+## the thrust, and the hull's own glow. Set before `setup`.
+@export var main_plumes: bool = true
 ## Draw every plume as an instance of this node's multimesh instead of nodes (M4-T11, AI ships). Set before `setup`.
 @export var instanced: bool = false
 
@@ -111,6 +114,8 @@ var _cores: Array[MeshInstance3D] = []
 var _lengths: PackedFloat64Array = PackedFloat64Array()
 var _radii: PackedFloat64Array = PackedFloat64Array()
 var _levels: PackedFloat64Array = PackedFloat64Array()
+# One entry per plume: 0 for a nozzle that only lights (a gravitic drive's mains).
+var _drawn: PackedByteArray = PackedByteArray()
 # Instanced: each plume's pose at the nozzle (before its scale), and the buffer the multimesh draws.
 var _bases: Array[Transform3D] = []
 var _buffer: PackedFloat32Array = PackedFloat32Array()
@@ -185,7 +190,8 @@ func setup(layout: ThrusterLayout, output_source: Callable) -> void:
 	for i: int in layout.nozzle_count():
 		var is_main: bool = ThrusterLayout.is_main_group(layout.nozzle_groups[i])
 		_add_plume(POD_PREFIX + layout.nozzle_names[i], layout.nozzle_positions[i], layout.nozzle_exhausts[i],
-				main_length_m if is_main else retro_length_m, main_radius_m if is_main else retro_radius_m, is_main)
+				main_length_m if is_main else retro_length_m, main_radius_m if is_main else retro_radius_m, is_main,
+				main_plumes or not is_main)
 	for entry: Dictionary in layout.rcs_nozzles:
 		_add_plume(RCS_PREFIX + str(entry["name"]), entry["position"], entry["exhaust"], rcs_length_m, rcs_radius_m)
 	if instanced:
@@ -232,6 +238,8 @@ func core(index: int) -> MeshInstance3D:
 
 ## Whether the plume at `index` is drawn now.
 func glow_shown(index: int) -> bool:
+	if _drawn[index] == 0:
+		return false
 	return _levels[index] >= hide_below if instanced else _plumes[index].visible
 
 
@@ -427,7 +435,8 @@ static func _cone_arrays() -> Array:
 	return arrays
 
 
-func _add_plume(plume_name: String, at: Vector3, exhaust: Vector3, length: float, radius: float, lit: bool = false) -> void:
+func _add_plume(plume_name: String, at: Vector3, exhaust: Vector3, length: float, radius: float, lit: bool = false,
+		drawn: bool = true) -> void:
 	var anchor: Node3D = self
 	var offset: Vector3 = at + exhaust.normalized() * EmitterCurves.NOZZLE_OFFSET_M  # out along the exhaust
 	if instanced:
@@ -470,6 +479,7 @@ func _add_plume(plume_name: String, at: Vector3, exhaust: Vector3, length: float
 	_lengths.append(length)
 	_radii.append(radius)
 	_levels.append(0.0)
+	_drawn.append(1 if drawn else 0)
 
 
 func _apply(index: int) -> void:
@@ -496,9 +506,9 @@ func _apply(index: int) -> void:
 		_buffer[b + 12] = 1.0
 		_buffer[b + 13] = 1.0
 		_buffer[b + 14] = 1.0
-		_buffer[b + 15] = level if level >= hide_below else 0.0
+		_buffer[b + 15] = level if level >= hide_below and _drawn[index] != 0 else 0.0
 		return
-	_plumes[index].visible = level >= hide_below
+	_plumes[index].visible = level >= hide_below and _drawn[index] != 0
 	_cones[index].scale = Vector3(radius, _lengths[index] * shown, radius)
 	_cones[index].transparency = 1.0 - level
 	_cores[index].scale = Vector3.ONE * (radius * CORE_DIAMETER_PER_RADIUS)
@@ -623,6 +633,7 @@ func _clear() -> void:
 	_bases.clear()
 	_lengths.clear()
 	_radii.clear()
+	_drawn.clear()
 	_levels.clear()
 	_lights.clear()
 	multimesh = null

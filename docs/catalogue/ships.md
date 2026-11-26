@@ -34,6 +34,8 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 | `ea_construction_tender` | earth_alliance | civilian | 8.0 x 11.2 x 3.8 | 50 | none | no | no |
 | `starfury_renegade` | renegades | fighter | 9.8 x 15.4 x 7.5 | 300 | fixed `pulse_cannon_ef` | no | no |
 | `ea_thunderbolt` | earth_alliance | fighter | 16.2 x 12.0 x 6.3 | 300 | fixed `pulse_cannon_ef` | no | no |
+| `centauri_shuttle` | centauri | civilian | 36.0 x 52.0 x 13.5 | 250 | none | no | no |
+| `minbari_flyer` | minbari | civilian | 40.0 x 18.5 x 8.2 | 300 | fixed `minbari_flyer_plasma` | no | no |
 
 ## What other code reads from each entry
 
@@ -67,3 +69,5 @@ civilian's radio name.
 | `ea_construction_tender` | `res://assets/ships/ea_construction_tender.tres` | civilian | yes | no | - | pool | EA construction tender | TENDER |
 | `starfury_renegade` | `res://assets/ships/starfury_renegade.tres` | ally_starfury | yes | - | - | pool | - | - |
 | `ea_thunderbolt` | `res://assets/ships/ea_thunderbolt.tres` | ally_starfury | yes | - | - | pool | Thunderbolt | - |
+| `centauri_shuttle` | `res://assets/ships/centauri_shuttle.tres` | civilian | yes | no | - | pool | Centauri shuttle | CENTAURI SHUTTLE |
+| `minbari_flyer` | `res://assets/ships/minbari_flyer.tres` | civilian | yes | no | - | pool | Minbari Flyer | FLYER |

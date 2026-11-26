@@ -58,6 +58,8 @@ const ASSET_ROOT: String = "res://assets/generated"
 @export var ram_lethal_dv_mps: float = 18.0
 ## HDR colour of the engine plumes (`ThrusterVisuals`). The default is the Starfury's blue-white.
 @export var engine_glow_color: Color = Color(0.7, 0.9, 1.8, 1.0)
+## The main plumes' size against the Starfury's (2.6 m long from a 0.5 m bell), for a hull with bigger nozzles (M10-T58).
+@export var main_plume_scale: float = 1.0
 ## Which main components the HUD's damage silhouette shows (`DamageZones.layout_from_name`): `x_fighter` or `delta`.
 @export var damage_layout: StringName = &"x_fighter"
 ## The ship's guns; null falls back to a default `WeaponSpec` (the Starfury's M1 numbers).
@@ -80,8 +82,9 @@ const ASSET_ROOT: String = "res://assets/generated"
 
 
 ## How a capital hull moves (M10-T07, Q51): `reaction` (EA, Drazi and other reaction drives: mains, and retros where the hull
-## has room, else it flips and burns) or `gravitic` (Minbari, Vorlon, Shadow, ISA: thrust along any axis, no flip). Fighters
-## and civilian ships ignore it.
+## has room, else it flips and burns) or `gravitic` (Minbari, Vorlon, Shadow, ISA: thrust along any axis, no flip). A fighter
+## or civilian ship flies the same either way, by its own thrust numbers; a gravitic one's main drive makes no plume, only
+## its nozzle light (Q92, `ThrusterVisuals.main_plumes`).
 @export var propulsion: StringName = &"reaction"
 ## A gravitic hull's thrust along any axis other than forward, as a fraction of its forward thrust (Q51); unused for reaction.
 @export_range(0.0, 1.0) var gravitic_fraction: float = 0.0

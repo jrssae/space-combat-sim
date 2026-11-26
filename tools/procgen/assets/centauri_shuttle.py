@@ -3,7 +3,8 @@ docs/design-references.md, "Centauri shuttle").
 
 Composition only: the pieces of ``parts/centauri_shuttle.py`` in the chosen look of ``styles/centauri_shuttle.py``, through
 the shuttles' shared build (``assets/ea_shuttles.py``, ``build_craft``): one textured mesh with a full and a low texture
-set, the break-up chunks, ``hardpoints.json`` and the manifest. A small craft by the class budgets (M10 Q38), unarmed.
+set, the break-up chunks, ``hardpoints.json`` and the manifest. A small craft by the class budgets (M10 Q38), unarmed, on a
+reaction drive; it lands in bays and has no docking port (Q93).
 """
 
 from __future__ import annotations
@@ -118,15 +119,13 @@ def dress(pieces: list[cv.Piece], look: Look) -> tuple[list[cv.Piece], dict]:
 
 
 def ports(by_name: dict[str, Part]) -> list[Port]:
-    """Cosmetic RCS (authored frame; ``r_`` names are mirrored): at the nose, the body's aft corners and the wing tips."""
-    tip = by_name["wing_r"].anchor("tip").position
+    """Cosmetic RCS (authored frame; ``r_`` names are mirrored): at the nose and, for the side thrust, on the outer face of
+    each wing's root; none at the wing tips (M10 Q93)."""
     return [
         ("r_nose", (2.0, -2.25, 2.0), OUT),
         ("nose_up", (0.0, cp.deck_y(0.0, 4.0), 4.0), UP),
         ("nose_down", (0.0, -2.9, 4.0), DOWN),
-        ("r_corner", (14.9, -2.0, 32.5), OUT),
-        ("r_tip_up", tip + np.array([-0.2, 0.15, 0.0]), UP),
-        ("r_tip_down", tip + np.array([-0.2, -0.15, 0.0]), DOWN),
+        ("r_root", cp.wing_root_port(), OUT),
     ]
 
 

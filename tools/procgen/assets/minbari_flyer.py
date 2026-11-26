@@ -3,7 +3,11 @@ docs/design-references.md, "Minbari Flyer").
 
 Composition only: the pieces of ``parts/minbari_flyer.py`` in one of the looks of ``styles/minbari_flyer.py``, through the
 shuttles' shared build (``assets/ea_shuttles.py``, ``build_craft``). The skin is the Minbari's hexagonal grid (Q45) under
-the branching band pattern (Q90, ``assets/minbari_flyer_pattern.py``). A small craft by the class budgets (M10 Q38); its two plasma guns (Q91) come with stage 2.
+the branching band pattern (Q90, ``assets/minbari_flyer_pattern.py``). A small craft by the class budgets (M10 Q38).
+
+Its drive is gravitic (Q92): the spindles' tails glow and make no plume. The only thrusters that do are on the bow blades:
+one firing forward from each blade's nose (the braking pair) and two firing inward from its intake pods (the side thrust).
+Two plasma guns fire forward from the fuselage's lower bow, either side of the nose (Q91).
 
 Option ``look`` names the surface option; ``p1`` is the only one.
 """
@@ -11,6 +15,8 @@ Option ``look`` names the surface option; ``p1`` is the only one.
 from __future__ import annotations
 
 from dataclasses import replace
+
+import math
 
 import numpy as np
 
@@ -23,10 +29,13 @@ from ..parts import Part
 from ..parts import minbari_flyer as mp
 from . import minbari_flyer_pattern as mfp
 from ..styles.minbari_flyer import DEFAULT_OPTION, Look, looks
-from .ea_shuttles import NAV_CLEARANCE_M, Craft, Port, build_craft, no_docks
+from .ea_shuttles import NAV_CLEARANCE_M, Craft, Muzzle, Port, build_craft, no_docks
 
 ASSET_ID = "minbari_flyer"
-UP, DOWN, OUT = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0), (1.0, 0.0, 0.0)
+IN = (-1.0, 0.0, 0.0)  # a starboard port firing at the centre line
+INTAKE_PORT_R, INTAKE_PORT_Z = 0.6, 1.5  # the intake pods' radius and where along them the inward ports sit
+BLADE_NOSE = (mp.BLADE_STATIONS[0][1], 0.0, mp.BLADE_STATIONS[0][0], 0.3)  # the forward thruster: x, y, z, radius
+GUN_Z, GUN_BELOW_RAD = 2.0, math.radians(35.0)  # the guns: how far aft of the nose, and how far round under the flank
 FINS = ("blade_r", "blade_l", "spindle_r", "spindle_l")  # the darker blue on the stills
 PANEL_LAMPS = 16
 BODY_SEAM = (1.6, 1.6, 2.5)  # the hexagon seams off the fins: width, depth, darkness
@@ -85,15 +94,16 @@ def dress(pieces: list[cv.Piece], look: Look) -> tuple[list[cv.Piece], dict[str,
 
 
 def ports(by_name: dict[str, Part]) -> list[Port]:
-    """Cosmetic RCS (authored frame; ``r_`` names are mirrored): on the bow blades, the spindles and the fuselage's crown."""
-    return [
-        ("r_blade", (8.45, 0.0, 9.0), OUT),
-        ("r_spindle", (mp.SPINDLE_X + 0.93, 0.0, 32.5), OUT),
-        ("r_blade_up", (8.15, 4.0, 4.0), UP),
-        ("r_blade_down", (8.15, -4.0, 4.0), DOWN),
-        ("r_spindle_up", (mp.SPINDLE_X, 3.6, 32.0), UP),
-        ("r_spindle_down", (mp.SPINDLE_X, -3.6, 32.0), DOWN),
-    ]
+    """The inward-vectored thrusters (Q92; authored frame, ``r_`` names are mirrored): on the inner side of each blade's two
+    intake pods, firing at the centre line. The gravitic drive needs no other port."""
+    x, y = mp.INTAKE_AT
+    return [("r_blade_in_up", (x - INTAKE_PORT_R, y, INTAKE_PORT_Z), IN), ("r_blade_in_down", (x - INTAKE_PORT_R, -y, INTAKE_PORT_Z), IN)]
+
+
+def muzzles(by_name: dict[str, Part]) -> list[Muzzle]:
+    """The two plasma guns (Q91): on the fuselage's lower bow either side of the nose, a clear line ahead."""
+    r = float(np.interp(GUN_Z, [z for z, _ in mp.BODY_PROFILE], [r for _, r in mp.BODY_PROFILE]))
+    return [("r_gun", (r * math.cos(GUN_BELOW_RAD), -r * math.sin(GUN_BELOW_RAD), GUN_Z))]
 
 
 def lights(by_name: dict[str, Part]) -> dict[str, np.ndarray]:
@@ -112,8 +122,8 @@ def joints(by_name: dict[str, Part]) -> dict[str, np.ndarray]:
 
 
 CRAFT = Craft(ASSET_ID, 0.25, ("body", "bow", "tail", "crossbar", "spindle_l", "spindle_r"), looks()[DEFAULT_OPTION], mp.assemble, dress,
-              0.0, (("l", "left", "spindle_l", 0.3), ("r", "right", "spindle_r", 0.3)), 0.0, (1.0, 0.0, 1.0, 0.3), ports, lights, joints,
-              no_docks)  # fmt: skip
+              0.0, (("l", "left", "spindle_l", 0.3), ("r", "right", "spindle_r", 0.3)), 0.0, BLADE_NOSE, ports, lights, joints,
+              no_docks, muzzles=muzzles)  # fmt: skip
 
 
 def build(ctx: BuildContext) -> AssetOutputs:

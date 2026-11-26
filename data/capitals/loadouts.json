@@ -593,6 +593,15 @@
    "cycle_s": 0.4,
    "tres": "res://assets/weapons/raider_plasma.tres"
   },
+  "minbari_flyer_plasma": {
+   "kind": "fighter_gun",
+   "faction": "minbari",
+   "role": "fighter",
+   "damage": 10,
+   "cycle_s": 0.25,
+   "barrels": 2,
+   "tres": "res://assets/weapons/minbari_flyer_plasma.tres"
+  },
   "thunderbolt_pod": {
    "kind": "fighter_gun",
    "faction": "earth_alliance",
@@ -1102,7 +1111,9 @@
    "class": "small_craft",
    "hull": 300,
    "jump": "gate",
-   "weapons": {},
+   "weapons": {
+    "minbari_flyer_plasma": 1
+   },
    "interceptors": {},
    "launches": {},
    "lays_mines": null

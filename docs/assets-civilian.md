@@ -643,7 +643,7 @@ starboard of their engines; here they are centred on them, which costs the front
 | Thrust line and centre of mass | y -0.31 (the hull's centre line) | y -0.47 (the nacelles' axes) |
 | `pods[]` main | `l`, `r`: the engine panels on the bulkhead's wing plates, (±2.36, -0.31, 17.96), radius 0.6 | `l`, `r`: the outer nozzles, (±4.43, -0.47, 21.67), radius 0.6; `cl`, `cr`: the centre nozzle as two halves at x ±0.3, radius 0.3 |
 | `pods[]` retro | the nose face, (±1.5, -0.31, 0.55) | the nose's rim, (±2.0, -0.22, 0.8) |
-| `rcs[]` | bow and stern flank, roof and keel, each side (12) | wing tips up and down, nose and stern rim each side, nose up and down (10) |
+| `rcs[]` | bow and stern flank, roof and keel, each side (12) | the nose rim each side, the outer face of each wing's root at (±11.0, -0.14, 16.17) for the side thrust, nose up and down (6); none at the wing tips (Q93, M10-T58) |
 | `cockpit_camera`, `nav_lights.cabin` | behind the hood's window, (0, 1.2, 2.9) | behind the windshield, (0, 0.72, 2.6) |
 | `nav_lights` port and starboard, top | the third flank block; the roof's crown box | the wing tips; the tailplane's crest |
 | `docking_ports[]` | `stern_hatch` at (0, -0.31, 18.30), out aft | none (no hatch stands out on the reference) |
@@ -752,10 +752,10 @@ traffic do not draw them, so older scenarios' seeded picks stay as they were; a 
 `parts/minbari_flyer.py`, looks in `tools/procgen/styles/centauri_shuttle.py` and `styles/minbari_flyer.py`, built through the
 shuttles' `build_craft` (`assets/ea_shuttles.py`). Both are **small craft** (M10 Q38): one 2 048 px atlas, the low texture set a
 mip level down. The shuttle wears its chosen look (Q89); the Flyer wears `p1`, the bluer of the three patterns
-the maintainer was shown (Q90), its only look. The shuttle is unarmed; the Flyer gets two plasma guns in stage 2 (Q91).
+the maintainer was shown (Q90), its only look. The shuttle is unarmed on a reaction drive (Q93); the Flyer carries two plasma
+guns on a gravitic drive (Q91, Q92).
 
-**Stage 1 as built (2026-11-25, seed 42).** Generators, looks and the 90 % compare; collision, docking, `ShipSpec`s and catalogue
-entries come in stage 2 with the chosen looks.
+**As built (2026-11-25, seed 42).**
 
 | | `centauri_shuttle` | `minbari_flyer` |
 |---|---|---|
@@ -793,6 +793,50 @@ section, wide at their middle and thin at their edges.
   wide at the root that fades into the body (`assets/minbari_flyer_pattern.py`); the blades and spindles darker blue under the
   same bands, their outboard faces bright blue with purple bands; a soft mottled blue glow under the crossbar from 16 overlapping
   pools of light. Sheet: `minbari_flyer_p1_round3_sheet.png`.
+
+**Hardpoints (stage 2).** The shuttles' contract (above), authored frame; neither has a `docking_ports[]` entry: both land in
+bays (Q93).
+
+| | `centauri_shuttle` | `minbari_flyer` |
+|---|---|---|
+| Thrust line and centre of mass | y -2.28 (the nozzles' axes) | y 0 (the spindles' axes) |
+| `pods[]` main | `l`, `r`: the two nozzles either side of the keel, (±3.3, -2.28, 35.5), radius 1.6 | `l`, `r`: the spindles' tails, (±8.3, 0, 40); the gravitic drive, drawn with no plume |
+| `pods[]` retro | the nose, (±1.2, -2.25, 1.0), radius 0.3 | the forward-vectored thrusters: each bow blade's nose, (±8.15, 0, 0.3), radius 0.3 |
+| `rcs[]` | the nose each side, up and down; the side thrust on the outer (lower) face of each wing's root, (±16.0, -0.62, 31.0); none at the wing tips (6, Q93) | the inward-vectored thrusters only: on the inner side of each blade's two intake pods, (±7.6, ±1.15, 1.5), firing at the centre line (4, Q92) |
+| `muzzles[]` | none (Q93) | `l_gun`, `r_gun` on the fuselage's lower bow, (±1.53, -1.07, 2.0), firing forward (Q91); no barrels are modelled |
+| `cockpit_camera`, `nav_lights.cabin` | behind the canopy, (0, 0.2, 8.6) | in the bow, (0, 1.4, 4.2) |
+| `nav_lights` port and starboard, top | the wing tips; the spine's crown aft | the spindles' flanks; the fuselage's crown |
+| Chunks | `body`, `stern`, `wing_l`, `wing_r` | `body`, `bow`, `tail`, `crossbar`, `spindle_l`, `spindle_r` |
+| Collision | 28 boxes: the body's runs, the spine, blisters, louvres, keel pod and nozzles; each wing a box per pair of sections, leaning with its rise but square to the hull's length (the tip's upright) | 35 boxes: the fuselage's runs; per side the pod, web, the blade in three runs, its root lobe and two intake pods, the strake, rod and two waist pods, the spindle in two runs and its tube; the crossbar |
+
+Every visible surface sample lies inside a box grown by one sample spacing, no box reaches more than 0.5 m past the hull's
+own box, and every port, retro and muzzle lies on the surface (`test_centauri_minbari_craft.py`). Stage 2 found and closed the
+gaps: the Flyer's pods (boxed at 0.8 of their size), blades (their ends, root lobes and intake pods), waist pods and spindles
+(their pointed ends); the shuttle's wing boxes turned with the sweep and stood 0.9 m past the straight trailing edge.
+
+**In the game (stage 2; first numbers from size and mass as T57's, to be tuned when a mission flies them, Q93).**
+
+| | `assets/ships/centauri_shuttle.tres` | `assets/ships/minbari_flyer.tres` |
+|---|---|---|
+| Mass (the generator's estimate) | 87 t | 73 t |
+| Drive | `reaction`: two pods of 0.61 MN (14 m/s²), retros 0.2 MN each (4.6 m/s²) | `gravitic`, fraction 0.5: two pods of 0.65 MN (17.8 m/s²; a Starfury 30), braking 0.325 MN each (8.9 m/s²) |
+| Sideways and vertical thrust | 0.435 MN (5 m/s²) | 0.65 MN (8.9 m/s²; a Starfury 15) |
+| Turn rates (pitch, yaw, roll) | 30, 30, 40 deg/s | 40, 40, 55 deg/s (a Starfury 60, 60, 90) |
+| Inertia; RCS torque | (10.6, 11.4, 7.6) x 10⁶ kg m²; (9.3, 10.0, 6.7) MN m | (7.5, 9.0, 1.9) x 10⁶ kg m²; (9.0, 10.8, 2.9) MN m |
+| Hull points (`loadouts.json`) | 250 | 300 |
+| Guns | none | `assets/weapons/minbari_flyer_plasma.tres`: the Starfury's `pulse_cannon_ef` numbers (10 a bolt, the pair 8 shots a second, 1 000 m/s, the same capacitor) as green-gold Minbari bolts |
+| Plumes | pink-white, from the two main nozzles at 3.2 times the Starfury's size (`main_plume_scale`: 1.28 m across the root, 8.3 m long), retros and RCS as every small craft | none from the drive: its nozzle lights follow the thrust and the spindles' tails glow on the hull; small plumes from the blades' forward thrusters when it brakes and from their inward ones when it slides or yaws |
+
+`ShipSpec.main_plume_scale` (new, default 1) sizes a hull's main plumes against the Starfury's. `ShipSpec.propulsion`
+`gravitic` on a fighter or civilian ship now means its main nozzles draw no plume (`ThrusterVisuals.main_plumes`); it flies by
+its own thrust numbers like any other. Both craft are catalogue civilians (`centauri`, `minbari`) with `random_pool: false` and
+the `civilian` profile, which flees and does not fire: the Flyer's guns are for a mission that gives it another pilot or
+for the player. Neither is `finalized` yet (the ship line-up does not park them). The Kestrel's wing-tip RCS moved to its
+wing roots in the same change (Q93, table above).
+
+Tests: `test_centauri_minbari_craft.py` (69) and `tests/integration/test_centauri_minbari_craft.gd` (5: import with the low
+set, flight, the Flyer's drive and blade thrusters, its guns against a Starfury's and the shuttle's plumes, in play and
+break-up). Both in flight: `references/screenshots/M10-T58 Centauri shuttle and Minbari Flyer/stage2/`; how they look is (H).
 
 ```
 .venv/bin/python3 -I tools/refview/compare.py references/Centauri_Shuttle.stl centauri_shuttle --length 36 --right=+y --up=+z --aft=+x

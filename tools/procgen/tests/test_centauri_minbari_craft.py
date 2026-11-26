@@ -33,6 +33,7 @@ from tools.procgen.core.seams import Hexes
 from tools.procgen.core.textured_mesh import TexturedPart, phase_steps
 from tools.procgen.styles import centauri_shuttle as cs_style
 from tools.procgen.styles import minbari_flyer as mf_style
+from tools.procgen.tests.test_ea_shuttles import PILOT_TERMS, inside_primitive
 from tools.procgen.tests.mesh_checks import TEST_OPTIONS, assert_chunks_cut_the_hull, assert_hull_mesh, assert_mirror_symmetric, glowing_points
 
 TEXEL_MAX_M = 0.04  # a small craft at the default 2 048 px atlas
@@ -57,6 +58,7 @@ class CraftChecks:
     HEIGHT: float
     CHUNKS: tuple[str, ...]
     THRUST_Y: float
+    PORTS: set[str]  # the RCS ports' names
     GLOW_FROM = 0.8  # the glow lies aft of this share of the length
 
     @classmethod
@@ -72,6 +74,9 @@ class CraftChecks:
         cls.obj = read_obj(cls.dir_a / f"{cls.asset_id}.obj")
         cls.offset = np.array(cls.manifest["centroid_offset"])
         cls.pieces = cls.CRAFT.assemble(cls.CRAFT.look.style)
+        cls.spacing = float(cls.manifest["surface_spacing_m"])
+        sampled = cv.sample_pieces(cls.pieces, BuildContext(cls.dir_a, seed=42), cls.spacing, buried_margin=es.BURIED_MARGIN_M)
+        cls.xyz = np.concatenate([s.samples.positions for s in sampled]) - cls.offset  # the visible surface, body frame
 
     @classmethod
     def tearDownClass(cls) -> None:
@@ -172,17 +177,84 @@ class CraftChecks:
             self.assertEqual(pod["side"], "left" if main[0] < 0.0 else "right", pod["name"])
         np.testing.assert_allclose(by_name["l"]["main"]["position"], mirrored(by_name["r"]["main"]["position"]), atol=1e-4)
 
-    def test_hardpoints_are_unarmed_and_mirror(self) -> None:
-        self.assertEqual((self.hp["muzzles"], self.hp["turrets"]), ([], []))
+    def test_hardpoints_schema(self) -> None:
+        keys = {"asset_id", "generator_version", "frame", "units", "length_m", "span_m", "height_m", "mass_kg",
+                "inertia_estimate_kg_m2", "center_of_mass", "cockpit_camera", "chase_anchor", "muzzles", "pods", "rcs",
+                "collision", "nav_lights", "turrets", "docking_ports", "chunks"}  # fmt: skip
+        self.assertEqual(set(self.hp), keys)
+        self.assertEqual(self.hp["turrets"], [], "no turrets")
+        self.assertEqual(self.hp["docking_ports"], [], "it lands in bays (Q93)")
+        self.assertGreater(self.hp["mass_kg"], 0.0)
+
+    def test_the_centre_of_mass_is_on_the_thrust_line(self) -> None:
+        com = self.authored(self.hp["center_of_mass"])
+        self.assertAlmostEqual(com[0], 0.0, places=5)
+        self.assertAlmostEqual(com[1], self.THRUST_Y, places=4)
+        self.assertTrue(0.3 * self.LENGTH < com[2] < 0.8 * self.LENGTH, com)
+
+    def test_the_retros_fire_forward_from_the_bow(self) -> None:
+        by_name = {pod["name"]: pod for pod in self.hp["pods"]}
+        for pod in self.hp["pods"]:
+            self.assertEqual(pod["retro"]["exhaust"], [0.0, 0.0, -1.0], pod["name"])
+            self.assertLess(self.authored(pod["retro"]["position"])[2], 0.1 * self.LENGTH, pod["name"])
+        np.testing.assert_allclose(by_name["l"]["retro"]["position"], mirrored(by_name["r"]["retro"]["position"]), atol=1e-4)
+
+    def test_rcs_ports_carry_pilot_terms_and_mirror(self) -> None:
         ports = {port["name"]: port for port in self.hp["rcs"]}
         self.assertEqual(len(ports), len(self.hp["rcs"]), "unique names")
+        self.assertEqual(set(ports), self.PORTS)
         for name, port in ports.items():
             self.assertTrue(port["tags"], name)
+            self.assertTrue(set(port["tags"]) <= PILOT_TERMS, name)
+            self.assertAlmostEqual(float(np.linalg.norm(port["exhaust"])), 1.0, places=4, msg=name)
             if name.startswith("r_"):
-                np.testing.assert_allclose(ports["l_" + name[2:]]["position"], mirrored(port["position"]), atol=1e-4, err_msg=name)
+                twin = ports["l_" + name[2:]]
+                np.testing.assert_allclose(twin["position"], mirrored(port["position"]), atol=1e-4, err_msg=name)
+                np.testing.assert_allclose(twin["exhaust"], mirrored(port["exhaust"]), atol=1e-4, err_msg=name)
+
+    def test_every_port_and_muzzle_sits_on_the_surface(self) -> None:
+        """A thruster or a gun is on the hull, not floating off it or buried in it."""
+        spots = [(p["name"], p["position"]) for p in self.hp["rcs"] + self.hp["muzzles"]]
+        spots += [(f"{pod['name']} retro", pod["retro"]["position"]) for pod in self.hp["pods"]]
+        for name, position in spots:
+            gap = float(np.linalg.norm(self.xyz - np.array(position), axis=1).min())
+            self.assertLess(gap, 2.0 * self.spacing, f"{name}: {gap:.2f} m from the nearest surface sample")
+
+    def test_nav_lights_port_on_the_left_and_the_lamp_on_top(self) -> None:
         lights = self.hp["nav_lights"]
         np.testing.assert_allclose(lights["port"], mirrored(lights["starboard"]), atol=1e-4)
+        self.assertLess(lights["port"][0], 0.0)
         self.assertGreater(lights["top_lamp"][1], lights["top"][1])
+        self.assertEqual(lights["cabin"], self.hp["cockpit_camera"]["position"])
+
+    def test_collision_primitives_cover_the_visible_surface_and_stay_close(self) -> None:
+        inside = np.zeros(len(self.xyz), dtype=bool)
+        for c in self.hp["collision"]:
+            inside |= inside_primitive(self.xyz, c, inflate=self.spacing)
+        missed = self.xyz[~inside] + self.offset
+        self.assertTrue(bool(inside.all()), f"every visible surface sample; {len(missed)} missed (authored frame): {np.round(missed[:10], 2).tolist()}")
+        lo, hi = self.xyz.min(axis=0), self.xyz.max(axis=0)
+        for c in self.hp["collision"]:
+            basis = np.array([c["basis"][k] for k in ("x", "y", "z")]).T
+            np.testing.assert_allclose(basis.T @ basis, np.eye(3), atol=1e-4, err_msg=c["name"])
+            self.assertAlmostEqual(float(np.linalg.det(basis)), 1.0, places=3, msg=c["name"])
+            self.assertEqual(c["type"], "box", c["name"])
+            corners = np.array([[a, b, d] for a in (-1, 1) for b in (-1, 1) for d in (-1, 1)]) * 0.5 * np.array(c["size"])
+            extent = corners @ basis.T + np.array(c["position"])
+            self.assertTrue(np.all(extent.min(axis=0) >= lo - 0.5) and np.all(extent.max(axis=0) <= hi + 0.5), c["name"])
+
+    def test_collision_is_mirror_symmetric(self) -> None:
+        shapes = {c["name"]: c for c in self.hp["collision"]}
+        self.assertEqual(len(shapes), len(self.hp["collision"]), "unique names")
+        for name, c in shapes.items():
+            part = name.split("_")
+            side = next((k for k, w in enumerate(part) if w in ("r", "l")), None)
+            if side is None:
+                self.assertAlmostEqual(c["position"][0], 0.0, places=4, msg=name)
+            elif part[side] == "r":
+                twin = shapes["_".join(part[:side] + ["l"] + part[side + 1 :])]
+                np.testing.assert_allclose(twin["position"], mirrored(c["position"]), atol=1e-4, err_msg=name)
+                np.testing.assert_allclose(sorted(twin["size"]), sorted(c["size"]), atol=1e-4, err_msg=name)
 
     # --- looks, determinism ---------------------------------------------------------------------------------------------------
     def test_same_seed_gives_byte_identical_output(self) -> None:
@@ -201,6 +273,30 @@ class CentauriShuttleTests(CraftChecks, unittest.TestCase):
     LENGTH, SPAN, HEIGHT = 36.0, 51.97, 13.51  # T01's length and the reference's box at it
     CHUNKS = ("body", "stern", "wing_l", "wing_r")
     THRUST_Y = -2.28  # the nozzles' axes
+    PORTS = {"r_nose", "l_nose", "nose_up", "nose_down", "r_root", "l_root"}
+
+    def test_unarmed_with_the_side_thrust_at_the_wing_roots(self) -> None:
+        """Q93: no weapons, no RCS on the wing tips; the side thrust sits on the outer face of each wing's root."""
+        self.assertEqual(self.hp["muzzles"], [])
+        ports = {port["name"]: port for port in self.hp["rcs"]}
+        tip_x = self.authored(self.hp["nav_lights"]["starboard"])[0]
+        for name, port in ports.items():
+            self.assertLess(abs(self.authored(port["position"])[0]), 0.7 * tip_x, f"{name}: not at a wing tip")
+        root = ports["r_root"]
+        self.assertEqual(root["exhaust"], [1.0, 0.0, 0.0])
+        self.assertIn("sway_left", root["tags"])
+        at = self.authored(root["position"])
+        self.assertTrue(cp.BODY_STATIONS[-1][1] < at[0] < cp.WING_STATIONS[3][0], "on the wing, just outboard of the body's rim")
+        self.assertLess(at[1], float(np.interp(at[0], [s[0] for s in cp.WING_STATIONS], [0.5 * (s[2] + s[4]) for s in cp.WING_STATIONS])),
+                        "on the wing's lower, outward face")
+
+    def test_two_main_nozzles_carry_the_reaction_drive(self) -> None:
+        """Q93: a reaction drive; the plumes come from the two nozzles either side of the keel, the retros from the nose."""
+        for pod in self.hp["pods"]:
+            main = self.authored(pod["main"]["position"])
+            self.assertAlmostEqual(abs(main[0]), cp.NOZZLE_X, places=4)
+            self.assertAlmostEqual(main[2], cp.NOZZLE_EXIT_Z, places=4)
+            self.assertAlmostEqual(pod["main"]["radius"], cp.NOZZLE_EXIT_R, places=3)
 
     def test_the_chosen_look_is_d2(self) -> None:
         """Q89: the maintainer chose D2."""
@@ -263,6 +359,34 @@ class MinbariFlyerTests(CraftChecks, unittest.TestCase):
     CHUNKS = ("body", "bow", "tail", "crossbar", "spindle_l", "spindle_r")
     THRUST_Y = 0.0  # the spindles' axes
     GLOW_FROM = 0.7  # the panel under the crossbar glows too
+    PORTS = {"r_blade_in_up", "l_blade_in_up", "r_blade_in_down", "l_blade_in_down"}
+
+    def test_two_plasma_guns_fire_forward_either_side_of_the_nose(self) -> None:
+        """Q91: two forward guns near the central pod."""
+        guns = {m["name"]: m for m in self.hp["muzzles"]}
+        self.assertEqual(set(guns), {"r_gun", "l_gun"})
+        np.testing.assert_allclose(guns["l_gun"]["position"], mirrored(guns["r_gun"]["position"]), atol=1e-4)
+        for name, gun in guns.items():
+            self.assertEqual(gun["direction"], [0.0, 0.0, -1.0], name)
+            at = self.authored(gun["position"])
+            self.assertLess(float(np.hypot(at[0], at[1])), mp.POD_STATIONS[2][1], f"{name}: on the fuselage, inboard of the flank pods")
+            ahead = self.xyz + self.offset
+            ahead = ahead[ahead[:, 2] < at[2] - 0.3]
+            self.assertGreater(float(np.hypot(ahead[:, 0] - at[0], ahead[:, 1] - at[1]).min()), 0.2, f"{name}: a clear line ahead")
+
+    def test_the_bow_blades_carry_the_only_thrusters_that_plume(self) -> None:
+        """Q92: a gravitic drive; forward- and inward-vectored thrusters on the front vertical stabilizers."""
+        blade_x = mp.BLADE_STATIONS[0][1]
+        for pod in self.hp["pods"]:
+            retro = self.authored(pod["retro"]["position"])
+            self.assertAlmostEqual(abs(retro[0]), blade_x, places=4, msg="the forward thruster on the blade's nose")
+            self.assertAlmostEqual(retro[1], 0.0, places=4)
+        for port in self.hp["rcs"]:
+            at = self.authored(port["position"])
+            self.assertLess(abs(abs(at[0]) - blade_x), 1.0, port["name"])
+            self.assertLess(at[2], mp.BLADE_STATIONS[-1][0], port["name"])
+            self.assertEqual(port["exhaust"], [-1.0 if at[0] > 0.0 else 1.0, 0.0, 0.0], f"{port['name']}: fires at the centre line")
+            self.assertIn("sway_right" if at[0] > 0.0 else "sway_left", port["tags"], port["name"])
     OPTIONS = ("p1",)
 
     def test_one_look_the_bluer_one(self) -> None:
