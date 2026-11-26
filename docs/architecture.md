@@ -7470,7 +7470,8 @@ assets/weapons/*_interceptor*.tres  ea_interceptor (4 barrels, 0.25 s), ea_inter
 ```
 native/src/capital_helm.rs                 the helm, engine-free: heading, velocity and top to a command; flips a hull with no retros
 native/src/capital_brain.rs                the brain, engine-free: states, the course, the stagger (5 Hz), `CapitalJob` in the AI job
-native/src/capital_brain/targets.rs        the target (threat x value / time to kill, doctrine weights) and the subsystem to aim at
+native/src/capital_brain/targets.rs        the target (threat x value / time to kill, doctrine weights)
+native/src/capital_brain/aim.rs            the part to aim at: a vital spot in arc with a clear line, else the nearest standing part
 native/src/capital_brain/attitude.rs       the attitude that bears the most mount dps, and the heading and top that take it
 native/src/capital_brain_rows.rs           ScsSimCore's shell: the table, the helm every tick, the launch's copy, the join's answers
 native/src/brain_behaviours/capital_run.rs a fighter's attack runs on a capital (set up, inbound, break, open, regroup)
@@ -7501,8 +7502,12 @@ data/capitals/capitals.json                `capital_brain`: the brain's numbers,
 - **Targets** (`targets.rs`). Hostile warships (capitals and stations' own hulls, as the ship perceives them) within `sensor_m`
   (30 km): `(threat + 1)^threat_w x value^value_w / time_to_kill`, the time to kill its hull points at its own dps plus the time
   to close to its main range; a disabled hull at 5 %, the held target 1.25 x. No capital in reach: no order, and the guns pick
-  their own (fighters too, Q77). The **aim** (Q17): under a cripple doctrine (`centauri`, `drazi`) a withdrawing target's nearest
-  working engine; outgunned (its dps over 1.5 x its own) the target's strongest mount whose arc covers it; else the centre. The
+  their own (fighters too, Q77). The **aim** (Q17, `aim.rs`; the maintainer, 2026-11-25): the first available vital spot, else
+  the nearest standing section of the hull. Vital, in order: under a cripple doctrine (`centauri`, `drazi`) a withdrawing
+  target's engines; outgunned (its dps over 1.5 x its own) its mounts whose arcs cover the ship, strongest first; then its
+  reactor, magazine and bridge, nearest first. Available: standing, inside the cone of one of the ship's heavy weapons, on a line
+  its own hull does not cross that first meets the target within 5 m of the part's box (at most 8 weapons tried a part). The
+  parts are `CapitalBrainSpec.points` (every section with its box, the engines, the bays), re-picked at each think. The
   anti-capital and dual mounts take the order (`CapitalGuns.set_order_id`), the heavy ones at the aim when their own hull does not
   hide it; the beams sweep at it (`CapitalBeams.set_order_id`). Orders are handed on per change (`capital_take_changes`).
 - **Attitude** (`attitude.rs`). Each mount bears along those of 26 directions (faces, edges, corners of its frame) inside its cone

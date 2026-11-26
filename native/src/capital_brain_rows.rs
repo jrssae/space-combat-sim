@@ -15,9 +15,9 @@ use crate::capital_helm::{self as ch, Helm, HelmSpec};
 use crate::sim_core::ScsSimCore;
 
 /// Numbers per mount in `capital_add`'s `mounts`: place (3), axis (3), cone half angle (deg), dps, range (m), shape, role,
-/// works; per point in `points`: place (3), kind, works.
+/// works; per part in `points`: place (3), kind, works, half extents (3).
 pub const MOUNT_LEN: usize = 12;
-pub const POINT_LEN: usize = 5;
+pub const POINT_LEN: usize = 8;
 /// `capital_add`'s `helm`: gravitic, retros, a_main, a_retro, a_rcs x and y, rate max (3), alpha max (3); `brain`: hull
 /// points, class value, threat and value weights, cripple, carrier.
 pub const HELM_LEN: usize = 12;
@@ -243,6 +243,7 @@ impl ScsSimCore {
                     at: v3(c, 0),
                     kind: c[3] as u8,
                     works: c[4] != 0.0,
+                    half: v3(c, 5),
                 })
                 .collect(),
         };

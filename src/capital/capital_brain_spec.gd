@@ -16,6 +16,10 @@ const POINT_ENGINE: int = 0
 const POINT_BAY: int = 1
 const POINT_REACTOR: int = 2
 const POINT_BRIDGE: int = 3
+const POINT_MAGAZINE: int = 4
+const POINT_SECTION: int = 5
+## A nozzle or a bay's mouth as a part to aim at: this far round its place when its hardpoint names no size, m.
+const PART_HALF_M: float = 10.0
 ## `capital_set_tuning`'s keys, in order, with their defaults.
 const TUNING_KEYS: Array[String] = ["think_hz", "engage_share", "approach_mps", "arrive_s", "sensor_m", "screen_min_m",
 		"screen_max_m", "withdraw_hull", "withdraw_reactor", "outgunned_ratio", "keep_bonus", "attitude_margin"]
@@ -91,25 +95,28 @@ static func mounts(ship: CapitalShip) -> Dictionary:
 	return {"names": names, "packed": packed}
 
 
-## `ship`'s subsystems as attackers and its brain aim at them: `{keys, packed}` with `ScsSimCore.POINT_LEN` numbers each
-## (place, kind, works); a key is `engine:<name>`, `bay:<name>`, `section:<name>`.
+## `ship`'s parts as attackers and its brain aim at them: `{keys, packed}` with `ScsSimCore.POINT_LEN` numbers each (place,
+## kind, works, half extents): the engines, the bays and every section of the hull (the reactor, bridge and magazine as vital
+## ones); a key is `engine:<name>`, `bay:<name>`, `section:<name>`.
 static func points(ship: CapitalShip) -> Dictionary:
 	var keys := PackedStringArray()
 	var packed := PackedFloat64Array()
 	var hardpoints: Dictionary = ship.hardpoints()
 	for raw: Variant in hardpoints.get("engines", []):
 		var e: Dictionary = raw
+		var r: float = float(e.get("radius_m", PART_HALF_M))
 		_point(keys, packed, "engine:%s" % e.get("name", ""), _vec3(e.get("position")), POINT_ENGINE,
-				ship.damage.engine_works(str(e.get("name", ""))))
+				ship.damage.engine_works(str(e.get("name", ""))), Vector3(r, r, r))
 	for raw: Variant in hardpoints.get("bays", []):
 		var b: Dictionary = raw
+		var mouth: Array = b.get("mouth_m", [2.0 * PART_HALF_M, 2.0 * PART_HALF_M])
 		_point(keys, packed, "bay:%s" % b.get("name", ""), _vec3(b.get("exit", b.get("position"))), POINT_BAY,
-				ship.damage.bay_works(str(b.get("name", ""))))
+				ship.damage.bay_works(str(b.get("name", ""))), Vector3(0.5 * float(mouth[0]), 0.5 * float(mouth[1]), PART_HALF_M))
 	for name: String in ship.damage.sections:
 		var s: CapitalSection = ship.damage.sections[name]
-		var kind: int = POINT_REACTOR if s.kind == CapitalSection.REACTOR else (POINT_BRIDGE if s.kind == CapitalSection.BRIDGE else -1)
-		if kind >= 0:
-			_point(keys, packed, "section:%s" % name, s.box.get_center(), kind, not s.lost())
+		var kind: int = {CapitalSection.REACTOR: POINT_REACTOR, CapitalSection.BRIDGE: POINT_BRIDGE,
+				CapitalSection.MAGAZINE: POINT_MAGAZINE}.get(s.kind, POINT_SECTION)
+		_point(keys, packed, "section:%s" % name, s.box.get_center(), kind, not s.lost(), 0.5 * s.box.size)
 	return {"keys": keys, "packed": packed}
 
 
@@ -152,9 +159,10 @@ static func _add(names: PackedStringArray, packed: PackedFloat64Array, name: Str
 			1.0 if ship.mount_works(name) else 0.0])
 
 
-static func _point(keys: PackedStringArray, packed: PackedFloat64Array, key: String, at: Vector3, kind: int, ok: bool) -> void:
+static func _point(keys: PackedStringArray, packed: PackedFloat64Array, key: String, at: Vector3, kind: int, ok: bool,
+		half: Vector3) -> void:
 	keys.append(key)
-	packed.append_array([at.x, at.y, at.z, kind, 1.0 if ok else 0.0])
+	packed.append_array([at.x, at.y, at.z, kind, 1.0 if ok else 0.0, half.x, half.y, half.z])
 
 
 static func _vec3(raw: Variant) -> Vector3:

@@ -116,7 +116,8 @@ func test_an_omega_beams_a_hostile_hull_ahead_from_its_fore_emitters_by_section(
 		total += float(e[2])
 	assert_eq(shooters.keys(), [omega.get_instance_id()], "the Omega is the shooter")
 	assert_false(sections.has(""), "every hit named by its section")
-	assert_true(sections.has("bow"), "the beams land on the bow it faces: %s" % [sections.keys()])
+	# Its brain sweeps them onto a vital spot they can reach (M10-T16), else the nearest part: here the bridge, else the bow.
+	assert_true(sections.has("bridge") or sections.has("bow"), "the beams land on the bridge or the bow it faces: %s" % [sections.keys()])
 	assert_eq(seen_firing.keys().size(), 2, "only the fore emitters cover a hull dead ahead: %s" % [seen_firing.keys()])
 	assert_true(seen_firing.has("beam_fore_r") and seen_firing.has("beam_fore_l"))
 	# 40 dps an emitter while on, landed a tick's share at a time (the sped-up ticks are still 1/60 s of sim time).

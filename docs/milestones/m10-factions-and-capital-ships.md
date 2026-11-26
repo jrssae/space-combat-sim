@@ -115,6 +115,11 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q86 | Asimov liveries (2026-11-25) | The liner has **several liveries**: the show's **green** (the default, the first ship) and **at least three more** in the same scheme (white sphere, the same band layout and window rows, grey hub and engines) with a different band colour, so liners can be told apart. A livery belongs to the ship: picked from its name (`data/ships/names.json`), so the same liner always wears the same colours. Where the build allows, the band colour comes from a mask in one atlas, not an atlas a livery |
 | Q87 | Asimov skin (2026-11-25) | The liner's whole surface takes the **Agamemnon pattern** (`references/Agamemnon_B5_FBX/Textures/`: the base colours, hull-plate bump and scratch patterns) **instead of the panel mosaic**, recoloured to the liner's white, greys and its livery band colour (Q86). As Q83: generated in code (`PatchPlates` at two or three sizes and code-made scratches), the Agamemnon files a style reference only, never copied or sampled. The A/B/C options vary within this style |
 | Q88 | Asimov names (2026-11-25) | Every Asimov-class liner is **named after a science-fiction author**, `Asimov` first (the show's), e.g. Heinlein, Clarke, Bradbury, Le Guin, Herbert, Verne, Wells, Butler, Sturgeon, Pohl, Niven, Dick, Shelley, Bester. The show's *Callisto* is left out (not an author) |
+| Q89 | Centauri shuttle look (2026-11-25) | **D2 chosen** (T58): violet #7540B0 (machinery #3A1F60, gold #DEBA60) under Q83's soft darker mottle, gold lines, small gold panels and a crest either side of the spine, a narrow brass strip down the violet spine, round red-orange lamps along the wings' trailing edges. The other options are dropped |
+| Q90 | Minbari Flyer pattern (2026-11-25) | Pale blue, a darker blue and purple fading into each other; on every hull lobe a dark line running lengthwise, with short curved tiger strokes branching from it towards the lobe's edges, tapering and fading out: soft edges and curves, **no straight lines or corners** anywhere. The fins and the crossbar may stay the darker blue with the same strokes; the hex grid (Q45) stays, subtle, underneath; a low-gloss paint so the top does not wash to white. References: the maintainer's orthos, painted miniature and stills in `references/show/m10/minbari_flyer/` (T58) |
+| Q91 | Minbari Flyer armament and handling (2026-11-25) | **Two forward-facing plasma guns** mounted near the central pod, about a Starfury's gun power; manoeuvrability lower than a Starfury's. Replaces the Flyer's "unarmed civilian" entry (T58 stage 2) |
+| Q92 | Minbari Flyer drive (2026-11-25) | A **gravitic drive** (Q51): no plume, but it glows. The front vertical stabilizers carry forward- and inward-vectored thrusters that make small plumes when used (hardpoints in T58's stage 2) |
+| Q93 | Centauri and Kestrel shuttles (2026-11-25) | For T58's and T57's stage 2: (1) the Centauri shuttle has **no tail fin** (built to the STL, confirmed); (2) it uses the EA ships' conventional **reaction** drive (Q51): visible plumes from its two main nozzles, retros as built; (3) **no weapons** on the Centauri shuttle or the EA shuttles (crew shuttle and Kestrel); (4) **no docking collar** on the Centauri shuttle: like the Kestrel it only lands in bays (no `docking_ports`); (5) **no RCS on the wing tips** of the Centauri shuttle or the Kestrel (`ea_atmo_shuttle`): the side thrust sits on the outside base of each wing (the wing root's outer face); the ports move on both craft in stage 2 (`assets/ea_shuttles.py`'s `atmo_ports` and its tests, the hardpoints test and the Kestrel's GUT test kept green); (6) the **wing-fold animation stays in T17**, which now also folds the Centauri shuttle's wings (it is an atmospheric shuttle too); (7) both shuttles' flight tuning is left until later |
 
 ## The hulls
 
@@ -335,8 +340,10 @@ Settled in T03 (Q16, Q17, Q53).
   point within 20 km, else a gate, else it fights on (a disabled ship cannot); Hold on orders (the player's: M11).
 - **Targets:** `threat x value / time_to_kill` with doctrine weights per faction (`capitals.json`). Anti-capital mounts
   take the brain's target; anti-fighter mounts pick their own on the turret rows, without the grid's "never first".
-  Subsystems (Q17): heavy weapons aim at the hull's centre, at the target's mounts bearing on it when outgunned (enemy
-  dps over 1.5x its own), at a withdrawing target's engines under the Centauri and Drazi "cripple" doctrine.
+  Subsystems (Q17; the maintainer, 2026-11-25): heavy weapons and beams aim at the closest part of the target, but take a
+  vital spot when one is available (standing, inside one of their arcs, with a clear line that meets the target on it): the
+  target's mounts bearing on it when outgunned (enemy dps over 1.5x its own), a withdrawing target's engines under the Centauri
+  and Drazi "cripple" doctrine, then its reactor, magazine and bridge; re-picked at each think.
 - **Fighters' attack runs:** approach along the direction least covered by the target's arcs (beams weighed most),
   re-planned every 2 s; fire from 1 500 to 400 m at a subsystem (mounts covering the approach, interceptors, engines,
   bays; torpedo craft the reactor), break off across the nearest beam arc, open to 3 km, repeat; abort at half the
@@ -437,7 +444,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | done |
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | in progress |
 | T16 | E | The `capital` brain and fighters' attacks on capitals; the capital helm (steering, today ~52 µs per capital per tick in GDScript) moves into the native brain (Q70) | T12, T14 | Opus | in progress |
-| T17 | E | Carriers launch fighters from bays and tubes | T07, T16 | Opus | not started |
+| T17 | E | Carriers launch fighters from bays and tubes; the wing-fold animation of the Kestrel and the Centauri shuttle (Q93) | T07, T16 | Opus | not started |
 | T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | done |
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
 | T19 | F | Raider strike carrier: hull, flight, collision, cradle launch and retrieval, its own jump points, no weapons (Q25 to Q30; approved 2026-11-19) | - (early start) | Fable | done |
@@ -785,6 +792,19 @@ fly attack runs on capitals; B10 and B1 run and reported (Q77). Launch (carriers
   (seeded per burst or sweep), so a beam sweeps rather than burns one section; (b) the sweep beam's dps or the magazine's points;
   (c) for B10, the heavy plasma not taking fighters (Q77 says it keeps firing; it does half the killing) or a slower traverse, and
   `fire_to_m` 600 m (fewer rams).
+- **Fix round 1 (the maintainer, 2026-11-25: closest part, vital spots first).** `native/src/capital_brain/aim.rs`: at each think
+  the heavy weapons' and beams' aim is the first available vital spot (the doctrine's aims, then reactor, magazine, bridge,
+  nearest first), available meaning standing, inside the cone of one of the ship's heavy weapons (anti-fighter guns left out),
+  on a line its own hull does not cross and that first meets the target within 5 m of that part's box; else the nearest standing
+  section. Every section now reaches the brain with its box (`CapitalBrainSpec.points`, `POINT_LEN` 8; kinds magazine and
+  section added). `test_capital_beams` now takes the bridge or the bow as the beams' section (the brain names the bridge).
+  *Tests (staged copy):* Rust 369/369 (2 new: a vital spot the line cannot reach, one outside every heavy weapon's arc; the
+  even fight now takes the reactor), clippy clean in the touched files; compile check 1 129 scripts clean; GUT 111/111 over 16
+  files (`test_capital_brain` 8 with the new aim test, the brain, beam and gun threads files, beams, guns, hulks, damage,
+  interceptors, the guard, the helm and brain parity). *Balance (BALANCE LATER, no retune):* **B10** unchanged (122, 128,
+  106 s, the Omega at 98, 93, 98 %: with no capital in reach its brain names no aim). **B1** now runs to the 900 s limit on all
+  three seeds, the Omegas at 88 to 91 % and 81 % (was 105 s): their fire now goes to a vital part their lines reach or the
+  nearest section, no longer to the magazine at the centre.
 - **Open for the maintainer.** A capital in the tier thinks but flies its last cruise (the tier's capital law); scenario capitals
   (`capitals[]`) are spawned on orders (Hold), so a mission frees one with `release_helm()` (no scenario key yet); the squadron's
   abort counts losses from its peak strength, not only those to a capital.
@@ -1258,6 +1278,8 @@ parity green.
   The Nova (Q71) launches and recovers its 24 Starfuries through its one forward bay on a hidden elevator: the bay hardpoint
   (`ea_nova`'s `hardpoints.json`, `bay_fore`) carries `recovers: true`, `elevator` (the lift's place in the bay floor, body frame)
   and `elevator_travel_m` (its drop to the hangar deck below); T17 brings craft up the lift and out of the mouth (no animation yet).
+  T17 also animates the wing fold of the two atmospheric shuttles (Q93): the Kestrel's wings fold up 90 degrees at their joints
+  (as parked in the liner's hall, T53) and the Centauri shuttle's upswept wings fold likewise for its bays.
 - **T18 (HUD):** Q17, on the radial framework; the M5 menu tests pass. Done when AC12.
 - **T18 done (2026-11-21).** A capital's subsystems are targets (Q17, `docs/architecture.md` §18.19 "Subsystems"). Picking an
   identified capital on a ship ring opens a ring of WHOLE SHIP, BRIDGE, REACTOR, ENGINES, LAUNCH BAYS, TURRETS, BEAM EMITTERS and

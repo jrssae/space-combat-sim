@@ -19,6 +19,7 @@ use crate::capital_helm::{Helm, HelmSpec};
 use crate::rows::{FLAG_DISABLED, FLAG_HULK, FLAG_SHELTERED, Rows, seen_ix};
 use crate::v3::{add, clampf, dist_sq, distance, div_s, length, scale, sub};
 
+mod aim;
 pub mod attitude;
 mod targets;
 
@@ -53,13 +54,14 @@ pub const ROLE_DUAL: u8 = 1;
 pub const ROLE_AC: u8 = 2;
 pub const ROLE_PD: u8 = 3;
 
-/// A subsystem point's kind (`BrainPoint.kind`).
+/// A part's kind (`BrainPoint.kind`): an engine's nozzle, a bay's mouth, the vital sections (reactor, bridge, magazine) and
+/// every other section of the hull.
 pub const POINT_ENGINE: u8 = 0;
 pub const POINT_BAY: u8 = 1;
-#[allow(dead_code)] // T16's torpedo craft would aim at it; none fly yet
 pub const POINT_REACTOR: u8 = 2;
-#[allow(dead_code)] // GDScript's number for the bridge; nothing aims at it yet
 pub const POINT_BRIDGE: u8 = 3;
+pub const POINT_MAGAZINE: u8 = 4;
+pub const POINT_SECTION: u8 = 5;
 
 /// What the withdraw's exit search found (`Status.exit`): not asked yet, an exit to fly to, or none (it fights on).
 pub const EXIT_UNKNOWN: u8 = 0;
@@ -96,13 +98,14 @@ impl BrainMount {
     }
 }
 
-/// A subsystem the brain or an attacker aims at, in its hull's frame: an engine's nozzle, a bay's mouth, the reactor, the
-/// bridge.
+/// A part the brain or an attacker aims at, in its hull's frame: its place, kind, whether it still stands, and the half
+/// extents of the box it fills (a section's box; a nozzle's or mouth's size).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct BrainPoint {
     pub at: Vector3,
     pub kind: u8,
     pub works: bool,
+    pub half: Vector3,
 }
 
 /// The faction's doctrine (`capitals.json`, `capital_brain.doctrine`): how much threat and value weigh in a target's score,

@@ -1,13 +1,13 @@
 // A capital's target (D12.10, Q17): the hostile warship in sensor range that best repays its heavy weapons, by threat
-// times value over the time it takes to kill (getting there included), weighed by the faction's doctrine; and the part of it
-// to aim at: its mounts bearing on the ship when outgunned, a withdrawing target's engines under a cripple doctrine, else
-// its centre.
+// times value over the time it takes to kill (getting there included), weighed by the faction's doctrine; the part of it
+// to aim at is `aim`'s.
 use godot::builtin::Vector3;
 
 use crate::rows::{FLAG_DISABLED, FLAG_HULK, Rows};
-use crate::v3::{dist_sq, dot, length, normalized, sub, xform_inv};
+use crate::v3::{length, sub};
 
-use super::{CapitalJob, CapitalSpec, Memory, POINT_ENGINE, STATE_WITHDRAW, ignored, is_warship_row, range_sq};
+use super::aim::aim;
+use super::{CapitalJob, CapitalSpec, Memory, ignored, is_warship_row, range_sq};
 
 // A hull the brain has no entry for (a station, a stand-in): its threat in dps, its worth and hull points per metre of
 // radius.
@@ -85,47 +85,4 @@ pub fn choose<F: Fn(i64) -> i64>(
         pick.aim = aim(spec, &other.spec, other.memory.state, rows, r, pick.row, t.outgunned_ratio);
     }
     Some(pick)
-}
-
-/// Where heavy weapons aim on target `target` (row `j`) from capital `spec` at row `r` (Q17): under a cripple doctrine a
-/// withdrawing target's nearest working engine; outgunned (its dps over `ratio` times its own), the target's strongest mount
-/// that bears on it; else none (the centre).
-pub fn aim(
-    spec: &CapitalSpec,
-    target: &CapitalSpec,
-    target_state: u8,
-    rows: &Rows,
-    r: usize,
-    j: usize,
-    ratio: f64,
-) -> Option<Vector3> {
-    let (basis, origin) = (&rows.bases[j], rows.positions[j]);
-    let own_local = xform_inv(basis, sub(rows.positions[r], origin));
-    if spec.doctrine.cripple && target_state == STATE_WITHDRAW {
-        let engine = target
-            .points
-            .iter()
-            .filter(|p| p.works && p.kind == POINT_ENGINE)
-            .min_by(|a, b| dist_sq(a.at, own_local).total_cmp(&dist_sq(b.at, own_local)));
-        if let Some(e) = engine {
-            return Some(e.at);
-        }
-    }
-    if target.dps() > ratio * spec.dps().max(1.0) {
-        let mut best: Option<(f64, f32, Vector3)> = None;
-        for m in target.mounts.iter().filter(|m| m.fights()) {
-            let to_us = normalized(sub(own_local, m.at));
-            if dot(to_us, m.axis) < m.cos_half {
-                continue;
-            }
-            let d = dist_sq(m.at, own_local);
-            if best.is_none_or(|(dps, bd, _)| m.dps > dps || (m.dps == dps && d < bd)) {
-                best = Some((m.dps, d, m.at));
-            }
-        }
-        if let Some((_, _, at)) = best {
-            return Some(at);
-        }
-    }
-    None
 }

@@ -96,19 +96,24 @@ fn spec(body: i64, mounts: Vec<BrainMount>) -> CapitalSpec {
         doctrine: Doctrine::default(),
         carrier: false,
         mounts,
-        points: vec![
-            BrainPoint {
-                at: v(0.0, 0.0, 200.0),
-                kind: POINT_ENGINE,
-                works: true,
-            },
-            BrainPoint {
-                at: v(0.0, 0.0, 0.0),
-                kind: POINT_REACTOR,
-                works: true,
-            },
-        ],
+        points: parts(),
     }
+}
+
+// The test hull's parts: an engine cluster on its stern, the reactor amidships, a bow and a stern section.
+fn parts() -> Vec<BrainPoint> {
+    let part = |at: Vector3, kind: u8, half: Vector3| BrainPoint {
+        at,
+        kind,
+        works: true,
+        half,
+    };
+    vec![
+        part(v(0.0, 0.0, 195.0), POINT_ENGINE, v(20.0, 10.0, 10.0)),
+        part(v(0.0, 0.0, 0.0), POINT_REACTOR, v(20.0, 10.0, 40.0)),
+        part(v(0.0, 0.0, -120.0), POINT_SECTION, v(20.0, 10.0, 80.0)),
+        part(v(0.0, 0.0, 120.0), POINT_SECTION, v(20.0, 10.0, 80.0)),
+    ]
 }
 
 fn entry(spec: CapitalSpec, ordinal: i64) -> Entry {
@@ -282,9 +287,33 @@ fn outgunned_it_aims_at_the_mounts_bearing_on_it() {
     let a = &think(&mut j, &rows)[0];
     let aim = a.order_aim.expect("a subsystem aim");
     assert!(aim.x < -20.0, "a mount on the flank facing it: {aim:?}");
-    // Even, it aims at the centre.
+    // Even, it goes for the vital spot it can reach: the reactor, bared on the flank it faces.
     let mut j = job(vec![entry(broadside(1), 0), entry(broadside(2), 7)]);
-    assert_eq!(think(&mut j, &rows)[0].order_aim, None);
+    assert_eq!(think(&mut j, &rows)[0].order_aim, Some(v(0.0, 0.0, 0.0)));
+}
+
+#[test]
+fn a_vital_spot_its_line_cannot_reach_gives_way_to_the_nearest_standing_part() {
+    // The target end on, bow first: the line to its reactor meets the bow section first.
+    let rows = rows_of(&[(1, Vector3::ZERO, 0), (2, v(0.0, 0.0, -4000.0), 1)]);
+    let mut j = job(vec![entry(bow_guns(1), 0), entry(broadside(2), 7)]);
+    assert_eq!(think(&mut j, &rows)[0].order_aim, Some(v(0.0, 0.0, 120.0)), "its nearest section (the stern, at -Z in rows)");
+    // Abeam, the reactor shows; once it is lost, the nearest standing section.
+    let rows = rows_of(&[(1, Vector3::ZERO, 0), (2, v(4000.0, 0.0, 0.0), 1)]);
+    let mut j = job(vec![entry(broadside(1), 0), entry(broadside(2), 7)]);
+    assert_eq!(think(&mut j, &rows)[0].order_aim, Some(v(0.0, 0.0, 0.0)), "the reactor");
+    Arc::make_mut(&mut j.entries[1].spec).points[1].works = false;
+    let aim = think(&mut j, &rows)[0].order_aim.expect("a part");
+    assert!(aim.z.abs() == 120.0, "a standing section, not the lost reactor: {aim:?}");
+}
+
+#[test]
+fn a_vital_spot_outside_every_heavy_weapons_arc_is_not_taken() {
+    // Only its fixed bow guns are heavy, and the target lies abeam: no line in their gimbals, so the nearest part.
+    let rows = rows_of(&[(1, Vector3::ZERO, 0), (2, v(4000.0, 0.0, 300.0), 1)]);
+    let mut j = job(vec![entry(bow_guns(1), 0), entry(broadside(2), 7)]);
+    let aim = think(&mut j, &rows)[0].order_aim.expect("a part");
+    assert_eq!(aim, v(0.0, 0.0, -120.0), "the nearest section, not the reactor its guns cannot bear on");
 }
 
 #[test]
@@ -296,7 +325,7 @@ fn a_cripple_doctrine_aims_at_a_withdrawing_targets_engines() {
     fleeing.memory.state = STATE_WITHDRAW;
     let mut j = job(vec![entry(own, 0), fleeing]);
     let a = &think(&mut j, &rows)[0];
-    assert_eq!(a.order_aim, Some(v(0.0, 0.0, 200.0)), "its engine");
+    assert_eq!(a.order_aim, Some(v(0.0, 0.0, 195.0)), "its engine");
 }
 
 #[test]

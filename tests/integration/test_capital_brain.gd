@@ -115,6 +115,46 @@ func test_two_omegas_approach_bow_on_then_engage_at_their_range_and_turn_their_m
 	assert_lt(_bearing(a, b), 0.6, "it turned its hull to bring them round")
 
 
+# The part of `target` its heavy weapons aim at (`CapitalBrainSpec.points`' key), "" when none.
+func _aimed_part(shooter: CapitalShip, target: CapitalShip) -> String:
+	var aim: Variant = _brains().brain_state(shooter).get("aim")
+	if aim == null:
+		return ""
+	var parts: Dictionary = CapitalBrainSpec.points(target)
+	var packed: PackedFloat64Array = parts["packed"]
+	for k: int in (parts["keys"] as PackedStringArray).size():
+		var at := Vector3(packed[k * 8], packed[k * 8 + 1], packed[k * 8 + 2])
+		if at.distance_to(aim as Vector3) < 0.01:
+			return (parts["keys"] as PackedStringArray)[k]
+	return "?"
+
+
+func test_its_heavy_weapons_go_for_a_vital_spot_they_can_reach_else_the_nearest_part() -> void:
+	var a: CapitalShip = _omega("Omega A", Factions.EARTH_ALLIANCE, 3000.0, 90.0)
+	var b: CapitalShip = _omega("Raider Omega", Factions.RAIDERS, 6000.0, 90.0)
+	if a == null or b == null:
+		return
+	for cap: CapitalShip in [a, b]:
+		CapitalGuns.of(main.world).hold(cap, true)
+		CapitalBeams.of(main.world).hold(cap, true)
+	a.set_course(-a.global_basis.z, main.world.rest_velocity())  # broadside on, held: the geometry stays
+	await _fly(5.0, func() -> bool: return int(_brains().brain_state(a).get("thinks", 0)) > 2)
+	var first: String = _aimed_part(a, b)
+	assert_true(first.begins_with("section:"), "it aims at a part of the hull (%s)" % first)
+	var section: String = first.trim_prefix("section:")
+	gut.p("aimed at %s (%s)" % [section, b.damage.sections[section].kind])
+	# Lose that part: the next think moves on to another standing one.
+	b.damage.hit(section, b.damage.sections[section].box.get_center(), b.damage.sections[section].max_hp * 2.0)
+	CapitalBrains.of(main.world).refresh(b)
+	if not is_instance_valid(b) or b.damage.is_destroyed:
+		pass_test("the part it took blew the target (%s)" % section)
+		return
+	await _fly(2.0)
+	var next: String = _aimed_part(a, b)
+	assert_ne(next, first, "a lost part gives way (%s, then %s)" % [first, next])
+	assert_true(next.begins_with("section:") and not b.damage.sections[next.trim_prefix("section:")].lost(), "to a standing one")
+
+
 func test_on_orders_it_holds_its_course_and_still_names_its_target() -> void:
 	var a: CapitalShip = _omega("Omega A", Factions.EARTH_ALLIANCE, 3000.0, 90.0)
 	var b: CapitalShip = _omega("Raider Omega", Factions.RAIDERS, 11000.0, 90.0)
