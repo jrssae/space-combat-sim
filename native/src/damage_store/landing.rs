@@ -3,7 +3,9 @@
 // capital by the section its surface volume names and the part there, the station by section and grid mount, any other
 // hull whole), with the disguise a shooter gives away and the attackers the turrets remember. GDScript gets, per batch, the
 // writes coalesced, the events, and one summary per damaged ship. A hit that raises an event (a section, a part, a hulk, a
-// blast, a kill, a reveal) ends the batch, so GDScript answers it before the next hit lands, as it did hit by hit.
+// blast, a kill, a reveal) ends the batch, so GDScript answers it before the next hit lands, as it did hit by hit. A blast's hits
+// (M10-T76) land the same way, friend or foe alike, one `land_more` a hull, so a blast and its chain share one batch's writes and
+// summaries.
 use std::collections::HashMap;
 
 use godot::builtin::Vector3;
@@ -72,6 +74,8 @@ pub struct LandHit {
 
 /// The rules of the tick: the settings and the relations (1 hostile, 2 friendly, by faction index).
 pub struct Ctx<'a> {
+    /// A blast's hits (M10-T76): any side's hull, no attacker to remember and no disguise to give away.
+    pub blast: bool,
     pub friendly_fire: bool,
     pub god_mode: bool,
     pub relation: &'a [u8],
@@ -122,6 +126,8 @@ pub struct LandOut {
     pub landed: Vec<Landed>,
     pub hits: u32,
     pub damage: f64,
+    /// The last `land_more` stopped on a hit GDScript must answer (an event, a kill, a reveal) or land itself.
+    pub stopped: bool,
     sync_at: HashMap<(u8, i64, u8, i64, i64), usize>,
     summary_at: HashMap<i64, usize>,
 }
@@ -138,6 +144,7 @@ impl LandOut {
         self.landed.clear();
         self.hits = 0;
         self.damage = 0.0;
+        self.stopped = false;
         self.sync_at.clear();
         self.summary_at.clear();
     }
@@ -164,8 +171,9 @@ impl LandOut {
         }
     }
 
-    // The coalesced writes grouped by ledger, in the order each was first written (GDScript takes a ledger's in one call).
-    fn group(&mut self) {
+    /// Ends a batch: the coalesced writes grouped by ledger, in the order each was first written (GDScript takes a ledger's in
+    /// one call). Nothing more may land into it until `clear`.
+    pub fn finish(&mut self) {
         let n = self.sync.len() / OUT_WIDTH;
         let mut first: Vec<(u8, i64)> = Vec::new();
         let mut rank = Vec::with_capacity(n);
@@ -235,6 +243,15 @@ pub fn zone_for(layout: u8, local: Vector3) -> i32 {
 /// Lands `hits` from `start` in order until the end or a hit that raises an event; returns the next hit to land.
 pub fn land(store: &mut DamageStore, targets: &HashMap<i64, Target>, hits: &[LandHit], start: usize, ctx: &Ctx, out: &mut LandOut) -> usize {
     out.clear();
+    let next = land_more(store, targets, hits, start, ctx, out);
+    out.finish();
+    next
+}
+
+/// As `land`, into a batch already begun (`out` neither cleared nor finished), so several calls share its writes and
+/// summaries; `out.stopped` says whether it stopped on a hit GDScript must answer or land.
+pub fn land_more(store: &mut DamageStore, targets: &HashMap<i64, Target>, hits: &[LandHit], start: usize, ctx: &Ctx, out: &mut LandOut) -> usize {
+    out.stopped = false;
     let mut log = Log::default();
     let rel = |a: u32, b: u32| {
         let (a, b) = (a as usize, b as usize);
@@ -244,17 +261,20 @@ pub fn land(store: &mut DamageStore, targets: &HashMap<i64, Target>, hits: &[Lan
     for (k, h) in hits.iter().enumerate().skip(start) {
         let Some(t) = HashMap::get(targets, &h.target) else {
             out.deferred = Some(k);
+            out.stopped = true;
             return k + 1;
         };
         let Some(hull) = store.hulls.get(t.hull) else {
             out.deferred = Some(k);
+            out.stopped = true;
             return k + 1;
         };
         if hull.destroyed {
             continue; // a hull already dead takes no more
         }
         let tf = h.target_faction;
-        let hurts = ctx.friendly_fire
+        let hurts = ctx.blast
+            || ctx.friendly_fire
             || tf.is_some_and(|f| rel(h.shooter_faction, f) == 1)
             || (t.hit_by_anyone && tf != Some(h.shooter_faction));
         if !hurts {
@@ -265,6 +285,7 @@ pub fn land(store: &mut DamageStore, targets: &HashMap<i64, Target>, hits: &[Lan
                 Some(&s) => s,
                 None => {
                     out.deferred = Some(k);
+                    out.stopped = true;
                     return k + 1;
                 }
             },
@@ -275,13 +296,16 @@ pub fn land(store: &mut DamageStore, targets: &HashMap<i64, Target>, hits: &[Lan
             (_, Some(l)) => Some(l),
             (_, None) => {
                 out.deferred = Some(k);
+                out.stopped = true;
                 return k + 1;
             }
         };
-        out.attackers.push((h.body, h.shooter));
+        if !ctx.blast {
+            out.attackers.push((h.body, h.shooter));
+        }
         let mut stop = false;
         let gives_away = |f: u32| t.is_player || tf.is_some_and(|v| rel(f, v) == 2);
-        if h.disguise.is_some_and(gives_away) && !revealed.contains(&h.shooter) {
+        if !ctx.blast && h.disguise.is_some_and(gives_away) && !revealed.contains(&h.shooter) {
             revealed.push(h.shooter);
             out.reveals.push(h.shooter);
             stop = true;
@@ -376,7 +400,10 @@ pub fn land(store: &mut DamageStore, targets: &HashMap<i64, Target>, hits: &[Lan
             s.attackers.push(h.shooter);
             s.attacker_factions.push(h.shooter_faction);
         }
-        s.last_shooter = h.shooter;
+        // A blast with no shooter (a death, 0) names no one: the last shooter stays the last one that has an id.
+        if h.shooter != 0 || s.hits == 0 {
+            s.last_shooter = h.shooter;
+        }
         s.hits += 1;
         s.damage += h.damage;
         s.applied += applied;
@@ -388,10 +415,9 @@ pub fn land(store: &mut DamageStore, targets: &HashMap<i64, Target>, hits: &[Lan
             s.zones.push(z);
         }
         if stop {
-            out.group();
+            out.stopped = true;
             return k + 1;
         }
     }
-    out.group();
     hits.len()
 }

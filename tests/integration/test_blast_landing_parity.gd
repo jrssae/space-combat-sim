@@ -6,7 +6,8 @@ extends GutTest
 ## death blast), on Babylon 5's sections and grid, and an Omega dying beside a 100-mine field with fighters at its far end (the
 ## field going off as a chain): every blast hit (the hull, the tick, damage, points removed, point), every event, every hull's
 ## velocity each tick (the pushes) and the end state (`tests/fixtures/parity/blast_landing.json`). The native batch must give the
-## same, bit for bit, with six threads, one thread and the `delayed` step alike.
+## same, bit for bit, with six threads, one thread and the `delayed` step alike; its hits are read from the batch's native hit
+## log now (a hit it leaves to GDScript would still show as a `hit_taken`).
 
 const FILE: String = "blast_landing"
 const TICKS: int = 240
@@ -111,6 +112,7 @@ func _run() -> Dictionary:
 	add_child_autofree(main)
 	await _ticks(2)
 	BlastResolver.reset_stats()
+	BlastResolver.set_hit_log(true)
 	_station = main.far_props.station
 	var p: Vector3 = main.ship.global_position
 	var fwd: Vector3 = -main.ship.global_basis.z
@@ -178,20 +180,28 @@ func _run() -> Dictionary:
 	var chunks: Array = []
 	var chunk_rows: Array = []
 	var hits_from: int = 0
+	# The readouts (wall clock): a scripted blast's landing with the deaths it causes, and Omega B's chain: its death's landing
+	# then every step of its field (the mines going off, drawn, with their blasts and the deaths they cause).
 	var costs: PackedStringArray = []
-	var chain: Array[int] = [0, 0]  # the blasts and wall-clock us from Omega B's death to the field's last mine (a readout)
+	var probe: Array[int] = [0, 0, 0]  # the probes' hulls hurt, us, of which the native batch's (none before M10-T76)
+	var chain: Array[int] = [0, 0, 0]  # blasts before it, us landing Omega B's death, us in its field's steps
 	for t: int in TICKS:
 		_tick = t
-		if t == CHAIN_FROM:
-			chain = [BlastResolver.blasts, BlastResolver.total_us]
-		if t == CHAIN_TO:
-			chain = [BlastResolver.blasts - chain[0], BlastResolver.total_us - chain[1]]
 		await get_tree().physics_frame
-		var spent: Array[int] = [BlastResolver.blasts, BlastResolver.total_us]
+		var spent: Array[int] = [BlastResolver.blasts, BlastResolver.total_us,
+				int(BlastResolver.stats().get("native_mean_us", 0.0) * BlastResolver.blasts)]
 		_script(t, a, b, cap_a, cap_b, side, up)
+		if t >= 4 and t <= 7:
+			probe[0] += BlastResolver.last_hurt
+			probe[1] += BlastResolver.total_us - spent[1]
+			probe[2] += int(BlastResolver.stats().get("native_mean_us", 0.0) * BlastResolver.blasts) - spent[2]
 		if t == 14 or t == 70:
 			costs.append("tick %d: %d blasts, %d us" % [t, BlastResolver.blasts - spent[0], BlastResolver.total_us - spent[1]])
+		if t == CHAIN_FROM:
+			chain = [spent[0], BlastResolver.total_us - spent[1], 0]
 		await get_tree().process_frame
+		if t >= CHAIN_FROM and t <= CHAIN_TO:
+			chain[2] += int(_field.step_us)
 		_take_pending()
 		chunk_rows.append(_velocities())
 		if (t + 1) % CHUNK_TICKS == 0:
@@ -216,9 +226,12 @@ func _run() -> Dictionary:
 	var counts: Array = [BlastResolver.blasts, BlastResolver.hulls_hurt, BlastResolver.pushed]
 	var out: Dictionary = {"hits": _hits.size(), "blasts": BlastResolver.blasts, "chunks": chunks, "events": _events.size(),
 			"event_log": ParityFixture.digest(_events), "counts": counts, "end": ParityFixture.digest(end)}
-	gut.p("cost: %d blasts, mean %.0f us, max %d us, the core's reach %.0f us; the chain (Omega B and its field): %d blasts, %d us; %s" % [
+	gut.p("cost: 4 probes, %d hulls hurt, %d us: %.1f us a hull (native %.1f)" % [probe[0], probe[1],
+			float(probe[1]) / maxf(probe[0], 1.0), float(probe[2]) / maxf(probe[0], 1.0)])
+	gut.p("cost: %d blasts, mean %.0f us, max %d us, the core's reach %.0f us; the chain (Omega B, its field's steps): %d blasts, %d us; %s" % [
 			BlastResolver.blasts, float(BlastResolver.stats()["mean_us"]), BlastResolver.max_us,
-			float(BlastResolver.stats()["reach_mean_us"]), chain[0], chain[1], "; ".join(costs)])
+			float(BlastResolver.stats()["reach_mean_us"]), BlastResolver.blasts - chain[0], chain[1] + chain[2], "; ".join(costs)])
+	BlastResolver.set_hit_log(false)
 	main.queue_free()
 	await _ticks(2)
 	return out
@@ -228,6 +241,9 @@ func _run() -> Dictionary:
 func _script(t: int, a: Array[Combatant], b: Array[Combatant], cap_a: CapitalShip, cap_b: CapitalShip, side: Vector3,
 		up: Vector3) -> void:
 	match t:
+		4, 5, 6, 7:
+			# A probe that hurts the whole group and kills none: the landing's own cost, a hull at a time.
+			BlastResolver.set_off(BlastSpec.make(&"t76_probe", 0.5, 400.0, 200.0), _centre_of(a), Factions.NEUTRAL)
 		10:
 			a[1].damageable.kill()  # a raider's death in the group: its low neighbours blow in turn
 		14:
@@ -344,8 +360,12 @@ func _watch_station() -> void:
 	_station.station_destroyed.connect(func(s: String) -> void: _events.append([_tick, who, "destroyed", s]))
 
 
-# The tick's hits with the points each removed.
+# The tick's hits with the points each removed: the batch's, then any landed in GDScript.
 func _take_pending() -> void:
+	for info: HitInfo in BlastResolver.hit_log():
+		if _who.has(info.target_id):
+			_hits.append([_who[info.target_id], _tick, info.damage, info.applied, info.point])
+	BlastResolver.set_hit_log(true)  # forgets what it read
 	for e: Array in _pending:
 		var info: HitInfo = e[2]
 		_hits.append([e[0], e[1], info.damage, info.applied, info.point])

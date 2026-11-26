@@ -93,6 +93,11 @@ func _log_hits(target: CapitalShip, shooter: CapitalShip) -> Array:
 	target.section_hit.connect(func(section: String, info: HitInfo) -> void:
 		if info.shooter_id == shooter_id:
 			log.append([info.cause, section, info.damage]))
+	# A warhead's blast lands in the native batch (M10-T76): one summary, its sections by the store's slot.
+	target.damageable.hits_landed.connect(func(summary: HitSummary) -> void:
+		if summary.cause == HitInfo.CAUSE_BLAST and summary.attackers.has(shooter_id):
+			for slot: int in summary.sections:
+				log.append([summary.cause, target.damage.section_name(slot), summary.damage]))
 	return log
 
 

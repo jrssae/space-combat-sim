@@ -316,6 +316,7 @@ impl ScsBeamRows {
             let mut guard = store.bind_mut();
             let s = &mut *guard;
             let ctx = Ctx {
+                blast: false,
                 friendly_fire,
                 god_mode,
                 relation: &self.relation,
@@ -450,7 +451,7 @@ impl ScsBeamRows {
     // The summaries as columns, one row a damaged ship: `[Damageables, bodies hit last, last shooters, hits, damage, points
     // removed, last points, attacker offsets, attackers, their faction indices (the core's), section offsets, sections, zone
     // offsets, zones, zone amounts]`; a ship's ragged lists run from its offset to the next.
-    fn summary_columns(list: &[dl::Summary]) -> VarArray {
+    pub(crate) fn summary_columns(list: &[dl::Summary]) -> VarArray {
         let mut att_at = vec![0i32];
         let mut sec_at = vec![0i32];
         let mut zone_at = vec![0i32];

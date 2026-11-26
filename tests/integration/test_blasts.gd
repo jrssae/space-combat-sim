@@ -60,13 +60,9 @@ static func _gap(c: Combatant, at: Vector3) -> float:
 	return best
 
 
-# The blast hits `damageable` takes from now on.
+# The blast hits `damageable` takes from now on (the native batch's summaries, M10-T76).
 static func _blast_hits(damageable: Damageable) -> Array[HitInfo]:
-	var out: Array[HitInfo] = []
-	damageable.hit_taken.connect(func(info: HitInfo) -> void:
-		if info.cause == HitInfo.CAUSE_BLAST:
-			out.append(info))
-	return out
+	return BlastHits.of(damageable)
 
 
 func _sync() -> void:
@@ -173,15 +169,19 @@ func test_a_blast_near_a_capital_lands_on_its_nearest_section() -> void:
 	for entry: Dictionary in cap.sections.on(CapitalSections.HULL):
 		for v: HitShape in entry["hit_volumes"]:
 			gap = minf(gap, CapitalSections.distance(v, local))
-	var landed: Array = []
-	cap.section_hit.connect(func(s: String, info: HitInfo) -> void: landed.append([s, info]))
+	var landed: Array[HitSummary] = []
+	cap.damageable.hits_landed.connect(func(s: HitSummary) -> void: landed.append(s))
 	var spec: BlastSpec = BlastSpec.make(&"test", 500.0, gap + 100.0, 1.0e4)
 	var points_before: float = cap.damage.sections[expected].hp
 	_sync()
 	BlastResolver.set_off(spec, at)
-	assert_eq(landed.size(), 1, "one hit for the whole ship, rotors and all")
-	assert_eq(landed[0][0], expected, "on the section nearest the blast")
-	assert_almost_eq((landed[0][1] as HitInfo).damage, spec.damage_at(gap), 0.05, "by the falloff to its nearest volume")
+	assert_eq(landed.size(), 1, "the ship hears of the blast once")
+	if landed.is_empty():
+		return
+	assert_eq(landed[0].cause, HitInfo.CAUSE_BLAST)
+	assert_eq(landed[0].hits, 1, "one hit for the whole ship, rotors and all")
+	assert_eq(cap.damage.section_name(landed[0].sections[0]), expected, "on the section nearest the blast")
+	assert_almost_eq(landed[0].damage, spec.damage_at(gap), 0.05, "by the falloff to its nearest volume")
 	assert_lt(cap.damage.sections[expected].hp, points_before, "its points went down")
 
 
@@ -211,8 +211,7 @@ func test_a_missiles_warhead_blasts_where_it_strikes() -> void:
 	_place(target, centre)
 	_place(beside, centre + main.ship.global_basis.x * 14.0)
 	_sync()
-	var target_hits: Array[HitInfo] = []
-	target.damageable.hit_taken.connect(func(info: HitInfo) -> void: target_hits.append(info))
+	var target_hits: Array[HitInfo] = BlastHits.of(target.damageable, true)
 	var beside_hits: Array[HitInfo] = _blast_hits(beside.damageable)
 	var from: Vector3 = centre + main.ship.global_basis.z * 120.0
 	MissileStandin.launch(main.projectiles, from, target.ship, main.ship.get_instance_id(), Factions.RAIDERS, SimClock.now())

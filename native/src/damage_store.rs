@@ -1,10 +1,11 @@
 // The damage store (M10-T75, Q94): one owner for every hull's, section's and part's points. Fighters' hulls, capital ships'
 // sections, mounts, engines and bays (Q72's rules) and the station's sections and grid mounts live here; every source of
-// damage lands through it (bolts, rams and the console one call a hit, beams one batch a tick) and GDScript keeps read-only
-// copies, refreshed from the write log each call returns. Engine-free (test_sim_core reads this file): numbers in, numbers
+// damage lands through it (bolts, rams and the console one call a hit, beams one batch a tick, blasts and their chains one
+// batch, M10-T76) and GDScript keeps read-only copies, refreshed from the write log each call returns. Engine-free (test_sim_core reads this file): numbers in, numbers
 // and a log out, no statics.
 // A hit's damage is tested as GDScript tests it, `not (damage > 0.0)`, so NaN is no damage.
 #![allow(clippy::neg_cmp_op_on_partial_ord)]
+pub mod blasts;
 pub mod capital;
 pub mod landing;
 pub mod station;

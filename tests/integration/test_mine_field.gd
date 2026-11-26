@@ -80,11 +80,7 @@ static func _gap(c: Combatant, at: Vector3) -> float:
 
 
 static func _blast_hits(damageable: Damageable) -> Array[HitInfo]:
-	var out: Array[HitInfo] = []
-	damageable.hit_taken.connect(func(info: HitInfo) -> void:
-		if info.cause == HitInfo.CAUSE_BLAST:
-			out.append(info))
-	return out
+	return BlastHits.of(damageable)  # the native batch's summaries (M10-T76)
 
 
 func _sync() -> void:

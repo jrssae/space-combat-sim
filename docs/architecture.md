@@ -1668,8 +1668,8 @@ player ship + selected target + active camera -> HudLayout (InterceptMath) -> Hu
   (`section_changed`, `mount_lost`, `part_lost`, `drive_changed`, `disabled`, `blew`, `lost`, a mount knocked out through
   `StationDamage.mount_out`, `destroyed`) where the log says, so a listener sees the state as the rules left it at that point.
   A direct write to a copy's field (a test, the console: `hp`, `state`, `alive`, `health`, the flags) goes through its setter
-  to the store (`DamageStore.quiet` keeps the replay's own writes off it). Bolts, rams, blasts, the console and every other
-  source land one call a hit through `Damageable.apply_hit` as before; the rules are op for op the GDScript ones, recorded before
+  to the store (`DamageStore.quiet` keeps the replay's own writes off it). Bolts, rams, the console and every other
+  source land one call a hit through `Damageable.apply_hit` as before (beams and blasts in their batches, below and §22.4); the rules are op for op the GDScript ones, recorded before
   the move (`tests/fixtures/parity/damage_rules.json`, `test_damage_rules_parity`, bit for bit).
 - **The beams' batch.** Each `Damageable` tells the store how a beam lands on it (`push_landing`, on setup, ready and every
   change of its faction, hull, flags; `set_landing` from the capital, its rotors and the station: route plain, capital by its
@@ -1688,7 +1688,10 @@ player ship + selected target + active camera -> HudLayout (InterceptMath) -> Hu
   takes the writes, replays its events, emits the summaries and the kill's `destroyed` (a `HitInfo` as before), and the next
   batch lands the rest, so a death blast lands before the next beam hit as it did. A hull with no landing, or a capital volume
   with no section, is left to GDScript (`CapitalBeams._land_one`, the old path; `deferred` counts them, 0 in the recordings).
-  Tests read the beams' native hit log (`CapitalBeams.set_hit_log`, `hit_log`). Cost: see §22.6.
+  Tests read the beams' native hit log (`CapitalBeams.set_hit_log`, `hit_log`). Cost: see §22.6. Blasts land on the same
+  batch code (`landing::land_more` with `Ctx.blast`: friend or foe alike, no attacker memory, no reveal) from the blast batch,
+  §22.4 (M10-T76); `push_landing` also tells the store what a blast needs (`target_blast`: the key a capital's pieces share, the
+  body a push moves, the push's box area, the hit volumes), refreshed when the volumes change.
 
 ### 15.5 Hit detection
 
@@ -7187,9 +7190,13 @@ src/rendering/hull_sheen_material.gd                    HullSheenMaterial
 ```
 native/src/blast_kernels.rs   the reach, engine-free: the hulls a blast touches and each one's nearest hit volume
 native/src/blast_rows.rs      ScsSimCore.blast_reach, its shell on the core (the rows of the tick's sync, the sweep's order)
+native/src/damage_store/blasts.rs  the landing's maths, engine-free (M10-T76): falloff, damage, push, a fighter's nearest
+                              hit volume, each ship once by its nearest piece
+native/src/blast_batch.rs     ScsBlastBatch (M10-T76): the queue of blasts and the minefields' landings, landed in one batch
+                              on the damage store with the pushes; GDScript gets the events once each
 src/combat/blast_spec.gd      BlastSpec, pure: one blast's d0, radius and impulse; the falloff, the damage, the push, the energy
 src/combat/blast_table.gd     BlastTable: the rows of data/capitals/capitals.json `blasts`; a death's blast by class and cargo
-src/combat/blast_resolver.gd  BlastResolver: lands a blast (damage, push), chains, readouts
+src/combat/blast_resolver.gd  BlastResolver: queues blasts, drives the batch, answers its events (kills, mines), readouts
 ```
 
 - **One curve for every explosion.** A blast has a centre damage `d0`, a radius `R` and an impulse `I0`. A hull whose
@@ -7229,26 +7236,42 @@ src/combat/blast_resolver.gd  BlastResolver: lands a blast (damage, push), chain
   section's centre. A missile's warhead (`HitResolver`, `MissileStandin`'s projectiles) blasts where it struck, on top of the
   impact, with the missile's shooter on its hits. The mines keep their flat damage until M10-T15 moves them onto this model
   (their flash already reads the table's `mine_prox` energy). The console's `blast` sets one off ahead of the player.
-- **Landing.** `BlastResolver.set_off(spec, centre, faction, shooter)` asks the core once (`blast_reach`: near hulls then tier
-  rows, skipping hulls out of play and ships sheltered in a station; a big hull measured to its surface's nearest volume,
-  which names the volume, any other hull to its bounding sphere) and then, in GDScript, measures a hull without a surface to
-  its own hit volumes (`HitShape.nearest_point`), keeps one piece per capital (a rotor answers for its ship), and lands each
-  hit through `Damageable.apply_hit` (cause `blast`, `HitInfo.volume` the nearest volume, so a capital's lands on the nearest
-  section through `CapitalDamage`) and the push on the body (`linear_velocity`; a rotor's on its capital; a frozen or
-  kinematic body is not pushed) or on the tier row (`ScsSimCore.tier_add_velocity`). Friend and foe alike; god mode as for any
-  hit. A death's blast has no shooter (no kill credit, no one for a brain to answer).
-- **Chains in the tick.** A hull a blast kills sets off its own blast through the director; it is queued behind the one
-  being landed and lands in the same tick, in the order set off, so a chain is never recursive and always lands the same.
+- **Landing (native since M10-T76, Q70).** `BlastResolver.set_off(spec, centre, faction, shooter)` queues the blast on the
+  native batch (`ScsBlastBatch`, one a process, on `DamageStore.store`) and, unless a landing is under way, drives it. For each
+  blast in order the batch first sets off the mines it reaches (each field's `in_blast`; they wait in their rows for the
+  field's landing), then takes the core's reach (`blast_kernels::reach`: near hulls then tier rows, skipping hulls out of play
+  and ships sheltered in a station; a big hull measured to its surface's nearest volume, which names the volume, any other
+  hull to its bounding sphere), keeps the hulls a blast can hurt (in play or a tier row, not destroyed), measures a hull without
+  a surface to its own hit volumes (`damage_store::blasts::nearest_on`, `HitShape.nearest_point` op for op), keeps one piece per
+  owner (a rotor answers for its ship), and lands each hull in that order: `d0 x f(d)` through the store (`landing::land_more`
+  with `Ctx.blast`: cause `blast`, the nearest volume naming a capital's section, the station by section and grid mount, a
+  fighter's silhouette zone; god mode as for any hit), then the push on the body (`linear_velocity`; a rotor's on its capital;
+  a frozen or kinematic body is not pushed) or on the tier row. Friend and foe alike. A death's blast has no shooter (no kill
+  credit, no one for a brain to answer). Each damaged ship hears of a batch's blast hits once, as a `HitSummary` (cause
+  `blast`, Q94); a `hit_taken` and a `damaged` a hit are gone for blasts.
+- **Chains in the tick.** A hit that kills, or raises a damage event, ends a batch: GDScript takes the writes, replays the
+  events, emits the summaries and the kill's `destroyed` (a `HitInfo` as before), the director sets off the dead hull's blast
+  (queued behind the ones being landed), and the next `run` pushes the killed hull and lands the rest, so a chain is never
+  recursive and lands in the order set off, as the GDScript landing did. A minefield's landing at the end of its step
+  (`BlastResolver.land_field`) runs in the batch too: each mine waiting goes off, its blast lands with every death it causes
+  before the next mine, and a mine a blast reaches joins the same loop, so a field goes off as one chain; each mine that went
+  off comes back to its field once (`MineField.went_off`: counted, drawn, out of the rows, `detonated`). A hull the batch has no
+  landing for, or a capital volume with no section, is landed in GDScript through `apply_hit` (the old path, 0 in the
+  recordings). Tests read the batch's native hit log (`BlastResolver.set_hit_log`, `hit_log`) or `BlastHits` (the summaries).
 - **Threads.** Everything runs on the main thread from the rows of the tick's sync, so 1 and 6 threads land the same blasts
-  bit for bit (`test_blast_threads`). Nothing runs per tick: the cost is per blast. Measured in the seeded battle (debug
-  build, 120 ships, a 300 m blast every 12 ticks): 170 to 220 us a blast with two to three hulls hurt and mostly killed,
-  of which the core's walk over the rows is 8 to 13 us; the rest is the landing (`apply_hit` and its listeners).
+  bit for bit (`test_blast_threads`, `test_blast_landing_parity` with one thread, six and the `delayed` step). Nothing runs
+  per tick: the cost is per blast. Before T76 (T09, the seeded battle, debug build): 170 to 220 us a blast with two to three
+  hulls hurt and mostly killed, of which the core's walk 8 to 13 us; the rest GDScript. After T76 the batch's own share is
+  about 5 us a hull hurt; what stays GDScript is per damaged ship (its summary's listeners, about 9 us, and its copy's write)
+  and per event (a death's effects, a mine's drawing): numbers in the T76 Done notes.
 - **Console.** Command `blast [source] [ahead_m]`, provider `blasts` (`info.md`).
 - **Tests.** `test_blast_model` (unit: the curve pinned, the push and its cap, the energy, the table's rows, classes, roles
   and cargo, D12.6's three checks, the nearest point); `test_blasts` (the main scene: a death's falloff and push and nothing past
   its radius, a chain in the same tick, an Omega's magazine from its section, a blast on a capital's nearest section, a tier
   row hurt and pushed, a missile's warhead, the console); `test_blast_threads` (1 vs 6 threads); Rust `blast_kernels::tests`
-  (spheres, surfaces, a turned hull, flags and order).
+  (spheres, surfaces, a turned hull, flags and order). M10-T76: `test_blast_landing_parity` (the recording from the GDScript
+  landing, bit for bit: fighters, an Omega by section, Babylon 5, a 100-mine chain; 1 and 6 threads, `delayed`),
+  `test_blast_batch` (unit: the shapes' numbers, a blast with no core) and Rust `damage_store::blasts::tests`.
 - **Known gaps.** The staged break-up's secondary blasts are T11's; a dead capital's unblown magazines and fuel do not yet
   blow with it. Blasts do not see through or around hulls: a hull behind another takes the same blast.
 
@@ -7617,12 +7640,12 @@ data/capitals/mines.json        each kind's numbers (T03's) and how a mount lays
   within the trigger of its **surface** (a big hull's nearest hit volume, a fighter's sphere), one tick in three by slot (the
   cadence `CHECK_TICKS`); any hull of any side whose body touches a mine's 3 m body, every tick along its move (a fast hull
   cannot pass through; a big hull by its volumes; a laid mine ignores its own ship's touch for 6 s); a shot (the hit resolver
-  stops any side's bolt on a placed mine, `MineField.strike`, M7-T64); a blast of any source reaching its body
-  (`MineField.blast_reached`, called by `BlastResolver._land`, so a death's blast sets mines off and a mine's sets its
-  neighbours off: a field goes off as a chain); a fuse; a flight that ended. The core names the mines (`ScsMineRows.step`); the
-  field lands each one's blast through T09's `BlastResolver` (falloff damage and push on every hull in reach, friend or foe) and
-  draws it (`DestructionDirector.watch_mines`). The landing stays GDScript's until T76 moves blasts into Rust: the seam is
-  `BlastResolver._land`'s one call and `ScsMineRows.in_blast`.
+  stops any side's bolt on a placed mine, `MineField.strike`, M7-T64); a blast of any source reaching its body (the blast
+  batch's `in_blast` on every field, so a death's blast sets mines off and a mine's sets its neighbours off: a field goes off as
+  a chain); a fuse; a flight that ended. The core names the mines (`ScsMineRows.step`); the mines set off wait in the rows
+  (`queue`, `is_queued`) for the field's landing at the end of its step, which the native blast batch runs (M10-T76, §22.4:
+  one blast each, falloff damage and push on every hull in reach, friend or foe), and the field draws each one that went off
+  (`MineField.went_off`, `DestructionDirector.watch_mines`).
 - **In flight a mine is a bolt row.** An energy mine and a homing guided mine are owned bolt rows of the missile kind (no
   damage, no look, `hits_left` from the kind's toughness): the capitals' interceptors shoot them down like any missile (three
   pulses for an energy mine), and so do the guns of any hostile ship, the player's and the fighters' included: each tick

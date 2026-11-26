@@ -679,11 +679,14 @@ const CAPITAL_GUN_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Bas
 ## The mines and their layers (M10-T15): a mine's triggers, touches, flights and the battle's laying, held to the kernels' rules;
 ## they import the row tables, the surfaces' maths and the vector maths (and each other). The shell (`mine_rows.rs`) is what
 ## GDScript reaches.
-## The damage store (M10-T75): every hull's, section's and part's points, the rules and the beams' batch, held to the kernels'
-## rules; they import the maths and each other only. The shells (`damage_rows.rs`, `beam_rows.rs`) are what GDScript reaches.
+## The damage store (M10-T75): every hull's, section's and part's points, the rules, the beams' batch and the blasts' maths
+## (M10-T76), held to the kernels' rules; they import the maths and each other only. The shells (`damage_rows.rs`, `beam_rows.rs`,
+## `blast_batch.rs`) are what GDScript reaches.
 const DAMAGE_KERNEL_FILES: Array[String] = ["res://native/src/damage_store.rs", "res://native/src/damage_store/capital.rs",
-		"res://native/src/damage_store/station.rs", "res://native/src/damage_store/landing.rs"]
-const DAMAGE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use std::collections::HashMap;", "use crate::v3::",
+		"res://native/src/damage_store/station.rs", "res://native/src/damage_store/landing.rs",
+		"res://native/src/damage_store/blasts.rs"]
+const DAMAGE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use godot::builtin::{Basis, Vector3};",
+		"use std::collections::HashMap;", "use crate::v3::",
 		"use super::", "use capital::", "use station::"]
 const MINE_KERNEL_FILES: Array[String] = ["res://native/src/mine_kernels.rs", "res://native/src/mine_layers.rs"]
 const MINE_KERNEL_USER: String = "res://native/src/mine_rows.rs"

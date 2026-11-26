@@ -538,6 +538,9 @@ func _on_carrier_beamed(summary: HitSummary, cap: CapitalStandin) -> void:
 	var run: CarrierRun = run_of(cap)
 	if run == null or not (summary.applied > 0.0):
 		return
+	if summary.cause == HitInfo.CAUSE_BLAST:
+		_on_carrier_blasted(summary, run)
+		return
 	var attacker: int = 0
 	var last: int = summary.last_shooter
 	if Factions.is_hostile(run.faction, summary.faction_of(last)):
@@ -553,6 +556,18 @@ func _on_carrier_beamed(summary: HitSummary, cap: CapitalStandin) -> void:
 		return
 	run.attacked_at_s = SimClock.now()
 	run.attacker_id = attacker
+
+
+# A batch's blast hits on a carrier at work (M10-T76): an attack when an enemy's blast took points, as each hit's `damaged` was,
+# the attacker the last enemy blast's shooter (none for a death's).
+func _on_carrier_blasted(summary: HitSummary, run: CarrierRun) -> void:
+	var ids: PackedInt64Array = summary.attackers
+	var sides: Array[StringName] = summary.factions
+	for k: int in range(ids.size() - 1, -1, -1):
+		if Factions.is_hostile(run.faction, sides[k]):
+			run.attacked_at_s = SimClock.now()
+			run.attacker_id = ids[k]
+			return
 
 
 # Cornered (under attack with its drive empty), the carrier throws every docked fighter out at once and turns round those

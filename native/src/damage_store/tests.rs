@@ -229,6 +229,7 @@ mod landing_tests {
 
     fn ctx() -> Ctx<'static> {
         Ctx {
+            blast: false,
             friendly_fire: false,
             god_mode: false,
             relation: &RELATION,

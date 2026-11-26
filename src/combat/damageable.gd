@@ -141,6 +141,14 @@ func push_landing() -> void:
 	var summary: Damageable = _landing[5]
 	DamageStore.store.target_set(get_instance_id(), hull.id, summary.get_instance_id() if is_instance_valid(summary) \
 			else get_instance_id(), faction, _landing[0], _landing[1], _landing[2], _landing[3], _landing[4], zones.layout, flags)
+	# What a blast needs (M10-T76): whose ship this piece is, the body its push moves and the box it acts on, its hit volumes.
+	var pushed: Node3D = BlastResolver.push_body_of(self)
+	var packed := PackedFloat64Array()
+	for shape: HitShape in shapes:
+		packed.append_array(shape.packed())
+	DamageStore.store.target_blast(get_instance_id(), BlastResolver.owner_of(self),
+			pushed.get_instance_id() if pushed != null else 0,
+			BlastSpec.mean_face_area(BlastResolver.box_size(self, pushed)), packed)
 
 
 ## A tick's beam hits on this ship (the batch's summary, `CapitalBeams`): the zones a fighter's silhouette shows, then the
@@ -224,6 +232,7 @@ func _build_volumes() -> void:
 		ram_bounds = AABB(_whole_bounds.position * hull_scale, _whole_bounds.size * hull_scale)
 		bounding_radius = _whole_radius * hull_scale
 		core_radius = _whole_core * hull_scale
+	push_landing()  # a blast measures the new volumes
 	volumes_changed.emit()
 
 

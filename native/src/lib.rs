@@ -110,3 +110,5 @@ mod mine_rows;
 // M10-T75: the damage store (every hull's, section's and part's points), an engine-free kernel and its shell for GDScript.
 mod damage_rows;
 mod damage_store;
+// M10-T76: every blast and its chain landed in one native batch on the damage store.
+mod blast_batch;

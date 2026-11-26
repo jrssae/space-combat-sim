@@ -268,8 +268,8 @@ func test_a_mine_blast_is_on_the_cores_rows_and_hurts_a_tier_row_and_a_near_hull
 	standins.active = true
 	var hit_by_mine: Dictionary = {}
 	for who: Combatant in [c, near]:
-		who.damageable.hit_taken.connect(func(info: HitInfo) -> void:
-			if info.cause == HitInfo.CAUSE_BLAST:
+		who.damageable.hits_landed.connect(func(summary: HitSummary) -> void:
+			if summary.cause == HitInfo.CAUSE_BLAST:  # the native batch's summary (M10-T76)
 				hit_by_mine[who.display_name] = true)
 	await _ticks(MineKinds.CHECK_TICKS + 2)
 	assert_false(mines.is_alive(0), "the tier row set its mine off")

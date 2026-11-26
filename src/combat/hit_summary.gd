@@ -1,13 +1,14 @@
 class_name HitSummary
 extends RefCounted
-## One ship's tick of beam hits, landed in one native batch (M10-T75, Q94; `Damageable.hits_landed`): instead of a `HitInfo` a
-## hit, every attacker that hit it this tick, the damage and the points removed, and where. The AI's attacker memory, the
-## carriers' jump-away, a capital's section counters, the HUD's damage zones and the core's hull column read it.
+## One ship's tick of beam hits, or one batch's blast hits, landed in one native batch (M10-T75, M10-T76, Q94;
+## `Damageable.hits_landed`): instead of a `HitInfo` a hit, every attacker that hit it (0 for a death's blast, which has no
+## shooter), the damage and the points removed, and where. The AI's attacker memory, the carriers' jump-away, a capital's section
+## counters, the HUD's damage zones and the core's hull column read it.
 
-## Every field reads the batch's columns (`ScsBeamRows.land`, row `k`) when asked, so a summary costs only what its
-## listeners read.
+## Every field reads the batch's columns (`ScsBeamRows.land` or `ScsBlastBatch.run`, row `k`) when asked, so a summary costs
+## only what its listeners read.
 
-## The body hit last (a capital's hull or rotor), the cause (`HitInfo.CAUSE_BEAM`).
+## The body hit last (a capital's hull or rotor), the cause (`HitInfo.CAUSE_BEAM`, or `CAUSE_BLAST`).
 var target_id: int:
 	get:
 		return (_cols[1] as PackedInt64Array)[_k]
@@ -25,7 +26,7 @@ var factions: Array[StringName]:
 		for i: int in range(at[_k], at[_k + 1]):
 			out.append(_names[ix[i]] if ix[i] >= 0 and ix[i] < _names.size() else &"")
 		return out
-## The ship whose hit landed last.
+## The ship whose hit landed last (for blasts, the last that had a shooter).
 var last_shooter: int:
 	get:
 		return (_cols[2] as PackedInt64Array)[_k]

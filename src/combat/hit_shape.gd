@@ -116,6 +116,18 @@ func contains(p_body: Vector3, inflate: float = 0.0) -> bool:
 	return p.x * p.x + p.z * p.z + (p.y - nearest_y) * (p.y - nearest_y) <= limit * limit
 
 
+## The shape as the native blast batch reads it (`damage_store::blasts::Shape`, 30 numbers): capsule, the transform's basis rows
+## and origin, its inverse's, the half extents, the radius, the half segment.
+func packed() -> PackedFloat64Array:
+	var out := PackedFloat64Array([1.0 if kind == Kind.CAPSULE else 0.0])
+	for xform: Transform3D in [transform, _inverse]:
+		for r: int in 3:
+			out.append_array([xform.basis.x[r], xform.basis.y[r], xform.basis.z[r]])
+		out.append_array([xform.origin.x, xform.origin.y, xform.origin.z])
+	out.append_array([half_extents.x, half_extents.y, half_extents.z, radius, half_segment])
+	return out
+
+
 ## The shape's point nearest the body-frame point `p_body`, body frame (`p_body` itself when inside): where a blast reaches
 ## it (M10-T09).
 func nearest_point(p_body: Vector3) -> Vector3:

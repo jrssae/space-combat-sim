@@ -1,6 +1,6 @@
 // The blast model's reach (M10-T09, D12.6): which hulls one blast can touch and how far each one's nearest hit volume lies
-// from its centre, over the rows the main thread holds. Every explosion asks it once (a death, a section blowing, a missile),
-// so the walk over the hulls stays native while the damage and the push, per event, are GDScript's. Engine-free
+// from its centre, over the rows the main thread holds. Every explosion asks it once (a death, a section blowing, a missile,
+// a mine); the native blast batch (M10-T76, `blast_batch.rs`) lands the damage and the push. Engine-free
 // (test_sim_core reads this file): rows in, plain numbers out, no statics, no threads, the same answer however many threads
 // the core runs.
 use godot::builtin::Vector3;

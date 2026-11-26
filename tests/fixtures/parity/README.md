@@ -113,6 +113,8 @@ its test: the mine kernels' own cargo tests and `test_mine_field` replace it.
 **M10-T76 recorded `blast_landing.json` from the GDScript landing** (`BlastResolver._land`, before the native batch), in the real
 main scene (free flight, Babylon 5 in play): a fighter group with low hulls blowing in turn, an Omega with its sections nearly
 spent taking torpedoes and energy-mine blasts and its death blast, Babylon 5's sections and grid, and an Omega dying beside a
-100-mine line with raiders at its far end (133 blasts, 80 hits, 126 events). Recorded with
+100-mine line with raiders at its far end. Recorded with
 `SCS_RECORD_FIXTURES=1 ... -gselect=test_blast_landing_parity.gd -gunit_test_name=test_blasts_and`; the file's 1-thread and
-`delayed` cases read the same entry.
+`delayed` cases read the same entry. Recorded again from the same GDScript landing (HEAD 1c57fc10's code in a staged copy) when
+the native batch's commit added four probe blasts over the fighter group to time the landing a hull at a time (133 → 137
+blasts, 80 → 140 hits, 126 events); the native batch matches it bit for bit.

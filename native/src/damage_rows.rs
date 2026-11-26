@@ -8,6 +8,7 @@ use godot::prelude::*;
 
 use std::collections::HashMap;
 
+use crate::damage_store::blasts::{BlastTarget, SHAPE_LEN, Shape};
 use crate::damage_store::capital::{self as cap, Capital, Part, Rules, Section};
 use crate::damage_store::landing::Target;
 use crate::damage_store::station::{self as st, GridMounts, Station, StationSections};
@@ -29,6 +30,8 @@ pub struct ScsDamageStore {
     /// How a batch lands on each `Damageable` (by instance id), and its faction by name.
     pub targets: HashMap<i64, Target>,
     pub target_factions: HashMap<i64, StringName>,
+    /// What a blast needs of each `Damageable` beyond its landing (M10-T76).
+    pub blast_targets: HashMap<i64, BlastTarget>,
     log: Log,
 }
 
@@ -524,10 +527,27 @@ impl ScsDamageStore {
         self.target_factions.insert(id, faction);
     }
 
+    /// `Damageable` `id` for a blast (M10-T76): the key its ship's pieces share (a rotor's capital), the body its push moves,
+    /// the push's mean box face (m^2) and its hit volumes (`SHAPE_LEN` numbers each).
+    #[func]
+    fn target_blast(&mut self, id: i64, owner: i64, push_body: i64, area: f64, shapes: PackedFloat64Array) {
+        let shapes = shapes.as_slice().chunks(SHAPE_LEN).filter_map(Shape::unpack).collect();
+        self.blast_targets.insert(
+            id,
+            BlastTarget {
+                owner,
+                push_body,
+                area,
+                shapes,
+            },
+        );
+    }
+
     #[func]
     fn target_free(&mut self, id: i64) {
         self.targets.remove(&id);
         self.target_factions.remove(&id);
+        self.blast_targets.remove(&id);
     }
 
     #[func]

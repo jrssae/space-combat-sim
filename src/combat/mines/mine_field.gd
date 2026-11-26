@@ -4,9 +4,10 @@ extends Node3D
 ## battle's own layers lay into (`battle`). Every mine is a slot of the native mine rows (`ScsMineRows`, `mine_kernels.rs`), drawn
 ## by a MultiMesh per kind (no node per mine) and, when placed, a `StaticRows` row so its own side steers round it (Q27). The
 ## core decides who goes off (a hostile within the trigger of a hull's surface, anything touching the body, a fuse, a flight that
-## ended), steers the guided mines and picks what the layers lay (`mine_layers.rs`); this node lands each blast (`BlastResolver`:
-## T09's falloff, friend or foe alike) and draws it. A blast of any source sets off the mines it reaches (`blast_reached`, called
-## by `BlastResolver`), and a mine that goes off blasts in turn, so a field goes off as a chain.
+## ended), steers the guided mines and picks what the layers lay (`mine_layers.rs`). The mines set off wait in the rows for the
+## field's landing at the end of its step, which runs in the native blast batch (M10-T76, `BlastResolver.land_field`): one blast
+## each (T09's falloff, friend or foe alike), and a blast of any source sets off the mines it reaches, so a field goes off as a
+## chain, every death it causes blowing in turn. This node draws what went off (`went_off`).
 ##
 ## Mines go off whoever's they are when anything touches or hits their 3 m body (M7-T64): `strike` is the hit resolver's. A mine
 ## in flight (an energy mine, a guided mine homing) is a bolt row that the capitals' interceptors and any hostile ship's bolts and
@@ -96,9 +97,7 @@ var _kinds := PackedByteArray()  # per slot: the kind it was laid as (draw and r
 var _factions: Array[StringName] = []  # per slot: its side, for what is registered
 var _row_ids := PackedInt64Array()  # per slot: its row in `StaticRows` (placed fields)
 var _registered := PackedByteArray()
-var _queued := PackedByteArray()  # per slot: already going off this step, or struck
-var _going := PackedInt32Array()
-var _going_cause := PackedByteArray()
+var _went: int = 0  # mines that went off in the landing under way
 var _relay_at := PackedFloat64Array()
 var _hostility := NativeHostility.new()
 var _faction_names: Array = []
@@ -135,13 +134,6 @@ static func step_all(now_s: float, delta: float) -> void:
 		if is_instance_valid(f) and f.is_inside_tree() and f.rows != null:
 			f._steps += 1
 			f.step_now(f._steps, now_s, delta)
-
-
-## A blast of `radius_m` at `centre` (World frame) went off (`BlastResolver`, any source): the mines it reaches go off with it.
-static func blast_reached(centre: Vector3, radius_m: float) -> void:
-	for f: MineField in fields:
-		if is_instance_valid(f) and f.rows != null and f.is_inside_tree():
-			f._on_blast(centre, radius_m)
 
 
 ## Every mine on the radar of a ship of `faction` at `from` within `range_m`: `[ids, positions, core faction indices]` with the
@@ -182,10 +174,12 @@ func _enter_tree() -> void:
 	_next_number += 1
 	fields.append(self)
 	fields_version += 1
+	BlastResolver.add_field(self)
 
 
 func _exit_tree() -> void:
 	unregister_rows()
+	BlastResolver.remove_field(self)
 	fields.erase(self)
 	fields_version += 1
 
@@ -300,7 +294,7 @@ func faction_of(i: int) -> StringName:
 
 ## Whether a shot can still set mine `i` off: a placed one in play and not already hit since the last step.
 func can_strike(i: int) -> bool:
-	return placed and i >= 0 and i < capacity and _queued[i] == 0 and bool(rows.is_alive(i))
+	return placed and i >= 0 and i < capacity and not bool(rows.is_queued(i)) and bool(rows.is_alive(i))
 
 
 ## A shot hit mine `i` (M7-T64): it goes off at the next step, whoever's it is. False when it cannot be struck.
@@ -427,10 +421,10 @@ func _make_rows(slots: int) -> bool:
 	for k: int in MineKinds.NAMES.size():
 		rows.set_spec(k, MineKinds.numbers(k))
 	rows.reserve(slots)
+	BlastResolver.add_field(self)  # blasts set its mines off from now on
 	capacity = slots
 	_kinds.resize(slots)
 	_registered.resize(slots)
-	_queued.resize(slots)
 	_row_ids.resize(slots)
 	_relay_at.resize(slots)
 	_relay_at.fill(INF)
@@ -491,7 +485,7 @@ func _show(i: int, k: int, at: Vector3) -> void:
 
 
 func _hide(i: int) -> void:
-	_queued[i] = 0
+	rows.unqueue(i)
 	for instance: MultiMeshInstance3D in _instances:
 		MultiMeshUpload.set_instance_transform(instance.multimesh, i, Transform3D(Basis.from_scale(Vector3.ONE * 1e-4), _offsets[i]))
 
@@ -517,46 +511,27 @@ func _unregister(i: int) -> void:
 
 # Mine `i` goes off at this step's end (or the next step, when queued outside one).
 func _queue(i: int, cause: int) -> void:
-	if i < 0 or i >= capacity or _queued[i] == 1:
-		return
-	_queued[i] = 1
-	_going.append(i)
-	_going_cause.append(cause)
+	rows.queue(i, cause)
 
 
-# A blast reached the mines within `radius_m` of `centre`: they go off in this field's next landing loop.
-func _on_blast(centre: Vector3, radius_m: float) -> void:
-	for slot: int in (rows.in_blast(global_position, centre, radius_m) as PackedInt32Array):
-		_queue(slot, CAUSE_BLAST)
-
-
-# Lands every mine in `_going`, one blast each, in the order they were set off; a blast that reaches more adds them (see
-# `_on_blast`), so the loop runs the chain out. Returns how many went off.
+# Lands every mine set off since the last landing, one blast each, in the order they were set off, in the native batch: a blast
+# that reaches more adds them, so the chain runs out. Returns how many went off.
 func _land_going(origin: Vector3) -> int:
-	var went: int = 0
-	var n: int = 0
-	while n < _going.size():
-		var slot: int = _going[n]
-		var cause: int = _going_cause[n]
-		n += 1
-		_queued[slot] = 0
-		var info: Array = rows.info(slot)
-		if info.is_empty() or not bool(rows.detonate(slot)):
-			continue
-		went += 1
-		by_cause[cause] += 1
-		var k: int = info[0]
-		var at: Vector3 = origin + (info[4] as Vector3)
-		var side: StringName = _side_name(int(info[1]), slot)
-		_hide(slot)
-		_unregister(slot)
-		if relays and placed:
-			_relay_at[slot] = _now_s + RELAY_S
-		detonated.emit(slot, k, at)
-		BlastResolver.set_off(MineKinds.blast(k), at, side, int(info[3]))
-	_going.clear()
-	_going_cause.clear()
-	return went
+	_went = 0
+	BlastResolver.land_field(self, origin)
+	return _went
+
+
+## Mine `slot` went off at `at` (World frame), for `cause`, a mine of `kind` (`BlastResolver`, as the batch lands its blast):
+## counted, drawn out, out of the rows, its signal.
+func went_off(slot: int, cause: int, kind: int, at: Vector3) -> void:
+	_went += 1
+	by_cause[cause] += 1
+	_hide(slot)
+	_unregister(slot)
+	if relays and placed:
+		_relay_at[slot] = _now_s + RELAY_S
+	detonated.emit(slot, kind, at)
 
 
 # The name of core faction `index`; the slot's own record when the core does not know it.

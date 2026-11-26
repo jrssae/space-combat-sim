@@ -100,11 +100,14 @@ func _ready() -> void:
 		&"pushed": {"get": func() -> int: return BlastResolver.pushed, "doc": "Hulls the blasts pushed"},
 		&"last": {"get": func() -> String: return "%s at %s: %d reached, %d hurt" % [BlastResolver.last_source,
 				BlastResolver.last_centre, BlastResolver.last_reached, BlastResolver.last_hurt], "doc": "The last blast"},
-		&"last_us": {"get": func() -> int: return BlastResolver.last_us, "doc": "The last blast's cost, us"},
-		&"max_us": {"get": func() -> int: return BlastResolver.max_us, "doc": "The costliest blast's, us"},
+		&"last_us": {"get": func() -> int: return BlastResolver.last_us,
+				"doc": "The last landing's cost (a blast and the chain it starts), us"},
+		&"max_us": {"get": func() -> int: return BlastResolver.max_us, "doc": "The costliest landing's, us"},
 		&"mean_us": {"get": func() -> float: return float(BlastResolver.stats()["mean_us"]), "doc": "A blast's mean cost, us"},
 		&"reach_mean_us": {"get": func() -> float: return float(BlastResolver.stats()["reach_mean_us"]),
 				"doc": "Of that, the native core's walk over the hulls, us"},
+		&"native_mean_us": {"get": func() -> float: return float(BlastResolver.stats()["native_mean_us"]),
+				"doc": "Of that, the native batch's whole share, us (M10-T76)"},
 	}), self)
 
 

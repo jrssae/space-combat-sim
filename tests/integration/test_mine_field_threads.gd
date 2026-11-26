@@ -53,10 +53,7 @@ func _battle_mines(threads: int) -> Dictionary:
 	var order: Array[int] = []
 	var tick: Array[int] = [0]
 	field.detonated.connect(func(slot: int, _kind: int, _at: Vector3) -> void: order.append(slot))
-	for c: Combatant in ships:
-		c.damageable.hit_taken.connect(func(info: HitInfo) -> void:
-			if info.cause == HitInfo.CAUSE_BLAST:
-				log.append([tick[0], int(index_of.get(info.target_id, -3)), info.damage]))
+	BlastResolver.set_hit_log(true)
 	var digests: Array[int] = []
 	var cost: Array[float] = []
 	for t: int in TICKS:
@@ -64,6 +61,10 @@ func _battle_mines(threads: int) -> Dictionary:
 		await get_tree().physics_frame
 		digests.append(int(field.rows.digest()))
 		cost.append(field.step_us)
+		for info: HitInfo in BlastResolver.hit_log():  # the native batch's hits (M10-T76), in landing order
+			log.append([tick[0], int(index_of.get(info.target_id, -3)), info.damage])
+		BlastResolver.set_hit_log(true)
+	BlastResolver.set_hit_log(false)
 	if threads == 1:
 		cost.sort()
 		gut.p("mine rows, %d mines among %d rows, median (max) us: step %.1f (%.1f)" % [MINES,

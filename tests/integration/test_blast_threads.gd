@@ -42,16 +42,17 @@ func _battle_blasts(threads: int) -> Array:
 	var ships: Array[Combatant] = fight["ships"]
 	var index_of: Dictionary = fight["index_of"]
 	var log: Array = []
-	for c: Combatant in ships:
-		c.damageable.hit_taken.connect(func(info: HitInfo) -> void:
-			if info.cause == HitInfo.CAUSE_BLAST:
-				log.append([index_of.get(info.target_id, -2), info.damage, info.point]))
 	var spec: BlastSpec = BlastTable.spec(&"civilian_death")
+	BlastResolver.set_hit_log(true)
 	for t: int in TICKS:
 		await get_tree().physics_frame
 		if t % BLAST_EVERY == 0:
 			var c: Combatant = ships[(t / BLAST_EVERY * 7) % ships.size()]
 			if not c.damageable.hull.destroyed:
 				BlastResolver.set_off(spec, c.ship.global_position + Vector3(25.0, 0.0, 0.0))
+		for info: HitInfo in BlastResolver.hit_log():  # the native batch's hits (M10-T76), in landing order
+			log.append([index_of.get(info.target_id, -2), info.damage, info.point, info.applied])
+		BlastResolver.set_hit_log(true)
+	BlastResolver.set_hit_log(false)
 	await SeededBattle.finish(fight)
 	return log

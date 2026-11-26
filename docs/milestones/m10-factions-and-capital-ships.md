@@ -869,6 +869,64 @@ owns every hull's, section's and part's points (Q94, option A), with the events 
   the summary. A capital volume the core dropped (non-finite) is landed by the old per-hit path. The GDScript side now costs per
   damaged ship a tick (about 10 us in debug Godot); T76's blasts can reuse the store and the batch's summaries.
 
+### M10-T76 Blast landing in Rust (Q70, Q94)
+
+**Goal.** Every blast (a death, a section blowing, a missile's warhead, a mine) and the chain it starts land in one native batch
+on T75's damage store instead of one GDScript `apply_hit` and push a hull, with the events raised to GDScript once each.
+
+- **Done (2026-11-26, awaiting the maintainer).** *Recording first* (1c57fc10, from the GDScript landing): `test_blast_landing_parity`
+  in the real main scene (free flight, Babylon 5 in play): four probe blasts over a fighter group that hurt all 14 and kill none, a
+  raider's death among low hulls blowing in turn, a missile with a shooter, an Omega with its sections nearly spent taking
+  torpedoes and energy-mine blasts and then dying among its attackers, five blasts on Babylon 5's sections and grid, and an Omega
+  dying beside a 100-mine line with raiders at its far end (the line goes off as a chain and kills them): every blast hit, every
+  event, each hull's velocity a tick, the end state (`blast_landing.json`: 137 blasts, 140 hits, 126 events). *The batch*
+  (this commit): `native/src/blast_batch.rs` (`ScsBlastBatch`, required by `NativeLib`) holds the queue of blasts and runs the
+  minefields' landings; `damage_store/blasts.rs` (engine-free, under the guard) the falloff, damage and push, a fighter's nearest
+  hit volume (`HitShape.nearest_point` op for op) and each ship once by its nearest piece; the hits land through T75's
+  `landing::land_more` (`Ctx.blast`: friend or foe, no attacker memory, no reveal). Per blast in order: the mines it reaches are
+  set off (each field's `in_blast`; they wait in `ScsMineRows`' own list for the field's landing), the core's reach, the
+  hurtable hulls (in play or a tier row), damage through the store and the push on the body or the tier row. A kill or a damage
+  event ends a batch: `BlastResolver` takes the writes, replays the events, hands each damaged ship one `HitSummary` (cause
+  `blast`) and announces the kill, whose death blast the director queues, then the batch pushes the killed hull and goes on. A
+  field's landing (`BlastResolver.land_field`, at the end of its step) runs in the batch: each mine goes off, its blast and every
+  death it causes land before the next, and each mine that went off comes back once (`MineField.went_off`: drawn, out of the
+  rows, `detonated`). `Damageable.push_landing` also sends what a blast needs (`ScsDamageStore.target_blast`: the key a capital's
+  pieces share, the body a push moves, the push's box area, the hit volumes; again when the volumes change). Removed (no
+  fallback): `BlastResolver._land`, `_hit`, `_push`, `MineField.blast_reached`, `_on_blast` and the GDScript going list. A hull
+  the batch has no landing for, or a capital volume with no section, is landed through `apply_hit` (0 in the recordings).
+  Blast hits raise no `hit_taken`/`damaged` a hit any more (Q94): the AI driver, `CapitalShip.section_hits`, the HUD zones, the
+  core's hull column and `CarrierJumps` (`_on_carrier_blasted`: an enemy's blast is an attack, as each hit's `damaged` was) read the
+  summary; a summary's `last_shooter` is the last hit that had a shooter, so a death's blast in the same batch does not hide it.
+  Tests read the batch's native hit log (`BlastResolver.set_hit_log`, `hit_log`) or `BlastHits` (a test fixture: the summaries
+  as `HitInfo`s). Console provider `blasts` adds `native_mean_us`; `last_us` and `max_us` are a landing's now (a blast and the
+  chain it starts) (`info.md`). Architecture §15.4 and §22.4, §22.9.
+  *Parity.* The native batch matches the recording bit for bit with six threads, one thread and the `delayed` step (the three
+  cases of `test_blast_landing_parity`); `test_blast_threads` (1 vs 6, now from the hit log) and `test_mine_field_threads` hold.
+  *Cost* (wall clock, debug Godot, release library, HEAD and the batch alternately on the loaded machine, four runs each): the four probes (14 hulls hurt a blast, none
+  killed) 26 to 45 us a hull hurt before, 17 to 31 us after, of which the native batch 4.8 to 7.5 us (the rest is GDScript per
+  damaged ship: its summary and listeners, about 9 us, and its copy's write, about 3 us); Omega B's death and its field's chain (107
+  blasts: the death, 100 mines, the 6 raiders they kill) 5.4 to 5.6 ms before, 5.0 to 6.8 ms after (median about 5.2 ms): almost
+  all of it is GDScript that did not move, drawing 100 mine explosions (about 40 us a mine) and the deaths' effects; the batch's
+  own share of the chain about 0.5 ms (5 us a blast). The 7 blasts of the group's chain of deaths 1.9 to 2.7 ms before and 1.9
+  to 2.0 ms after (one 5.3 ms outlier), Omega A's death with its 4 attackers 0.8 to 1.5 ms either way: a death's effects dominate.
+  The core's reach 3 us a blast before, 1 us after. `bench_quick`: furball 400 / 400 ships, spread 500 / 500, battle 100 / 100 (`reports/perf/t76_after`), all in budget.
+  *Tests (staged copy).* Rust 415/415 (new: `damage_store::blasts` 6), clippy clean in the touched files; compile check 1 163
+  scripts clean; the quick suite 2 228 of 2 228 (Python 399, Rust 415); GUT_SLOW, the touched files and their neighbours:
+  `test_blast_landing_parity` 3/3, `test_blast_batch` 3 (new), `test_blasts` 7, `test_blast_threads` 1, `test_blast_model` 9,
+  `test_mine_field` 10, `test_mine_field_threads` 1, `test_mine_flight_threads` 1, `test_mine_blast` 6, `test_mine_cost` 1,
+  `test_tier_proxies` 12, `test_capital_guns` 9, `test_capital_damage` 18, `test_capital_hulks` 11, `test_damage_store` 4,
+  `test_beam_landing_parity` 1, `test_beam_threads` 1, `test_station_in_game` 11, `test_sim_core` 21 (the guard covers
+  `damage_store/blasts.rs`), `test_native_required` 3, `test_console_command_list` 7. Tests changed by the new rule (blast hits
+  come as summaries): `test_blasts`, `test_mine_field`, `test_tier_proxies` and `test_capital_guns` read them (`BlastHits`), the
+  thread tests the native hit log. No other recording moved (`weapon_rows_battle`, `turret_kernel`, `beam_landing` hold).
+- **Open for the maintainer.** (1) The cost: the batch's own share is small, but most of a blast's wall clock stays GDScript by
+  design: each damaged ship's summary and its listeners (Q94, about 9 us a ship in debug Godot), each copy's write, a death's
+  effects and a mine's drawing; a chain of 100 mines costs what drawing 100 explosions costs. Trimming the summaries' listeners
+  (the AI driver's and the core's hull column) is the next lever if the battles need it. (2) A death's blast is still chosen in
+  GDScript: the kill ends a batch and the director queues the dead hull's blast (its class and cargo, a Starfury's first chunk,
+  the section that blew), as T75 does for beams; the queue, the mines and the order are the batch's. (3) `CapitalShip.section_hit`
+  is no longer emitted for a blast's hit (beams already did not); nothing in the game listens to it.
+
 ### M10-T87 Our own Starfury gun sound (Q82)
 
 - **Goal:** the Starfury's shot made by our own synthesis (`tools/procgen/assets/sfx_combat.py`, `core/audio`), sounding very close to

@@ -1,8 +1,8 @@
 // The core's shell around the mines (M10-T15, Q20, D12.9): one `ScsMineRows` for each minefield, holding its mines as rows with
 // no node, stepped once a tick from `SimCore.step_now` after the capital guns (so an interceptor's pulses have met the mines
-// in flight) and before the bolts move. GDScript lays the placed mines, draws them, lands each blast (T09's `BlastResolver`:
-// the general landing stays in GDScript until T76) and answers what the step names; the core decides who goes off, which mines
-// take off, how the homing ones steer and which mines the battle's layers lay. The maths is `mine_kernels` and `mine_layers`,
+// in flight) and before the bolts move. GDScript lays the placed mines, draws them and answers what the step names; the mines
+// set off wait here for the field's landing, which the native blast batch runs with their blasts (M10-T76, `blast_batch.rs`).
+// The core decides who goes off, which mines take off, how the homing ones steer and which mines the battle's layers lay. The maths is `mine_kernels` and `mine_layers`,
 // engine-free. A mine in flight is an owned bolt row of the missile kind with no damage and no look, so the interceptor
 // batteries shoot it down like any missile (toughness from its kind) while the field's own draw shows it.
 // gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
@@ -42,11 +42,62 @@ pub struct ScsMineRows {
     detonations: i64,
     shot_on_flight: i64,
     last_us: f64,
+    // The mines set off and waiting for the field's next landing (M10-T76): in the order they were set off, with why, and
+    // which slots are among them; a blast landed in that loop adds more, so it runs the chain out.
+    queued: Vec<bool>,
+    going: Vec<(u32, u8)>,
+    going_at: usize,
 }
 
 impl ScsMineRows {
     fn specs_or_none(&self) -> [Spec; KINDS] {
         self.specs.unwrap_or([Spec::NONE; KINDS])
+    }
+
+    /// The mines in play a blast of `radius_m` at `centre` reaches, the field's node at `origin` (ascending slots).
+    pub(crate) fn reached(&self, origin: Vector3, centre: Vector3, radius_m: f64, out: &mut Vec<u32>) {
+        mk::in_blast(&self.mines, &self.specs_or_none(), origin, centre, radius_m, out);
+    }
+
+    /// Mine `slot` goes off in the field's next landing, for `cause`; false when it is out of range or already set off.
+    pub(crate) fn queue_slot(&mut self, slot: i64, cause: u8) -> bool {
+        match usize::try_from(slot).ok().filter(|&i| i < self.queued.len() && !self.queued[i]) {
+            Some(i) => {
+                self.queued[i] = true;
+                self.going.push((i as u32, cause));
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// How many mines wait for the field's next landing.
+    pub(crate) fn waiting(&self) -> usize {
+        self.going.len() - self.going_at
+    }
+
+    /// The next mine of the landing in progress and why it goes off; None when the chain has run out (the list is emptied).
+    pub(crate) fn next_going(&mut self) -> Option<(usize, u8)> {
+        if self.going_at >= self.going.len() {
+            self.going.clear();
+            self.going_at = 0;
+            return None;
+        }
+        let (slot, cause) = self.going[self.going_at];
+        self.going_at += 1;
+        let i = slot as usize;
+        self.queued[i] = false;
+        Some((i, cause))
+    }
+
+    /// Mine `slot` goes off now: its kind, faction index, owner and offset from the node, or None when it was not in play.
+    pub(crate) fn go_off(&mut self, slot: usize) -> Option<(u8, u32, i64, Vector3)> {
+        let m = &self.mines;
+        if slot >= m.len() || !m.alive[slot] {
+            return None;
+        }
+        let info = (m.kind[slot], m.faction_ix[slot], m.owner[slot], m.local[slot]);
+        self.detonate(slot as i64).then_some(info)
     }
 }
 
@@ -104,7 +155,36 @@ impl ScsMineRows {
     /// Makes room for `slots` mines (the field's draw has that many instances).
     #[func]
     fn reserve(&mut self, slots: i64) {
-        self.mines.reserve_slots(usize::try_from(slots).unwrap_or(0));
+        let n = usize::try_from(slots).unwrap_or(0);
+        self.mines.reserve_slots(n);
+        self.queued.resize(n, false);
+    }
+
+    /// Mine `slot` goes off at the field's next landing (M10-T76), for `cause` (`mine_kernels::CAUSE_*`); false when it is out
+    /// of range or already set off.
+    #[func]
+    fn queue(&mut self, slot: i64, cause: i64) -> bool {
+        self.queue_slot(slot, cause as u8)
+    }
+
+    /// Whether mine `slot` waits to go off at the next landing.
+    #[func]
+    fn is_queued(&self, slot: i64) -> bool {
+        usize::try_from(slot).ok().and_then(|i| self.queued.get(i)).copied().unwrap_or(false)
+    }
+
+    /// Mine `slot` no longer counts as set off (it left play another way); a place it holds in the list is skipped.
+    #[func]
+    fn unqueue(&mut self, slot: i64) {
+        if let Some(q) = usize::try_from(slot).ok().and_then(|i| self.queued.get_mut(i)) {
+            *q = false;
+        }
+    }
+
+    /// How many mines wait for the next landing.
+    #[func]
+    fn going_count(&self) -> i64 {
+        self.waiting() as i64
     }
 
     /// Lays a mine of `kind` (0 proximity, 1 energy, 2 guided) and `faction`'s at `local` (an offset from the field's node),
