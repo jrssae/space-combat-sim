@@ -1,7 +1,8 @@
 class_name CapitalSection
 extends RefCounted
 ## One damage section of a capital ship (M10-T08, D12.5): its share of the hull's points, its state and the subsystems it holds
-## (weapon mounts, bays, engines), which are lost with it. `CapitalDamage` moves it from state to state. The bridge and the
+## (weapon mounts, bays, engines), which are lost with it. `CapitalDamage` moves it from state to state; its points and
+## state are a copy of the damage store's (M10-T75, Q94), and writing them writes the store. The bridge and the
 ## reactor are subsystems in their own right (M10-T65, Q72): a hit on them takes their points in full and half as much off the
 ## hull. Pure.
 
@@ -28,14 +29,25 @@ var kind: String = ""
 ## The body it sits on (`hull`, or a rotating piece).
 var piece: String = CapitalSections.HULL
 var max_hp: float = 1.0
-var hp: float = 1.0
-var state: State = State.INTACT
+var hp: float = 1.0:
+	set(value):
+		hp = value
+		if ledger >= 0 and not DamageStore.quiet:
+			DamageStore.store.capital_set(ledger, DamageStore.SEC_HP, 0, slot, value)
+var state: State = State.INTACT:
+	set(value):
+		state = value
+		if ledger >= 0 and not DamageStore.quiet:
+			DamageStore.store.capital_set(ledger, DamageStore.SEC_STATE, 0, slot, float(value))
 ## The hardpoints it holds, by list (names).
 var mounts := PackedStringArray()
 var bays := PackedStringArray()
 var engines := PackedStringArray()
 ## Its box in the body frame with the rotating pieces at rest (the manifest's `aabb_min`, `aabb_max`).
 var box := AABB()
+## Its ledger's handle in the damage store and its place there (M10-T75, Q94): -1 until `CapitalDamage` registers it.
+var ledger: int = -1
+var slot: int = -1
 
 
 ## Whether what it holds is gone (disabled or destroyed).

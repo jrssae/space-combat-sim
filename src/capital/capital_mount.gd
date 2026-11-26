@@ -14,8 +14,19 @@ var position: Vector3 = Vector3.ZERO
 ## A hit this close lands on it, m.
 var reach_m: float = 10.0
 var max_hp: float = 800.0
-var hp: float = 800.0
-var alive: bool = true
+var hp: float = 800.0:
+	set(value):
+		hp = value
+		if ledger >= 0 and not DamageStore.quiet:
+			DamageStore.store.capital_set(ledger, DamageStore.PART_HP, DamageStore.PART_MOUNT, slot, value)
+var alive: bool = true:
+	set(value):
+		alive = value
+		if ledger >= 0 and not DamageStore.quiet:
+			DamageStore.store.capital_set(ledger, DamageStore.PART_ALIVE, DamageStore.PART_MOUNT, slot, 1.0 if value else 0.0)
+## Its ledger's handle in the damage store and its place in its list there (M10-T75, Q94): -1 until registered.
+var ledger: int = -1
+var slot: int = -1
 
 
 ## The mount `entry` of the hardpoints' `weapons[]`, its hit points from `CapitalData`; `reach_m` at least `min_reach_m`.

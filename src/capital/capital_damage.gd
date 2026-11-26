@@ -13,6 +13,9 @@ extends RefCounted
 ##   Vorlons and Shadows explode instead (`CapitalShip`).
 ##
 ## `CapitalShip` routes its hits here and acts on the signals; the weapons, bays, helm and HUD read the state.
+##
+## The points and states live in the native damage store (M10-T75, Q94, `DamageStore`), which applies these rules; this holds
+## the ship's read-only copy, replayed from each call's log, and raises the signals where the log says.
 
 ## A section changed state (`CapitalSection.State`).
 signal section_changed(section: String, state: int)
@@ -37,14 +40,34 @@ var engine_sections: Dictionary[String, String] = {}
 var bay_sections: Dictionary[String, String] = {}
 ## The ship's total hull points, which every hit lowers by its hull share (the `HullHealth` takes the same).
 var hull_max: float = 1.0
-var hull_hp: float = 1.0
-var is_disabled: bool = false
-var is_destroyed: bool = false
+var hull_hp: float = 1.0:
+	set(value):
+		hull_hp = value
+		_push(DamageStore.HULL_HP, value)
+var is_disabled: bool = false:
+	set(value):
+		is_disabled = value
+		_push(DamageStore.FLAG_DISABLED, 1.0 if value else 0.0)
+var is_destroyed: bool = false:
+	set(value):
+		is_destroyed = value
+		_push(DamageStore.FLAG_DESTROYED, 1.0 if value else 0.0)
 ## The section that blew ("" until one does).
-var blown: String = ""
+var blown: String = "":
+	set(value):
+		blown = value
+		_push(DamageStore.BLOWN, float(_order.find(value)))
+## Its ledger's handle in the damage store.
+var ledger: int = -1
 
 var _rules: Dictionary = {}
 var _order := PackedStringArray()  # the sections in manifest order (ties go to the earlier)
+# The store's lists, in its order: the sections, mounts, engines and bays, and each name's place.
+var _section_list: Array[CapitalSection] = []
+var _mount_list: Array[CapitalMount] = []
+var _engine_list: Array[CapitalPart] = []
+var _bay_list: Array[CapitalPart] = []
+var _slots: Dictionary = {}  # "mount:<name>", "engine:<name>", "bay:<name>" or a section's name -> [list, slot]
 
 
 ## The damage model of a hull of `p_hull_max` points from its `sections` (`CapitalSections`) and `hardpoints`.
@@ -93,7 +116,18 @@ static func from_entries(entries: Dictionary, hardpoints: Dictionary, p_hull_max
 			out.engine_sections[engine.name] = engine.section
 			if out.sections.has(engine.section):
 				out.sections[engine.section].engines.append(engine.name)
+	out._register()
 	return out
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and ledger >= 0 and DamageStore.store != null:
+		DamageStore.store.capital_free(ledger)
+		for s: CapitalSection in _section_list:
+			s.ledger = -1
+		for list: Array in [_mount_list, _engine_list, _bay_list]:
+			for p: Object in list:
+				p.set(&"ledger", -1)
 
 
 ## A hit of `damage` on section `section_name` at `point` (body frame, rotating pieces at rest): on the subsystem it strikes,
@@ -101,11 +135,9 @@ static func from_entries(entries: Dictionary, hardpoints: Dictionary, p_hull_max
 func hit(section_name: String, point: Vector3, damage: float) -> float:
 	if is_destroyed or not (damage > 0.0):
 		return 0.0
-	var s: CapitalSection = sections.get(section_name)
-	if s == null:
-		s = nearest(point)
-	var part: Object = _part_at(s, point) if s != null and not s.lost() else null
-	return _land(s, part, damage)
+	var at: Array = _slots.get(section_name, [])
+	var section: int = int(at[1]) if not at.is_empty() and int(at[0]) == DamageStore.PART_SECTION else -1
+	return _replay(DamageStore.store.capital_hit(ledger, section, point, damage))
 
 
 ## A hit of `damage` on subsystem `key` itself (`mount:<name>`, `engine:<name>`, `bay:<name>`, or a section's name: the
@@ -113,12 +145,10 @@ func hit(section_name: String, point: Vector3, damage: float) -> float:
 func hit_part(key: String, damage: float) -> float:
 	if is_destroyed or not (damage > 0.0):
 		return 0.0
-	var part: Object = part_of(key)
-	if part != null:
-		var s: CapitalSection = sections.get(str(part.get(&"section")))
-		return _land(s, part if s == null or not s.lost() else null, damage)
-	var section: CapitalSection = sections.get(key)
-	return _land(section, null, damage) if section != null else 0.0
+	var at: Array = _slots.get(key, [])
+	if at.is_empty():
+		return 0.0
+	return _replay(DamageStore.store.capital_hit_part(ledger, int(at[0]), int(at[1]), damage))
 
 
 ## A hit of `damage` on mount `mount_name` itself.
@@ -286,6 +316,9 @@ func live_bays() -> PackedStringArray:
 
 ## Every section, part and the ship's state whole again.
 func restore() -> void:
+	DamageStore.store.capital_restore(ledger)
+	var was: bool = DamageStore.quiet
+	DamageStore.quiet = true
 	for name: String in sections:
 		sections[name].restore()
 	for name: String in mounts:
@@ -298,6 +331,7 @@ func restore() -> void:
 	is_disabled = false
 	is_destroyed = false
 	blown = ""
+	DamageStore.quiet = was
 
 
 ## One line per section for the console: name, kind, state and points left; then the hull's total.
@@ -315,132 +349,121 @@ func describe() -> PackedStringArray:
 func scuttle() -> bool:
 	if is_disabled or is_destroyed:
 		return false
-	_disable()
-	return true
+	return _replay(DamageStore.store.capital_scuttle(ledger)) != 0.0
 
 
-# Lands `damage` on section `s` (null: the hull alone): on `part` when the hit strikes one (its section untouched: only the part
-# hit takes it), else on the section; the hull's share off the total. Returns the hull points removed.
-func _land(s: CapitalSection, part: Object, damage: float) -> float:
-	var to_hull: float = damage
-	var share: float = float(_rules["subsystem_hull_share"])
-	if s != null and not s.lost():
-		if part != null:
-			_wear_part(part, damage)
-			to_hull = damage * share
-		elif s.is_subsystem():
-			_wear_section(s, damage)
-			to_hull = damage * share
-		else:
-			_wear_section(s, damage)
-	if is_destroyed:
-		return to_hull
-	hull_hp = maxf(hull_hp - to_hull, 0.0)
-	_check_disabled()
-	return to_hull
+# Registers the ledger with the damage store: the rules, then each section, mount, engine and bay in manifest and hardpoint
+# order, each told its handle and place.
+func _register() -> void:
+	var rules := PackedFloat64Array([_rules["subsystem_hull_share"], _rules["power_stage_at"], _rules["power_stage_level"],
+			_rules["reactor_shutdown_at"], _rules["hulk_below"]])
+	var packed := PackedFloat64Array()
+	for name: String in _order:
+		var s: CapitalSection = sections[name]
+		s.slot = _section_list.size()
+		_section_list.append(s)
+		_slots[name] = [DamageStore.PART_SECTION, s.slot]
+		packed.append_array([_kind_code(s.kind), s.max_hp, s.hp, s.state, s.box.position.x, s.box.position.y,
+				s.box.position.z, s.box.size.x, s.box.size.y, s.box.size.z])
+	var lists: Array = [[mounts, _mount_list, DamageStore.PART_MOUNT, "mount:"], [engines, _engine_list, DamageStore.PART_ENGINE,
+			"engine:"], [bays, _bay_list, DamageStore.PART_BAY, "bay:"]]
+	var packs: Array[PackedFloat64Array] = []
+	for list: Array in lists:
+		var pack := PackedFloat64Array()
+		var by_name: Dictionary = list[0]
+		for name: String in by_name:
+			var p: Object = by_name[name]
+			var at: Array = _slots.get(str(p.get(&"section")), [])
+			var pos: Vector3 = p.get(&"position")
+			p.set(&"slot", (list[1] as Array).size())
+			(list[1] as Array).append(p)
+			_slots[str(list[3]) + name] = [list[2], p.get(&"slot")]
+			pack.append_array([float(at[1]) if not at.is_empty() else -1.0, pos.x, pos.y, pos.z, p.get(&"reach_m"),
+					p.get(&"max_hp"), p.get(&"hp"), 1.0 if p.get(&"alive") else 0.0])
+		packs.append(pack)
+	ledger = int(DamageStore.store.capital_add(rules, packed, packs[0], packs[1], packs[2], hull_max))
+	for s: CapitalSection in _section_list:
+		s.ledger = ledger
+	for list: Array in [_mount_list, _engine_list, _bay_list]:
+		for p: Object in list:
+			p.set(&"ledger", ledger)
 
 
-# The live mount, engine or bay of `s` nearest `point` within its reach, or null.
-func _part_at(s: CapitalSection, point: Vector3) -> Object:
-	var best: Object = null
-	var best_d: float = INF
-	for name: String in s.mounts:
-		var m: CapitalMount = mounts[name]
-		var d: float = m.position.distance_to(point)
-		if m.alive and d <= m.reach_m and d < best_d:
-			best_d = d
-			best = m
-	for list: Array in [[s.engines, engines], [s.bays, bays]]:
-		for name: String in list[0] as PackedStringArray:
-			var p: CapitalPart = (list[1] as Dictionary)[name]
-			var d: float = p.position.distance_to(point)
-			if p.alive and d <= p.reach_m and d < best_d:
-				best_d = d
-				best = p
-	return best
+static func _kind_code(kind: String) -> int:
+	match kind:
+		CapitalSection.BRIDGE:
+			return 1
+		CapitalSection.REACTOR:
+			return 2
+		CapitalSection.MAGAZINE:
+			return 3
+		CapitalSection.FUEL:
+			return 4
+	return 0
 
 
-func _wear_part(part: Object, damage: float) -> void:
-	if part is CapitalMount:
-		var m := part as CapitalMount
-		m.hp = maxf(m.hp - damage, 0.0)
-		if m.hp <= 0.0:
-			_lose_mount(m)
-		return
-	var p := part as CapitalPart
-	p.hp = maxf(p.hp - damage, 0.0)
-	if p.hp <= 0.0:
-		_lose_part(p)
+# The part in list `list` at `slot`.
+func _part(list: int, slot: int) -> Object:
+	match list:
+		DamageStore.PART_ENGINE:
+			return _engine_list[slot]
+		DamageStore.PART_BAY:
+			return _bay_list[slot]
+	return _mount_list[slot]
 
 
-func _wear_section(s: CapitalSection, amount: float) -> void:
-	var power_before: float = power()
-	s.hp = maxf(s.hp - amount, 0.0)
-	if s.hp <= 0.0:
-		_lose_section(s)
-		return
-	if s.state == CapitalSection.State.INTACT:
-		s.state = CapitalSection.State.DAMAGED
-		section_changed.emit(s.name, s.state)
-	if power() != power_before:
-		drive_changed.emit()
+# Takes the store's answer onto the copy in its order, raising each signal where the rules raised it; returns its result.
+func _replay(out: PackedFloat64Array) -> float:
+	var was: bool = DamageStore.quiet
+	var i: int = 1
+	while i < out.size():
+		var code: int = int(out[i])
+		var a: float = out[i + 1]
+		var b: float = out[i + 2]
+		var c: float = out[i + 3]
+		i += DamageStore.WIDTH
+		DamageStore.quiet = true
+		match code:
+			DamageStore.SEC_HP:
+				_section_list[int(a)].hp = b
+			DamageStore.SEC_STATE:
+				_section_list[int(a)].state = int(b) as CapitalSection.State
+			DamageStore.SECTION_CHANGED:
+				var s: CapitalSection = _section_list[int(a)]
+				s.state = int(b) as CapitalSection.State
+				DamageStore.quiet = was
+				section_changed.emit(s.name, s.state)
+			DamageStore.PART_HP:
+				_part(int(a), int(b)).set(&"hp", c)
+			DamageStore.PART_LOST:
+				var p: Object = _part(int(a), int(b))
+				p.set(&"alive", false)
+				DamageStore.quiet = was
+				if int(a) == DamageStore.PART_MOUNT:
+					mount_lost.emit(str(p.get(&"name")))
+				else:
+					part_lost.emit("%s:%s" % [p.get(&"kind"), p.get(&"name")])
+			DamageStore.DRIVE_CHANGED:
+				DamageStore.quiet = was
+				drive_changed.emit()
+			DamageStore.HULL_HP:
+				hull_hp = a
+			DamageStore.BECAME_DISABLED:
+				is_disabled = true
+				DamageStore.quiet = was
+				disabled.emit()
+			DamageStore.BLEW:
+				is_destroyed = true
+				blown = _order[int(a)]
+				DamageStore.quiet = was
+				blew.emit(blown)
+	DamageStore.quiet = was
+	return out[0] if not out.is_empty() else 0.0
 
 
-func _lose_mount(m: CapitalMount) -> void:
-	if not m.alive:
-		return
-	m.alive = false
-	mount_lost.emit(m.name)
-
-
-func _lose_part(p: CapitalPart) -> void:
-	if not p.alive:
-		return
-	p.alive = false
-	part_lost.emit("%s:%s" % [p.kind, p.name])
-	if p.kind == CapitalPart.ENGINE:
-		drive_changed.emit()
-
-
-# Section `s` reached 0: what it holds is lost; an explosive section blows, a lost bridge leaves a hulk.
-func _lose_section(s: CapitalSection) -> void:
-	s.state = CapitalSection.State.DISABLED
-	for name: String in s.mounts:
-		_lose_mount(mounts[name])
-	for name: String in s.bays:
-		_lose_part(bays[name])
-	for name: String in s.engines:
-		_lose_part(engines[name])
-	section_changed.emit(s.name, s.state)
-	if s.explosive():
-		_blow(s)
-		return
-	_check_disabled()
-
-
-func _blow(s: CapitalSection) -> void:
-	s.state = CapitalSection.State.DESTROYED
-	section_changed.emit(s.name, s.state)
-	if is_destroyed:
-		return
-	is_destroyed = true
-	blown = s.name
-	blew.emit(s.name)
-
-
-# A hulk once the bridge is lost, a reactor shuts down or the hull falls below its last tenth; a hull at 0 is destroyed
-# instead (`CapitalShip`).
-func _check_disabled() -> void:
-	if is_disabled or is_destroyed or hull_hp <= 0.0:
-		return
-	if not has_bridge() or reactor_shut_down() or hull_hp < float(_rules["hulk_below"]) * hull_max:
-		_disable()
-
-
-func _disable() -> void:
-	is_disabled = true
-	disabled.emit()
-	drive_changed.emit()
+func _push(code: int, value: float) -> void:
+	if ledger >= 0 and not DamageStore.quiet:
+		DamageStore.store.capital_set(ledger, code, 0, 0, value)
 
 
 func _section_lost(name: String) -> bool:

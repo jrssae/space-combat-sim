@@ -16,8 +16,19 @@ var position: Vector3 = Vector3.ZERO
 ## A hit this close lands on it, m; below 0 for a part the hardpoints place nowhere (lost only with its section).
 var reach_m: float = 10.0
 var max_hp: float = 1500.0
-var hp: float = 1500.0
-var alive: bool = true
+var hp: float = 1500.0:
+	set(value):
+		hp = value
+		if ledger >= 0 and not DamageStore.quiet:
+			DamageStore.store.capital_set(ledger, DamageStore.PART_HP, _list(), slot, value)
+var alive: bool = true:
+	set(value):
+		alive = value
+		if ledger >= 0 and not DamageStore.quiet:
+			DamageStore.store.capital_set(ledger, DamageStore.PART_ALIVE, _list(), slot, 1.0 if value else 0.0)
+## Its ledger's handle in the damage store and its place in its list there (M10-T75, Q94): -1 until registered.
+var ledger: int = -1
+var slot: int = -1
 
 
 ## The engine `entry` of the hardpoints' `engines[]`: its nozzle, reached within its radius plus `min_reach_m`.
@@ -42,6 +53,11 @@ static func bay(entry: Dictionary, hit_points: float, min_reach_m: float) -> Cap
 			else float(entry.get("radius_m", 0.0))
 	p.reach_m = min_reach_m + maxf(half, 0.0) if entry.get("exit", entry.get("position")) is Array else -1.0
 	return p
+
+
+# Its list in the damage store.
+func _list() -> int:
+	return DamageStore.PART_ENGINE if kind == ENGINE else DamageStore.PART_BAY
 
 
 func fraction() -> float:

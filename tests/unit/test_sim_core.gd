@@ -679,6 +679,12 @@ const CAPITAL_GUN_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Bas
 ## The mines and their layers (M10-T15): a mine's triggers, touches, flights and the battle's laying, held to the kernels' rules;
 ## they import the row tables, the surfaces' maths and the vector maths (and each other). The shell (`mine_rows.rs`) is what
 ## GDScript reaches.
+## The damage store (M10-T75): every hull's, section's and part's points and the rules, held to the kernels' rules; they import
+## the maths and each other only. The shell (`damage_rows.rs`) is what GDScript reaches.
+const DAMAGE_KERNEL_FILES: Array[String] = ["res://native/src/damage_store.rs", "res://native/src/damage_store/capital.rs",
+		"res://native/src/damage_store/station.rs"]
+const DAMAGE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use std::collections::HashMap;", "use crate::v3::",
+		"use super::", "use capital::", "use station::"]
 const MINE_KERNEL_FILES: Array[String] = ["res://native/src/mine_kernels.rs", "res://native/src/mine_layers.rs"]
 const MINE_KERNEL_USER: String = "res://native/src/mine_rows.rs"
 const MINE_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::Vector3;", "use crate::capital_gun_kernels::", "use crate::intercept_kernels::", "use crate::mine_kernels::",
@@ -765,6 +771,11 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	violations.append_array(_engine_free_violations(BEAM_KERNEL_FILE, KERNEL_FORBIDDEN, BEAM_KERNEL_USE_ALLOWED))
 	assert_true(FileAccess.get_file_as_string(BEAM_KERNEL_USER).contains("use crate::beam_kernels"), "the shell reads the beam kernel")
 	assert_false(FileAccess.get_file_as_string(BEAM_KERNEL_FILE).contains("static mut"), "no shared state in the beam kernel")
+	for path: String in DAMAGE_KERNEL_FILES:
+		violations.append_array(_engine_free_violations(path, KERNEL_FORBIDDEN, DAMAGE_KERNEL_USE_ALLOWED))
+		assert_false(FileAccess.get_file_as_string(path).contains("static mut"), "no shared state in %s" % path.get_file())
+	assert_true(FileAccess.get_file_as_string("res://native/src/damage_rows.rs").contains("use crate::damage_store"),
+			"the shell reads the damage store")
 	for path: String in MINE_KERNEL_FILES:
 		violations.append_array(_engine_free_violations(path, KERNEL_FORBIDDEN, MINE_KERNEL_USE_ALLOWED))
 		assert_false(FileAccess.get_file_as_string(path).contains("static mut"), "no shared state in %s" % path.get_file())

@@ -107,3 +107,6 @@ mod capital_helm;
 mod mine_kernels;
 mod mine_layers;
 mod mine_rows;
+// M10-T75: the damage store (every hull's, section's and part's points), an engine-free kernel and its shell for GDScript.
+mod damage_rows;
+mod damage_store;

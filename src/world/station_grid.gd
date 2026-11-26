@@ -149,8 +149,13 @@ func repair_some(i: int, amount: float) -> void:
 ## Takes `amount` off mount `i` alone (the console's staged damage, M7-T35).
 func damage_mount(i: int, amount: float) -> void:
 	if health != null and health.wear(i, amount):
-		mounts[i].knocked_out = true
-		mount_knocked_out.emit(mounts[i].mount_name)
+		knock_out(i)
+
+
+## Mount `i` was worn to nothing (`damage_mount`, or a hit the station's damage landed): it stops until repaired.
+func knock_out(i: int) -> void:
+	mounts[i].knocked_out = true
+	mount_knocked_out.emit(mounts[i].mount_name)
 
 
 func _repair_at(i: int) -> void:

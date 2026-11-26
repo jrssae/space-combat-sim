@@ -455,7 +455,7 @@ func _build_damage() -> void:
 	var rules: Dictionary = CapitalData.station_rules(DAMAGE_ID)
 	damage = StationDamage.make(sections, grid.health if grid != null else null, rules.get("section_kinds", {}) as Dictionary)
 	if grid != null:
-		damage.wear_mount = grid.damage_mount
+		damage.mount_out = grid.knock_out
 	damage.disabled.connect(_on_disabled)
 	damage.destroyed.connect(_on_destroyed)
 	hull = HullHealth.new(damage.hull_max)

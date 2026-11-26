@@ -3,6 +3,8 @@ extends RefCounted
 ## The station grid's mounts' own health (M7-T07 fix, maintainer): a hit on the station within a mount's radius, on the same body,
 ## wears that mount down (the nearest one only, and the hull half as much, `StationDamage`), and at zero the mount is knocked out until a
 ## mission or the console repairs it. Pure: `StationGrid` feeds it the station's hits and turns a loss into a mount that stops.
+## The health lives in the native damage store (M10-T75, Q94, `DamageStore`), registered on first use; this is the copy, and
+## writing `health` or `max_health` writes the store.
 
 ## Health and the radius around the pivot a hit counts within, per kind (`StationGrid.Kind`: 1 light, 2 heavy, 3 interceptor).
 ## The heavy cannons are armoured to outlast a cruiser's beams for a whole fight (the balance rule needs them to the end).
@@ -14,8 +16,16 @@ var kinds := PackedInt32Array()
 ## `StationHardpoints.DRUM` or `FRAME`: the body whose frame `positions` are in.
 var bodies := PackedStringArray()
 var positions := PackedVector3Array()
-var health := PackedFloat64Array()
-var max_health := PackedFloat64Array()
+var health := PackedFloat64Array():
+	set(value):
+		health = value
+		_push()
+var max_health := PackedFloat64Array():
+	set(value):
+		max_health = value
+		_push()
+## Its ledger's handle in the damage store (-1 until first used).
+var ledger: int = -1
 
 
 ## One entry per mount from the hardpoints' `grid_mounts` (name, kind name, body, position).
@@ -69,28 +79,71 @@ func hit(body: String, point: Vector3, amount: float) -> PackedInt32Array:
 	return lost
 
 
+## Its handle in the damage store, registering the mounts as they stand now on first use.
+func ensure() -> int:
+	return ledger if ledger >= 0 else register({})
+
+
+## Registers the mounts as they stand now (again, when they were), their bodies named by `body_codes` as the station's
+## sections name them (a body they lack gets a code no section has). Its handle.
+func register(body_codes: Dictionary) -> int:
+	if ledger >= 0:
+		DamageStore.store.mounts_free(ledger)
+	var codes: Dictionary = body_codes.duplicate()
+	var bodies_in := PackedInt32Array()
+	var at := PackedFloat64Array()
+	var radius := PackedFloat64Array()
+	for i: int in names.size():
+		if not codes.has(bodies[i]):
+			codes[bodies[i]] = 1000 + codes.size()
+		bodies_in.append(int(codes[bodies[i]]))
+		at.append_array([positions[i].x, positions[i].y, positions[i].z])
+		radius.append(RADIUS_M.get(kinds[i], 30.0))
+	ledger = int(DamageStore.store.mounts_add(bodies_in, at, radius, health, max_health))
+	return ledger
+
+
+## Mount `index`'s health as the store has it.
+func take(index: int, value: float) -> void:
+	var was: bool = DamageStore.quiet
+	DamageStore.quiet = true
+	health[index] = value
+	DamageStore.quiet = was
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE and ledger >= 0 and DamageStore.store != null:
+		DamageStore.store.mounts_free(ledger)
+
+
+func _push() -> void:
+	if ledger >= 0 and not DamageStore.quiet:
+		DamageStore.store.mounts_set(ledger, health, max_health)
+
+
 ## Whole again; true when it was knocked out.
 func repair(index: int) -> bool:
-	var was_out: bool = is_out(index)
-	health[index] = max_health[index]
-	return was_out
+	var out: PackedFloat64Array = DamageStore.store.mounts_repair(ensure(), index)
+	take(index, out[1])
+	return out[0] != 0.0
 
 
 ## Adds `amount` to mount `index` (never above its full health); true when this brought a knocked-out mount back (M7-T35).
 func heal(index: int, amount: float) -> bool:
 	if index < 0 or index >= health.size() or amount <= 0.0:
 		return false
-	var was_out: bool = is_out(index)
-	health[index] = minf(health[index] + amount, max_health[index])
-	return was_out and health[index] > 0.0
+	var out: PackedFloat64Array = DamageStore.store.mounts_heal(ensure(), index, amount)
+	take(index, out[1])
+	return out[0] != 0.0
 
 
 ## Takes `amount` off mount `index` alone; true when that knocked it out (the console's staged damage, M7-T35).
 func wear(index: int, amount: float) -> bool:
 	if index < 0 or index >= health.size() or amount <= 0.0 or is_out(index):
 		return false
-	health[index] = maxf(health[index] - amount, 0.0)
-	return is_out(index)
+	var out: PackedFloat64Array = DamageStore.store.mounts_wear(ensure(), index, amount)
+	take(index, out[1])
+	return out[0] != 0.0
 
 
 func is_whole(index: int) -> bool:
