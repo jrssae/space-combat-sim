@@ -374,7 +374,7 @@ impl ScsCapitalGuns {
             row_of: |id: i64| usize::try_from(guard.row_for_kernel(id)).ok(),
             rest: guard.frame_rest().velocity,
         };
-        let tick = guard.syncs();
+        let tick = sim_tick(now_s, delta, guard.syncs());
         if live {
             if guarding {
                 let view = GuardView { friendly: &self.friendly, shooter_rows: &self.shooter_rows };
@@ -509,5 +509,31 @@ impl ScsCapitalGuns {
         out.push(&PackedByteArray::from(met_kinds.as_slice()).to_variant());
         self.last_us = started.elapsed().as_secs_f64() * 1e6;
         out
+    }
+}
+
+
+// The tick the guns' and interceptors' seeded spreads are hashed with (M10-T11 fix): counted in sim time, so two scenes that
+// start their clocks alike draw alike. The core's sync count also holds whatever ticks a scene ran before its clock started,
+// which differ with how its first frames fell (a first scene in a process, a slow load). The count only without a step length.
+fn sim_tick(now_s: f64, delta: f64, syncs: i64) -> i64 {
+    if delta > 0.0 && now_s.is_finite() {
+        (now_s / delta).round() as i64
+    } else {
+        syncs
+    }
+}
+
+#[cfg(test)]
+mod sim_tick_tests {
+    use super::sim_tick;
+
+    #[test]
+    fn the_spread_tick_follows_sim_time_not_the_sync_count() {
+        let dt = 1.0 / 60.0;
+        assert_eq!(sim_tick(0.0, dt, 7), 0);
+        assert_eq!(sim_tick(347.0 * dt, dt, 349), 347);
+        assert_eq!(sim_tick(347.0 * dt + 1e-9, dt, 2), 347, "rounding off a float's drift");
+        assert_eq!(sim_tick(1.0, 0.0, 42), 42, "no step length: the count");
     }
 }
