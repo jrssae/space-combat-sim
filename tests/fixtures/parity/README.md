@@ -109,3 +109,10 @@ the GDScript fight passes again: worst furball 3.6, 2.2, 0.4 points, spread 1.4,
 instead of a flat 200, and the log no longer carries `checked`; `weapon_rows_battle.json` and its counts are unchanged). Recorded from the
 native path with `SCS_RECORD_FIXTURES=1 GUT_SLOW=1 ... -gtest=res://tests/unit/test_turret_kernel.gd`. `mine_kernel.json` is gone with
 its test: the mine kernels' own cargo tests and `test_mine_field` replace it.
+
+**M10-T76 recorded `blast_landing.json` from the GDScript landing** (`BlastResolver._land`, before the native batch), in the real
+main scene (free flight, Babylon 5 in play): a fighter group with low hulls blowing in turn, an Omega with its sections nearly
+spent taking torpedoes and energy-mine blasts and its death blast, Babylon 5's sections and grid, and an Omega dying beside a
+100-mine line with raiders at its far end (133 blasts, 80 hits, 126 events). Recorded with
+`SCS_RECORD_FIXTURES=1 ... -gselect=test_blast_landing_parity.gd -gunit_test_name=test_blasts_and`; the file's 1-thread and
+`delayed` cases read the same entry.
