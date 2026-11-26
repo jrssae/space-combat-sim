@@ -10,7 +10,7 @@ func _weapon(ship_path: String) -> WeaponSpec:
 
 
 func test_every_shipped_profile_loads_and_validates() -> void:
-	assert_eq(AiProfile.PATHS.keys(), [&"ally_starfury", &"raider", &"instructor", &"civilian", &"training_drone"])
+	assert_eq(AiProfile.PATHS.keys(), [&"ally_starfury", &"raider", &"instructor", &"civilian", &"training_drone", &"civilian_armed"])
 	for profile_name: StringName in AiProfile.PATHS:
 		var profile: AiProfile = AiProfile.load_named(profile_name)
 		assert_not_null(profile, String(profile_name))
@@ -94,3 +94,21 @@ func _valid_profile() -> AiProfile:
 
 func test_an_unknown_profile_name_loads_nothing() -> void:
 	assert_null(AiProfile.load_named(&"pirate"))
+
+
+func test_the_armed_civilian_runs_like_a_civilian_and_fights_one_pursuer() -> void:
+	# M10 Q97 (the Minbari Flyer): the Saturn civilians' flight, a little more aggressive.
+	var plain: AiProfile = AiProfile.load_named(&"civilian")
+	var armed: AiProfile = AiProfile.load_named(&"civilian_armed")
+	assert_eq(armed.retreat_within_m, plain.retreat_within_m, "it runs from a hostile at the civilians' range")
+	assert_eq(armed.weight(&"retreat"), 1.0)
+	assert_eq(plain.fight_odds, 0, "a plain civilian only runs")
+	assert_eq(armed.fight_odds, 1, "it turns on one pursuer")
+	assert_true(armed.fires and armed.weight(&"attack") > 0.0, "and can fight")
+	assert_false(plain.fires)
+	assert_gt(armed.aggression, plain.aggression, "slightly more aggressive")
+	assert_lt(armed.aggression, AiTemperament.BALANCED, "but no fighter pilot")
+	assert_eq(AiPilot.native_profile(armed)[-1], 1.0, "the native brain is told the odds")
+	armed = armed.duplicate() as AiProfile
+	armed.fight_odds = -1
+	assert_string_contains(armed.validate(), "fight_odds")

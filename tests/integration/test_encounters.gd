@@ -586,8 +586,9 @@ func test_the_free_flight_load_time_with_encounters_on_is_recorded() -> void:
 	var off_ms: int = await _load_ms(false)
 	var on_ms: int = await _load_ms(true)
 	gut.p("free flight load: encounters off %d ms, on %d ms (the pools: %d ms)" % [off_ms, on_ms, _director().build_ms])
-	assert_eq(main.ships.pool_size(), 75, "the shipped pools: 12 raiders and 12 Starfuries on top of the station's raid and wing "
-			+ "(12 of each), five of each hull that fits the docking tunnel and two of every other civilian hull (M7-T56)")
+	assert_eq(main.ships.pool_size(), 79, "the shipped pools: 12 raiders and 12 Starfuries on top of the station's raid and wing "
+			+ "(12 of each), five of each hull that fits the docking tunnel and two of every other civilian hull (M7-T56), "
+			+ "the Centauri shuttle and the Flyer among them (M10 Q97)")
 	assert_gt(_director().build_ms, 0)
 
 

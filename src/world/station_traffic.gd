@@ -34,7 +34,6 @@ const PROVIDER: StringName = &"traffic"
 const ACTIONS: Array[StringName] = [&"status", &"dock", &"undock", &"freighter", &"raid", &"scramble", &"auto", &"clear"]
 ## What the run's own starts may be (raids at the station come with the encounters).
 const KINDS: Array[StringName] = [&"dock", &"undock", &"freighter"]
-const CIVILIAN_AI: Dictionary = {"type": "ai", "profile": "civilian"}
 const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack"}
 const TRANSIT_CRUISE_MPS: float = 120.0
 ## Sheltering civilians wait this far behind the station, this far apart, metres (M8-T34).
@@ -394,7 +393,8 @@ func flow_count() -> int:
 
 ## Starts an encounter's traffic event on the run: its ships come in one behind the other toward the station, joining the run
 ## past the player's radar where it can. A Saturn goes to the cargo bay when no freighter is there or on its way; every other hull,
-## and any Saturn after that, flies to the docking bay in a hull that fits its tunnel. Whether any ship started.
+## and any Saturn after that, flies to the docking bay in a hull that fits its tunnel; a `traffic_only` hull, which does not dock,
+## flies out to the gate instead. Whether any ship started.
 func lane_event(e: EncounterEvent, seed_value: int) -> bool:
 	if not lanes_ready() or _gate() == null:
 		return false
@@ -404,6 +404,11 @@ func lane_event(e: EncounterEvent, seed_value: int) -> bool:
 	var placed: int = 0
 	for k: int in e.count():
 		var type: StringName = e.types[k]
+		if ShipCatalog.data().is_traffic_only(type):
+			# A visitor that does not dock here (M10 Q97) is seen leaving for the gate.
+			if _join_outbound(type, along + step * float(k), {"encounter": true}) != null:
+				placed += 1
+			continue
 		if DockingPlan.freighter_types().has(type) and not freighter_taken:
 			freighter_taken = true
 			type = _free_hull(DockingPlan.freighter_types(), DockingPlan.freighter_types().find(type))
@@ -617,8 +622,13 @@ func _seed_run() -> void:
 		if k % 2 == 0:
 			_join_inbound(_arrival_hull(k), along, {"flow": true, "loading": _unit("load", k) < 0.5})
 		else:
-			_join_outbound(_free_hull(ShipCatalog.civilian_types(), hash([main.scenario_seed, "traffic out", k])), along, {"flow": true})
+			_join_outbound(_free_hull(_traffic_types(), hash([main.scenario_seed, "traffic out", k])), along, {"flow": true})
 	_last_flow_s = elapsed_s
+
+
+# The hulls the run's departures draw from: the encounters' own list when they are on, so both fly the same traffic.
+func _traffic_types() -> Array[StringName]:
+	return main.encounter_director.traffic_types() if main.encounter_director != null else ShipCatalog.civilian_types()
 
 
 # A point of the run from `lane`'s first point to the gate, `along` 0 at the station's end and 1 at the gate's, its ends kept clear,
@@ -817,7 +827,7 @@ func _lane_route(kind: StringName, lane: Array[Dictionary]) -> Route:
 func _take(type: StringName, route: Route, at: Vector3, basis: Basis, velocity: Vector3, kind: StringName, state: StringName,
 		extra: Dictionary = {}) -> Combatant:
 	_ensure_free(type, 1)
-	var made: Dictionary = BrainFactory.from_behaviour(CIVILIAN_AI, main.world.to_universe(at), hash([main.scenario_seed, "traffic", _spawned]))
+	var made: Dictionary = BrainFactory.from_behaviour(ShipCatalog.civilian_behaviour(type), main.world.to_universe(at), hash([main.scenario_seed, "traffic", _spawned]))
 	if not bool(made["ok"]):
 		push_error("StationTraffic: %s" % made["error"])
 		return null

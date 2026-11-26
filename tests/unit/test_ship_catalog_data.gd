@@ -67,6 +67,20 @@ func test_a_civilian_marked_out_of_the_random_pool_is_still_a_civilian() -> void
 	assert_eq(_parse(GOOD).civilian_pool(), [&"b_hauler", &"d_hauler"] as Array[StringName])
 
 
+func test_a_traffic_only_civilian_joins_the_traffic_of_a_scenario_that_pools_it() -> void:
+	var marked: String = GOOD.replace('"docking": "tunnel", "callsign": "BEE"', '"docking": "tunnel", "callsign": "BEE", "traffic_only": true')
+	var data: ShipCatalogData = _parse(marked)
+	assert_eq(data.error, "")
+	assert_eq(data.civilian_pool(), [&"d_hauler"] as Array[StringName], "the missions' random civilian never draws it")
+	assert_true(data.in_random_pool(&"b_hauler"), "it is still random traffic")
+	assert_true(data.is_traffic_only(&"b_hauler"))
+	assert_false(data.is_traffic_only(&"d_hauler"))
+	assert_eq(data.traffic_pool({}), data.civilian_pool(), "a scenario that pools none draws as it always did")
+	assert_eq(data.traffic_pool({&"b_hauler": 0}), data.civilian_pool(), "an empty pool is no pool")
+	assert_eq(data.traffic_pool({&"b_hauler": 2}), [&"b_hauler", &"d_hauler"] as Array[StringName], "pooled: it joins, in file order")
+	assert_string_contains(_parse(marked.replace('"traffic_only": true', '"traffic_only": "yes"')).error, "traffic_only")
+
+
 func test_by_asset_maps_each_asset_once_to_the_first_entry_with_a_value() -> void:
 	var data: ShipCatalogData = _parse(GOOD)
 	assert_eq(data.by_asset("name"), {"a": "A fighter"})

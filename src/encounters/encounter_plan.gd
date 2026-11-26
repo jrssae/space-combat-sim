@@ -57,6 +57,8 @@ var weights: Dictionary = DEFAULT_WEIGHTS
 ## The pools file's `gate` table (M6-T14): {"arrive": {kind: share 0..1}, "depart": {kind: share}}. Empty: no event uses the gate,
 ## so a file without it plans exactly as before (the gate's draw has its own salt).
 var gate_shares: Dictionary = {}
+## The hulls a traffic event draws from; the director widens it by the `traffic_only` hulls its pools list (M10 Q97).
+var civilian_types: Array[StringName] = ShipCatalog.civilian_types()
 ## Share of raids sent at the station instead (the pools file's `station_raid_share`); the director honours it only near one.
 var station_raid_share: float = 0.0
 ## The kinds switched on (free flight's three switches, M8-T28): a switched-off kind is never drawn, never a substitute.
@@ -188,7 +190,7 @@ func _plan_cruise(e: EncounterEvent, type: StringName, n: int, pass_m: Vector2, 
 		var ship_type: StringName = type
 		var pods: int = -1
 		if ship_type == &"":
-			var types: Array[StringName] = ShipCatalog.civilian_types()
+			var types: Array[StringName] = civilian_types
 			ship_type = types[mini(floori(_unit(i, Salt.TYPE + k) * float(types.size())), types.size() - 1)]
 			if ship_type == BOKMAI:
 				pods = mini(floori(_unit(i, Salt.PODS + k) * float(MAX_PODS + 1)), MAX_PODS)

@@ -215,3 +215,52 @@ func test_smoothing_goes_down_as_well_as_up_and_never_overshoots() -> void:
 func test_zero_time_constant_snaps_to_the_target() -> void:
 	assert_eq(ThrusterGlowLevels.smooth(0.2, 0.9, DT, 0.0), 0.9)
 	assert_eq(ThrusterGlowLevels.smooth(0.2, 0.9, 0.0, 0.08), 0.2, "no time, no change")
+
+
+# --- ports that brake and ports that swing (M10 Q97) ---------------------------------------------------------
+
+
+func _bow_layout() -> ThrusterLayout:
+	var nozzle := func(z: float, x: float) -> Dictionary: return {"position": [x, 0.0, 1.0], "exhaust": [0.0, 0.0, z]}
+	return ThrusterLayout.from_dict({"pods": [
+		{"name": "r", "side": "right", "main": nozzle.call(1.0, 2.0), "retro": nozzle.call(-1.0, 2.0)},
+		{"name": "l", "side": "left", "main": nozzle.call(1.0, -2.0), "retro": nozzle.call(-1.0, -2.0)},
+	], "rcs": [
+		{"name": "l_blade", "pod": "l", "position": [-3.0, 1.0, -5.0], "exhaust": [0.0, 0.0, -1.0], "tags": ["yaw_left", "retro"]},
+		{"name": "r_blade", "pod": "r", "position": [3.0, 1.0, -5.0], "exhaust": [0.0, 0.0, -1.0], "tags": ["yaw_right", "retro"]},
+	]}, Vector3.ZERO)
+
+
+func test_a_port_tagged_retro_shows_its_own_pods_braking() -> void:
+	var bow: ThrusterLayout = _bow_layout()
+	var output: FlightOutput = _output([0.0, 0.0], [0.2, 0.9])  # pod order r, l
+	var targets: PackedFloat64Array = ThrusterGlowLevels.targets(bow, output)
+	assert_almost_eq(targets[bow.nozzle_count()], 0.9, FLOAT32_TOL, "the left blade draws the left pod's retro")
+	assert_almost_eq(targets[bow.nozzle_count() + 1], 0.2, FLOAT32_TOL)
+	output.rcs_torque_level = Vector3(0.0, -0.6, 0.0)  # yaw right
+	targets = ThrusterGlowLevels.targets(bow, output)
+	assert_almost_eq(targets[bow.nozzle_count() + 1], 0.6, FLOAT32_TOL, "the stronger of its braking and its turn")
+	assert_almost_eq(targets[bow.nozzle_count()], 0.9, FLOAT32_TOL)
+	assert_eq(ThrusterGlowLevels.tag_level(ThrusterGlowLevels.RETRO_TAG, Vector3.ONE, Vector3.ONE), 0.0, "no RCS axis lights it")
+
+
+func test_a_vectored_port_swings_its_plume_against_the_thrust_asked() -> void:
+	var limits := PackedFloat64Array([deg_to_rad(85.0), deg_to_rad(85.0), deg_to_rad(80.0), deg_to_rad(20.0)])  # up, down, left, right
+	assert_eq(ThrusterGlowLevels.swing(Vector3.ZERO, limits), Vector2.ZERO, "nothing asked: straight ahead")
+	var up: Vector2 = ThrusterGlowLevels.swing(Vector3(0.0, 1.0, 0.0), limits)
+	assert_almost_eq(up, Vector2(0.0, -deg_to_rad(85.0)), Vector2.ONE * FLOAT32_TOL, "heave up: the plume goes down to its limit")
+	var right: Vector2 = ThrusterGlowLevels.swing(Vector3(1.0, 0.0, 0.0), limits)
+	assert_almost_eq(right, Vector2(-deg_to_rad(80.0), 0.0), Vector2.ONE * FLOAT32_TOL, "sway right: the plume goes left, as far as the left limit")
+	var left: Vector2 = ThrusterGlowLevels.swing(Vector3(-0.5, 0.0, 0.0), limits)
+	assert_almost_eq(left, Vector2(deg_to_rad(10.0), 0.0), Vector2.ONE * FLOAT32_TOL, "half a sway left: half the right limit")
+	var over: Vector2 = ThrusterGlowLevels.swing(Vector3(3.0, -3.0, 0.0), limits)
+	assert_almost_eq(over, Vector2(-deg_to_rad(80.0), deg_to_rad(85.0)), Vector2.ONE * FLOAT32_TOL, "never past a limit")
+	# The direction: from straight ahead toward the hull's right for a positive first angle, up for a positive second.
+	var ahead := Vector3.FORWARD
+	assert_almost_eq(ThrusterGlowLevels.swing_direction(ahead, Vector2.ZERO), ahead, Vector3.ONE * FLOAT32_TOL)
+	assert_almost_eq(ThrusterGlowLevels.swing_direction(ahead, Vector2(PI / 2.0, 0.0)), Vector3.RIGHT, Vector3.ONE * FLOAT32_TOL)
+	assert_almost_eq(ThrusterGlowLevels.swing_direction(ahead, Vector2(0.0, PI / 2.0)), Vector3.UP, Vector3.ONE * FLOAT32_TOL)
+	var down: Vector3 = ThrusterGlowLevels.swing_direction(ahead, up)
+	assert_lt(down.y, -0.99, "the plume for a heave up points almost straight down")
+	assert_lt(down.z, 0.0, "and still a little ahead")
+	assert_almost_eq(down.length(), 1.0, FLOAT32_TOL)

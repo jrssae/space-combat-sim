@@ -929,13 +929,14 @@ func _notification(what: int) -> void:
 
 
 ## `AiProfile` as the host takes it: the nine weights by `TIE_ORDER`, then stickiness, emergency_margin, min_dwell_s,
-## retreat_below, retreat_within_m, cruise_mps, aim_error_deg, fires, slashing, idle_hold.
+## retreat_below, retreat_within_m, cruise_mps, aim_error_deg, fires, slashing, idle_hold, fight_odds.
 static func native_profile(p: AiProfile) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
 	for id: StringName in TIE_ORDER:
 		out.append(p.weight(id))
 	out.append_array([p.stickiness, p.emergency_margin, p.min_dwell_s, p.retreat_below, p.retreat_within_m, p.cruise_mps,
-			p.aim_error_deg, 1.0 if p.fires else 0.0, 1.0 if p.slashing else 0.0, 1.0 if p.idle_hold else 0.0])
+			p.aim_error_deg, 1.0 if p.fires else 0.0, 1.0 if p.slashing else 0.0, 1.0 if p.idle_hold else 0.0,
+			float(p.fight_odds)])
 	return out
 
 

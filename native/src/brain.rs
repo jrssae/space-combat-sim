@@ -33,8 +33,8 @@ pub const KIND_STATIC: u8 = 5;
 pub const SENSOR_RANGE_M: f64 = 5000.0;
 
 /// `AiProfile` as the facade packs it: the nine weights in tie order, then stickiness, emergency_margin, min_dwell_s,
-/// retreat_below, retreat_within_m, cruise_mps, aim_error_deg, fires, slashing, idle_hold.
-pub const PROFILE_LEN: usize = KINDS + 10;
+/// retreat_below, retreat_within_m, cruise_mps, aim_error_deg, fires, slashing, idle_hold, fight_odds.
+pub const PROFILE_LEN: usize = KINDS + 11;
 /// `RaiderTactics` as the facade packs it, in its field order.
 pub const TACTICS_LEN: usize = 14;
 /// A batch think's inputs per ship: the slot, the relation row's offset and length in the batch's relations, the
@@ -1539,6 +1539,7 @@ fn profile_of(profile: &PackedFloat64Array, tactics: &PackedFloat64Array) -> Opt
         fires: p[KINDS + 7] != 0.0,
         slashing: p[KINDS + 8] != 0.0,
         idle_hold: p[KINDS + 9] != 0.0,
+        fight_odds: p[KINDS + 10],
         tactics: Tactics {
             closing_far_mps: t[0],
             closing_near_mps: t[1],

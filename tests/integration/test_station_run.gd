@@ -257,6 +257,36 @@ func test_an_encounter_convoy_joins_the_run_past_the_radar_heading_for_the_stati
 	assert_eq(colour, Factions.CIVILIAN_COLOR, "drawn as a civilian, not an ally")
 
 
+func test_a_convoys_visitors_that_do_not_dock_fly_out_to_the_gate_as_themselves() -> void:
+	# M10 Q97: the Centauri shuttle and the Flyer are free flight's traffic, each of its own faction.
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var e := EncounterEvent.new()
+	e.index = 4
+	e.kind = &"traffic"
+	e.types.assign([&"minbari_flyer", &"centauri_shuttle"])
+	for type: StringName in e.types:
+		if not Hardpoints.load_file(ShipCatalog.spec_for(type).hardpoints_path()).valid:
+			pending("%s is not generated" % type)
+			return
+	var traffic: StationTraffic = main.traffic
+	var before: int = traffic.alive_count()
+	assert_true(traffic.lane_event(e, 5))
+	var convoy: Array[Combatant] = traffic.ships().slice(before)
+	assert_eq(convoy.size(), 2, "both on the run")
+	var factions: Dictionary = {&"minbari_flyer": &"minbari", &"centauri_shuttle": &"centauri"}
+	for k: int in convoy.size():
+		var c: Combatant = convoy[k]
+		assert_eq(main.ships.type_of(c), e.types[k], "no tunnel hull stands in for it")
+		assert_eq(c.faction, factions[e.types[k]], "of its own people")
+		assert_eq(c.targetable.role, Targetable.Role.CIVILIAN)
+		assert_eq(traffic.state_of(c), &"leave", "%s is on its way out" % c.display_name)
+		assert_lt(_off_run(c.ship.global_position), ON_RUN_M, "%s on the run" % c.display_name)
+		assert_gt(_heading(c).dot((main.gates.gate().global_position - c.ship.global_position).normalized()), 0.9,
+				"%s flies for the gate" % c.display_name)
+
+
 func test_an_encounter_raid_drawn_for_the_station_goes_for_it_and_scrambles_its_wing() -> void:
 	DebugConsole.flags.invulnerable = true
 	if not await _start(true):

@@ -32,7 +32,7 @@ static func rows(data: ShipCatalogData, asset_root: String = ShipSpec.ASSET_ROOT
 				if key == "pooled":
 					row[key] = "yes" if data.is_pooled(id) else "no"
 				elif key == "random_pool":
-					row[key] = "" if data.role(id) != &"civilian" else ("yes" if data.in_random_pool(id) else "no")
+					row[key] = "" if data.role(id) != &"civilian" else ("traffic" if data.is_traffic_only(id) else ("yes" if data.in_random_pool(id) else "no"))
 				else:
 					row[key] = data.text(id, key)
 		out.append(row)
@@ -57,7 +57,8 @@ static func render(p_rows: Array[Dictionary]) -> String:
 	lines.append_array(_table(p_rows, COLUMNS, HEADERS))
 	lines.append_array(["", "## What other code reads from each entry", "",
 		"`pooled`: `ShipPool` builds it by type. `random_pool`: whether random traffic, encounters and `random_civilian` spawns",
-		"may draw a civilian (`no`: only a mission that names it places it). `docking`: `tunnel` (the main docking bay) or",
+		"may draw a civilian (`no`: only a mission that names it places it; `traffic`: the traffic and encounters of a scenario",
+		"that pools it, never a mission's `random_civilian`). `docking`: `tunnel` (the main docking bay) or",
 		"`cargo_bay`. `look_sheet`: what `sheet <asset>` parks. `name`: the target preview's class line. `callsign`: a",
 		"civilian's radio name.", ""])
 	lines.append_array(_table(p_rows, FLAG_COLUMNS, FLAG_COLUMNS))

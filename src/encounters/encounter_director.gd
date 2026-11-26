@@ -66,7 +66,6 @@ const CIVILIAN_CALLSIGN: String = "CIVILIAN"
 const RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider"}
 const STATION_RAIDER_AI: Dictionary = {"type": "ai", "profile": "raider", "orders": "attack", "objective": Station.DISPLAY_NAME}
 const ALLY_AI: Dictionary = {"type": "ai", "profile": "ally_starfury", "orders": "engage"}
-const CIVILIAN_AI: Dictionary = {"type": "ai", "profile": "civilian"}
 
 signal event_started(event: EncounterEvent)
 signal ship_released(combatant: Combatant)
@@ -201,6 +200,7 @@ func enable() -> String:
 	if plan == null:
 		plan = EncounterPlan.new(seed_value, float(Settings.get_value(&"encounter_interval_s")), weights)
 		plan.gate_shares = gate_shares
+		plan.civilian_types = traffic_types()
 		plan.station_raid_share = station_raid_share
 		next_due_s = elapsed_s + plan.gap_of(next_index)
 	sync_switches()
@@ -434,8 +434,13 @@ func _free_of(type: StringName, taken: Dictionary) -> int:
 	return int(taken[type]) if taken.has(type) else main.ships.free_count(type)
 
 
+## The civilian hulls this scenario's traffic draws from: the catalogue's pool and the `traffic_only` hulls the pools file lists.
+func traffic_types() -> Array[StringName]:
+	return ShipCatalog.traffic_types(pools)
+
+
 func _free_civilian(wanted: StringName, taken: Dictionary) -> StringName:
-	var types: Array[StringName] = ShipCatalog.civilian_types()
+	var types: Array[StringName] = traffic_types()
 	var start: int = maxi(types.find(wanted), 0)
 	for step: int in types.size():
 		var type: StringName = types[(start + step) % types.size()]
@@ -524,7 +529,7 @@ func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, an
 		target_name: String, depart_by: Jumpgate = null) -> void:
 	var ships: ShipPool = main.ships
 	var ship_name: String = _name_for(e, type)
-	var behaviour: Dictionary = _behaviour_for(e, target_name)
+	var behaviour: Dictionary = _behaviour_for(e, type, target_name)
 	var at: UniversePos = anchor.plus_local(e.positions[k])
 	var made: Dictionary = BrainFactory.from_behaviour(behaviour, at, hash([seed_value, e.index, k]))
 	if not bool(made["ok"]):
@@ -560,7 +565,7 @@ func _place(e: EncounterEvent, k: int, type: StringName, anchor: UniversePos, an
 # event, flying out along the gate's axis; a raider goes for its target, a patrol or traffic flies on along the axis.
 func _arrive_at_gate(e: EncounterEvent, k: int, type: StringName, target_name: String, gate: Jumpgate) -> void:
 	var ship_name: String = _name_for(e, type)
-	var behaviour: Dictionary = _behaviour_for(e, target_name)
+	var behaviour: Dictionary = _behaviour_for(e, type, target_name)
 	var offset := Vector3((float(k) - float(e.count() - 1) * 0.5) * GATE_SPREAD_M, 0.0, 0.0)
 	var made: Dictionary = BrainFactory.from_behaviour(behaviour, main.world.to_universe(gate.global_position),
 			hash([seed_value, e.index, k]))
@@ -616,7 +621,7 @@ static func civilian_callsign(type: StringName) -> String:
 	return callsign if not callsign.is_empty() else CIVILIAN_CALLSIGN
 
 
-func _behaviour_for(e: EncounterEvent, target_name: String) -> Dictionary:
+func _behaviour_for(e: EncounterEvent, type: StringName, target_name: String) -> Dictionary:
 	match e.kind:
 		&"raid":
 			if target_name == Station.DISPLAY_NAME:
@@ -626,7 +631,7 @@ func _behaviour_for(e: EncounterEvent, target_name: String) -> Dictionary:
 			return behaviour
 		&"patrol":
 			return ALLY_AI.duplicate()
-	return CIVILIAN_AI.duplicate()
+	return ShipCatalog.civilian_behaviour(type)
 
 
 # A departing ship went through the gate: back to its pool, if it still flies for the encounters.

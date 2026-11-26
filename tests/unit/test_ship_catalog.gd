@@ -86,6 +86,29 @@ func test_the_shuttles_are_civilians_only_missions_place() -> void:
 		assert_eq(LookScene.pool_types().get(String(type)), type, "its look sheet parks one")
 
 
+func test_the_centauri_shuttle_and_the_flyer_are_traffic_of_their_own_factions() -> void:
+	# M10 Q97: finished hulls, in the line-up and in free flight's traffic, never the missions' random civilian.
+	var pooled: Dictionary = {&"centauri_shuttle": 2, &"minbari_flyer": 2}
+	var nine: Array[StringName] = ShipCatalog.civilian_types()
+	for type: StringName in pooled:
+		assert_true(ShipCatalog.is_civilian(type), "%s carries the civilian role" % type)
+		assert_false(nine.has(type), "%s: older scenarios' seeded civilians stay as they were" % type)
+		assert_has(ShipCatalog.traffic_types(pooled), type, "%s flies in the traffic of a scenario that pools it" % type)
+		assert_has(ShipCatalog.data().finalized_ids(), type, "%s is in the ship line-up" % type)
+		assert_false(DockingPlan.tunnel_types().has(type) or DockingPlan.freighter_types().has(type), "%s does not dock at the station" % type)
+	assert_eq(ShipCatalog.traffic_types({}), nine, "no pool, no change")
+	assert_eq(ShipCatalog.traffic_types(pooled).slice(0, nine.size()), nine, "the old hulls lead, in their order")
+	assert_eq(ShipCatalog.faction_for(&"centauri_shuttle"), &"centauri")
+	assert_eq(ShipCatalog.faction_for(&"minbari_flyer"), &"minbari")
+	assert_eq(ShipCatalog.civilian_behaviour(&"centauri_shuttle"), {"type": "ai", "profile": "civilian"})
+	assert_eq(ShipCatalog.civilian_behaviour(&"minbari_flyer"), {"type": "ai", "profile": "civilian_armed"}, "the Flyer fights back")
+	assert_eq(ShipCatalog.civilian_behaviour(&"saturn_4_transport"), {"type": "ai", "profile": "civilian"})
+	# Free flight's own pools list them, so its encounters and the station's run draw them.
+	var pools: Dictionary = (JSON.parse_string(FileAccess.get_file_as_string("res://data/encounters/free_flight.json")) as Dictionary)["pools"]
+	for type: StringName in pooled:
+		assert_gt(int(pools.get(String(type), 0)), 0, "%s is pooled for free flight" % type)
+
+
 func test_the_working_ships_are_civilians_only_missions_place() -> void:
 	for type: StringName in [&"ea_panama", &"ea_construction_tender"]:
 		assert_true(ShipCatalog.has_type(type), "%s is pooled" % type)

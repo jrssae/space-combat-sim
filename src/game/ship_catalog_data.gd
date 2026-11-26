@@ -16,6 +16,9 @@ extends RefCounted
 ## - `callsign`: the name an encounter or station civilian of this type calls in under.
 ## - `random_pool`: false keeps a civilian out of the hulls random traffic, encounters and `random_civilian` spawns draw from
 ##   (default true); a mission names such a hull itself (the shuttles, M10-T57).
+## - `traffic_only`: true keeps a civilian of the random pool to the traffic and encounters of a scenario whose encounter
+##   pools list it (`traffic_pool`), and out of the missions' `random_civilian` draw (the Centauri shuttle and the Flyer,
+##   M10 Q97), so the scenarios made before it keep their seeded hulls. Default false.
 ## - `finalized`: the hull's look is approved, so it belongs in the ship line-up (`ship_showcase`, M10-T64); a test fails
 ##   until the scenario parks every finalized hull. Default false.
 ## Entry order matters: every list built from the file keeps it, and seeded picks index into those lists.
@@ -24,7 +27,7 @@ const ROLES: Array[String] = ["fighter", "civilian", "capital"]
 const DOCKING: Array[String] = ["", "tunnel", "cargo_bay"]
 const LOOK_SHEETS: Array[String] = ["", "pool", "hull"]
 const REQUIRED: Array[String] = ["id", "spec", "asset", "faction", "role"]
-const OPTIONAL: Array[String] = ["ai_profile", "capital_class", "pooled", "name", "look_sheet", "docking", "callsign", "random_pool", "finalized"]
+const OPTIONAL: Array[String] = ["ai_profile", "capital_class", "pooled", "name", "look_sheet", "docking", "callsign", "random_pool", "traffic_only", "finalized"]
 
 ## Why the file was refused ("" when it is good); a refused file has no entries.
 var error: String = ""
@@ -83,9 +86,28 @@ func pooled_ids() -> Array[StringName]:
 	return _list("pooled", func(e: Dictionary) -> bool: return bool(e.get("pooled", true)))
 
 
-## The civilian hulls random picks draw from, in file order: every civilian but those marked `random_pool: false`.
+## The civilian hulls random picks draw from, in file order: every civilian but those marked `random_pool: false` or
+## `traffic_only`.
 func civilian_pool() -> Array[StringName]:
-	return _list("civilian_pool", func(e: Dictionary) -> bool: return e["role"] == "civilian" and bool(e.get("random_pool", true)))
+	return _list("civilian_pool", func(e: Dictionary) -> bool:
+		return e["role"] == "civilian" and bool(e.get("random_pool", true)) and not bool(e.get("traffic_only", false)))
+
+
+## The civilian hulls a scenario's traffic and encounters draw from, in file order: `civilian_pool` and each `traffic_only`
+## hull that `pooled` (type -> count, the scenario's encounter pools) lists.
+func traffic_pool(pooled: Dictionary) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for e: Dictionary in _entries:
+		if e["role"] != "civilian" or not bool(e.get("random_pool", true)):
+			continue
+		if not bool(e.get("traffic_only", false)) or int(pooled.get(StringName(e["id"]), 0)) > 0:
+			out.append(StringName(e["id"]))
+	return out
+
+
+## Whether `id` joins random traffic only (`traffic_only`).
+func is_traffic_only(id: StringName) -> bool:
+	return _by_id.has(id) and bool(_by_id[id].get("traffic_only", false))
 
 
 ## Whether random picks may draw `id` (true for anything not marked otherwise).
@@ -163,6 +185,8 @@ func _add(raw: Variant) -> String:
 		return "pooled must be true or false"
 	if e.has("random_pool") and not (e["random_pool"] is bool):
 		return "random_pool must be true or false"
+	if e.has("traffic_only") and not (e["traffic_only"] is bool):
+		return "traffic_only must be true or false"
 	if e.has("finalized") and not (e["finalized"] is bool):
 		return "finalized must be true or false"
 	_entries.append(e)

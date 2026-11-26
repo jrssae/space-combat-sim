@@ -2,7 +2,8 @@ class_name AiProfile
 extends Resource
 ## A pilot's character for `AiPilot` (architecture §16 D34): how much each behaviour's score counts, how readily it
 ## changes its mind, when it runs, how fast it cruises, how well it aims, and the attack's tactics. One resource per kind
-## of pilot in `assets/ai/` (`ally_starfury`, `raider`, `instructor`, the tutorial's unarmed `training_drone`; `PATHS`); the defaults below are the plan's selection
+## of pilot in `assets/ai/` (`ally_starfury`, `raider`, `instructor`, the tutorial's unarmed `training_drone`, the `civilian`
+## and the `civilian_armed` that turns on a pursuer; `PATHS`); the defaults below are the plan's selection
 ## numbers. Tune in (H).
 ##
 ## How the numbers are used is in `AiPilot`.
@@ -13,6 +14,7 @@ const PATHS: Dictionary[StringName, String] = {
 	&"instructor": "res://assets/ai/instructor.tres",
 	&"civilian": "res://assets/ai/civilian.tres",
 	&"training_drone": "res://assets/ai/training_drone.tres",
+	&"civilian_armed": "res://assets/ai/civilian_armed.tres",
 }
 const STARFURY_TACTICS_PATH: String = "res://assets/ai/starfury_tactics.tres"
 
@@ -43,6 +45,9 @@ const STARFURY_TACTICS_PATH: String = "res://assets/ai/starfury_tactics.tres"
 @export var slashing: bool = true
 ## Idle: true holds position with the brake, false coasts.
 @export var idle_hold: bool = false
+## A civilian that fights back (M10 Q97): it runs first, and turns on pursuers it cannot shake when they are no more than
+## this many, none far bigger than itself, and its hull is mostly whole. 0 = it only runs.
+@export var fight_odds: int = 0
 
 
 ## The profile `PATHS[profile_name]`, or null for a name it does not list.
@@ -82,6 +87,8 @@ func validate() -> String:
 		return "cruise_mps must be above 0, got %s" % cruise_mps
 	if aim_error_deg < 0.0:
 		return "aim_error_deg must be 0 or more, got %s" % aim_error_deg
+	if fight_odds < 0:
+		return "fight_odds must be 0 or more, got %s" % fight_odds
 	if tactics == null:
 		return "tactics must be a RaiderTactics resource"
 	return ""

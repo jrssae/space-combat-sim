@@ -609,6 +609,71 @@ fn an_attacked_civilian_keeps_running_while_its_attacker_swings_out_for_another_
     assert_ne!(brain.current_kind(), i32::from(KIND_RETREAT), "a fighter's retreat ends with the threat's range");
 }
 
+// An armed civilian (M10 Q97): the `civilian_armed` profile's flee range and odds, with the attack to turn to.
+fn armed_brain() -> Brain {
+    let mut brain = raider_brain(&[KIND_RETREAT, KIND_ATTACK, KIND_IDLE]);
+    brain.ship.radius = 20.0;
+    brain.retreat.retreat_within_m = 3000.0;
+    brain.retreat.fight_odds = 1.0;
+    brain
+}
+
+// The armed civilian's kind after thinks at 1 s, 5 s and 10 s with its pursuers held where they are.
+fn kinds_over_a_chase(bench: &mut Bench, brain: &mut Brain) -> [i32; 3] {
+    let mut out = [0; 3];
+    for (k, now_s) in [1.0, 5.0, 10.0].into_iter().enumerate() {
+        civilian_think(bench, brain, now_s);
+        out[k] = brain.current_kind();
+    }
+    out
+}
+
+#[test]
+fn an_armed_civilian_flees_first_and_turns_on_one_pursuer_it_cannot_shake() {
+    let (flee, fight) = (i32::from(KIND_RETREAT), i32::from(KIND_ATTACK));
+    let at = Vector3::new(0.0, 0.0, 30_000.0);
+    let near = at + Vector3::new(0.0, 0.0, -1000.0);
+    // One raider holding 1 km off: it runs, still runs four seconds on, and has turned on it by ten.
+    let mut bench = attacked_bench(at, near);
+    assert_eq!(kinds_over_a_chase(&mut bench, &mut armed_brain()), [flee, flee, fight]);
+    // The same raider loitering beyond half the flee range is not a pursuit: it keeps running.
+    let mut bench = attacked_bench(at, at + Vector3::new(0.0, 0.0, -2500.0));
+    assert_eq!(kinds_over_a_chase(&mut bench, &mut armed_brain()), [flee, flee, flee]);
+    // Two pursuers are more than its odds.
+    let ships = [(RAIDER, 0, at), (ATTACKER, 1, near), (ATTACKER + 1, 1, near + Vector3::new(200.0, 0.0, 0.0))];
+    let mut rows = rows_with(&ships, 500.0, 0.0);
+    rows.roles[1] = crate::rows::ROLE_CIVILIAN;
+    assert_eq!(kinds_over_a_chase(&mut Bench::new(rows), &mut armed_brain()), [flee, flee, flee]);
+    // A pursuer far bigger than itself is no fight.
+    let mut bench = attacked_bench(at, near);
+    bench.rows.radii[2] = 200.0;
+    assert_eq!(kinds_over_a_chase(&mut bench, &mut armed_brain()), [flee, flee, flee]);
+    // An unarmed civilian with the same attack to hand never turns.
+    let mut bench = attacked_bench(at, near);
+    let mut plain = armed_brain();
+    plain.retreat.fight_odds = 0.0;
+    assert_eq!(kinds_over_a_chase(&mut bench, &mut plain), [flee, flee, flee]);
+}
+
+#[test]
+fn an_armed_civilian_that_shook_its_pursuer_runs_first_again_the_next_time() {
+    let (flee, fight) = (i32::from(KIND_RETREAT), i32::from(KIND_ATTACK));
+    let at = Vector3::new(0.0, 0.0, 30_000.0);
+    let near = at + Vector3::new(0.0, 0.0, -1000.0);
+    let mut bench = attacked_bench(at, near);
+    let mut brain = armed_brain();
+    assert_eq!(kinds_over_a_chase(&mut bench, &mut brain), [flee, flee, fight]);
+    // The raider pulls out past the flee range: the stand is over.
+    move_row(&mut bench, 2, at + Vector3::new(0.0, 0.0, -4500.0));
+    civilian_think(&mut bench, &mut brain, 12.0);
+    assert_ne!(brain.current_kind(), fight, "nothing left inside its flee range to stand against");
+    move_row(&mut bench, 2, near);
+    civilian_think(&mut bench, &mut brain, 60.0);
+    assert_eq!(brain.current_kind(), flee, "a new chase starts with a run");
+    civilian_think(&mut bench, &mut brain, 69.0);
+    assert_eq!(brain.current_kind(), fight);
+}
+
 #[test]
 fn a_civilian_burns_its_main_engine_to_turn_its_run_around() {
     // A freighter flying at the raider at 100 m/s: its nose goes onto the change of velocity, not the new heading, so the

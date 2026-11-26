@@ -41,6 +41,10 @@ extends MultiMeshInstance3D
 ## emitters are in the rig's candidates only while the ship is in play: a parked or freed ship takes them out, and
 ## the pass puts them back when it is back. `own_ship` (the player's) gives them the picker's top priority.
 ##
+## Ports with more to them (M10 Q97): an RCS port that names a `radius` draws a plume that size; one tagged `retro` draws its
+## pod's braking thrust, and that pod's own retro nozzle then draws none; a vectored port (`swing` limits) turns its plume
+## against the side thrust asked of it, smoothed like the levels, and holds its last direction while it fades.
+##
 ## The plumes ride with the interpolated hull (children of the ship, or this node's instances); only their scale and alpha
 ## change per frame, which is invisible next to a 16 ms tick. How it looks is (H).
 
@@ -95,6 +99,11 @@ const SETTLE_LEVEL: float = 1e-4
 ## Whether the main nozzles draw a plume. A gravitic drive's do not (M10 Q92): they keep their light, which still follows
 ## the thrust, and the hull's own glow. Set before `setup`.
 @export var main_plumes: bool = true
+## A plume's direction this close to its target counts as there, rad.
+const SETTLE_SWING_RAD: float = 1e-3
+## Below this much side thrust a vectored plume keeps the direction it had.
+const SWING_HOLD_LEVEL: float = 0.02
+
 ## Draw every plume as an instance of this node's multimesh instead of nodes (M4-T11, AI ships). Set before `setup`.
 @export var instanced: bool = false
 
@@ -116,6 +125,11 @@ var _radii: PackedFloat64Array = PackedFloat64Array()
 var _levels: PackedFloat64Array = PackedFloat64Array()
 # One entry per plume: 0 for a nozzle that only lights (a gravitic drive's mains).
 var _drawn: PackedByteArray = PackedByteArray()
+# Vectored plumes: their index, the limits and neutral exhaust of each, and where each points now.
+var _swing_plumes: PackedInt32Array = PackedInt32Array()
+var _swing_limits: Array[PackedFloat64Array] = []
+var _swing_exhausts: PackedVector3Array = PackedVector3Array()
+var _swings: PackedVector2Array = PackedVector2Array()
 # Instanced: each plume's pose at the nozzle (before its scale), and the buffer the multimesh draws.
 var _bases: Array[Transform3D] = []
 var _buffer: PackedFloat32Array = PackedFloat32Array()
@@ -191,9 +205,15 @@ func setup(layout: ThrusterLayout, output_source: Callable) -> void:
 		var is_main: bool = ThrusterLayout.is_main_group(layout.nozzle_groups[i])
 		_add_plume(POD_PREFIX + layout.nozzle_names[i], layout.nozzle_positions[i], layout.nozzle_exhausts[i],
 				main_length_m if is_main else retro_length_m, main_radius_m if is_main else retro_radius_m, is_main,
-				main_plumes or not is_main)
+				main_plumes if is_main else not layout.retro_drawn_by_ports(layout.nozzle_pods[i]))
 	for entry: Dictionary in layout.rcs_nozzles:
-		_add_plume(RCS_PREFIX + str(entry["name"]), entry["position"], entry["exhaust"], rcs_length_m, rcs_radius_m)
+		var radius: float = entry["radius"] if float(entry["radius"]) > 0.0 else rcs_radius_m
+		if not (entry["swing"] as PackedFloat64Array).is_empty():
+			_swing_plumes.append(_levels.size())
+			_swing_limits.append(entry["swing"])
+			_swing_exhausts.append(entry["exhaust"])
+			_swings.append(Vector2.ZERO)
+		_add_plume(RCS_PREFIX + str(entry["name"]), entry["position"], entry["exhaust"], rcs_length_m * radius / rcs_radius_m, radius)
 	if instanced:
 		_build_multimesh()
 
@@ -302,6 +322,7 @@ func advance(delta: float) -> void:
 		settled = settled and absf(_levels[i] - targets[i]) <= SETTLE_LEVEL
 	if settled:
 		_levels = targets  # there: the smoothing would only creep the last ten-thousandth
+	settled = _swing(output, delta) and settled
 	for i: int in _levels.size():
 		_apply(i)
 		if _lights[i] != null:
@@ -310,6 +331,37 @@ func advance(delta: float) -> void:
 	_settled = settled
 	if settled:
 		_note_output(output)
+
+
+## Where the vectored plume at `index` points now, in this node's frame; its fixed exhaust for any other plume.
+func plume_direction(index: int) -> Vector3:
+	if instanced:
+		return _bases[index].basis.y
+	return _plumes[index].basis.y
+
+
+# Turns every vectored plume toward the side thrust asked now; true once each is there.
+func _swing(output: FlightOutput, delta: float) -> bool:
+	var there: bool = true
+	for k: int in _swing_plumes.size():
+		var force: Vector3 = output.rcs_force_level if output != null else Vector3.ZERO
+		if maxf(absf(force.x), absf(force.y)) < SWING_HOLD_LEVEL:
+			continue
+		var target: Vector2 = ThrusterGlowLevels.swing(force, _swing_limits[k])
+		var now := Vector2(ThrusterGlowLevels.smooth(_swings[k].x, target.x, delta, smoothing_s),
+				ThrusterGlowLevels.smooth(_swings[k].y, target.y, delta, smoothing_s))
+		if now.distance_to(target) <= SETTLE_SWING_RAD:
+			now = target
+		else:
+			there = false
+		_swings[k] = now
+		var basis: Basis = plume_basis(ThrusterGlowLevels.swing_direction(_swing_exhausts[k], now))
+		var index: int = _swing_plumes[k]
+		if instanced:
+			_bases[index].basis = basis
+		else:
+			_plumes[index].basis = basis
+	return there
 
 
 ## Whether every plume holds its target and the plumes are left alone until the output changes (M4-T36).
@@ -634,6 +686,10 @@ func _clear() -> void:
 	_lengths.clear()
 	_radii.clear()
 	_drawn.clear()
+	_swing_plumes.clear()
+	_swing_limits.clear()
+	_swing_exhausts.clear()
+	_swings.clear()
 	_levels.clear()
 	_lights.clear()
 	multimesh = null

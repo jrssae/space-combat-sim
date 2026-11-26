@@ -342,6 +342,21 @@ class EaAtmoShuttleTests(ShuttleChecks, unittest.TestCase):
     THRUST_Y = -0.47 * K  # the three nacelles' axes
     BAND_SRGB = 0xA8322C  # the maintainer's choice (2026-11-20): fleet grey, one red band
 
+    def test_the_wing_roots_lift_and_roll_it(self) -> None:
+        """M10 Q97: a port up and a port down on each wing's root, beside the side thruster, for the lift and the roll."""
+        ports = {port["name"]: port for port in self.hp["rcs"]}
+        side = np.array(ports["r_root"]["position"])
+        for way, sign in (("up", 1.0), ("down", -1.0)):
+            port = ports[f"r_root_{way}"]
+            self.assertEqual(port["exhaust"], [0.0, sign, 0.0], way)
+            self.assertIn("heave_down" if sign > 0.0 else "heave_up", port["tags"], "it pushes the hull the other way")
+            self.assertTrue({"roll_left", "roll_right"} & set(port["tags"]), f"{way}: off the centre line, so it rolls too")
+            self.assertLess(abs(port["position"][0] - side[0]), 1.5, f"{way}: beside the side thruster")
+            self.assertGreater(port["radius"], 0.15, f"{way}: large enough to be seen working")
+            gap = float(np.linalg.norm(self.xyz - np.array(port["position"]), axis=1).min())
+            self.assertLess(gap, 2.0 * self.spacing, f"{way}: on the wing's skin")
+        self.assertGreater(ports["r_root_up"]["position"][1], ports["r_root_down"]["position"][1])
+
     def test_the_atmospheric_shuttle_has_no_docking_port(self) -> None:
         self.assertIs(self.CRAFT.look, ATMO_LOOK)
         self.assertEqual(self.hp["docking_ports"], [])

@@ -117,6 +117,8 @@ pub struct Profile {
     pub fires: bool,
     pub slashing: bool,
     pub idle_hold: bool,
+    /// How many pursuers an armed civilian turns on once it cannot shake them (M10 Q97); 0: it only runs.
+    pub fight_odds: f64,
     pub tactics: Tactics,
 }
 
@@ -1488,7 +1490,15 @@ impl Brain {
             KIND_RAM => self.ram.score(tick, &self.ctx),
             KIND_RETREAT => self.retreat.score(tick, &self.ctx),
             KIND_EVADE => self.evade.score(tick, &self.ctx),
-            KIND_ATTACK => self.attack.score(tick, &self.ctx),
+            KIND_ATTACK => {
+                let score = self.attack.score(tick, &self.ctx);
+                // An armed civilian attacks only once it has turned on its pursuers (M10 Q97); retreat scores first.
+                if self.retreat.fight_odds > 0.0 && !self.retreat.standing {
+                    0.0
+                } else {
+                    score
+                }
+            }
             KIND_GUARD => self.guard.score(tick, &self.ctx),
             KIND_FORMATION => self.formation.score(tick, &self.ctx),
             KIND_RALLY => self.rally.score(tick, &self.ctx),
@@ -2058,11 +2068,24 @@ struct RetreatState {
     // Until when a civilian keeps running from hostiles in sight after one last came near or hit it (M7-T55), so an
     // attacker swinging out for its next pass never turns it back onto its route.
     threat_until_s: f64,
+    // An armed civilian (M10 Q97): how many pursuers it will take on (0: it only runs), since when a hostile has been
+    // inside its flee range, and whether it has turned on them.
+    fight_odds: f64,
+    chased_since_s: f64,
+    standing: bool,
 }
 
 impl RetreatState {
     const EXTRA_MPS: f64 = 50.0;
     const SCORE_MIN: f64 = 0.85;
+    /// How long an armed civilian runs before it turns on pursuers it has not shaken (M10 Q97): it flees first.
+    const FLEE_FIRST_S: f64 = 8.0;
+    /// The share of its flee range a pursuer is still within when the run has not shaken it.
+    const PURSUED_SHARE: f64 = 0.5;
+    /// The hull it needs left to think a fight winnable.
+    const FIGHT_HULL: f64 = 0.5;
+    /// A hostile this many times its own size is no fight for it.
+    const FIGHT_SIZE: f64 = 3.0;
     /// Below this much velocity left to change, a civilian's nose goes where it is heading rather than where it burns.
     const BURN_FACE_MPS: f64 = 5.0;
 
@@ -2083,6 +2106,9 @@ impl RetreatState {
             scare_body: 0,
             scare_until_s: f64::NEG_INFINITY,
             threat_until_s: f64::NEG_INFINITY,
+            fight_odds: 0.0,
+            chased_since_s: f64::INFINITY,
+            standing: false,
         }
     }
 
@@ -2090,6 +2116,7 @@ impl RetreatState {
         self.retreat_below = profile.retreat_below;
         self.speed_mps = profile.cruise_mps + Self::EXTRA_MPS;
         self.retreat_within_m = profile.retreat_within_m;
+        self.fight_odds = profile.fight_odds;
     }
 
     fn reset(&mut self) {
@@ -2103,6 +2130,45 @@ impl RetreatState {
         self.scare_body = 0;
         self.scare_until_s = f64::NEG_INFINITY;
         self.threat_until_s = f64::NEG_INFINITY;
+        self.chased_since_s = f64::INFINITY;
+        self.standing = false;
+    }
+
+    // Whether an armed civilian turns on its pursuers this think (M10 Q97). It flees first: only after `FLEE_FIRST_S` with
+    // an armed hostile inside its flee range, and that hostile still close or hitting it, is it pursued. The fight is
+    // winnable against no more of them than its odds, none far bigger than itself, with its hull mostly whole.
+    fn stands(&mut self, tick: &Tick) -> bool {
+        if self.fight_odds <= 0.0 || self.retreat_within_m <= 0.0 {
+            return false;
+        }
+        let p = &tick.p;
+        let own_radius = tick.rows.radii[tick.own_row];
+        let mut near = 0.0;
+        let mut nearest = f64::INFINITY;
+        let mut outmatched = false;
+        for h in 0..tick.lists.hostiles.len() {
+            let d = tick.lists.ranges[h];
+            let row = tick.hostile_row(h);
+            if d > self.retreat_within_m || tick.rows.is_civilian(row) {
+                continue;
+            }
+            near += 1.0;
+            nearest = minf(nearest, d);
+            outmatched |= tick.rows.surface(row).is_some() || tick.rows.radii[row] > Self::FIGHT_SIZE * own_radius;
+        }
+        if near == 0.0 {
+            // Shaken off: the next chase starts with a run again.
+            self.chased_since_s = f64::INFINITY;
+            self.standing = false;
+            return false;
+        }
+        self.chased_since_s = minf(self.chased_since_s, p.now_s);
+        let hit = p.now_s - p.last_bolt_hit_s <= brain_maths::PROVOKED_S;
+        let pursued = p.now_s - self.chased_since_s >= Self::FLEE_FIRST_S
+            && (self.standing || hit || nearest <= self.retreat_within_m * Self::PURSUED_SHARE);
+        let winnable = !outmatched && near <= self.fight_odds && p.hull_fraction >= Self::FIGHT_HULL;
+        self.standing = pursued && winnable;
+        self.standing
     }
 
     fn score(&mut self, tick: &Tick, ctx: &Context) -> f64 {
@@ -2124,6 +2190,7 @@ impl RetreatState {
         // A civilian runs on its people's alarm too (Q25), with no threat of its own in sight, and from whoever's fire
         // came close, hostile or not (M7-T29); and keeps running while its attackers are in sight (M7-T55).
         let panicked = civilian && (self.panicked(tick) | self.attacked(tick));
+        let stands = civilian && self.stands(tick);
         let scared = civilian && self.scared_by(tick) >= 0;
         // Under the guns of a station that shelters it a civilian keeps its course against raiders (M7-T55): a docking lane
         // is no place to turn. A friend's fire close by still frightens it: the guns do not answer that. One that began its
@@ -2139,6 +2206,9 @@ impl RetreatState {
         let mut low = 0.0;
         if self.retreat_below > 0.0 && hull < self.retreat_below {
             low = Self::SCORE_MIN + (1.0 - Self::SCORE_MIN) * (1.0 - hull / self.retreat_below);
+        }
+        if stands {
+            return low;
         }
         if self.retreat_within_m > 0.0 && low < Self::SCORE_MIN {
             for &d in &tick.lists.ranges {

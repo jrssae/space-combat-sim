@@ -167,6 +167,24 @@ func test_traffic_is_one_to_three_civilians_passing_two_to_ten_km_from_the_playe
 	assert_eq(pods.size(), 4, "a Bokmai comes with 0, 1, 2 and 3 pods")
 
 
+func test_traffic_draws_the_hulls_it_is_given_and_the_catalogues_by_default() -> void:
+	# M10 Q97: the director widens the list by the traffic-only hulls its pools list; a plan left alone draws as before.
+	var plain: EncounterPlan = _plan(29)
+	var wide: EncounterPlan = _plan(29)
+	assert_eq(plain.civilian_types, ShipCatalog.civilian_types())
+	wide.civilian_types = ShipCatalog.traffic_types({&"centauri_shuttle": 1, &"minbari_flyer": 1})
+	var seen: Dictionary = {}
+	for i: int in 300:
+		var a: EncounterEvent = plain.event(i, &"traffic")
+		var b: EncounterEvent = wide.event(i, &"traffic")
+		assert_eq(a.count(), b.count(), "the same convoy either way")
+		for k: int in a.count():
+			assert_has(ShipCatalog.civilian_types(), a.types[k], "the plain plan never draws a traffic-only hull")
+			seen[b.types[k]] = true
+	assert_true(seen.has(&"centauri_shuttle") and seen.has(&"minbari_flyer"), "the wide plan draws both")
+	assert_eq(seen.size(), wide.civilian_types.size(), "and every other civilian hull")
+
+
 func test_a_patrol_or_traffic_route_is_straight_and_ends_as_far_out_as_it_starts() -> void:
 	var plan: EncounterPlan = _plan(29)
 	for kind: StringName in [&"patrol", &"traffic"]:

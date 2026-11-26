@@ -12,6 +12,10 @@ extends RefCounted
 ##   reads one signed axis of the output, in the same body-frame signs the flight model uses:
 ##   `rcs_force_level` x = sway right, y = heave up; `rcs_torque_level` x = pitch up, y = yaw LEFT, z = roll LEFT
 ##   (a positive body rotation about +Y yaws the nose left, about +Z rolls left; see `FlightModel`).
+## - An RCS nozzle tagged `retro` also shows its pod's `retro_levels` entry: it draws that pod's braking thrust (M10 Q97).
+## - A vectored RCS nozzle swings its plume against the side thrust asked of it (`swing`, `swing_direction`).
+
+const RETRO_TAG: String = "retro"
 
 
 ## Targets for every glow of `layout`, in glow order. `output` may be null (nothing flying yet): all zeros.
@@ -23,9 +27,27 @@ static func targets(layout: ThrusterLayout, output: FlightOutput) -> PackedFloat
 	for i: int in layout.nozzle_count():
 		result[i] = pod_nozzle_level(layout, output, i)
 	for j: int in layout.rcs_nozzles.size():
-		var tags: PackedStringArray = layout.rcs_nozzles[j]["tags"]
-		result[layout.nozzle_count() + j] = rcs_level(tags, output.rcs_force_level, output.rcs_torque_level)
+		var port: Dictionary = layout.rcs_nozzles[j]
+		var level: float = rcs_level(port["tags"], output.rcs_force_level, output.rcs_torque_level)
+		var retro_pod: int = port["retro_pod"]
+		if retro_pod >= 0 and retro_pod < output.retro_levels.size():
+			level = maxf(level, clampf(output.retro_levels[retro_pod], 0.0, 1.0))
+		result[layout.nozzle_count() + j] = level
 	return result
+
+
+## Where a vectored nozzle points for the side thrust `force_level` asks (x = sway right, y = heave up): x the angle toward
+## the hull's right, y the angle up, radians. The plume goes the opposite way to the thrust, as far as that side's limit
+## (`limits`: up, down, left, right) at full level.
+static func swing(force_level: Vector3, limits: PackedFloat64Array) -> Vector2:
+	var sway: float = clampf(force_level.x, -1.0, 1.0)
+	var heave: float = clampf(force_level.y, -1.0, 1.0)
+	return Vector2(-sway * (limits[2] if sway > 0.0 else limits[3]), -heave * (limits[1] if heave > 0.0 else limits[0]))
+
+
+## The exhaust direction of a forward-firing nozzle (`exhaust`) swung by `angles` (`swing`).
+static func swing_direction(exhaust: Vector3, angles: Vector2) -> Vector3:
+	return Basis(Vector3.UP, -angles.x) * (Basis(Vector3.RIGHT, angles.y) * exhaust)
 
 
 ## Level of pod nozzle `nozzle_index`: its pod's main or retro level after trim.

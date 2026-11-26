@@ -54,7 +54,11 @@ NAV_CABIN_RANGE_SHARE = 0.05
 GLASS_SRGB = 0x10161C
 INF = float("inf")
 FLIP = np.array([-1.0, 1.0, 1.0])
-Port = tuple[str, Sequence[float], Sequence[float]]  # an RCS port: name, position, exhaust
+# An RCS port: name, position, exhaust, and for the few that need it a dict of ``radius`` (m, a port larger than the usual),
+# ``retro`` (it draws its pod's braking thrust) and ``vector`` (how far its plume swings: up_deg, down_deg, in_deg, out_deg).
+Port = tuple[Any, ...]
+ROOT_PORT = {"radius": 0.2}  # a winged shuttle's wing-root thrusters: larger than the nose's, they move the whole craft
+SWING_TAGS = ["sway_left", "sway_right", "heave_up", "heave_down"]  # a vectored port serves every side thrust
 Muzzle = tuple[str, Sequence[float]]  # a fixed gun firing forward: name, position
 
 
@@ -191,10 +195,11 @@ def shuttle_docks(by_name: dict[str, Part]) -> list[tuple[str, np.ndarray, np.nd
 
 def atmo_ports(by_name: dict[str, Part]) -> list[Port]:
     """Cosmetic RCS (authored frame; ``r_`` names are mirrored): on the nose and, for the side thrust, on the outer face of
-    each wing's root; none at the wing tips (M10 Q93)."""
+    each wing's root, with a port up and a port down beside it for the lift and the roll (Q97); none at the wing tips (M10 Q93)."""
     return [
         ("r_nose", (2.25, ap.EDGE_Y, 1.0), sp.X_AXIS),
-        ("r_root", ap.wing_root_port(), sp.X_AXIS),
+        ("r_root", ap.wing_root_port(), sp.X_AXIS, ROOT_PORT),
+        *((f"r_root_{way}", ap.wing_root_lift_port(sign), (0.0, sign, 0.0), ROOT_PORT) for way, sign in (("up", 1.0), ("down", -1.0))),
         ("nose_up", (0.0, ap.body_top(0.0, 1.0), 1.0), sp.Y_AXIS),
         ("nose_down", (0.0, -0.65, 1.0), (0.0, -1.0, 0.0)),
     ]
@@ -260,12 +265,24 @@ def hardpoints(craft: Craft, pieces: list[cv.Piece], chunks: list[dict[str, Any]
         })  # fmt: skip
 
     rcs = []
-    for name, position, exhaust in craft.ports(by_name):
+    for name, position, exhaust, *more in craft.ports(by_name):
         p, e = np.asarray(position, dtype=float), np.asarray(exhaust, dtype=float)
+        extra = more[0] if more else {}
         twins = [(name, p, e)] + ([("l_" + name[2:], p * FLIP, e * FLIP)] if name.startswith("r_") else [])
         for n, spot, out in twins:
-            rcs.append({"name": n, "pod": "l" if spot[0] < -1e-6 else "r", "position": at(spot), "exhaust": cv.r(out),
-                        "tags": pilot_tags(k * spot, out, com)})  # fmt: skip
+            left = spot[0] < -1e-6
+            port = {"name": n, "pod": "l" if left else "r", "position": at(spot), "exhaust": cv.r(out), "tags": pilot_tags(k * spot, out, com)}
+            if "radius" in extra:
+                port["radius"] = round(k * extra["radius"], 3)
+            if extra.get("retro"):
+                port["tags"].append("retro")
+            if "vector" in extra:
+                swing = extra["vector"]
+                # In the hull's frame: a port on the left swings inboard to the right.
+                port["vector"] = {"up_deg": swing["up_deg"], "down_deg": swing["down_deg"],
+                                  "left_deg": swing["out_deg" if left else "in_deg"], "right_deg": swing["in_deg" if left else "out_deg"]}
+                port["tags"] = list(SWING_TAGS)
+            rcs.append(port)
 
     muzzles = []
     for name, position in craft.muzzles(by_name):

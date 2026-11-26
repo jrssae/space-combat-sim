@@ -191,3 +191,35 @@ func test_minimal_two_pod_layout_is_accepted() -> void:
 
 func _nozzle(exhaust_z: float, x: float = 1.0) -> Dictionary:
 	return {"position": [x, 0.0, 1.0], "exhaust": [0.0, 0.0, exhaust_z]}
+
+
+func test_an_rcs_port_may_carry_a_size_a_swing_and_its_pods_braking() -> void:
+	# The Minbari Flyer's bow (M10 Q97): a blade pod that draws its side's retro thrust and a vectored inner pod.
+	var data: Dictionary = {"pods": [
+		{"name": "r", "side": "right", "main": _nozzle(1.0, 2.0), "retro": _nozzle(-1.0, 2.0)},
+		{"name": "l", "side": "left", "main": _nozzle(1.0, -2.0), "retro": _nozzle(-1.0, -2.0)},
+	], "rcs": [
+		{"name": "l_blade", "pod": "l", "position": [-3.0, 1.0, -5.0], "exhaust": [0.0, 0.0, -1.0], "tags": ["yaw_left", "retro"], "radius": 0.34},
+		{"name": "r_inner", "pod": "r", "position": [2.5, 0.0, -4.0], "exhaust": [0.0, 0.0, -1.0], "tags": ["sway_left"], "radius": 0.27,
+			"vector": {"up_deg": 85.0, "down_deg": 85.0, "left_deg": 80.0, "right_deg": 20.0}},
+		{"name": "plain", "pod": "r", "position": [1.0, 0.0, 0.0], "exhaust": [1.0, 0.0, 0.0], "tags": ["sway_left"]},
+	]}
+	var built: ThrusterLayout = ThrusterLayout.from_dict(data, Vector3.ZERO)
+	assert_true(built.valid, built.error)
+	var blade: Dictionary = built.rcs_nozzles[0]
+	assert_almost_eq(float(blade["radius"]), 0.34, EPS)
+	assert_eq(int(blade["retro_pod"]), 1, "the left pod, by its name")
+	assert_true((blade["swing"] as PackedFloat64Array).is_empty(), "a fixed port")
+	var inner: Dictionary = built.rcs_nozzles[1]
+	assert_eq(int(inner["retro_pod"]), -1)
+	var swing: PackedFloat64Array = inner["swing"]
+	assert_eq(swing.size(), 4, "up, down, left, right")
+	assert_almost_eq(swing[0], deg_to_rad(85.0), EPS)
+	assert_almost_eq(swing[2], deg_to_rad(80.0), EPS)
+	assert_almost_eq(swing[3], deg_to_rad(20.0), EPS)
+	var plain: Dictionary = built.rcs_nozzles[2]
+	assert_eq(float(plain["radius"]), 0.0, "no size named: the usual one")
+	assert_eq(int(plain["retro_pod"]), -1)
+	assert_true((plain["swing"] as PackedFloat64Array).is_empty())
+	assert_true(built.retro_drawn_by_ports(1), "the left pod's braking thrust is drawn by its blade port")
+	assert_false(built.retro_drawn_by_ports(0))

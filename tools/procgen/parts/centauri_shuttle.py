@@ -178,6 +178,16 @@ def wing_root_port() -> tuple[float, float, float]:
     return (x, lead_y + 0.4 * (trail_y - lead_y) - half, lead_z + 0.4 * (trail_z - lead_z))
 
 
+LIFT_PORT_X = ROOT_PORT_X + 1.0  # beside the side thruster, a little further out
+
+
+def wing_root_lift_port(sign: float) -> tuple[float, float, float]:
+    """Where a lift thruster sits (M10 Q97): on the upper (``sign`` 1) or the lower face of the wing's root, at its thickest point."""
+    x, lead_z, lead_y, trail_z, trail_y, half = (float(np.interp(LIFT_PORT_X, [s[0] for s in WING_STATIONS], [s[k] for s in WING_STATIONS]))
+                                                 for k in range(6))
+    return (x, lead_y + 0.4 * (trail_y - lead_y) + sign * half, lead_z + 0.4 * (trail_z - lead_z))
+
+
 LIGHTS = 9  # running lights along each wing's trailing edge, for a style that has them
 LIGHT_R = 0.28
 

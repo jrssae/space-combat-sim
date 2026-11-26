@@ -393,3 +393,72 @@ func test_a_new_glow_colour_retints_the_plumes_and_back() -> void:
 	assert_eq((_core_of(_pod_plume(layout.nozzle_names[0])).material_override as StandardMaterial3D).albedo_color, red)
 	visuals.set_glow_color(ThrusterVisuals.DEFAULT_GLOW_COLOR)
 	assert_null(cone.material_override, "the shared default materials again")
+
+
+# --- ports with a size, a pod's braking or a swing (M10 Q97) -------------------------------------------------
+
+
+# A bow like the Minbari Flyer's: a blade port a side that draws its pod's braking, and a vectored inner port.
+func _bow_layout() -> ThrusterLayout:
+	var nozzle := func(z: float, x: float) -> Dictionary: return {"position": [x, 0.0, 1.0], "exhaust": [0.0, 0.0, z]}
+	return ThrusterLayout.from_dict({"pods": [
+		{"name": "r", "side": "right", "main": nozzle.call(1.0, 2.0), "retro": nozzle.call(-1.0, 2.0)},
+		{"name": "l", "side": "left", "main": nozzle.call(1.0, -2.0), "retro": nozzle.call(-1.0, -2.0)},
+	], "rcs": [
+		{"name": "r_blade", "pod": "r", "position": [3.0, 1.0, -5.0], "exhaust": [0.0, 0.0, -1.0], "tags": ["yaw_right", "retro"], "radius": 0.3},
+		{"name": "r_inner", "pod": "r", "position": [2.5, 0.0, -4.0], "exhaust": [0.0, 0.0, -1.0], "radius": 0.27,
+			"tags": ["sway_left", "sway_right", "heave_up", "heave_down"], "vector": {"up_deg": 85.0, "down_deg": 85.0, "left_deg": 80.0, "right_deg": 20.0}},
+	]}, Vector3.ZERO)
+
+
+func _bow_visuals(instanced: bool) -> ThrusterVisuals:
+	layout = _bow_layout()
+	assert_true(layout.valid, layout.error)
+	var made := ThrusterVisuals.new()
+	made.instanced = instanced
+	add_child_autofree(made)
+	made.setup(layout, _source)
+	return made
+
+
+func test_a_port_that_draws_its_pods_braking_replaces_the_pods_own_retro_plume() -> void:
+	visuals = _bow_visuals(false)
+	output = _levels([0.0, 0.0], [1.0, 1.0])
+	_settle()
+	var right_retro: int = layout.nozzle_names.find("r_retro")
+	var left_retro: int = layout.nozzle_names.find("l_retro")
+	assert_false(visuals.glow_shown(right_retro), "the right pod's braking is drawn by its blade port")
+	assert_true(visuals.glow_shown(left_retro), "the left pod has no such port and draws its own")
+	var blade: int = _rcs_index("r_blade")
+	assert_true(visuals.glow_shown(blade))
+	assert_almost_eq(visuals.glow_level(blade), 1.0, 1e-3)
+	# A port that names its radius draws a plume that size, in the usual plume's proportions.
+	assert_almost_eq(visuals.cone(blade).scale.x, 0.3, 1e-3)
+	assert_almost_eq(visuals.cone(blade).scale.y, visuals.rcs_length_m * 0.3 / visuals.rcs_radius_m, 1e-2)
+
+
+func test_a_vectored_plume_turns_against_the_side_thrust_and_holds_as_it_fades() -> void:
+	for instanced: bool in [false, true]:
+		visuals = _bow_visuals(instanced)
+		var inner: int = _rcs_index("r_inner")
+		assert_almost_eq(visuals.plume_direction(inner), Vector3.FORWARD, _vec_tol(1e-5), "straight ahead at rest")
+		output = _levels([0.0, 0.0], [0.0, 0.0])
+		output.rcs_force_level = Vector3(0.0, 1.0, 0.0)  # heave up
+		_settle()
+		var down: Vector3 = visuals.plume_direction(inner)
+		assert_almost_eq(down, ThrusterGlowLevels.swing_direction(Vector3.FORWARD, Vector2(0.0, -deg_to_rad(85.0))), _vec_tol(1e-3),
+				"heave up: the plume points down at its limit (instanced %s)" % instanced)
+		assert_almost_eq(visuals.glow_level(inner), 1.0, 1e-3)
+		assert_true(visuals.is_settled())
+		output = _levels([0.0, 0.0], [0.0, 0.0])
+		output.rcs_force_level = Vector3(1.0, 0.0, 0.0)  # sway right
+		visuals.advance(DT)
+		assert_false(visuals.is_settled(), "it swings over, not snaps")
+		_settle()
+		assert_lt(visuals.plume_direction(inner).x, -0.95, "sway right: the plume points left, 80 degrees over")
+		output = _levels([0.0, 0.0], [0.0, 0.0])
+		_settle()
+		assert_lt(visuals.plume_direction(inner).x, -0.95, "with nothing asked it fades where it was")
+		assert_false(visuals.glow_shown(inner))
+		if instanced:
+			assert_almost_eq(visuals.instance_transform(inner).basis.y.normalized(), visuals.plume_direction(inner), _vec_tol(1e-4))

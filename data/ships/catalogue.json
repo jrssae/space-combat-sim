@@ -61,11 +61,11 @@
     {"id": "starfury_renegade", "spec": "res://assets/ships/starfury_renegade.tres", "asset": "starfury_aurora",
       "faction": "renegades", "role": "fighter", "ai_profile": "ally_starfury", "look_sheet": "pool"},
     {"id": "ea_thunderbolt", "finalized": true, "spec": "res://assets/ships/ea_thunderbolt.tres", "asset": "ea_thunderbolt", "faction": "earth_alliance", "role": "fighter", "ai_profile": "ally_starfury", "name": "Thunderbolt", "look_sheet": "pool"},
-    {"id": "centauri_shuttle", "spec": "res://assets/ships/centauri_shuttle.tres", "asset": "centauri_shuttle",
+    {"id": "centauri_shuttle", "finalized": true, "spec": "res://assets/ships/centauri_shuttle.tres", "asset": "centauri_shuttle",
       "faction": "centauri", "role": "civilian", "ai_profile": "civilian", "name": "Centauri shuttle",
-      "look_sheet": "pool", "callsign": "CENTAURI SHUTTLE", "random_pool": false},
-    {"id": "minbari_flyer", "spec": "res://assets/ships/minbari_flyer.tres", "asset": "minbari_flyer",
-      "faction": "minbari", "role": "civilian", "ai_profile": "civilian", "name": "Minbari Flyer",
-      "look_sheet": "pool", "callsign": "FLYER", "random_pool": false}
+      "look_sheet": "pool", "callsign": "CENTAURI SHUTTLE", "traffic_only": true},
+    {"id": "minbari_flyer", "finalized": true, "spec": "res://assets/ships/minbari_flyer.tres", "asset": "minbari_flyer",
+      "faction": "minbari", "role": "civilian", "ai_profile": "civilian_armed", "name": "Minbari Flyer",
+      "look_sheet": "pool", "callsign": "FLYER", "traffic_only": true}
   ]
 }

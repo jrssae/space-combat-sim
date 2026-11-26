@@ -17,7 +17,7 @@ extends Node
 
 const LIGHTS: Array[StringName] = [&"lit", &"dark", &"off"]
 ## How the parked ship faces the camera: three-quarters on (the sheets' rows), its back (the dorsal number), or its left side.
-const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side", &"front"]
+const VIEWS: Array[StringName] = [&"three_quarter", &"top", &"side", &"front", &"below"]
 ## The hulls that are not pooled ships, for the sheets (M4-T30d).
 const PROP_ASSETS: Array[String] = ["nav_buoy", "raider_fighter_chunks", "starfury_aurora_chunks", "capital_cruiser", "capital_destroyer",
 		"capital_carrier", "babylon5_station"]
@@ -138,7 +138,7 @@ func _show_ship(asset_id: String, camera: Camera3D, distance_m: float, light: St
 	return ""
 
 
-# How the parked subject faces the camera: three-quarters on, its back (the nose up the picture), or its left side (the nose left).
+# How the parked subject faces the camera: three-quarters on, its back or its belly (the nose up the picture), its front, or its left side (the nose left).
 func _sheet_basis(camera: Camera3D, at: Vector3, view: StringName) -> Basis:
 	var cam: Transform3D = camera.global_transform
 	var to_camera: Vector3 = (cam.origin - at).normalized()
@@ -147,6 +147,8 @@ func _sheet_basis(camera: Camera3D, at: Vector3, view: StringName) -> Basis:
 		basis = Basis.looking_at(cam.basis.y, to_camera)
 	elif view == &"front":
 		basis = Basis.looking_at(to_camera, cam.basis.y)
+	elif view == &"below":
+		basis = Basis.looking_at(cam.basis.y, -to_camera)  # its belly to the camera, the nose up the picture
 	elif view == &"side":
 		basis = Basis.looking_at(-cam.basis.x, cam.basis.y)
 	return basis.orthonormalized()

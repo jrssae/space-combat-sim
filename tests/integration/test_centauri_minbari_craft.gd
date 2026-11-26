@@ -3,8 +3,9 @@ extends TestSteps
 ## flies through the one flight model with zero damping, and in play is a pooled civilian of its faction that only a mission
 ## places, shows its running lights, takes hull damage and breaks into its chunks. The shuttle is unarmed on a reaction drive
 ## whose plumes fit its two big nozzles (Q93); the Flyer carries two plasma guns of about a Starfury's power, turns slower than
-## one, and its gravitic drive makes no plume: only the thrusters on its bow blades do (Q91, Q92). Skips, saying why, without
-## the generated assets.
+## one, and its gravitic drive makes no plume: only the thrusters at its bow do (Q91, Q92), the blades' pods firing forward and
+## the inner pods swinging their plumes for the side and vertical thrust (Q97). Both are finished: in the ship line-up and in
+## free flight's traffic, and the Flyer turns on a pursuer it cannot shake (Q97). Skips, saying why, without the generated assets.
 
 const SHUTTLE: StringName = &"centauri_shuttle"
 const FLYER: StringName = &"minbari_flyer"
@@ -159,30 +160,58 @@ func test_the_flyers_gravitic_drive_lights_but_makes_no_plume_and_its_blade_thru
 		assert_false(thrusters.glow_shown(i), "and draws no plume")
 		assert_false(thrusters.glow(i).visible)
 		assert_gt(thrusters.nozzle_light(i).energy, 0.0, "but it glows: its light follows the thrust")
+	# Braking (Q97): the two pods on each blade fire forward from their holes; the pod's own retro nozzle draws nothing.
 	var brake := FlightCommand.new()
 	brake.retro_left = 1.0
 	brake.retro_right = 1.0
-	brake.strafe = Vector2(1.0, 0.0)
 	flyer.ship.set_flight_command(brake)
 	await _ticks(3)
 	thrusters.advance(1.0)
-	var blade_x: float = 0.0
 	for i: int in _nozzles(layout, false):
-		assert_true(thrusters.glow_shown(i), "a forward thruster on a bow blade plumes as it brakes")
-		assert_eq(layout.nozzle_exhausts[i], Vector3.FORWARD)
-		blade_x = absf(layout.nozzle_positions[i].x)
-	assert_gt(blade_x, 7.0, "out on the blades")
-	assert_eq(layout.rcs_nozzles.size(), 4, "the inward thrusters, two a blade, and no other port")
-	var plumed: int = 0
+		assert_gt(thrusters.glow_level(i), 0.9, "it brakes")
+		assert_false(thrusters.glow_shown(i), "the blade's pods draw the braking thrust, not its nose")
+	assert_eq(layout.rcs_nozzles.size(), 6, "two forward pods a blade and an inner pod a side, and no other port")
+	var blades: int = 0
+	var inner: Array[int] = []
 	for j: int in layout.rcs_nozzles.size():
 		var port: Dictionary = layout.rcs_nozzles[j]
 		var at: Vector3 = port["position"]
-		assert_almost_eq(absf(at.x), blade_x, 1.0, "%s is on a blade" % port["name"])
-		assert_eq((port["exhaust"] as Vector3).x, -signf(at.x), "%s fires at the centre line" % port["name"])
-		var shown: bool = thrusters.glow_shown(layout.nozzle_count() + j)
-		assert_eq(shown, at.x > 0.0, "%s: the starboard pair pushes the hull to starboard" % port["name"])
-		plumed += 1 if shown else 0
-	assert_eq(plumed, 2)
+		assert_eq(port["exhaust"], Vector3.FORWARD, "%s opens forward: no inward set" % port["name"])
+		assert_lt(at.z, flyer.ship.get_layout().center_of_mass.z - 10.0, "%s is at the bow" % port["name"])
+		if (port["swing"] as PackedFloat64Array).is_empty():
+			blades += 1
+			assert_gt(absf(at.x), 8.0, "%s is out on a blade" % port["name"])
+			assert_true(thrusters.glow_shown(layout.nozzle_count() + j), "%s plumes as it brakes" % port["name"])
+			assert_almost_eq(thrusters.plume_direction(layout.nozzle_count() + j), Vector3.FORWARD, Vector3.ONE * 1e-5)
+		else:
+			inner.append(layout.nozzle_count() + j)
+			assert_between(absf(at.x), 6.0, 8.0, "%s is just inside a blade" % port["name"])
+			assert_false(thrusters.glow_shown(layout.nozzle_count() + j), "%s is dark with no side thrust asked" % port["name"])
+	assert_eq(blades, 4)
+	assert_eq(inner.size(), 2)
+	# Side and vertical thrust (Q97): the inner pods swing their plumes against it, up and down almost to the vertical,
+	# inboard far over and outboard only a little, where the blade stands.
+	var heave := FlightCommand.new()
+	heave.strafe = Vector2(0.0, 1.0)
+	flyer.ship.set_flight_command(heave)
+	await _ticks(3)
+	thrusters.advance(1.0)
+	for i: int in inner:
+		assert_true(thrusters.glow_shown(i), "an inner pod plumes for the lift")
+		assert_lt(thrusters.plume_direction(i).y, -0.99, "its plume swung down, 85 degrees from straight ahead")
+	var sway := FlightCommand.new()
+	sway.strafe = Vector2(1.0, 0.0)
+	flyer.ship.set_flight_command(sway)
+	await _ticks(3)
+	thrusters.advance(1.0)
+	for i: int in inner:
+		var way: Vector3 = thrusters.plume_direction(i)
+		var starboard: bool = (layout.rcs_nozzles[i - layout.nozzle_count()]["position"] as Vector3).x > 0.0
+		assert_lt(way.x, 0.0, "a push to starboard: both plumes go to port")
+		assert_almost_eq(rad_to_deg(asin(-way.x)), 80.0 if starboard else 20.0, 0.5,
+				"the starboard pod swings inboard, the port pod outboard as far as its blade lets it")
+	# The handling follows the swing: less side thrust than lift, by what the outboard limit gives up.
+	assert_almost_eq(spec.rcs_force_max.x / spec.rcs_force_max.y, (sin(deg_to_rad(80.0)) + sin(deg_to_rad(20.0))) / (2.0 * sin(deg_to_rad(85.0))), 0.01)
 
 
 func test_the_flyer_carries_two_plasma_guns_of_a_starfurys_power_and_turns_slower() -> void:
@@ -197,7 +226,7 @@ func test_the_flyer_carries_two_plasma_guns_of_a_starfurys_power_and_turns_slowe
 	var muzzles: Array[Node3D] = flyer.ship.get_muzzles()
 	assert_eq(muzzles.size(), 2, "two guns (Q91)")
 	assert_almost_eq(muzzles[0].position.x, -muzzles[1].position.x, 1e-4, "either side of the nose")
-	assert_lt(absf(muzzles[0].position.x), 3.0, "near the central pod")
+	assert_between(absf(muzzles[0].position.x), 3.0, 4.5, "in the gun pods beside the central pod")
 	for muzzle: Node3D in muzzles:
 		assert_almost_eq(-muzzle.basis.z, Vector3.FORWARD, Vector3.ONE * 1e-5, "firing forward")
 	assert_eq(flyer.cannon.weapon, spec.weapon, "its cannon is the plasma gun")
@@ -227,8 +256,27 @@ func test_the_flyer_carries_two_plasma_guns_of_a_starfurys_power_and_turns_slowe
 	for i: int in _nozzles(layout, true):
 		assert_true(thrusters.glow_shown(i), "a plume from each main nozzle")
 		assert_gt(thrusters.cone(i).scale.x, 1.0, "as wide as the nozzle it leaves")
+	var lifts: Dictionary = {}
 	for port: Dictionary in layout.rcs_nozzles:
 		assert_lt(absf((port["position"] as Vector3).x), 20.0, "%s: no thruster at a wing tip" % port["name"])
+		if String(port["name"]).contains("_root_"):
+			lifts[port["name"]] = layout.nozzle_count() + layout.rcs_nozzles.find(port)
+	# The wing roots lift and roll it (Q97): a port up and a port down on each.
+	assert_eq(lifts.size(), 4, "a lift port up and down on each wing's root")
+	var up := FlightCommand.new()
+	up.strafe = Vector2(0.0, 1.0)
+	shuttle.ship.set_flight_command(up)
+	await _ticks(3)
+	thrusters.advance(1.0)
+	for port_name: String in lifts:
+		assert_eq(thrusters.glow_shown(lifts[port_name]), port_name.ends_with("_down"), "%s: the ports firing down lift the hull" % port_name)
+	var roll := FlightCommand.new()
+	roll.rot = Vector3(0.0, 0.0, 1.0)
+	shuttle.ship.set_flight_command(roll)
+	await _ticks(3)
+	thrusters.advance(1.0)
+	assert_ne(thrusters.glow_shown(lifts["r_root_up"]), thrusters.glow_shown(lifts["l_root_up"]), "a roll fires one wing's upper port")
+	assert_eq(thrusters.glow_shown(lifts["r_root_up"]), thrusters.glow_shown(lifts["l_root_down"]), "and the other wing's lower one")
 
 
 func test_in_play_each_is_a_civilian_of_its_faction_that_breaks_into_its_chunks() -> void:
@@ -245,7 +293,7 @@ func test_in_play_each_is_a_civilian_of_its_faction_that_breaks_into_its_chunks(
 		var type: StringName = TYPES[i]
 		assert_true(ShipCatalog.is_civilian(type), "%s carries the civilian role" % type)
 		assert_eq(ShipCatalog.faction_for(type), FACTIONS[type])
-		assert_false(ShipCatalog.civilian_types().has(type), "%s stays out of random traffic and encounters" % type)
+		assert_false(ShipCatalog.civilian_types().has(type), "%s stays out of the missions' random civilian" % type)
 		assert_eq(LookScene.pool_types().get(String(type)), type, "its look sheet parks one")
 		assert_eq(main.ensure_pool(type, 1), 1, "%s: the pool builds one, watched like the scenario's own" % type)
 		var at: Vector3 = main.ship.global_position + Vector3(400.0 * (i + 1), 0.0, -600.0)
@@ -271,3 +319,38 @@ func test_in_play_each_is_a_civilian_of_its_faction_that_breaks_into_its_chunks(
 		assert_gt(chunks, 2, "%s has its chunks" % type)
 		assert_eq(main.debris.active_chunk_count() - before, chunks, "%s breaks into its %d chunks" % [type, chunks])
 		assert_has(destroyed, c, "%s was destroyed" % type)
+
+
+func test_an_armed_flyer_runs_from_a_raider_and_turns_on_it_when_it_cannot_shake_it() -> void:
+	# Q97: the Saturn civilians' flight, a little more aggressive. A lone raider that stays 800 m astern is first run from,
+	# then fought. The rule itself is tested in the native core; this is the profile, the hull and its guns together.
+	if _skipped() or not Hardpoints.load_file(ShipCatalog.spec_for(&"raider_fighter").hardpoints_path()).valid:
+		pending("the Flyer or the raider is not generated (%s)" % GEN_ASSETS_HINT)
+		return
+	await get_tree().process_frame
+	await get_tree().physics_frame
+	var scene: TurretScene = TurretScene.build(self)
+	var behaviour: Dictionary = ShipCatalog.civilian_behaviour(FLYER)
+	var flyer: Combatant = scene.ship(FLYER, FACTIONS[FLYER], "FLYER", Vector3.ZERO, behaviour, 1, true)
+	var raider: Combatant = scene.ship(&"raider_fighter", Factions.RAIDERS, "RAIDER", Vector3(0.0, 0.0, 800.0))
+	scene.attach()
+	var pilot := flyer.driver.brain as AiPilot
+	assert_eq(pilot.base_profile.resource_path, AiProfile.PATHS[&"civilian_armed"])
+	var seen: Array[String] = []
+	var fired: bool = false
+	var t0: float = SimClock.now()
+	while SimClock.now() - t0 < 16.0:
+		# The raider keeps its place astern whatever the Flyer does: a pursuer it cannot shake.
+		raider.ship.global_position = flyer.ship.global_position + Vector3(0.0, 0.0, 800.0)
+		raider.ship.linear_velocity = flyer.ship.linear_velocity
+		await get_tree().physics_frame
+		var now: String = String(pilot.describe().get("behaviour", ""))
+		if seen.is_empty() or seen.back() != now:
+			seen.append(now)
+		fired = fired or int(scene.sim.core.bolt_count()) > 0
+	gut.p("the Flyer's behaviours: %s" % [seen])
+	assert_has(seen, "retreat", "it runs first")
+	assert_has(seen, "attack", "then turns on the raider it could not shake")
+	assert_lt(seen.find("retreat"), seen.find("attack"), "in that order")
+	assert_true(fired, "and fires its plasma guns")
+	await scene.free_scene(get_tree())

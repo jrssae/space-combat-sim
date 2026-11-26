@@ -205,10 +205,11 @@ class CraftChecks:
         self.assertEqual(set(ports), self.PORTS)
         for name, port in ports.items():
             self.assertTrue(port["tags"], name)
-            self.assertTrue(set(port["tags"]) <= PILOT_TERMS, name)
+            self.assertTrue(set(port["tags"]) <= PILOT_TERMS | {"retro"}, name)
             self.assertAlmostEqual(float(np.linalg.norm(port["exhaust"])), 1.0, places=4, msg=name)
             if name.startswith("r_"):
                 twin = ports["l_" + name[2:]]
+                self.assertEqual(twin.get("radius"), port.get("radius"), name)
                 np.testing.assert_allclose(twin["position"], mirrored(port["position"]), atol=1e-4, err_msg=name)
                 np.testing.assert_allclose(twin["exhaust"], mirrored(port["exhaust"]), atol=1e-4, err_msg=name)
 
@@ -273,7 +274,22 @@ class CentauriShuttleTests(CraftChecks, unittest.TestCase):
     LENGTH, SPAN, HEIGHT = 36.0, 51.97, 13.51  # T01's length and the reference's box at it
     CHUNKS = ("body", "stern", "wing_l", "wing_r")
     THRUST_Y = -2.28  # the nozzles' axes
-    PORTS = {"r_nose", "l_nose", "nose_up", "nose_down", "r_root", "l_root"}
+    PORTS = {"r_nose", "l_nose", "nose_up", "nose_down", "r_root", "l_root", "r_root_up", "l_root_up", "r_root_down", "l_root_down"}
+
+    def test_the_wing_roots_lift_and_roll_it(self) -> None:
+        """Q97: a port up and a port down on each wing's root, beside the side thruster, for the lift and the roll."""
+        ports = {port["name"]: port for port in self.hp["rcs"]}
+        side = self.authored(ports["r_root"]["position"])
+        for way, sign in (("up", 1.0), ("down", -1.0)):
+            port = ports[f"r_root_{way}"]
+            self.assertEqual(port["exhaust"], [0.0, sign, 0.0], way)
+            self.assertIn("heave_down" if sign > 0.0 else "heave_up", port["tags"], "it pushes the hull the other way")
+            self.assertTrue({"roll_left", "roll_right"} & set(port["tags"]), f"{way}: off the centre line, so it rolls too")
+            at = self.authored(port["position"])
+            self.assertLess(abs(at[0] - side[0]), 1.5, f"{way}: beside the side thruster")
+            self.assertGreater(port["radius"], 0.15, f"{way}: large enough to be seen working")
+        self.assertGreater(ports["r_root_up"]["position"][1], ports["r_root_down"]["position"][1] + 0.5, "one on each face of the wing")
+        self.assertNotEqual(set(ports["r_root_up"]["tags"]) & {"roll_left", "roll_right"}, set(ports["l_root_up"]["tags"]) & {"roll_left", "roll_right"})
 
     def test_unarmed_with_the_side_thrust_at_the_wing_roots(self) -> None:
         """Q93: no weapons, no RCS on the wing tips; the side thrust sits on the outer face of each wing's root."""
@@ -359,34 +375,95 @@ class MinbariFlyerTests(CraftChecks, unittest.TestCase):
     CHUNKS = ("body", "bow", "tail", "crossbar", "spindle_l", "spindle_r")
     THRUST_Y = 0.0  # the spindles' axes
     GLOW_FROM = 0.7  # the panel under the crossbar glows too
-    PORTS = {"r_blade_in_up", "l_blade_in_up", "r_blade_in_down", "l_blade_in_down"}
+    PORTS = {"r_blade_up", "l_blade_up", "r_blade_down", "l_blade_down", "r_inner", "l_inner"}
 
-    def test_two_plasma_guns_fire_forward_either_side_of_the_nose(self) -> None:
-        """Q91: two forward guns near the central pod."""
+    def test_two_plasma_guns_fire_forward_from_the_gun_pods(self) -> None:
+        """Q91, Q97: two forward guns, in the holes of the pods either side of the central pod."""
         guns = {m["name"]: m for m in self.hp["muzzles"]}
         self.assertEqual(set(guns), {"r_gun", "l_gun"})
         np.testing.assert_allclose(guns["l_gun"]["position"], mirrored(guns["r_gun"]["position"]), atol=1e-4)
         for name, gun in guns.items():
             self.assertEqual(gun["direction"], [0.0, 0.0, -1.0], name)
             at = self.authored(gun["position"])
-            self.assertLess(float(np.hypot(at[0], at[1])), mp.POD_STATIONS[2][1], f"{name}: on the fuselage, inboard of the flank pods")
+            self.assertAlmostEqual(abs(at[0]), mp.POD_STATIONS[2][1], places=4, msg=f"{name}: on its gun pod's axis")
+            self.assertTrue(mp.POD_HOLE[0] < at[2] < mp.POD_HOLE[0] + mp.POD_HOLE[3], f"{name}: inside the pod's hole")
             ahead = self.xyz + self.offset
             ahead = ahead[ahead[:, 2] < at[2] - 0.3]
             self.assertGreater(float(np.hypot(ahead[:, 0] - at[0], ahead[:, 1] - at[1]).min()), 0.2, f"{name}: a clear line ahead")
 
-    def test_the_bow_blades_carry_the_only_thrusters_that_plume(self) -> None:
-        """Q92: a gravitic drive; forward- and inward-vectored thrusters on the front vertical stabilizers."""
-        blade_x = mp.BLADE_STATIONS[0][1]
+    def test_the_blades_pods_fire_forward_and_draw_the_braking_thrust(self) -> None:
+        """Q97: both pods on each blade fire forward from their holes (no inward set); they stand in for the pod's retro."""
+        x, y = mp.INTAKE_AT
+        ports = {port["name"]: port for port in self.hp["rcs"]}
+        for side, sx in (("r", 1.0), ("l", -1.0)):
+            for way, sy in (("up", 1.0), ("down", -1.0)):
+                port = ports[f"{side}_blade_{way}"]
+                np.testing.assert_allclose(self.authored(port["position"]), [sx * x, sy * y, 0.0], atol=1e-4)
+                self.assertEqual(port["exhaust"], [0.0, 0.0, -1.0])
+                self.assertEqual(port["pod"], side)
+                self.assertIn("retro", port["tags"])
+                self.assertIn("yaw_right" if sx > 0.0 else "yaw_left", port["tags"], "braking on one side turns it that way")
+                self.assertAlmostEqual(port["radius"], mp.INTAKE_HOLE_R, places=3)
         for pod in self.hp["pods"]:
             retro = self.authored(pod["retro"]["position"])
-            self.assertAlmostEqual(abs(retro[0]), blade_x, places=4, msg="the forward thruster on the blade's nose")
+            self.assertAlmostEqual(abs(retro[0]), mp.BLADE_STATIONS[0][1], places=4, msg="the thrust acts between the blade's two pods")
             self.assertAlmostEqual(retro[1], 0.0, places=4)
-        for port in self.hp["rcs"]:
-            at = self.authored(port["position"])
-            self.assertLess(abs(abs(at[0]) - blade_x), 1.0, port["name"])
-            self.assertLess(at[2], mp.BLADE_STATIONS[-1][0], port["name"])
-            self.assertEqual(port["exhaust"], [-1.0 if at[0] > 0.0 else 1.0, 0.0, 0.0], f"{port['name']}: fires at the centre line")
-            self.assertIn("sway_right" if at[0] > 0.0 else "sway_left", port["tags"], port["name"])
+
+    def test_the_inner_pods_vector_their_thrust(self) -> None:
+        """Q97: the small pod inside each blade swings its plume about 170 degrees up and down, and sideways as far as it can
+        without the plume touching the blade beside it or reaching the other side of the craft."""
+        ports = {port["name"]: port for port in self.hp["rcs"]}
+        right, left = ports["r_inner"], ports["l_inner"]
+        for port in (right, left):
+            self.assertEqual(port["exhaust"], [0.0, 0.0, -1.0])
+            self.assertEqual(set(port["tags"]), {"sway_left", "sway_right", "heave_up", "heave_down"})
+            swing = port["vector"]
+            self.assertAlmostEqual(swing["up_deg"] + swing["down_deg"], 170.0)
+        self.assertEqual((right["vector"]["left_deg"], right["vector"]["right_deg"]), (left["vector"]["right_deg"], left["vector"]["left_deg"]),
+                         "mirrored: each swings further inboard than outboard")
+        self.assertGreater(right["vector"]["left_deg"], right["vector"]["right_deg"])
+        at = self.authored(right["position"])
+        self.assertTrue(mp.POD_STATIONS[2][1] < at[0] < mp.BLADE_STATIONS[2][1], "between the gun pod and the blade")
+        # The plume at every limit and corner, as the game draws it (ten radii long, narrowing to 0.3): clear of the hull
+        # once it has left its own pod's mouth.
+        hull = self.xyz + self.offset
+        hull = hull[hull[:, 0] > 0.0]
+        radius, length = right["radius"], 10.0 * right["radius"]
+        swing = right["vector"]
+        for az_deg in (-swing["left_deg"], 0.0, swing["right_deg"]):
+            for el_deg in (-swing["down_deg"], 0.0, swing["up_deg"]):
+                az, el = np.radians(az_deg), np.radians(el_deg)
+                way = np.array([np.sin(az) * np.cos(el), np.sin(el), -np.cos(az) * np.cos(el)])
+                for t in np.linspace(0.25, 1.0, 16):
+                    reach = radius * (1.0 - 0.7 * t)
+                    gap = float(np.linalg.norm(hull - (at + way * length * t), axis=1).min())
+                    self.assertGreater(gap, reach, f"az {az_deg} el {el_deg}: the plume meets the hull {length * t:.1f} m out")
+
+    def test_the_pods_open_forward_in_dark_holes(self) -> None:
+        """Q97: a modelled hole in each gun pod, each thruster pod and each inner pod, its inside dark; the inner pods' is
+        the larger, a rounded rectangle."""
+        by_name = {p.part.name: p.part for p in self.pieces}
+        pod_x, (lobe_z, lobe_rx, lobe_ry, lobe_d) = mp.POD_STATIONS[1][1], mp.LOBE_HOLE
+        holes = {"gun": ("pod_r", (pod_x, 0.0, mp.POD_HOLE[0] + mp.POD_HOLE[3])),
+                 "thruster up": ("blade_r", (mp.INTAKE_AT[0], mp.INTAKE_AT[1], mp.INTAKE_HOLE_DEPTH)),
+                 "thruster down": ("blade_r", (mp.INTAKE_AT[0], -mp.INTAKE_AT[1], mp.INTAKE_HOLE_DEPTH)),
+                 "inner": ("blade_r", (mp.LOBE_X, 0.0, lobe_z + lobe_d))}
+        for name, (piece, floor) in holes.items():
+            v = by_name[piece].mesh.vertices
+            self.assertLess(float(np.linalg.norm(v - np.array(floor), axis=1).min()), 1e-6, f"{name}: the hole has a floor inside the pod")
+            self.assertEqual(float(mp.in_holes(np.array([floor]), np.zeros((1, 3)))[0]), 1.0, f"{name}: its inside is painted dark")
+        self.assertGreater(lobe_rx * lobe_ry, mp.INTAKE_HOLE_R ** 2, "the inner pod's hole is the larger")
+        corner = mp.ellipse_ring(lobe_z, mp.LOBE_X, 0.0, lobe_rx, lobe_ry, 64, mp.LOBE_HOLE_POWER) - np.array([mp.LOBE_X, 0.0, lobe_z])
+        fill = float(np.abs(corner[:, 0] * corner[:, 1]).max()) / (lobe_rx * lobe_ry)
+        self.assertTrue(0.6 < fill < 1.0, f"a rectangle with rounded corners, not an ellipse (0.5) or a sharp box (1): {fill:.2f}")
+        self.assertEqual(float(mp.in_holes(np.array([[pod_x, 1.2, 8.0]]), np.zeros((1, 3)))[0]), 0.0, "the hull outside stays painted")
+        # In the built atlas the holes' floors are near black.
+        dressed, marks = mf.dress(self.pieces, self.CRAFT.look)
+        for name in ("pod_r", "pod_l", "blade_r", "blade_l"):
+            last = marks[name][-1]
+            self.assertEqual(last.kind, "paint")
+            self.assertLess(max(last.colour), 0.02, f"{name}: the holes' coat is laid last and is dark")
+
     OPTIONS = ("p1",)
 
     def test_one_look_the_bluer_one(self) -> None:
@@ -435,7 +512,7 @@ class MinbariFlyerTests(CraftChecks, unittest.TestCase):
     def test_dark_fins_and_a_glowing_panel(self) -> None:
         _, marks = mf.dress(self.pieces, self.CRAFT.look)
         for name in mf.FINS:
-            self.assertEqual(len(marks[name]), 2 + len(mfp.LAYERS), f"{name}: the fins' blue, their outboard blue, then the pattern")
+            self.assertEqual(len(marks[name]), 2 + len(mfp.LAYERS) + (name.startswith("blade")), f"{name}: the fins' blue, their outboard blue, the pattern, and on the blades the holes' dark")
         floods = [m for m in marks["crossbar"] if m.kind == "flood"]
         self.assertEqual(len(floods), mf.PANEL_LAMPS, "a soft mottled glow from scattered pools, not a grid")
         self.assertTrue(all(m.params["centre"][1] < mp.CROSSBAR[2] - mp.CROSSBAR[3] for m in floods), "lit from below")

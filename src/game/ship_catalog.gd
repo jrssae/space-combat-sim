@@ -57,6 +57,18 @@ static func civilian_types() -> Array[StringName]:
 	return data().civilian_pool()
 
 
+## The civilian hulls the traffic and encounters of a scenario draw from: `civilian_types` and each `traffic_only` hull its
+## encounter pools (`pooled`, type -> count) list (M10 Q97). A scenario that pools none of them draws as it always did.
+static func traffic_types(pooled: Dictionary) -> Array[StringName]:
+	return data().traffic_pool(pooled)
+
+
+## The behaviour a civilian of `type` flies in traffic and encounters: its catalogue profile, the plain `civilian` without one.
+static func civilian_behaviour(type: StringName) -> Dictionary:
+	var profile: String = entry_text(type, "ai_profile")
+	return {"type": "ai", "profile": profile if AiProfile.PATHS.has(StringName(profile)) else "civilian"}
+
+
 ## The types whose catalogue `key` is `value`, pooled or not, in catalogue order.
 static func types_where(key: String, value: String) -> Array[StringName]:
 	return data().ids_where(key, value)

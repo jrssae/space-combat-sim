@@ -41,7 +41,8 @@ Adding a hull: one entry in the catalogue (keys in `src/game/ship_catalog_data.g
 ## What other code reads from each entry
 
 `pooled`: `ShipPool` builds it by type. `random_pool`: whether random traffic, encounters and `random_civilian` spawns
-may draw a civilian (`no`: only a mission that names it places it). `docking`: `tunnel` (the main docking bay) or
+may draw a civilian (`no`: only a mission that names it places it; `traffic`: the traffic and encounters of a scenario
+that pools it, never a mission's `random_civilian`). `docking`: `tunnel` (the main docking bay) or
 `cargo_bay`. `look_sheet`: what `sheet <asset>` parks. `name`: the target preview's class line. `callsign`: a
 civilian's radio name.
 
@@ -71,5 +72,5 @@ civilian's radio name.
 | `ea_construction_tender` | `res://assets/ships/ea_construction_tender.tres` | civilian | yes | no | - | pool | EA construction tender | TENDER |
 | `starfury_renegade` | `res://assets/ships/starfury_renegade.tres` | ally_starfury | yes | - | - | pool | - | - |
 | `ea_thunderbolt` | `res://assets/ships/ea_thunderbolt.tres` | ally_starfury | yes | - | - | pool | Thunderbolt | - |
-| `centauri_shuttle` | `res://assets/ships/centauri_shuttle.tres` | civilian | yes | no | - | pool | Centauri shuttle | CENTAURI SHUTTLE |
-| `minbari_flyer` | `res://assets/ships/minbari_flyer.tres` | civilian | yes | no | - | pool | Minbari Flyer | FLYER |
+| `centauri_shuttle` | `res://assets/ships/centauri_shuttle.tres` | civilian | yes | traffic | - | pool | Centauri shuttle | CENTAURI SHUTTLE |
+| `minbari_flyer` | `res://assets/ships/minbari_flyer.tres` | civilian_armed | yes | traffic | - | pool | Minbari Flyer | FLYER |

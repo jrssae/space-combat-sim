@@ -212,13 +212,37 @@ func _read_rcs(rcs: Variant) -> void:
 			for tag: Variant in raw_tags as Array:
 				if tag is String:
 					tags.append(tag)
+		var pod: String = str(entry.get("pod", ""))
+		var radius: Variant = entry.get("radius")
 		rcs_nozzles.append({
 			"name": str(entry.get("name", "")),
-			"pod": str(entry.get("pod", "")),
+			"pod": pod,
 			"position": _to_vec3(entry.get("position")),
 			"exhaust": _to_vec3(entry.get("exhaust")).normalized(),
 			"tags": tags,
+			"radius": maxf(float(radius), 0.0) if radius is float or radius is int else 0.0,
+			"retro_pod": pod_names.find(pod) if tags.has(ThrusterGlowLevels.RETRO_TAG) else -1,
+			"swing": _swing(entry.get("vector")),
 		})
+
+
+## Whether an RCS port draws pod `pod_index`'s braking thrust, so the pod's own retro nozzle draws none (M10 Q97).
+func retro_drawn_by_ports(pod_index: int) -> bool:
+	for port: Dictionary in rcs_nozzles:
+		if int(port["retro_pod"]) == pod_index:
+			return true
+	return false
+
+
+# A vectored port's limits in radians (up, down, left, right), empty for a fixed port.
+static func _swing(vector: Variant) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	if not (vector is Dictionary):
+		return out
+	for key: String in ["up_deg", "down_deg", "left_deg", "right_deg"]:
+		var value: Variant = (vector as Dictionary).get(key)
+		out.append(deg_to_rad(clampf(float(value), 0.0, 90.0)) if value is float or value is int else 0.0)
+	return out
 
 
 # Validates one nozzle of a pod and returns its record; empty (with `layout.error` set) when malformed.

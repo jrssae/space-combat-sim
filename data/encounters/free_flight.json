@@ -1,7 +1,7 @@
 {"pools": {"raider_fighter": 12, "starfury_ally": 12,
            "saturn_3_freighter": 2, "saturn_4_transport": 2, "saturn_4_tanker": 2, "saturn_8_transport": 2,
            "saturn_8_tanker": 2, "skylark_transport": 5, "narn_transport": 5, "centauri_brezebel": 5,
-           "brakiri_bokmai": 2},
+           "brakiri_bokmai": 2, "centauri_shuttle": 2, "minbari_flyer": 2},
  "weights": {"raid": 0.4, "patrol": 0.25, "traffic": 0.35},
  "station_run": true,
  "station_raid_share": 0.3,

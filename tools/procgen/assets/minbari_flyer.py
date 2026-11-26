@@ -5,9 +5,9 @@ Composition only: the pieces of ``parts/minbari_flyer.py`` in one of the looks o
 shuttles' shared build (``assets/ea_shuttles.py``, ``build_craft``). The skin is the Minbari's hexagonal grid (Q45) under
 the branching band pattern (Q90, ``assets/minbari_flyer_pattern.py``). A small craft by the class budgets (M10 Q38).
 
-Its drive is gravitic (Q92): the spindles' tails glow and make no plume. The only thrusters that do are on the bow blades:
-one firing forward from each blade's nose (the braking pair) and two firing inward from its intake pods (the side thrust).
-Two plasma guns fire forward from the fuselage's lower bow, either side of the nose (Q91).
+Its drive is gravitic (Q92): the spindles' tails glow and make no plume. The thrusters that do are at the bow (Q97): the two
+pods on each blade fire forward (they brake and turn it), and the small pod just inside each blade swings its plume up, down
+and sideways for the side and vertical thrust. Two plasma guns fire forward from the gun pods either side of the fuselage (Q91).
 
 Option ``look`` names the surface option; ``p1`` is the only one.
 """
@@ -15,8 +15,6 @@ Option ``look`` names the surface option; ``p1`` is the only one.
 from __future__ import annotations
 
 from dataclasses import replace
-
-import math
 
 import numpy as np
 
@@ -32,10 +30,13 @@ from ..styles.minbari_flyer import DEFAULT_OPTION, Look, looks
 from .ea_shuttles import NAV_CLEARANCE_M, Craft, Muzzle, Port, build_craft, no_docks
 
 ASSET_ID = "minbari_flyer"
-IN = (-1.0, 0.0, 0.0)  # a starboard port firing at the centre line
-INTAKE_PORT_R, INTAKE_PORT_Z = 0.6, 1.5  # the intake pods' radius and where along them the inward ports sit
-BLADE_NOSE = (mp.BLADE_STATIONS[0][1], 0.0, mp.BLADE_STATIONS[0][0], 0.3)  # the forward thruster: x, y, z, radius
-GUN_Z, GUN_BELOW_RAD = 2.0, math.radians(35.0)  # the guns: how far aft of the nose, and how far round under the flank
+FORWARD = (0.0, 0.0, -1.0)
+# Where each pod's braking thrust acts: the blade's nose, between its two thruster pods, which draw it (x, y, z, radius).
+BLADE_NOSE = (mp.BLADE_STATIONS[0][1], 0.0, mp.BLADE_STATIONS[0][0], mp.INTAKE_HOLE_R)
+# How far the inner pods' plume swings from straight ahead, degrees (Q97): 170 in all up and down; inboard until it would
+# reach across to the other side, outboard only until it would touch the blade beside it.
+VECTOR_UP_DEG, VECTOR_IN_DEG, VECTOR_OUT_DEG = 85.0, 80.0, 20.0
+INNER_PORT_R = 0.27
 FINS = ("blade_r", "blade_l", "spindle_r", "spindle_l")  # the darker blue on the stills
 PANEL_LAMPS = 16
 BODY_SEAM = (1.6, 1.6, 2.5)  # the hexagon seams off the fins: width, depth, darkness
@@ -89,21 +90,27 @@ def dress(pieces: list[cv.Piece], look: Look) -> tuple[list[cv.Piece], dict[str,
             colour = colours["dark"] if layer == "blue" and name in FINS else colours[layer]
             marks[name].append(Marking.paint(name, colour, mfp.cover_fn(lobe, seed, layer), placed=True))
     glow = capture_albedo(look.panel_glow)
+    # Last, so nothing paints a hole's inside: the forward holes stay dark.
+    bore = look.style.material("interior").albedo[:3]
+    for name in ("pod_r", "pod_l", "blade_r", "blade_l"):
+        marks[name].append(Marking.paint(name, bore, mp.in_holes, placed=True))
     marks["crossbar"] += [Marking.flood("crossbar", lamp, (0.0, 1.0, 0.0), 70.0, 10.0, 2.2, glow, look.glow_strength) for lamp in panel_lamps()]
     return dressed, {name: tuple(m) for name, m in marks.items() if m}
 
 
 def ports(by_name: dict[str, Part]) -> list[Port]:
-    """The inward-vectored thrusters (Q92; authored frame, ``r_`` names are mirrored): on the inner side of each blade's two
-    intake pods, firing at the centre line. The gravitic drive needs no other port."""
+    """The bow's thrusters (Q97; authored frame, ``r_`` names are mirrored): each blade's two pods fire forward from their
+    holes, drawing the braking thrust; the small pod inside each blade vectors its plume for the side and vertical thrust."""
     x, y = mp.INTAKE_AT
-    return [("r_blade_in_up", (x - INTAKE_PORT_R, y, INTAKE_PORT_Z), IN), ("r_blade_in_down", (x - INTAKE_PORT_R, -y, INTAKE_PORT_Z), IN)]
+    swing = {"up_deg": VECTOR_UP_DEG, "down_deg": VECTOR_UP_DEG, "in_deg": VECTOR_IN_DEG, "out_deg": VECTOR_OUT_DEG}
+    return [("r_blade_up", (x, y, 0.0), FORWARD, {"radius": mp.INTAKE_HOLE_R, "retro": True}),
+            ("r_blade_down", (x, -y, 0.0), FORWARD, {"radius": mp.INTAKE_HOLE_R, "retro": True}),
+            ("r_inner", by_name["blade_r"].anchor("inner").position, FORWARD, {"radius": INNER_PORT_R, "vector": swing})]
 
 
 def muzzles(by_name: dict[str, Part]) -> list[Muzzle]:
-    """The two plasma guns (Q91): on the fuselage's lower bow either side of the nose, a clear line ahead."""
-    r = float(np.interp(GUN_Z, [z for z, _ in mp.BODY_PROFILE], [r for _, r in mp.BODY_PROFILE]))
-    return [("r_gun", (r * math.cos(GUN_BELOW_RAD), -r * math.sin(GUN_BELOW_RAD), GUN_Z))]
+    """The two plasma guns (Q91, Q97): in the hole of the gun pod either side of the fuselage."""
+    return [("r_gun", by_name["pod_r"].anchor("gun").position)]
 
 
 def lights(by_name: dict[str, Part]) -> dict[str, np.ndarray]:

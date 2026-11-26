@@ -21,7 +21,7 @@ from ..core.textures import Marking, value_noise
 from ..parts import Part
 from ..parts import centauri_shuttle as cp
 from ..styles.centauri_shuttle import BRASS_SRGB, SHUTTLE_LOOK, Look
-from .ea_shuttles import NAV_CLEARANCE_M, Craft, Port, build_craft, no_docks
+from .ea_shuttles import NAV_CLEARANCE_M, ROOT_PORT, Craft, Port, build_craft, no_docks
 
 ASSET_ID = "centauri_shuttle"
 UP, DOWN, OUT = (0.0, 1.0, 0.0), (0.0, -1.0, 0.0), (1.0, 0.0, 0.0)
@@ -120,12 +120,14 @@ def dress(pieces: list[cv.Piece], look: Look) -> tuple[list[cv.Piece], dict]:
 
 def ports(by_name: dict[str, Part]) -> list[Port]:
     """Cosmetic RCS (authored frame; ``r_`` names are mirrored): at the nose and, for the side thrust, on the outer face of
-    each wing's root; none at the wing tips (M10 Q93)."""
+    each wing's root, with a port up and a port down beside it for the lift and the roll (Q97); none at the wing tips (M10 Q93)."""
     return [
         ("r_nose", (2.0, -2.25, 2.0), OUT),
         ("nose_up", (0.0, cp.deck_y(0.0, 4.0), 4.0), UP),
         ("nose_down", (0.0, -2.9, 4.0), DOWN),
-        ("r_root", cp.wing_root_port(), OUT),
+        ("r_root", cp.wing_root_port(), OUT, ROOT_PORT),
+        ("r_root_up", cp.wing_root_lift_port(1.0), UP, ROOT_PORT),
+        ("r_root_down", cp.wing_root_lift_port(-1.0), DOWN, ROOT_PORT),
     ]
 
 
