@@ -19,9 +19,10 @@ use crate::v3::{add, cross, dot, length, normalized, scale, sub, xform, xform_in
 /// Rolls a ship's mounts are given apart by ship index, so a fleet's rolls spread over the second.
 pub const STAGGER_TICKS: i64 = 7;
 /// The share of the hostile shots headed for its hull a capital's batteries take when all of them work, a shot of toughness
-/// `t` (a heavy bolt 2, a torpedo 3) the share to the power `t`: fitted to two Omegas broadside 2 km apart in play (980 of the
-/// 1 113 bolts taken); missiles and torpedoes, which the batteries take first (Q81), by the same rule.
-pub const PD_SHARE: f64 = 0.88;
+/// `t` (a heavy bolt 2, a torpedo 3) the share to the power `t`: fitted to two Omegas broadside 2.4 km apart in play, their
+/// hangars empty (662 of the 700 bolts taken, and every missile); missiles and torpedoes, which the batteries take first (Q81),
+/// by the same rule.
+pub const PD_SHARE: f64 = 0.95;
 /// What a target's unforeseen manoeuvres add to a bolt's miss while it flies, m/s^2: a fighter's (as the stand-ins' far
 /// guns), a capital's.
 pub const FIGHTER_DODGE_MPS2: f64 = 10.0;

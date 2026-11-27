@@ -95,6 +95,8 @@ func _duel(ahead_m: float, seconds: float) -> Dictionary:
 	await wait_physics_frames(1)
 	for cap: CapitalShip in [a, b]:
 		CapitalBeams.of(main.world).hold(cap, true)
+		if cap.hangar != null:
+			cap.hangar.empty()  # no wings: far hangars launch none, and anti-fighter launchers would chase them in play
 	await _fly(4.0)
 	var far: bool = _far(a) and _far(b)
 	var before: float = a.damageable.hull.hp + b.damageable.hull.hp

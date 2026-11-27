@@ -7943,7 +7943,7 @@ for it (T16). Its guns and launchers fire there as seeded rolls, its beams by th
   else where the line to the centre meets the hull, else its largest volume (an Omega's centre is its drum, a body of its own).
   A launcher's salvo is rounds that arrive after their flight (`Round`), with the warhead's blast at its centre added to the hit
   (`set_warheads`, from `BlastTable`): out there no blast row goes off. The target's batteries take a share of what comes at its
-  hull: `PD_SHARE` (0.88, fitted to two Omegas broadside in play) to the power of the shot's toughness, scaled by the batteries
+  hull: `PD_SHARE` (0.95, fitted to two Omegas broadside in play with their hangars empty) to the power of the shot's toughness, scaled by the batteries
   still working; friendly fire and a disguised shooter's shots are not taken (Q81).
 - **Tier rows keep their surface.** A capital's tier row has `ROLE_SURFACE` (`tier_add`), so beams and the far rolls meet its
   volumes and name a section; before, far beam hits met a sphere and fell to the per-hit GDScript path.

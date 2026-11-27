@@ -884,7 +884,8 @@ on T75's damage store; a ship crossing the tier's edge neither bursts nor pauses
   volume (an Omega's centre is its drum, a body of its own). A salvo is rounds that arrive after their flight with the warhead's
   blast centre added (`BlastTable` `missile` 20, `torpedo` 100; no blast row goes off out there); a fighter is reached with 0.8
   falling off over 12 km. *Interceptors (natural, so in):* the target's batteries take each hostile shot at its hull with `PD_SHARE`
-  0.88 (fitted to two Omegas broadside in play: 980 of 1 113 bolts) to the power of its toughness (heavy 0.77, torpedo 0.68), scaled
+  0.95 (fitted to two Omegas broadside in play, hangars empty: 662 of 700 bolts; the follow-up below) to the power of its toughness
+  (heavy 0.90, torpedo 0.86), scaled
   by the batteries still working, missiles by the same rule (Q81, missiles first); friendly fire and a disguised shooter's shots are
   not taken. *Landing:* one batch on the store a tick (`ScsCapitalGuns.land_far`, T75's `landing::land`, the point in the body's
   frame from its row), one `HitSummary` (cause `bolt`) a damaged ship, the attacker memory, a disguise given away by a hit, a kill's
@@ -892,8 +893,8 @@ on T75's damage store; a ship crossing the tier's edge neither bursts nor pauses
   broadcast side reveals it (`Transponder.note_shot_at`). Near guns take far rows as targets too (`GunWorld.tier_targets`), so a
   fight across the edge is fought from both ends. Provider `capital_guns` adds `far_hits`, `far_damage`, `far_rolls`, `far_taken`,
   `far_us`, `far_land_us` (`info.md`); architecture §22.14 (and §22.7's gap).
-  *Measured (GUT, the main scene, 16x):* two Omegas broadside 2.4 km apart, beams held, 60 s: 1 935 hull points lost in play, 2 825
-  far (x1.46; far gun bolts land about 1.4 times as many: no slew, no blocked lines but the pick's); a ship's shots a second far
+  *Measured (GUT, the main scene, 16x):* two Omegas broadside 2.4 km apart, beams held, hangars empty, 60 s: 715 hull points lost in
+  play, 1 090 far (x1.52; far turrets fire about a quarter more bolts: no slew, no lines blocked but the pick's); a ship's shots a second far
   11.6, over the 3 s of a promotion 14.7, in play 10.4, far again 12.5. *Cost* (release library): 24 far Omegas broadside 2.4 km
   apart firing: the rolls median 3 us a tick, mean 72, p99 373 (about 3 us a tick a capital); their landing (batch and GDScript) mean
   11 us, p99 69. `bench_quick`: furball 400 ships, spread 400 (its time budget ran out before 500), battle 100, every count in
@@ -906,14 +907,21 @@ on T75's damage store; a ship crossing the tier's edge neither bursts nor pauses
   beams, hulks, brain and brain threads, far helm, far fleet, the tier's files, the beam and blast landing parity and threads, the
   weapon rows battle, flight, helm and damage-rules parity, the stand-ins, turret kernel, core threads, damage store and the console
   list.
-- **Open for the maintainer.** (1) In play, a capital's missiles at a capital did not strike in the duel: two Omegas broadside 2.4 km
-  apart launched 32 in 90 s, the batteries downed 2, and the target took no warhead (its hits were 49 bolts): far rounds strike (less
-  the batteries' share), so the far fight is a little harder than the near one until the near missiles are looked at (T14's
-  guidance). (2) Far beams stay on their own kernel (exact), and the far helm turns ships differently from the near one, so beams were
-  held in the comparison. (3) Far batteries take the far rolls' shots only: a near ship's real bolts crossing the edge at a far
-  capital are not shot, and the far batteries guard their own hull, not friends. (4) Two capitals spawned with overlapping hulls (an
+- **Follow-up (2026-11-27): the near missiles.** They were not broken. The Omega's launchers carry `ea_missile`, an anti-fighter
+  weapon: after a first salvo at the other Omega they chase its launched wings (and, in free flight, the player, who flies for the
+  raiders there), and the two sent at the Omega were taken by its 8 batteries about 700 m out (Q81: missiles first). With the
+  target's batteries held its first salvo struck (on the drum and the hull, the warheads' blasts landing). `test_capital_missile_strikes`
+  (new) holds it: an Omega's salvo lands on a still Omega and on one turning away under way, and a Hyperion's torpedoes land. The
+  wings were also most of the near fight's damage (1 935 hull points with them, 715 without), so the comparison now empties the
+  hangars (far hangars launch none) and `PD_SHARE` is refitted from 0.88 (an Omega's batteries busy with the wings' bolts too) to
+  0.95; far against near went from x3.95 (on the old fit, without wings) to x1.52 (the thread test's fleet: 152 far hits, 2 230 taken,
+  1 and 6 threads still byte for byte). Rust 428/428; GUT `test_capital_missile_strikes` 3, `test_capital_far_fire` 4,
+  `test_capital_far_fire_threads` 1, `test_sim_core` 21 (this copy: HEAD and the change).
+- **Open for the maintainer.** (1) Far beams stay on their own kernel (exact), and the far helm turns ships differently from the near one, so beams were
+  held in the comparison. (2) Far batteries take the far rolls' shots only: a near ship's real bolts crossing the edge at a far
+  capital are not shot, and the far batteries guard their own hull, not friends. (3) Two capitals spawned with overlapping hulls (an
   Omega line rotated 90 degrees at 1.5 km spacing) fly differently from one scene to the next even with every gun held, on HEAD too
-  (T16's helm or the contacts); the thread test spaces them 3 km. (5) The stand-ins' far rolls (`ScsWeaponRows`) stay until T45.
+  (T16's helm or the contacts); the thread test spaces them 3 km. (4) The stand-ins' far rolls (`ScsWeaponRows`) stay until T45.
 
 ### M10-T75 Beam hit landing in Rust (Q70, Q94)
 
