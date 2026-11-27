@@ -38,11 +38,11 @@ from ..parts import mass_centroid, total_mass
 from ..styles.capital import CapitalStyle
 from . import civilian as cv
 from . import collision as col
-from . import glyphs, hull_decals
+from . import far_mesh, glyphs, hull_decals
 from .budgets import LOW_SHRINK, low_set_mb, texture_mb
 from .context import AssetOutputs, BuildContext
 from .image import write_png
-from .manifest import build_manifest, write_manifest
+from .manifest import build_manifest, validate_manifest, write_manifest
 from .silhouette import far_section
 from .textured_mesh import import_sidecar
 from .textures import FLOOD_GREY, Marking
@@ -325,7 +325,19 @@ def _hall_faces(halls: Sequence[bays.Hall], frame: np.ndarray) -> Callable[[np.n
 
 def build(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
     """Generate the capital hull into ``ctx.out_dir``. Options: ``spacing`` (m, the surface samples'), ``atlas_px`` (every
-    piece's atlas, for small test builds), ``detail_px`` (the shared tile)."""
+    piece's atlas, for small test builds), ``detail_px`` (the shared tile), ``far_mesh`` (false: no far meshes)."""
+    outputs = _build_ship(spec, ctx)
+    if not ctx.option("far_mesh", True):
+        return outputs
+    # Made from the finished pieces once the build's working data is gone: the far meshes read them back from disk (M10-T89).
+    manifest = outputs.manifest
+    files = far_mesh.add_far_meshes(Path(ctx.out_dir), manifest, spec.ship_class)
+    validate_manifest(manifest)
+    write_manifest(Path(ctx.out_dir), manifest)
+    return dataclasses.replace(outputs, files=(*outputs.files, *files))
+
+
+def _build_ship(spec: CapitalSpec, ctx: BuildContext) -> AssetOutputs:
     wrong = problems(spec)
     if wrong:
         raise ValueError(f"{spec.asset_id}: " + "; ".join(wrong))

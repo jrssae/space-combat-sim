@@ -299,6 +299,37 @@ The card's own counter (`mem_info_vram_used`) rose from 5 761 to 7 608 MB, with 
 a fleet's textures are a gigabyte at high and about 270 MB at low. Pictures (gitignored):
 `references/screenshots/M10-T05 capital framework/probe*/`.
 
+## Far meshes (M10-T89)
+
+Every capital piece carries a far mesh, built from the finished piece by `core/far_mesh.py` and drawn by the game past
+`from_m` (architecture §22.15): about 3 % of the class's triangles (3 000 for a capital), more (up to twice) when the outline needs
+them, an atlas of its own of at most 1 024 px. **The class budget counts the drawn mesh only** (maintainer, 2026-11-26): the far
+mesh is not added to it.
+
+| Hull (HEAD of 2026-11-27) | Full, triangles | Far, triangles | Outline IoU top / side / front | Swap, km | Far texel, m |
+|---|---|---|---|---|---|
+| `ea_omega` hull + drum | 15 982 + 1 876 | 2 736 + 314 | 0.969 / 0.962 / 0.959 (drum 0.99) | 13.5 | 1.7 |
+| `ea_nova` | 24 136 | 6 170 (twice its share) | 0.959 / **0.949** / 0.957 | 11.9 | 2.0 |
+| `ea_hyperion` | 17 986 | 3 138 | 0.963 / 0.955 / 0.987 | 8.4 | 2.8 |
+
+The far step takes 20 to 35 s a hull and about 1.5 GB. **The GPU** (RX 6950 XT, `forward_plus`, 1920x1080; triangles and draw
+calls with the empty scene's 24 000 and 1 taken off; `scripts/far_mesh_probe.sh`, pictures in
+`references/screenshots/M10-T89 far mesh/probe2/`):
+
+| Phase | Without far meshes | With |
+|---|---|---|
+| Omega at 1 km / 3 km | 17 858 tris, 3 draws | the same |
+| Omega at 15 km | 17 858 tris, 3 draws | 3 050 tris, 2 draws |
+| Nova at 15 km | 24 136, 2 | 6 170, 1 |
+| Hyperion at 15 km | 17 830, 2 | 3 138, 1 |
+| Raider carrier at 1 / 3 / 15 km | 10 440 / 4 032 / 1 292, 1 (the importer's levels) | no far mesh: not needed |
+| 16 capitals, 15 to 30 km | 222 814, 23 | 64 840, 13 |
+| 16 capitals, 20 to 40 km | 188 418, 28 | 64 840, 16 |
+
+At 50 km a hull is past the camera's far plane (50 km) and drawn by neither. GPU time is small either way (0.42 against 0.39 ms for
+the fleet). Video memory: the far maps are three block-compressed maps of at most 1 024 px a piece, under 1 MB together; the
+renderer's total did not move at this probe's resolution.
+
 ## `raider_strike_carrier` (M12-T19)
 
 `tools/procgen/assets/raider_strike_carrier.py` on `parts/raider_carrier.py`, `styles/raider_capital.py` and

@@ -1150,6 +1150,33 @@ comes from a pool with shared meshes and materials (roadmap L10).
   tests (swap distances, hysteresis, rotors, hulk) green; triangles, draw calls and VRAM on the real renderer at 1, 3, 15 and 50 km
   for the Omega, Nova, Hyperion and raider carrier, and for 16 capitals far away, before and after; `docs/assets-capital.md` and
   `docs/architecture.md` updated.
+- **Done (2026-11-27, awaiting the maintainer).** *Measured first:* on the HEAD hulls Godot's import levels cut nothing on the
+  Omega (17.9 k triangles at 1, 3 and 15 km alike), the Nova or the Hyperion; the raider carrier's (112 m, 10.4 k) do (1.3 k at
+  15 km), so it needs no far mesh. *Built:* `core/far_mesh.py`, run by `core/capital.build` after the full build for every piece
+  of every capital (option `far_mesh` false skips it): the piece's glb sampled onto a grid of the hull's length over 384, the
+  outside flooded in, a signed distance field (thin plates and masts kept about a cell thick, two-cell gaps closed), the skin
+  extracted and thinned to 3 % of the class's budget (capital 3 000), up to twice that when the top, side or front outline (pixel
+  coverage on a 4K view at the swap) would fall under 0.95; its own atlas (1 024 px at most, about 2.5 m a texel) baked from the
+  hull's maps by facing, a flat normal map; listed in the piece's `mesh.lods[0]` with `from_m` (7.9 lengths: Omega 13.5 km,
+  fading over 12.2 to 14.9 km) and `margin_m`. 20 to 35 s and 1.5 GB a hull; nothing in a hull's own generator changes, so
+  T68's Omega takes it when rebuilt. *Game:* `FarMeshRange` (pure) and `RenderPiece`'s `FarMesh`: Godot's visibility range with
+  `FADE_SELF`, the full mesh and everything else on the piece (bay halls, marks, doors: `hide_when_far`) its visibility
+  dependents, so the full hull draws until the far mesh is opaque, never a frame with neither and no flapping (the fade is
+  stateless); rotors carry their own, turning with them; a hulk's glow dims on it (`CapitalHulkLights`); the break-up keeps the
+  full chunks. Console `capital far [auto|full|far]`, provider key `capital.far_mesh` (`info.md`). *Results* (HEAD hulls): Omega
+  2 736 + 314 (drum), outline 0.969 / 0.962 / 0.959; Hyperion 3 138, 0.963 / 0.955 / 0.987; Nova 6 170 at twice its share, side
+  0.949 (its thin side struts). *GPU* (RX 6950 XT, 1080p, `scripts/far_mesh_probe.sh`): at 15 km Omega 17 858 to 3 050 triangles,
+  Nova 24 136 to 6 170, Hyperion 17 830 to 3 138; 16 capitals 15 to 30 km off 222.8 k to 64.8 k triangles and 23 to 13 draw calls
+  (20 to 40 km: 188.4 k to 64.8 k, 28 to 16); at 50 km a hull is past the camera's 50 km far plane either way; GPU time 0.42 to
+  0.39 ms; far maps under 1 MB a hull. Pictures: `references/screenshots/M10-T89 far mesh/` (`probe2/`, the outline diffs).
+  *Tests (staged copy):* Python 105 (`test_far_mesh` 10 new; `test_capital_framework`, `test_capital_test_cruiser`, `test_manifest`,
+  `test_budgets`, `test_organic_test_hull`, `test_ea_hyperion`) and 68 (`test_ea_nova`, `test_ea_omega`, `test_ea_asimov`); GUT 11 new
+  (`test_far_mesh_range` 6, `test_far_mesh_asset` 5) with `test_capital_framework_asset`, `test_organic_test_hull_asset` (22), and
+  61 in `test_capital_hulks`, `test_capital_bay_interiors`, `test_ea_hyperion`, `test_ea_nova`, `test_ea_omega`,
+  `test_textured_hulls`, `test_station_sections`, `test_capital_ship`, `test_mesh_only_scene`, `test_station_lights`.
+  *Open for the maintainer:* the look at the swap (H): the far mesh reads slightly brighter on the Hyperion and the full hull's
+  window lights show as sharp dots the far atlas softens into a faint glow; the Nova's 0.949; an intermediate level (about 20 k
+  beyond about 3 km) once T68's 89 k Omega lands (Godot's levels give it nothing today).
 
 ### M10-T65 Subsystems targeted by kind (Q60)
 

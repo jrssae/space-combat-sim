@@ -6,7 +6,7 @@ extends RefCounted
 
 const PROVIDER: StringName = &"capital"
 const ACTIONS: Array[StringName] = [&"info", &"list", &"spawn", &"helm", &"jump", &"focus", &"sections", &"damage",
-		&"disable", &"scuttle", &"hulks", &"doors"]
+		&"disable", &"scuttle", &"hulks", &"doors", &"far"]
 ## How far ahead of the player `capital spawn` places a ship, m, unless told.
 const SPAWN_AHEAD_M: float = 2000.0
 
@@ -61,9 +61,10 @@ func register() -> void:
 				"doc": "It is a low-attention tier row now"},
 		&"flight_us": {"get": func() -> int: return flight.last_us, "type": TYPE_INT,
 				"doc": "Wall-clock cost of the last tick's capital flight, us (a readout)"},
+		&"far_mesh": {"get": _far_text, "doc": "Far meshes (M10-T89): the mode (auto, full, far), live pieces with one, and the focused hull's (triangles, swap distance)"},
 	}), flight)
 	DebugConsole.registry.register_command(ConsoleCommand.new(PROVIDER,
-			"Capital ships (M10-T07): info, list, spawn <type[:faction]> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount|engine|bay> <amount>, disable, scuttle, hulks, doors <open|close>[:<bay>]",
+			"Capital ships (M10-T07): info, list, spawn <type[:faction]> [ahead_m], helm <speed_mps> [yaw_deg], jump, focus <name>, sections, damage <section|mount|engine|bay> <amount>, disable, scuttle, hulks, doors <open|close>[:<bay>], far [auto|full|far]",
 			[ConsoleArg.enum_optional(&"action", ACTIONS, &"info"), ConsoleArg.string_optional(&"a"),
 					ConsoleArg.float_optional(&"b", null)]), _cmd, flight)
 
@@ -97,11 +98,33 @@ func _cmd(args: Dictionary) -> ConsoleResult:
 			return _hulks()
 		&"doors":
 			return _doors(a)
+		&"far":
+			return _far(a)
 	var ship: CapitalShip = _focused()
 	if ship == null:
 		return ConsoleResult.line("no capital ships")
 	return ConsoleResult.line("%s (%s): %s; %s; %s; hull %.2f; %s; %s" % [ship.targetable.display_name, ship.type_id,
 			_state_text(), _propulsion_text(), _helm_text(), ship.damageable.hull.fraction(), _collision_text(), _jump_text()])
+
+
+# How every capital's far mesh is used (M10-T89): by distance, never or always; no argument says how it is now.
+func _far(mode_text: String) -> ConsoleResult:
+	if mode_text.is_empty():
+		return ConsoleResult.line(_far_text())
+	var mode: int = FarMeshRange.mode_named(mode_text)
+	if mode < 0:
+		return ConsoleResult.failure("capital far [auto|full|far]")
+	RenderPiece.set_far_mode(mode as FarMeshRange.Mode)
+	return ConsoleResult.line(_far_text())
+
+
+func _far_text() -> String:
+	var text: String = "%s, %d pieces" % [FarMeshRange.mode_name(FarMeshRange.mode), RenderPiece.far_count()]
+	var ship: CapitalShip = _focused()
+	if ship != null and ship.hull_piece != null and not ship.hull_piece.far_lod.is_empty():
+		text += "; %s hull %d triangles from %.1f km" % [ship.targetable.display_name, int(ship.hull_piece.far_lod.get("triangles", 0)),
+				float(ship.hull_piece.far_lod.get("from_m", 0.0)) / 1000.0]
+	return text
 
 
 # The focused ship's sections, one a line, and what still works.

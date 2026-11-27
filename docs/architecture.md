@@ -7964,3 +7964,51 @@ for it (T16). Its guns and launchers fire there as seeded rolls, its beams by th
 - **Known gaps.** Far interceptors take the far rolls' shots only; a far capital's batteries do not shoot near bolts in flight (a
   near ship's shots crossing the edge are rare), and they guard their own hull, not friends. Far beams fire by their kernel, as in
   play. The stand-ins' far rolls (`ScsWeaponRows`, `tier_fire`) stay until T45.
+
+### 22.15 Far meshes for capitals (T89)
+
+Godot's import levels of detail cannot thin a hull made of many small boxes (each box keeps its twelve triangles): an Omega drew
+its whole 17.9 k triangles at 1, 3 and 15 km alike. Every capital piece now carries a far mesh of about 3 k triangles for an
+Omega-size hull, drawn past a swap distance instead.
+
+```
+tools/procgen/core/far_mesh.py      the far mesh of a built piece: shape, paint, outline check, manifest entry (run by core/capital.build)
+src/rendering/far_mesh_range.gd     FarMeshRange, pure: the swap distances and fade, the console's modes
+src/rendering/render_piece.gd       RenderPiece draws the far mesh and makes everything else on the piece its visibility dependent
+scripts/far_mesh_probe.sh           the GPU probe: hulls near and far with and without their far meshes, a far fleet
+```
+
+- **Built from the finished piece.** `core/capital.build` runs the full build, then (its working data gone, so memory stays
+  under the full build's peak) `far_mesh.add_far_meshes` reads each piece's glb (and its bay halls, `interior_file`) and maps back:
+  the triangles sampled at half a cell, a grid of the hull's length over 384, the outside flooded in from the grid's border
+  (closed rooms and buried boxes are solid), a distance field signed by the flood and next to the skin by the nearest visible
+  sample's facing, plates and masts thinner than a cell taken in at about a cell's thickness, gaps of two cells closed (each hole
+  is triangles the thinning cannot remove), the skin extracted (`isosurface.extract`) and thinned (`decimate`). A hull's far
+  triangles are `FAR_SHARE` (3 %) of its class's budget (capital 3 000), split over its pieces by their triangles; if the top, side
+  or front outline (pixel coverage on a 4K view at the swap) falls under 0.95, it is thinned less, up to twice that.
+- **Paint.** One atlas (1 024 px at most, about 2.5 m a texel), each texel the mean of the full maps (the lighter set) near it on
+  surfaces seen from outside facing the same way (six bins), colour in linear light; ORM and glow the same; a flat normal map (the
+  skin is faceted). The surface entry is the hull's, without the detail tile and texture sets, so the far mesh is drawn by
+  `MeshAssets.load_textured` with the hull's own material kinds (sheen, band tints).
+- **Manifest.** The piece's `mesh.lods[0]` (the textured mesh's contract): `file`, `triangles`, `from_m` (7.9 hull lengths: an
+  Omega at 13.5 km), `margin_m` (a tenth of it), the atlas and surfaces, `outline_iou`.
+- **The swap.** `RenderPiece` adds `FarMesh` with `visibility_range_begin` at `from_m` and `VISIBILITY_RANGE_FADE_SELF` over the
+  margin; the full mesh and every other child of the piece (bay halls, and the marks and doors `CapitalShip` adds, then
+  `hide_when_far`) take it as their `visibility_parent`. Godot draws a dependent while its parent is hidden for being near or is
+  fading, so the full hull stays opaque under the far mesh fading in, and stops only once the far mesh is opaque: never a frame
+  with neither, no pop, and no flapping on the boundary, since the fade is a function of distance alone (the hysteresis is the band).
+  Only the fading far mesh goes through the transparent pass. A rotor's picture builds its own far mesh, turning with its pivot.
+  A hulk's lights (`CapitalHulkLights`) dim the far mesh's glow with the rest; the break-up's chunks are cut from the full pieces.
+- **Console.** `capital far [auto|full|far]` (every live piece and every one built after: by distance, never, always), provider
+  key `capital.far_mesh`.
+- **Measured** (RX 6950 XT, 1920x1080, the HEAD hulls of 2026-11-27; `scripts/far_mesh_probe.sh`): see `docs/assets-capital.md`,
+  "Far meshes". At 15 km an Omega draws 3.1 k triangles instead of 17.9 k, a Nova 6.2 k instead of 24.1 k, a Hyperion 3.1 k
+  instead of 17.8 k; 16 capitals 15 to 30 km off 65 k instead of 223 k, in 13 draw calls instead of 23. Under 1 MB of maps a hull.
+- **Tests.** Python `test_far_mesh` (a toy hull: budget, outline, thin parts kept and buried ones gone, a closed skin, paint by
+  facing, glow, the manifest entry, determinism; the test cruiser's build); GUT `test_far_mesh_range` (swap distances by mode, the
+  fade with no gap, the node's range), `test_far_mesh_asset` (every piece's far mesh and its dependents, children added later,
+  the console's modes, a hulk's glow, the chunks).
+- **Known gaps.** The Nova keeps its side outline at 0.949 even at twice the budget (6.2 k): the thinning eats its thin side struts
+  first. The full hull's window lights show as sharp dots at range (tiny triangles caught at pixel centres); the far atlas spreads
+  them into a faint glow of the same light. The raider carrier (112 m, a stand-in until T45) needs none: the importer's levels
+  already take it from 10.4 k to 1.3 k at 15 km. No intermediate level yet (the maintainer's call, after T68's Omega).
