@@ -69,6 +69,11 @@ static func civilian_behaviour(type: StringName) -> Dictionary:
 	return {"type": "ai", "profile": profile if AiProfile.PATHS.has(StringName(profile)) else "civilian"}
 
 
+## The hulls that dock at `value` in a scenario whose encounter pools are `pooled`: see `ShipCatalogData.docking_pool`.
+static func docking_types(value: String, pooled: Dictionary) -> Array[StringName]:
+	return data().docking_pool(value, pooled)
+
+
 ## The types whose catalogue `key` is `value`, pooled or not, in catalogue order.
 static func types_where(key: String, value: String) -> Array[StringName]:
 	return data().ids_where(key, value)

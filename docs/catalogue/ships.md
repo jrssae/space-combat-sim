@@ -72,5 +72,5 @@ civilian's radio name.
 | `ea_construction_tender` | `res://assets/ships/ea_construction_tender.tres` | civilian | yes | no | - | pool | EA construction tender | TENDER |
 | `starfury_renegade` | `res://assets/ships/starfury_renegade.tres` | ally_starfury | yes | - | - | pool | - | - |
 | `ea_thunderbolt` | `res://assets/ships/ea_thunderbolt.tres` | ally_starfury | yes | - | - | pool | Thunderbolt | - |
-| `centauri_shuttle` | `res://assets/ships/centauri_shuttle.tres` | civilian | yes | traffic | - | pool | Centauri shuttle | CENTAURI SHUTTLE |
-| `minbari_flyer` | `res://assets/ships/minbari_flyer.tres` | civilian_armed | yes | traffic | - | pool | Minbari Flyer | FLYER |
+| `centauri_shuttle` | `res://assets/ships/centauri_shuttle.tres` | civilian | yes | traffic | tunnel | pool | Centauri shuttle | CENTAURI SHUTTLE |
+| `minbari_flyer` | `res://assets/ships/minbari_flyer.tres` | civilian_armed | yes | traffic | tunnel | pool | Minbari Flyer | FLYER |

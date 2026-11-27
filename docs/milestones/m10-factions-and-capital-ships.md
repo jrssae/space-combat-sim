@@ -125,6 +125,7 @@ Q1 to Q30 were answered on 2026-11-13 unless a row gives another date. There is 
 | Q96 | Asimov shuttle bay: option A (2026-11-26) | After T53's stage 2 found no hall that fits inside the fixed forward section (`docs/assets-capital.md`, `ea_asimov`): **option A.** The turning band's collision is a **ring round a fixed, non-rotating core** (the band is a habitat ring; nothing changes to look at), and the **hall runs about 70 m straight back** behind the hexagonal mouth inside that core, with **two berths side by side**: one EA crew shuttle (38.0 x 18.8 x 10.7 m) and one Kestrel with folded wings (29.0 x 22.9 x 19.4 m, Q73, Q93). Lit, with doors, on the interior layer (Q68); a `bay` hardpoint with two berths flown by T17's `CapitalHangar`, as the Hyperion's shuttle bay is. The band's inner ring stays clear of the hall with margin while it turns; the collars keep working. Options B (a hangar trunk proud of the bowl's floor), C (sterns left in the bowl) and D (smaller craft only) are dropped |
 | Q97 | Centauri shuttle and Minbari Flyer: finish (2026-11-26) | After T58's stage 2. (1) **Flyer AI:** the Saturn civilians' profile, slightly more aggressive: it flees first and fights back when pursued if it judges the fight winnable (`civilian_armed`, `AiProfile.fight_odds`). (2) **Forward holes** with dark insides, modelled in the mesh, on the Flyer's gun pods, thruster pods and the small pods just inside the blades (those a larger rectangle with rounded corners); the 90 % rule still holds. (3) **Flyer thrusters:** both pods on each bow blade fire **forward** (no inward set); the small pod inside each blade is a **thrust-vectoring** thruster for the side and vertical movement, about 170° up and down and as wide sideways as it can go without the plume reaching the blade or the other side, its plume following the strafe and heave asked. (4) **Both shuttles** (Centauri, Kestrel) get up and down thruster ports on the wing roots. (5) Both craft are finished: **not** in the player's line-up, parked in the ship showcase, and standard civilian traffic in free flight, each of its own faction (Centauri, Minbari; Q24) |
 | Q98 | Agamemnon-pattern skin (2026-11-26) | The Omega's base skin is the **Agamemnon pattern** generated in code (Q83, Q87: the base colour wandering over big plates, darker patches at two or three sizes, a few proud plates, fine scratches; `styles/patch_skin.PatchSkin`, shared from the Asimov's), in the Omega's greys, **instead of the Hyperion mosaic** (overrides Q64 for the Omega; its paint layout stays: name board, hull letter, emblem, red fittings, warning stickers). It is the **default skin for every new hull**; the existing hulls move to it in T88. The Agamemnon files (Chris Kuhn's, Creative Commons per the maintainer) are a style reference only, never copied or sampled |
+| Q99 | Centauri shuttle and Minbari Flyer land in B5's main docking bay (2026-11-26) | Both join Babylon 5's steady civilian stream (the station run) and **land in the main docking bay**, arriving through the gate and leaving back out like the other docking civilians (replaces Q97's "not docking, flying out to the gate"). The Centauri shuttle's **wing fold is 110 degrees up** (was 72; `data/ships/wing_folds.json`; T17 keeps the animation): 5.7 m clear of the mouth level and centred, 3.6 m off by 2 m and 2 degrees, the tips 1.4 m apart over the spine. It folds on the approach, **finished before the mouth**, and spreads once clear after leaving (`station_bay` in the fold's data; `StationTraffic`); the Flyer docks as it flies (10.9 m clear). **Seeded picks:** both stay `traffic_only` with `docking: tunnel`, so `DockingPlan.tunnel_types()` and every scenario that does not pool them draw as before (`test_ship_catalog_recorded.gd` unchanged); only a scenario whose encounter pools list them (free flight) draws them for the bay (`tunnel_types(pools)`), so only free flight's own run draws change |
 
 ## The hulls
 
@@ -1810,6 +1811,32 @@ On top of it:
   files, and the parity files `test_brain_parity`, `test_brain_think_parity`, `test_flight_parity_fight`, `test_parity_fixture`,
   `test_weapon_rows_battle`, all against the committed recordings); compile check clean. Shots (GPU):
   `references/screenshots/M10-T58 Centauri shuttle and Minbari Flyer/followup/`; how they look and how the Flyer fights is (H).
+- **T58 bay docking (2026-11-26, Q99), in progress until the maintainer closes it.** Both craft land in Babylon 5's main
+  docking bay. Catalogue: `docking: tunnel` beside `traffic_only`; `DockingPlan.tunnel_types()` leaves a `traffic_only` hull
+  out unless the scenario's encounter pools list it (`tunnel_types(pools)`, `ShipCatalogData.docking_pool`), so the recorded
+  lists and every older scenario's seeded docking hulls hold; `fits_tunnel` lets a named one dock anywhere. The console's
+  `traffic dock` and `undock` take a hull's name, and `dock <type> show` starts it on the lane and puts the player beside
+  the mouth (`info.md`). **Draws that change:** free flight only (it pools two of each): the run's docking and
+  undocking hulls (`"traffic hull"`, now one of seven, was five) and a convoy's shuttle or Flyer, which flies in to the bay as
+  itself instead of out to the gate; a convoy's other hulls and stand-ins draw from the catalogue's five as before.
+  **Fold:** the shuttle's `fold_deg` 110 (was 72) with `station_bay`; `StationTraffic._fold_step` folds it from 400 m short of
+  the mouth (`FOLD_IN_M`; the fold takes 4 s, the lane flies 20 m/s there), keeps it folded in the void, starts an undocking one
+  folded and spreads it 120 m out (`FOLD_OUT_M`); a ship going back to its pool is spread. Collision follows the fold
+  (`WingFoldNode`, T53). **Clearance** (`test_ea_craft_bay_clearance.py`, the wings' boxes turned by the data's angle): shuttle
+  5.69 m level and centred, 3.59 m off by 2 m and 2 degrees (spread: 0.88 m and touching); Flyer 10.92 and 8.61 m. Folded, the
+  wings' boxes are 1.40 m apart over the spine (the meshes' tips 1.5 m), 3.9 m above it; the wing meshes meet the hull only at
+  their roots, as spread (the fat boxes of spans 2 and 3 overlap the louvres' box by 0.75 m, harmless inside one body). At
+  115 degrees the wings would touch each other. **Other bays:** the Hyperion's shuttle bay (28 x 24 m mouth) never took it: the
+  body alone is 30.0 m wide. The Asimov's hexagonal mouth passes the folded shuttle (30.5 x 15.3 m) with 3.2 m to spare
+  (1.4 m at 72 degrees), but its two berths are the crew shuttle's and the Kestrel's (Q96). Tests on a staged copy:
+  `tests/integration/test_station_visitors.gd` (4: each docks untouched and reaches the inside state, the shuttle folded at
+  the mouth and all the way in; one coming out stays folded until its tail is out and spreads soon after; `dock show`) and
+  `test_station_run.gd` (11: a convoy's visitors fly in as themselves; the run draws them only where pooled), with the
+  station traffic, docking, liner, encounter, wing fold, craft and `test_ship_catalog*` files; Python
+  `test_ea_craft_bay_clearance` 2. Shots (GPU, `forward_plus`, 140 fps):
+  `references/screenshots/M10-T58 Centauri shuttle and Minbari Flyer/b5bay/` (the shuttle folded on its approach and entering
+  the bay, the Flyer likewise); how it looks is (H). **Found on the way:** `set settings.show_hud false` freezes the frame the
+  console's `screenshot` saves (the shots keep the HUD); not T58's, for the maintainer to place.
 - **T51 and T55 done (2026-11-21).** `ea_panama` (180 m, 3 862 triangles) and `ea_construction_tender` (50 m, 69.7 m
   across its boom, 11 712 triangles): `tools/procgen/assets/ea_work_ships.py`, `parts/ea_panama.py`,
   `parts/ea_construction_tender.py`, `styles/ea_work_ships.py`, through the shuttles' `build_craft`; as built in

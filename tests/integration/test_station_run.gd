@@ -257,8 +257,8 @@ func test_an_encounter_convoy_joins_the_run_past_the_radar_heading_for_the_stati
 	assert_eq(colour, Factions.CIVILIAN_COLOR, "drawn as a civilian, not an ally")
 
 
-func test_a_convoys_visitors_that_do_not_dock_fly_out_to_the_gate_as_themselves() -> void:
-	# M10 Q97: the Centauri shuttle and the Flyer are free flight's traffic, each of its own faction.
+func test_a_convoys_visitors_fly_in_to_the_docking_bay_as_themselves() -> void:
+	# M10 Q97, Q99: the Centauri shuttle and the Flyer are free flight's traffic, each of its own faction, and land in the bay.
 	if not await _start():
 		pending("the babylon5_station asset is not generated")
 		return
@@ -278,13 +278,29 @@ func test_a_convoys_visitors_that_do_not_dock_fly_out_to_the_gate_as_themselves(
 	var factions: Dictionary = {&"minbari_flyer": &"minbari", &"centauri_shuttle": &"centauri"}
 	for k: int in convoy.size():
 		var c: Combatant = convoy[k]
-		assert_eq(main.ships.type_of(c), e.types[k], "no tunnel hull stands in for it")
+		assert_eq(main.ships.type_of(c), e.types[k], "no other tunnel hull stands in for it")
 		assert_eq(c.faction, factions[e.types[k]], "of its own people")
 		assert_eq(c.targetable.role, Targetable.Role.CIVILIAN)
-		assert_eq(traffic.state_of(c), &"leave", "%s is on its way out" % c.display_name)
+		assert_eq(traffic.kind_of(c), &"dock", "%s is bound for the docking bay" % c.display_name)
+		assert_eq(traffic.state_of(c), &"transit", "%s is on its way in" % c.display_name)
 		assert_lt(_off_run(c.ship.global_position), ON_RUN_M, "%s on the run" % c.display_name)
-		assert_gt(_heading(c).dot((main.gates.gate().global_position - c.ship.global_position).normalized()), 0.9,
-				"%s flies for the gate" % c.display_name)
+		assert_gt(_heading(c).dot((_next_waypoint(c) - c.ship.global_position).normalized()), 0.9,
+				"%s flies for the station" % c.display_name)
+
+
+func test_the_runs_docking_draws_take_the_visitors_only_where_the_scenario_pools_them() -> void:
+	if not await _start():
+		pending("the babylon5_station asset is not generated")
+		return
+	var traffic: StationTraffic = main.traffic
+	var drawn: Dictionary = {}
+	for index: int in 60:
+		drawn[traffic._free_hull(traffic._tunnel_types(), hash([main.scenario_seed, "traffic hull", index]))] = true
+	for type: StringName in [&"centauri_shuttle", &"minbari_flyer"]:
+		assert_true(drawn.has(type), "free flight's run sends %s to the docking bay" % type)
+		assert_false(DockingPlan.tunnel_types().has(type), "a scenario that does not pool %s draws as it always did" % type)
+	for type: StringName in DockingPlan.tunnel_types():
+		assert_true(drawn.has(type), "%s still docks" % type)
 
 
 func test_an_encounter_raid_drawn_for_the_station_goes_for_it_and_scrambles_its_wing() -> void:

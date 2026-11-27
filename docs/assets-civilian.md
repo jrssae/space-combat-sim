@@ -831,8 +831,9 @@ gaps: the Flyer's pods (boxed at 0.8 of their size), blades (their ends, root lo
 `gravitic` on a fighter or civilian ship now means its main nozzles draw no plume (`ThrusterVisuals.main_plumes`); it flies by
 its own thrust numbers like any other. Both craft are catalogue civilians (`centauri`, `minbari`), `finalized` and parked in the ship
 line-up, and `traffic_only` (Q97): out of `ShipCatalog.civilian_types`, so the scenarios made before them keep their seeded
-hulls, and in the traffic of a scenario whose encounter pools list them (free flight: two of each). They do not dock at
-Babylon 5; on the station's run they fly out to the gate. The shuttle flies the `civilian` profile; the Flyer flies
+hulls, and in the traffic of a scenario whose encounter pools list them (free flight: two of each). Both land in
+Babylon 5's main docking bay (Q99, `docking: tunnel`): drawn for it only where pooled, the shuttle with its wings folded
+110 degrees up from before the mouth until it is clear again (`wing_folds.json`, `StationTraffic`). The shuttle flies the `civilian` profile; the Flyer flies
 `civilian_armed`: it runs first and turns on one pursuer it cannot shake (after 8 s, the pursuer no more than three times its
 size, its own hull above half). The Flyer's bow pods open forward in modelled holes with dark insides (the inner pods' a
 rounded rectangle). An `rcs[]` port may carry `radius` (m), the tag `retro` (it draws its pod's braking thrust in place of the

@@ -78,6 +78,11 @@ func test_a_traffic_only_civilian_joins_the_traffic_of_a_scenario_that_pools_it(
 	assert_eq(data.traffic_pool({}), data.civilian_pool(), "a scenario that pools none draws as it always did")
 	assert_eq(data.traffic_pool({&"b_hauler": 0}), data.civilian_pool(), "an empty pool is no pool")
 	assert_eq(data.traffic_pool({&"b_hauler": 2}), [&"b_hauler", &"d_hauler"] as Array[StringName], "pooled: it joins, in file order")
+	# M10 Q99: it docks only where it is pooled, so the older scenarios' seeded docking hulls hold.
+	assert_eq(_parse(GOOD).docking_pool("tunnel", {}), [&"b_hauler", &"d_hauler"] as Array[StringName])
+	assert_eq(data.docking_pool("tunnel", {}), [&"d_hauler"] as Array[StringName], "not drawn for the bay where no pool lists it")
+	assert_eq(data.docking_pool("tunnel", {&"b_hauler": 1}), [&"b_hauler", &"d_hauler"] as Array[StringName], "drawn where it is pooled")
+	assert_eq(data.ids_where("docking", "tunnel"), [&"b_hauler", &"d_hauler"] as Array[StringName], "it fits the bay all the same")
 	assert_string_contains(_parse(marked.replace('"traffic_only": true', '"traffic_only": "yes"')).error, "traffic_only")
 
 

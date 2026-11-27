@@ -1,7 +1,7 @@
 class_name WingFold
 extends RefCounted
 ## How an atmospheric shuttle folds its wings for a bay (M10-T17, Q73, Q93: the Kestrel's fold up 90 degrees at their root
-## joints, the Centauri shuttle's likewise): the fold's numbers (`data/ships/wing_folds.json`) and the pose of each wing at a
+## joints, the Centauri shuttle's 110, Q99): the fold's numbers (`data/ships/wing_folds.json`) and the pose of each wing at a
 ## share of the fold. Pure; `WingFoldNode` draws it from the hull's break-up chunks, the wings already being their own meshes.
 ##
 ## A wing turns about its root joint (its chunk's `joint`) round the hull's length (+Z), its tip going up: the starboard wing
@@ -15,7 +15,7 @@ static var _data: Dictionary = {}
 static var _loaded: bool = false
 
 
-## The fold of craft `asset` (`{fold_deg, fold_s}`), empty when it does not fold.
+## The fold of craft `asset` (`{fold_deg, fold_s, station_bay}`), empty when it does not fold.
 static func of_asset(asset: String) -> Dictionary:
 	if not _loaded:
 		_loaded = true
@@ -24,6 +24,11 @@ static func of_asset(asset: String) -> Dictionary:
 		_data = parsed if parsed is Dictionary else {}
 	var found: Variant = _data.get(asset)
 	return (found as Dictionary).duplicate() if found is Dictionary else {}
+
+
+## Whether craft `asset` flies into the station's docking bay with its wings folded (`station_bay`): it does not fit it spread.
+static func folds_for_station(asset: String) -> bool:
+	return bool(of_asset(asset).get("station_bay", false))
 
 
 ## Whether a hull's `chunks` (`hardpoints.json`) have both wings as their own pieces, with joints.

@@ -12,7 +12,8 @@ extends RefCounted
 ##   `CapitalStandin` until capitals get their own).
 ## - `name`: what the target preview calls the asset (the first entry of an asset that has one).
 ## - `look_sheet`: `pool` parks a pooled ship of this type for the asset's look sheet, `hull` the bare hull (`LookScene`).
-## - `docking`: where it docks at the station: `tunnel` (the main docking bay) or `cargo_bay` (`DockingPlan`).
+## - `docking`: where it docks at the station: `tunnel` (the main docking bay) or `cargo_bay` (`DockingPlan`). A `traffic_only`
+##   hull docks only in a scenario that pools it (`docking_pool`).
 ## - `callsign`: the name an encounter or station civilian of this type calls in under.
 ## - `random_pool`: false keeps a civilian out of the hulls random traffic, encounters and `random_civilian` spawns draw from
 ##   (default true); a mission names such a hull itself (the shuttles, M10-T57).
@@ -99,6 +100,18 @@ func traffic_pool(pooled: Dictionary) -> Array[StringName]:
 	var out: Array[StringName] = []
 	for e: Dictionary in _entries:
 		if e["role"] != "civilian" or not bool(e.get("random_pool", true)):
+			continue
+		if not bool(e.get("traffic_only", false)) or int(pooled.get(StringName(e["id"]), 0)) > 0:
+			out.append(StringName(e["id"]))
+	return out
+
+
+## The hulls that dock at `value` (`docking`), in file order: a `traffic_only` hull only when `pooled` (type -> count) lists it,
+## so the scenarios made before it keep their seeded docking hulls (M10 Q99).
+func docking_pool(value: String, pooled: Dictionary) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for e: Dictionary in _entries:
+		if str(e.get("docking", "")) != value:
 			continue
 		if not bool(e.get("traffic_only", false)) or int(pooled.get(StringName(e["id"]), 0)) > 0:
 			out.append(StringName(e["id"]))

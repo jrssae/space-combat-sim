@@ -50,9 +50,15 @@ var away: Vector3 = Vector3.FORWARD
 
 
 ## Hulls that fit the docking bay's mouth (M7-T25: a band 73 x 17 m across a core 45 x 30 m) with room to spare, lying square in it;
-## every other civilian holds outside (the Saturns never enter). The catalogue's `docking: tunnel` entries, in its order.
-static func tunnel_types() -> Array[StringName]:
-	return ShipCatalog.types_where("docking", "tunnel")
+## every other civilian holds outside (the Saturns never enter). The catalogue's `docking: tunnel` entries, in its order; a
+## `traffic_only` one (the Centauri shuttle, the Minbari Flyer, M10 Q99) only for a scenario whose encounter `pooled` list it.
+static func tunnel_types(pooled: Dictionary = {}) -> Array[StringName]:
+	return ShipCatalog.docking_types("tunnel", pooled)
+
+
+## Whether a hull of `type` may fly the docking lane when it is named, whatever the scenario pools.
+static func fits_tunnel(type: StringName) -> bool:
+	return ShipCatalog.entry_text(type, "docking") == "tunnel"
 
 
 ## Every Saturn that comes to the cargo bay (M7-T30: each by its own pods or tanks): the catalogue's `docking: cargo_bay` entries.

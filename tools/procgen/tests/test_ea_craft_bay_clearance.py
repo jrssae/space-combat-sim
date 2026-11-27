@@ -1,5 +1,6 @@
-"""The resized EA craft through Babylon 5's main docking bay (M10-T70, the Panama T71): each hull's real collision boxes, swept along the
-mouth's axis (the same x, y silhouette all the way), must stay clear of the mouth's outline with a margin to spare."""
+"""The resized EA craft through Babylon 5's main docking bay (M10-T70, the Panama T71), and the Centauri shuttle and the Minbari
+Flyer that dock there (M10-T58, Q99): each hull's real collision boxes, swept along the mouth's axis (the same x, y silhouette all
+the way), must stay clear of the mouth's outline with a margin to spare. The Centauri shuttle flies in with its wings folded."""
 from __future__ import annotations
 
 import itertools
@@ -11,23 +12,40 @@ import numpy as np
 
 from tools.procgen.parts import station_detail as sd
 
-ROOT = Path(__file__).resolve().parents[3] / "assets" / "generated"
+REPO = Path(__file__).resolve().parents[3]
+ROOT = REPO / "assets" / "generated"
+FOLDS = REPO / "data" / "ships" / "wing_folds.json"
 # Craft id -> least clearance (m) wanted when flown level and centred, and when off by the offsets below.
 CRAFT = {"ea_shuttle": (9.0, 7.0), "ea_atmo_shuttle": (5.0, 2.0), "ea_construction_tender": (12.0, 10.0),
-         "ea_panama": (6.0, 3.5)}  # the Panama at 20 m tall (M10-T71)
+         "ea_panama": (6.0, 3.5),  # the Panama at 20 m tall (M10-T71)
+         "centauri_shuttle": (5.5, 3.5), "minbari_flyer": (10.5, 8.5)}  # the shuttle folded (Q99); the Flyer as it flies
+# Craft that enter with their wings folded up by their `wing_folds.json` angle.
+FOLDED = ("centauri_shuttle",)
 OFFSETS = [(dx, dy) for dx in (-2.0, 0.0, 2.0) for dy in (-2.0, 0.0, 2.0)]
 ROLLS_DEG = (-2.0, 0.0, 2.0)
 
 
-def box_shadows(path: Path) -> list[np.ndarray]:
-    """Each collision box seen from ahead: its eight corners projected on x, y (the swept hull's outline pieces)."""
+def fold_deg(craft: str) -> float:
+    return float(json.loads(FOLDS.read_text(encoding="utf-8"))[craft]["fold_deg"])
+
+
+def box_shadows(path: Path, fold: float = 0.0) -> list[np.ndarray]:
+    """Each collision box seen from ahead: its eight corners projected on x, y (the swept hull's outline pieces). ``fold``
+    turns the wings' boxes up about their root joints by that many degrees (`WingFold.wing_turn`)."""
     shadows = []
-    for c in json.loads(path.read_text())["collision"]:
+    data = json.loads(path.read_text())
+    joints = {c["name"]: np.array(c["joint"][:2]) for c in data.get("chunks", []) if c["name"].startswith("wing_") and "joint" in c}
+    for c in data["collision"]:
         basis = np.array([c["basis"]["x"], c["basis"]["y"], c["basis"]["z"]]).T
         if c["type"] == "box":
             half = np.array(c["size"]) / 2.0
             corners = [np.array(c["position"]) + basis @ (half * np.array(s)) for s in itertools.product((-1, 1), repeat=3)]
-            shadows.append(np.array(corners)[:, :2])
+            seen = np.array(corners)[:, :2]
+            wing = next((j for name, j in joints.items() if c["name"].startswith(name)), None) if fold else None
+            if wing is not None:
+                a = np.radians(fold) * (1.0 if wing[0] >= 0.0 else -1.0)
+                seen = (seen - wing) @ np.array([[np.cos(a), -np.sin(a)], [np.sin(a), np.cos(a)]]).T + wing
+            shadows.append(seen)
         elif c["type"] == "capsule":
             # Round caps seen from the side: a polygon just outside each end circle keeps the check on the safe side.
             axis = basis[:, "xyz".index(c["axis"])] * (c["height"] / 2.0 - c["radius"])
@@ -94,11 +112,27 @@ class TestEaCraftThroughTheMainBay(unittest.TestCase):
             path = ROOT / craft / "hardpoints.json"
             if not path.exists():
                 self.skipTest(f"{craft} is not built")
-            shadows = box_shadows(path)
+            shadows = box_shadows(path, fold_deg(craft) if craft in FOLDED else 0.0)
             level, _ = clearance(shadows, outline)
             self.assertGreaterEqual(level, centred, f"{craft} flown level and centred")
             worst = min(clearance(shadows, outline, dx, dy, roll)[0] for (dx, dy), roll in itertools.product(OFFSETS, ROLLS_DEG))
             self.assertGreaterEqual(worst, shifted, f"{craft} off by up to 2 m and 2 degrees of roll")
+
+    def test_the_centauri_shuttles_folded_wings_stand_clear_of_each_other(self) -> None:
+        """Folded 110 degrees up (Q99) the tips nearly meet over the spine: they must not cross it."""
+        path = ROOT / "centauri_shuttle" / "hardpoints.json"
+        if not path.exists():
+            self.skipTest("centauri_shuttle is not built")
+        self.assertEqual(fold_deg("centauri_shuttle"), 110.0)
+        names = [c["name"] for c in json.loads(path.read_text())["collision"]]
+        shadows = box_shadows(path, fold_deg("centauri_shuttle"))
+        right = np.concatenate([s for n, s in zip(names, shadows, strict=True) if n.startswith("wing_r")])
+        left = np.concatenate([s for n, s in zip(names, shadows, strict=True) if n.startswith("wing_l")])
+        self.assertGreaterEqual(float(right[:, 0].min()), 0.5, "the starboard wing stays on its side of the spine")
+        self.assertLessEqual(float(left[:, 0].max()), -0.5, "and the port wing on its own")
+        spine_top = max(float(s[:, 1].max()) for n, s in zip(names, shadows, strict=True) if n.startswith("spine"))
+        over = np.concatenate([right, left])
+        self.assertGreater(float(over[np.abs(over[:, 0]) < 3.0][:, 1].min()), spine_top + 1.0, "the tips pass over the spine")
 
 
 if __name__ == "__main__":

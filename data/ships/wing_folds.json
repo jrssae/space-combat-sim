@@ -1,5 +1,5 @@
 {
- "_doc": "M10-T17 (Q73, Q93): atmospheric shuttles that fold their wings to fit a bay (WingFold, WingFoldNode). Each wing chunk (wing_l, wing_r in its hardpoints.json chunks) turns up about its root joint round the hull's length by fold_deg, over fold_s. The Kestrel's 90 degrees match the Hyperion's shuttle bay pose (T22); the Centauri shuttle's upswept wings (they rise about 18 degrees to their tips) fold 72 degrees, standing them upright like the Kestrel's.",
+ "_doc": "M10-T17 (Q73, Q93): atmospheric shuttles that fold their wings to fit a bay (WingFold, WingFoldNode). Each wing chunk (wing_l, wing_r in its hardpoints.json chunks) turns up about its root joint round the hull's length by fold_deg, over fold_s. The Kestrel's 90 degrees match the Hyperion's shuttle bay pose (T22); the Centauri shuttle's upswept wings fold 110 degrees (M10-T58, Q99), their tips nearly meeting over the spine, so it fits Babylon 5's main docking bay: station_bay makes the station's traffic fold it on the way in and spread it once out (StationTraffic).",
  "ea_atmo_shuttle": {"fold_deg": 90.0, "fold_s": 4.0},
- "centauri_shuttle": {"fold_deg": 72.0, "fold_s": 4.0}
+ "centauri_shuttle": {"fold_deg": 110.0, "fold_s": 4.0, "station_bay": true}
 }
