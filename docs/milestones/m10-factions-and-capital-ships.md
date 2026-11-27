@@ -450,7 +450,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T13 | D | Interceptors: the native kernel against bolts and missiles | T12 | Opus | done |
 | T14 | D | Capital turrets and missiles on the native rows | T07, T03 | Opus | done |
 | T15 | D | Mines and minefields: native rows, scenario placement, the falloff blast | T09, T02 | Sonnet | in progress |
-| T16 | E | The `capital` brain and fighters' attacks on capitals; the capital helm (steering, today ~52 µs per capital per tick in GDScript) moves into the native brain (Q70) | T12, T14 | Opus | in progress |
+| T16 | E | The `capital` brain and fighters' attacks on capitals; the capital helm (steering, today ~52 µs per capital per tick in GDScript) moves into the native brain (Q70) | T12, T14 | Opus | done |
 | T17 | E | Carriers launch fighters from bays and tubes; the wing-fold animation of the Kestrel and the Centauri shuttle (Q93) | T07, T16 | Opus | in progress |
 | T18 | E | HUD and targeting: subsystems in the target menu's second level and on the target box | T08 | Sonnet | done |
 | T49 | E | The player at a capital's helm (Q15) | T16, T18, T19 | Opus | not needed (moved to M11) |
