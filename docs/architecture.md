@@ -5169,12 +5169,15 @@ native/src/voice_kernels.rs, voice_rows.rs   ScsSimCore.ships_near(centre, radiu
 - **The re-rank (T28).** Four times a second the director asks the core for the ships near the listener and offers them
   until the cap is spent, so its work follows the ships in earshot, not the ships in play. The rows are the tick's, so a
   candidate's node is checked before it is offered. Without a core only the player's voices sound.
-- **Our own gun (M10-T87, Q82; awaiting the maintainer's A/B).** `tools/procgen/assets/sfx_gun.py` makes the Starfury's shot
-  as noise shaped by a 20-band x 16-moment level table (`audio.spectral_noise`), fitted with `tools/procgen/core/sound_match.py`
-  (log-mel similarity, loudness envelope correlation, audible length) against the local reference clip; `WEAPONS` is the
-  proposed pitched-down, lengthened family (raiders +3 semitones). `python3 -m tools.procgen.assets.sfx_gun <dir>` renders the
-  listening set. In play a ship's next shot fades its last one's tail out in 40 ms (`ShotTails`, `src/audio/shot_tails.gd`;
-  `AudioDirector.play_shot(..., owner)`), so a ship holds at most two voices. `pulse_fire` stays until the A/B is approved.
+- **Our own gun (M10-T87, Q82; approved by the maintainer's A/B).** `tools/procgen/assets/sfx_gun.py` makes the Starfury's
+  shot as noise shaped by level maps (`audio.spectral_noise`: 14 bands under 2 kHz, the top 2.5-11 kHz finer), a sparkle of
+  short sine grains and a faint ping, fitted with `tools/procgen/core/sound_match.py` (log-mel similarity, the top in the
+  middle, loudness envelope correlation, audible length) against the local reference clip. `sfx_combat` builds it as
+  `pulse_fire` and its family by `sfx_gun.WEAPONS`: `raider_fire` +3 semitones, `turret_fire`, `gun_light`, `gun_medium`,
+  `gun_railgun`, `gun_heavy` pitched down and lengthened; `interceptor_fire` is the old light turret pulse, kept for the
+  batteries. `GunSounds` maps a weapon to its shot (particle cannons, beams, missiles: none); `CapitalGuns.shot_fired` and the
+  grid's `StationGrid.SOUND_NAME` feed it. In play a ship's (a turret's, a grid mount's) next shot fades its last tail out in
+  40 ms (`ShotTails`; `AudioDirector.play_shot(..., owner)`), so each holds at most two voices; every shot is ±4 % off pitch.
 - **Culling (T37)** is §18.26.
 - **One loudness reference and the mix (M8-T12).** Every generated sound is written at -20 LUFS (BS.1770 K-weighting, 50 ms
   blocks every 12.5 ms, gated at -70 LUFS and 10 LU under; a loop read circularly), never above -1 dBFS:

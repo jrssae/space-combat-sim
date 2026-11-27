@@ -4,8 +4,9 @@ extends Node3D
 ## `VOICES` `AudioStreamPlayer3D`s (when all are busy the oldest voice is stolen), engine voices on the ships, and a few 2D
 ## players for warnings. Space is audible, as in the show (Q5): shots, hits and explosions play positionally, outside the ship.
 ##
-## Hooks (`connect_combat`, `watch_ship`): cannon fire (`pulse_fire` for the Starfury's side, `raider_fire` for the others),
-## a defensive turret's shot (`turret_fire`, M5-T21),
+## Hooks (`connect_combat`, `watch_ship`): cannon fire (`pulse_fire` for the Starfury's side, `raider_fire` for the others, our
+## own shot and its +3 semitones, M10-T87), a defensive turret's shot (`turret_fire`, M5-T21), a capital's or the grid's bolt
+## guns (`gun_light`, `gun_medium`, `gun_railgun`, `gun_heavy` by `GunSounds`), the interceptors' pulse (`interceptor_fire`),
 ## hits (`hit_hull`), destruction (`explosion`, a mine's too, M7-T64), the player's hull below 25 % (`warning_beep`, repeating)
 ## and a new selection (`target_blip`).
 ##
@@ -35,7 +36,9 @@ extends Node3D
 const SOUND_DIR: String = "res://assets/generated/sfx_combat"
 const UI_SOUND_DIR: String = "res://assets/generated/sfx_ui"
 const UI_SOUND_NAMES: Array[StringName] = [&"ui_move", &"ui_accept", &"ui_back", &"radio_open", &"radio_close"]
-const SOUND_NAMES: Array[StringName] = [&"pulse_fire", &"raider_fire", &"turret_fire", &"hit_hull", &"explosion", &"main_burst", &"rcs_burst", &"warning_beep", &"target_blip"]
+const SOUND_NAMES: Array[StringName] = [&"pulse_fire", &"raider_fire", &"turret_fire", &"gun_light", &"gun_medium",
+		&"gun_railgun", &"gun_heavy", &"interceptor_fire", &"hit_hull", &"explosion", &"main_burst", &"rcs_burst", &"warning_beep",
+		&"target_blip"]
 ## The engine bursts, looped for as long as their thrusters fire.
 const LOOPS: Array[StringName] = [&"main_burst", &"rcs_burst"]
 const BUS: StringName = AudioBuses.SFX  ## the bus the 3D voices and the engines play on
@@ -357,7 +360,7 @@ func watch_ship(combatant: Combatant) -> void:
 		# `shot_fired` sounds on both bolt paths; `projectile_fired` is silent for the AI cannons' rows (M4-T35).
 		var owner: int = combatant.get_instance_id()
 		combatant.cannon.shot_fired.connect(func(_index: int, at: Vector3) -> void:
-			play_shot(shot, at, 0.0, randf_range(0.96, 1.04), owner))
+			play_shot(shot, at, 0.0, GunSounds.jitter(), owner))
 	if combatant.ship.is_node_ready():
 		_watch_turrets(combatant)
 	else:
@@ -368,45 +371,59 @@ func watch_ship(combatant: Combatant) -> void:
 # A turret's shot sounds where it leaves the barrel (M5-T21).
 func _watch_turrets(combatant: Combatant) -> void:
 	for mount: TurretMount in combatant.turrets:
-		if not mount.shot_fired.is_connected(_on_turret_fired):
-			mount.shot_fired.connect(_on_turret_fired)
+		var sound: Callable = _on_turret_fired.bind(mount.get_instance_id())
+		if not mount.shot_fired.is_connected(sound):
+			mount.shot_fired.connect(sound)
 
 
-func _on_turret_fired(at: Vector3) -> void:
-	play_shot(&"turret_fire", at, 0.0, randf_range(0.97, 1.03))
+func _on_turret_fired(at: Vector3, mount_id: int) -> void:
+	play_shot(&"turret_fire", at, 0.0, GunSounds.jitter(), mount_id)
 
 
-## Gives the station's defense grid its sounds (M7-T07): the turret shot pitched and levelled per kind, at the muzzle for every
-## shot (a battery's pulse too, M7-T41) and at the meeting when a pulse takes a projectile.
+## Gives the station's defense grid its sounds (M7-T07): each kind's shot (`StationGrid.SOUND_NAME`, M10-T87) pitched and
+## levelled per kind, at the muzzle for every shot (a battery's pulse too, M7-T41) and at the meeting when a pulse takes a
+## projectile. Each mount is one voice: its next shot fades its last (`ShotTails`).
 func watch_grid(grid: StationGrid) -> void:
 	if grid == null:
 		return
 	for mount: TurretMount in grid.mounts:
 		var kind: StationGrid.Kind = mount.grid_kind as StationGrid.Kind
-		var sound: Callable = _on_grid_sound.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind])
+		var args: Array = [StationGrid.SOUND_NAME[kind], StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind],
+				mount.get_instance_id()]
+		var sound: Callable = _on_grid_sound.bindv(args)
 		if not mount.shot_fired.is_connected(sound):
 			mount.shot_fired.connect(sound)
-			mount.intercepted.connect(_on_grid_intercept.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind]))
+			mount.intercepted.connect(_on_grid_intercept.bindv(args))
 
 
-## Gives the capitals' interceptor batteries their sound (M10-T13): the grid battery's, at the muzzle for every pulse and at
-## the meeting when a pulse takes a shot.
+## Gives the capitals' guns their sounds: each bolt gun's shot by its weapon (`GunSounds`, M10-T87; a ship is one voice, its
+## next shot fading its last), and the interceptor batteries the grid battery's pulse (M10-T13), at the muzzle for every pulse
+## and at the meeting when a pulse takes a shot.
 func watch_capital_guns(guns: CapitalGuns) -> void:
 	if guns == null:
 		return
+	if not guns.shot_fired.is_connected(_on_capital_shot):
+		guns.shot_fired.connect(_on_capital_shot)
 	var kind: StationGrid.Kind = StationGrid.Kind.INTERCEPTOR
-	var sound: Callable = _on_grid_sound.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind])
+	var args: Array = [StationGrid.SOUND_NAME[kind], StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind], 0]
+	var sound: Callable = _on_grid_sound.bindv(args)
 	if not guns.pulse_fired.is_connected(sound):
 		guns.pulse_fired.connect(sound)
-		guns.pulse_met.connect(_on_grid_intercept.bind(StationGrid.SOUND_DB[kind], StationGrid.SOUND_PITCH[kind]))
+		guns.pulse_met.connect(_on_grid_intercept.bindv(args))
 
 
-func _on_grid_sound(at: Vector3, volume_db: float, pitch: float) -> void:
-	play_shot(&"turret_fire", at, volume_db, pitch * randf_range(0.97, 1.03))
+func _on_capital_shot(at: Vector3, weapon: String, ship_id: int) -> void:
+	var sound: StringName = GunSounds.of_weapon(weapon)
+	if sound != &"":
+		play_shot(sound, at, GunSounds.volume_db(sound), GunSounds.jitter(), ship_id)
 
 
-func _on_grid_intercept(at: Vector3, _color: Color, volume_db: float, pitch: float) -> void:
-	_on_grid_sound(at, volume_db, pitch)
+func _on_grid_sound(at: Vector3, sound: StringName, volume_db: float, pitch: float, owner: int) -> void:
+	play_shot(sound, at, volume_db, pitch * GunSounds.jitter(), owner)
+
+
+func _on_grid_intercept(at: Vector3, _color: Color, sound: StringName, volume_db: float, pitch: float, owner: int) -> void:
+	_on_grid_sound(at, sound, volume_db, pitch, owner)
 
 
 ## Engine voices granted now.

@@ -1027,6 +1027,15 @@ comes from a pool with shared meshes and materials (roadmap L10).
   (`TONE_*`). New gate in `sound_match`: `high`, the log-mel correlation over bands from 3 kHz in 0.2-0.8 s, >= 0.95: v1 0.900,
   v2 0.958; log-mel 0.957 -> 0.963, envelope 0.999, length 1.080 s. Tonality at 2-10 kHz (flatness) 0.230 -> 0.191 (reference
   0.198). v2 listening set and an A | v1 | v2 spectrogram rendered; still awaiting the A/B.
+- **Shipped (2026-11-26, the maintainer approved v2).** `sfx_combat` (generator 8) builds `pulse_fire` from `sfx_gun` (the
+  built file at seed 42: log-mel 0.962, top-middle 0.955, envelope 0.999, 1.080 s), `raider_fire` +3 semitones at the same
+  length, and the approved family: `turret_fire` (defensive turrets) -2/x1.1, `gun_light` -3/x1.2, `gun_medium` (medium pulse
+  and plasma, fixed and swivel) -5/x1.4, `gun_railgun` -7/x1.25, `gun_heavy` (heavy plasma) -10/x1.8. The old light turret
+  pulse stays as `interceptor_fire` for the batteries (grid and capitals). Capital bolt guns had no shot sound: `CapitalGuns`
+  now signals `shot_fired` (muzzle, weapon, ship) and `GunSounds` maps the weapon (by kind, the railgun by id; particle cannons,
+  beams, missiles and interceptors none), louder by size (+1/+3/+3/+6 dB, as the grid's light and heavy). The grid plays
+  `StationGrid.SOUND_NAME` per kind (the heavy's 0.55 pitch is now in the sound). One voice per ship, turret or grid mount
+  (`ShotTails`); every shot ±4 % off pitch (`GunSounds.jitter`). `sfx` takes the new names (info.md).
 
 ### M10-T88 Agamemnon-pattern skin on the existing hulls (Q98)
 

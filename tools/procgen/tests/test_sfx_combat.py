@@ -1,4 +1,4 @@
-"""``sfx_combat`` (AC14 of M2, AC15 and AC19 of M5): nine sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, one loudness reference (M8-T12), seeded, the engine bursts
+"""``sfx_combat`` (AC14 of M2, AC15 and AC19 of M5, M10-T87): fourteen sounds, 48 kHz mono 16-bit, peaks at most -1 dBFS, one loudness reference (M8-T12), seeded, the engine bursts
 seamless; the guns, the impact and the bursts keep the shapes measured from the reference (docs/design-references.md "Combat
 sounds")."""
 
@@ -14,16 +14,18 @@ from typing import NamedTuple
 
 import numpy as np
 
-from tools.procgen.assets import sfx_combat
-from tools.procgen.core import audio, loudness
+from tools.procgen.assets import sfx_combat, sfx_gun
+from tools.procgen.core import audio, loudness, sound_match
 from tools.procgen.core import manifest as manifest_io
 from tools.procgen.core.context import BuildContext
 
 EXPECTED = {
-    "pulse_fire": 0.105, "raider_fire": 0.15, "turret_fire": 0.075, "hit_hull": 0.14, "explosion": 1.8,
+    "pulse_fire": 1.08, "raider_fire": 1.08, "turret_fire": 1.188, "gun_light": 1.296, "gun_medium": 1.512,
+    "gun_railgun": 1.35, "gun_heavy": 1.944, "interceptor_fire": 0.075, "hit_hull": 0.14, "explosion": 1.8,
     "main_burst": 4.0, "rcs_burst": 2.0, "warning_beep": 0.3, "target_blip": 0.08,
 }  # fmt: skip
 LOOPS = ("main_burst", "rcs_burst")
+REFERENCE = Path(__file__).resolve().parents[3] / "references" / "starfurybolt.wav"
 
 
 SR = audio.SAMPLE_RATE
@@ -158,11 +160,11 @@ class SfxCombatTests(unittest.TestCase):
     def tearDownClass(cls) -> None:
         cls._tmp.cleanup()
 
-    def test_all_nine_wavs_and_the_manifest_are_written(self) -> None:
+    def test_all_fourteen_wavs_and_the_manifest_are_written(self) -> None:
         names = {p.name for p in self.dir_a.iterdir()}
         self.assertEqual(names, {f"{n}.wav" for n in EXPECTED} | {"manifest.json"})
         self.assertEqual({p.name for p in self.out_a.files}, names)
-        self.assertEqual(self.out_a.summary, "9 sounds")
+        self.assertEqual(self.out_a.summary, "14 sounds")
 
     def test_the_manifest_is_an_audio_manifest(self) -> None:
         m = self.manifest
@@ -234,7 +236,7 @@ class SfxCombatTests(unittest.TestCase):
             freqs = np.fft.rfftfreq(len(samples), 1.0 / rate)
             return float(np.sum(mag * freqs) / np.sum(mag))
 
-        self.assertGreater(spectral_centroid("pulse_fire"), spectral_centroid("raider_fire"), "the raider's gun is lower")
+        self.assertLess(spectral_centroid("pulse_fire"), spectral_centroid("raider_fire"), "the raider's gun is higher (Q82)")
         # Measured as the energy median: the explosion's crackle and noise would swamp a spectral centroid.
         boom, clank = (audio.read_wav(self.dir_a / f"{name}.wav")[0] for name in ("explosion", "hit_hull"))
         self.assertLess(energy_median(boom), 0.25 * energy_median(clank), "an explosion is a low rumble, a clank bright")
@@ -243,40 +245,25 @@ class SfxCombatTests(unittest.TestCase):
         peak_freq = np.fft.rfftfreq(len(beep), 1.0 / rate)[int(np.argmax(np.abs(np.fft.rfft(beep))))]
         self.assertAlmostEqual(float(peak_freq), 880.0, delta=15.0)
 
-    def test_the_guns_and_the_impact_are_two_octaves_below_their_design(self) -> None:
+    def test_the_interceptor_and_the_impact_are_two_octaves_below_their_design(self) -> None:
         # M3-T15 (Q17), kept by M5 (D60): every frequency a quarter of the design's, the length unchanged (not a resample).
         self.assertEqual(sfx_combat.GUN_PITCH, 0.25)
-        for make in (sfx_combat.pulse_fire, sfx_combat.raider_fire, sfx_combat.turret_fire, sfx_combat.hit_hull):
+        for make in (sfx_combat.interceptor_fire, sfx_combat.hit_hull):
             low = make(np.random.default_rng(3))
             design = make(np.random.default_rng(3), pitch=1.0)
             self.assertEqual(len(low), len(design), make.__name__)
             ratio = energy_median(low) / energy_median(design)
             self.assertTrue(0.24 <= ratio <= 0.26, (make.__name__, ratio))
-        hold = slice(int(0.010 * SR), int(0.095 * SR))
-        for make in (sfx_combat.pulse_fire, sfx_combat.raider_fire):
-            low = spectrum_peaks(make(np.random.default_rng(3))[hold], -10.0)
-            design = [f for f, _ in spectrum_peaks(make(np.random.default_rng(3), pitch=1.0)[hold], -40.0)]
-            for f, _ in low:  # every strong partial sits at four times its frequency in the design
-                nearest = min(design, key=lambda d, f=f: abs(d - 4.0 * f))
-                self.assertAlmostEqual(nearest / (4.0 * f), 1.0, delta=0.005, msg=(make.__name__, f))
-        # Designed near the reference: the Starfury's main tone before the register is within 5 % of its 4.79 kHz.
-        design = sfx_combat.pulse_fire(np.random.default_rng(3), pitch=1.0)[hold]
-        self.assertAlmostEqual(spectrum_peaks(design, -1.0)[0][0], 4790.0, delta=0.05 * 4790.0)
 
-    def test_the_turret_shot_is_a_lighter_gun(self) -> None:
-        # M5-T21 (D61): built like the guns (a click, then a held FM cluster cut hard), shorter, higher and cleaner.
-        turret = audio.read_wav(self.dir_a / "turret_fire.wav")[0]
-        pulse = audio.read_wav(self.dir_a / "pulse_fire.wav")[0]
-        shot = shot_shape(turret)
+    def test_the_interceptor_pulse_is_a_short_light_gun(self) -> None:
+        # M5-T21's light turret shot (D61), the interceptors' own sound (M10-T87): a click, then a held FM cluster cut hard.
+        pulse = audio.read_wav(self.dir_a / "interceptor_fire.wav")[0]
+        shot = shot_shape(pulse)
         self.assertLessEqual(shot.attack_s, 0.005)
         self.assertTrue(0.050 <= shot.hold_s <= 0.070, shot)
-        self.assertLessEqual(shot.cut_s, 0.008, "a hard cut, as the Starfury's")
-        self.assertLess(len(turret), len(pulse), "shorter than the Starfury's shot")
-        hold = slice(int(0.008 * SR), int(0.055 * SR))
-        self.assertGreater(spectrum_peaks(turret[hold], -1.0)[0][0], spectrum_peaks(pulse[hold], -1.0)[0][0], "higher")
-        self.assertLessEqual(len(spectrum_peaks(turret[hold], -10.0)), len(spectrum_peaks(pulse[hold], -10.0)), "no denser")
-        click = high_band_energy(turret, 0.0, 0.003)
-        held = max(high_band_energy(turret, s, s + 0.003) for s in np.arange(0.010, 0.050, 0.003))
+        self.assertLessEqual(shot.cut_s, 0.008, "a hard cut")
+        click = high_band_energy(pulse, 0.0, 0.003)
+        held = max(high_band_energy(pulse, s, s + 0.003) for s in np.arange(0.010, 0.050, 0.003))
         self.assertGreaterEqual(click, 4.0 * held, "a click at the attack")
 
     def test_same_seed_gives_byte_identical_files(self) -> None:
@@ -309,92 +296,73 @@ class SfxCombatTests(unittest.TestCase):
         self.assertEqual(data["asset_id"], "sfx_combat")
 
 
-class GunAndImpactShapeTests(unittest.TestCase):
-    """M5-T18 (AC15, D60): the shapes the reference measured, in numbers. The reference's figures are before the register;
-    every frequency here is a quarter of them (``GUN_PITCH``)."""
+def gun_centroid(samples: np.ndarray, pitch: float = 1.0) -> float:
+    """Spectral centroid from 200 Hz to 11 kHz, both times ``pitch`` (the rumble under it sits at the edge of resolution)."""
+    freqs, power = power_spectrum(samples)
+    band = (freqs >= 200.0 * pitch) & (freqs <= 11000.0 * pitch)
+    return float(np.sum(power[band] * freqs[band]) / np.sum(power[band]))
+
+
+class GunTests(unittest.TestCase):
+    """M10-T87 (Q82): the Starfury's shot, our own match for the reference, and its family for the other guns."""
 
     @classmethod
     def setUpClass(cls) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             sfx_combat.build(BuildContext(Path(tmp), seed=42))
-            cls.wav = {name: audio.read_wav(Path(tmp) / f"{name}.wav")[0] for name in ("pulse_fire", "raider_fire", "hit_hull")}
-        cls.shot = {name: shot_shape(cls.wav[name]) for name in ("pulse_fire", "raider_fire")}
+            cls.wav = {name: audio.read_wav(Path(tmp) / f"{name}.wav")[0] for name in sfx_combat.GUNS}
+            cls.ref_dir = Path(tmp)
 
-    def _hold(self, name: str) -> np.ndarray:
-        return self.wav[name][int(0.010 * SR) : int((self.shot[name].hold_end_s - 0.005) * SR)]
+    @unittest.skipUnless(REFERENCE.exists(), "the reference clip is local only (references/, never committed)")
+    def test_the_built_shot_passes_the_95_percent_rule(self) -> None:
+        reference, rate = audio.read_wav(REFERENCE)
+        m = sound_match.compare(reference, self.wav["pulse_fire"], rate)
+        self.assertGreaterEqual(m.mel, 0.95)
+        self.assertGreaterEqual(m.high, 0.95, "the top in the middle of the shot (the maintainer's A/B, round 2)")
+        self.assertGreaterEqual(m.envelope, 0.95)
+        self.assertLessEqual(abs(m.length_ratio - 1.0), 0.05)
 
-    def test_the_starfury_shot_holds_flat_for_about_100_ms_then_cuts_hard(self) -> None:
-        # Reference: attack under 10 ms, a flat hold of 95-105 ms, then the next shot cuts in.
-        shot = self.shot["pulse_fire"]
-        self.assertLessEqual(shot.attack_s, 0.005)
-        self.assertTrue(0.090 <= shot.hold_s <= 0.110, shot)
-        self.assertLessEqual(shot.flatness_db, 1.0, "flat, not a decay")
-        self.assertLessEqual(shot.cut_s, 0.008, "a hard cut")
+    def test_every_gun_plays_its_row_of_the_family(self) -> None:
+        for name, weapon in sfx_combat.GUNS.items():
+            _, stretch, _ = sfx_gun.WEAPONS[weapon]
+            self.assertEqual(len(self.wav[name]), round(sfx_gun.DURATION_S * stretch * SR), name)
+        self.assertNotIn("particle", " ".join(sfx_combat.GUNS.values()), "particle cannons keep the beam sound")
 
-    def test_the_raider_shot_is_built_the_same_way_with_a_longer_hold_and_a_softer_cut(self) -> None:
-        shot, starfury = self.shot["raider_fire"], self.shot["pulse_fire"]
-        self.assertLessEqual(shot.attack_s, 0.005)
-        self.assertTrue(0.110 <= shot.hold_s <= 0.135, shot)
-        self.assertLessEqual(shot.flatness_db, 1.0)
-        self.assertTrue(0.012 <= shot.cut_s <= 0.040, shot)
-        self.assertGreaterEqual(shot.cut_s, 2.0 * starfury.cut_s, "a different cut from the Starfury's")
+    def test_the_raider_shot_is_three_semitones_up_and_as_long(self) -> None:
+        raider, starfury = self.wav["raider_fire"], self.wav["pulse_fire"]
+        self.assertEqual(len(raider), len(starfury))
+        up = 2.0 ** (3.0 / 12.0)
+        self.assertAlmostEqual(gun_centroid(raider, up) / gun_centroid(starfury), up, delta=0.05)
 
-    def test_each_shot_opens_with_a_click(self) -> None:
-        for name, shot in self.shot.items():
-            click = high_band_energy(self.wav[name], 0.0, 0.003)
-            starts = np.arange(0.010, shot.hold_end_s - 0.008, 0.003)
-            held = max(high_band_energy(self.wav[name], s, s + 0.003) for s in starts)
-            self.assertGreaterEqual(click, 4.0 * held, f"{name}: broadband at the attack, tonal in the hold")
+    def test_the_bigger_the_gun_the_lower(self) -> None:
+        order = ["raider_fire", "pulse_fire", "turret_fire", "gun_light", "gun_medium", "gun_railgun", "gun_heavy"]
+        medians = [gun_centroid(self.wav[name]) for name in order]
+        for (a, fa), (b, fb) in zip(zip(order, medians), zip(order[1:], medians[1:])):
+            self.assertGreater(fa, fb, f"{a} above {b}")
 
-    def test_the_pitch_holds_still_through_a_shot(self) -> None:
-        # Reference: constant within 10 Hz across a shot, 2.5 Hz after the register; no falling sweep.
-        for name in self.shot:
-            hold = self._hold(name)
-            early, late = hold[: len(hold) // 2], hold[len(hold) // 2 :]
-            main = spectrum_peaks(early, -1.0)[0][0]
-            later = min((f for f, _ in spectrum_peaks(late, -40.0)), key=lambda f: abs(f - main))
-            self.assertLessEqual(abs(later - main), 2.5, name)
-            self.assertAlmostEqual(power_centroid(late) / power_centroid(early), 1.0, delta=0.01, msg=name)
 
-    def test_the_starfury_gun_sits_in_the_reference_band_after_the_register(self) -> None:
-        # Reference: main tone 4.79 kHz, most energy at 4-6.5 kHz, more at 2.5-4 and 6.5-10 kHz, none below 1 kHz.
-        pulse = self.wav["pulse_fire"]
-        self.assertAlmostEqual(spectrum_peaks(self._hold("pulse_fire"), -1.0)[0][0], 1200.0, delta=60.0)
-        bands = [band_share(pulse, lo, hi) for lo, hi in ((625.0, 1000.0), (1000.0, 1625.0), (1625.0, 2500.0))]
-        self.assertEqual(int(np.argmax(bands)), 1, bands)
-        self.assertGreaterEqual(bands[1], 0.5)
-        self.assertGreaterEqual(sum(bands), 0.9)
-        self.assertLessEqual(band_share(pulse, 0.0, 250.0), 0.01, "no thump")
+class ImpactShapeTests(unittest.TestCase):
+    """M5-T18 (AC15, D60): the hit's shape, in numbers; its frequencies a quarter of the design (``GUN_PITCH``)."""
 
-    def test_the_raider_gun_is_lower_and_buzzier(self) -> None:
-        raider, pulse = self.wav["raider_fire"], self.wav["pulse_fire"]
-        self.assertLess(energy_median(raider), 0.7 * energy_median(pulse))
-        main = {name: spectrum_peaks(self._hold(name), -1.0)[0][0] for name in self.shot}
-        self.assertLess(main["raider_fire"], main["pulse_fire"])
-        dense = len(spectrum_peaks(self._hold("raider_fire"), -10.0))
-        self.assertGreaterEqual(dense, 2 * len(spectrum_peaks(self._hold("pulse_fire"), -10.0)), "a denser, buzzier cluster")
-        self.assertGreaterEqual(band_share(raider, 250.0, 1625.0), 0.85)
-        self.assertLessEqual(band_share(raider, 0.0, 150.0), 0.02, "no thump")
+    @classmethod
+    def setUpClass(cls) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sfx_combat.build(BuildContext(Path(tmp), seed=42))
+            cls.hit = audio.read_wav(Path(tmp) / "hit_hull.wav")[0]
 
-    def test_the_partials_are_inharmonic(self) -> None:
+    def test_the_hit_rings_like_metal(self) -> None:
         # The measure reads 0 for a harmonic cluster: the same FM with a ratio of exactly 3.
         t = audio.time_axis(0.085)
         harmonic = audio.fm(t, 7.0 * 165.0, ((3.0 * 165.0, 0.8), (165.0, 0.9)))
         self.assertLess(harmonic_misfit([f for f, _ in spectrum_peaks(harmonic, -16.0)]), 0.01)
-        for name in self.shot:
-            partials = [f for f, _ in spectrum_peaks(self._hold(name), -16.0)]
-            self.assertGreaterEqual(len(partials), 6, name)
-            self.assertGreaterEqual(harmonic_misfit(partials), 0.05, name)
-        strike = [f for f, _ in spectrum_peaks(self.wav["hit_hull"][int(0.003 * SR) : int(0.060 * SR)], -16.0)]
-        self.assertGreaterEqual(harmonic_misfit(strike), 0.05, "the hit rings like metal")
+        strike = [f for f, _ in spectrum_peaks(self.hit[int(0.003 * SR) : int(0.060 * SR)], -16.0)]
+        self.assertGreaterEqual(harmonic_misfit(strike), 0.05)
 
-    def test_a_sound_is_one_attack_with_no_burst_rhythm(self) -> None:
-        # The guns follow the cannon's own rate of fire: one shot per bolt.
-        for name, samples in self.wav.items():
-            self.assertEqual(onsets(samples), 1, name)
+    def test_the_hit_is_one_attack(self) -> None:
+        self.assertEqual(onsets(self.hit), 1)
 
     def test_the_hit_is_short_bright_and_metallic(self) -> None:
-        hit = self.wav["hit_hull"]
+        hit = self.hit
         self.assertLessEqual(len(hit) / SR, 0.15)
         env = frame_levels(hit, 0.002)
         loudest = int(np.argmax(env))

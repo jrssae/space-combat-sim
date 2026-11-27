@@ -232,3 +232,36 @@ func test_a_cannon_firing_again_fades_its_last_shot() -> void:
 	main.cannon.step(SimClock.now() + 1.0)
 	main.cannon.step(SimClock.now() + 2.0)
 	assert_eq(main.audio.tails_fading(), 1, "the player's second shot fades the first")
+
+
+func test_a_capital_gun_plays_its_size_of_the_shot_and_a_ship_is_one_voice() -> void:
+	var guns: CapitalGuns = CapitalGuns.of(main.world)
+	assert_not_null(guns, "main attaches the capitals' guns")
+	var heavy: int = main.audio.times_played(&"gun_heavy")
+	guns.shot_fired.emit(Vector3(0.0, 0.0, -80.0), "ea_plasma_heavy", 4242)
+	assert_eq(main.audio.times_played(&"gun_heavy"), heavy + 1)
+	var voices: Array[AudioStreamPlayer3D] = _voices_playing(&"gun_heavy")
+	assert_eq(voices.size(), 1)
+	assert_eq(voices[0].volume_db, SoundMix.level_db(&"gun_heavy") + GunSounds.volume_db(&"gun_heavy"))
+	assert_between(voices[0].pitch_scale, 0.96, 1.04, "a little off its pitch")
+	var railgun: int = main.audio.times_played(&"gun_railgun")
+	guns.shot_fired.emit(Vector3(0.0, 0.0, -80.0), "ea_railgun", 4242)
+	assert_eq(main.audio.times_played(&"gun_railgun"), railgun + 1, "the railgun's own shot")
+	assert_eq(main.audio.tails_fading(), 1, "the same ship's next shot fades its last")
+	var before: int = main.audio.shots_played
+	guns.shot_fired.emit(Vector3(0.0, 0.0, -80.0), "ea_particle_cannon", 4242)
+	assert_eq(main.audio.shots_played, before, "a particle cannon keeps its beam sound")
+
+
+func test_the_raiders_play_the_starfury_shot_three_semitones_up() -> void:
+	var cmd := CombatCommand.new()
+	cmd.fire = true
+	DebugConsole.registry.execute("spawn raider 400")
+	var raider: Combatant = main.ships.alive(ShipPool.DEFAULT_TYPE)[0]
+	raider.cannon.set_combat_command(cmd)
+	raider.cannon.step(SimClock.now() + 3.0)
+	var voices: Array[AudioStreamPlayer3D] = _voices_playing(&"raider_fire")
+	assert_false(voices.is_empty())
+	var stream: AudioStreamWAV = voices[0].stream as AudioStreamWAV
+	var starfury: AudioStreamWAV = load(AudioDirector.SOUND_DIR.path_join("pulse_fire.wav")) as AudioStreamWAV
+	assert_almost_eq(stream.get_length(), starfury.get_length(), 0.001, "as long as the Starfury's (Q82)")

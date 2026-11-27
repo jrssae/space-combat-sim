@@ -1,23 +1,20 @@
 """``sfx_combat``: the combat sounds (docs/architecture.md section 15.1 D29, M2-T12), synthesised with NumPy.
 
-Nine mono 16-bit 48 kHz WAVs, each at the reference loudness (-20 LUFS, 50 ms blocks, M8-T12) and peaking at most -1 dBFS, all from seeded generators (the same seed gives byte-identical files):
+Fourteen mono 16-bit 48 kHz WAVs, each at the reference loudness (-20 LUFS, 50 ms blocks, M8-T12) and peaking at most -1 dBFS, all from seeded generators (the same seed gives byte-identical files):
 
-* ``pulse_fire`` (0.105 s): the Starfury's pulse cannon, shaped on the reference measured in docs/design-references.md
-  ("Combat sounds", M5-T18, D60): a noise click, then a metallic inharmonic cluster held flat for 100 ms and cut hard. The
-  cluster is two-frequency FM, a carrier at 2a + b modulated by a and b, with our own a = 2.10 kHz and b = 0.66 kHz near the
-  reference's 2.06 and 0.67 kHz. Constant pitch, no sweep, no thump.
-* ``raider_fire`` (0.15 s): the raiders' gun, built the same way but another weapon: a lower cluster (a = 1.16 kHz,
-  b = 0.43 kHz) at higher modulation indices and soft-clipped, so denser and buzzier, held 120 ms and ending in a softer
-  exponential cut.
-* ``turret_fire`` (0.075 s): a civilian's defensive turret (M5-T21, D61), built like the guns but lighter: a higher, cleaner
-  cluster (a = 2.70 kHz, b = 0.88 kHz at low modulation indices), held 60 ms and cut hard, with a smaller click.
+* ``pulse_fire`` (1.08 s): the Starfury's pulse cannon, our own match for the show's shot (M10-T87, Q82; ``sfx_gun``): shaped
+  noise with a sparkle of short tones and a faint ping, approved by the maintainer's A/B.
+* ``raider_fire`` (1.08 s): the same shot 3 semitones up, same length (the raiders, and every fighter not on Earth's side).
+* ``turret_fire``, ``gun_light``, ``gun_medium``, ``gun_railgun``, ``gun_heavy``: the same shot pitched down and lengthened for
+  the bigger guns, by ``sfx_gun.WEAPONS`` (turrets -2 semitones and x1.1, light pulse -3/x1.2, medium pulse and plasma -5/x1.4,
+  railgun -7/x1.25, heavy plasma -10/x1.8). Particle cannons, beams, missiles and interceptors keep their own sounds.
+* ``interceptor_fire`` (0.075 s): the interceptor batteries' pulse (M5-T21's light turret shot, D61, kept for them): a high,
+  clean FM cluster (a = 2.70 kHz, b = 0.88 kHz at low modulation indices), held 60 ms and cut hard, with a small click.
 * ``hit_hull`` (0.14 s): a bolt on a hull: a short metallic strike, FM at an inharmonic 1 : 1.414 ratio whose brightness
   dies faster than its level, and a click.
 
-  These four sit two octaves down (``GUN_PITCH``, M3-T15, the maintainer's Q17): they are designed at the reference's
-  frequencies and every frequency in them (carriers, modulators, noise bands) is then a quarter, their lengths and envelopes
-  unchanged (not a resample, which would stretch them four times). Each is one attack: the guns follow the cannon's own rate
-  of fire.
+  These two sit two octaves down (``GUN_PITCH``, M3-T15, the maintainer's Q17): designed at the written reference's
+  frequencies, every frequency in them then a quarter, their lengths and envelopes unchanged. Each is one attack.
 * ``explosion`` (1.8 s): a boom (a falling sine), noise swept down through a low-pass, and a crackle of sparse impulses.
 * ``main_burst`` (4.0 s, **seamless**): a main pod's roar, shaped on the reference's step roars (M5-T19, D60): noise from
   400 Hz to 16 kHz with the most energy of any octave at 4-8 kHz, a presence peak on a spectrum falling 6.5 dB per octave
@@ -43,10 +40,11 @@ from collections.abc import Callable
 import numpy as np
 
 from ..core import audio, loudness
+from . import sfx_gun
 from ..core.context import AssetOutputs, BuildContext
 
 ASSET_ID = "sfx_combat"
-GENERATOR_VERSION = 7
+GENERATOR_VERSION = 8
 MAIN_BURST_S = 4.0
 RCS_BURST_S = 2.0
 WANDER_CYCLES = (2, 3, 5, 7)  # the main burst's swells: whole cycles in its loop, 0.5 to 1.75 Hz
@@ -67,21 +65,7 @@ def _cluster(t: np.ndarray, a_hz: float, b_hz: float, index_a: float, index_b: f
     return audio.fm(t, 2.0 * a_hz + b_hz, ((a_hz, index_a), (b_hz, index_b)))
 
 
-def pulse_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
-    t = audio.time_axis(0.105)
-    tone = _cluster(t, 2100.0 * pitch, 660.0 * pitch, 0.8, 0.9) * audio.hold_and_cut(t, 0.0015, 0.100, 0.005)
-    return audio.fade(tone + 0.5 * _click(rng, t, pitch, 0.0015), 0.0003, 0.0)
-
-
-def raider_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
-    t = audio.time_axis(0.15)
-    drive = 1.6  # soft clipping: more intermodulation, the buzz
-    tone = np.tanh(drive * _cluster(t, 1160.0 * pitch, 430.0 * pitch, 1.4, 1.6)) / np.tanh(drive)
-    tone *= audio.hold_and_release(t, 0.002, 0.120, 0.006)
-    return audio.fade(tone + 0.6 * _click(rng, t, pitch, 0.0025), 0.0003, 0.004)
-
-
-def turret_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
+def interceptor_fire(rng: np.random.Generator, pitch: float = GUN_PITCH) -> np.ndarray:
     t = audio.time_axis(0.075)
     tone = _cluster(t, 2700.0 * pitch, 880.0 * pitch, 0.5, 0.6) * audio.hold_and_cut(t, 0.0015, 0.060, 0.004)
     return audio.fade(tone + 0.4 * _click(rng, t, pitch, 0.001), 0.0003, 0.0)
@@ -171,10 +155,24 @@ def target_blip(_rng: np.random.Generator) -> np.ndarray:
     return audio.fade(blip * audio.exp_decay(t, 0.035), 0.003, 0.01)
 
 
+def _gun(weapon: str) -> Callable[[np.random.Generator], np.ndarray]:
+    return lambda rng: sfx_gun.weapon_shot(rng, weapon)
+
+
+## Each gun sound and the row of ``sfx_gun.WEAPONS`` it plays.
+GUNS: dict[str, str] = {
+    "pulse_fire": "starfury",
+    "raider_fire": "raider",
+    "turret_fire": "turret",
+    "gun_light": "bolt_light",
+    "gun_medium": "bolt_medium",
+    "gun_railgun": "railgun",
+    "gun_heavy": "bolt_heavy",
+}
+
 SOUNDS: dict[str, Callable[[np.random.Generator], np.ndarray]] = {
-    "pulse_fire": pulse_fire,
-    "raider_fire": raider_fire,
-    "turret_fire": turret_fire,
+    **{name: _gun(weapon) for name, weapon in GUNS.items()},
+    "interceptor_fire": interceptor_fire,
     "hit_hull": hit_hull,
     "explosion": explosion,
     "main_burst": main_burst,

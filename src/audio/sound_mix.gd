@@ -15,7 +15,12 @@ const LEVEL_DB: Dictionary[StringName, float] = {
 	&"main_burst": 4.0,  # -16: a ship's pods at full thrust, the bed the rest sits on
 	&"pulse_fire": 2.0,  # -18: the Starfury's guns, the player's own most of the time
 	&"raider_fire": 1.0,  # -19
-	&"turret_fire": 1.0,  # -19: capital and station turrets (the grid varies it per kind)
+	&"turret_fire": 1.0,  # -19: defensive turrets on civilians and capitals
+	&"gun_light": 1.0,  # -19: capital and grid guns, each louder by its size (`GunSounds.VOLUME_DB`, the grid's `SOUND_DB`)
+	&"gun_medium": 1.0,  # -19
+	&"gun_railgun": 1.0,  # -19
+	&"gun_heavy": 1.0,  # -19
+	&"interceptor_fire": 1.0,  # -19: the interceptor batteries (the grid varies it)
 	&"hit_hull": 1.0,  # -19
 	&"rcs_burst": -1.0,  # -21: a ship's jets, under the pods
 	&"warning_beep": 6.0,  # -14: hull low, must cut through a fight

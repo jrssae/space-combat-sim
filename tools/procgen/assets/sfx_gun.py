@@ -1,6 +1,6 @@
 """The Starfury's gun, our own (M10-T87, Q82): shaped noise that sounds very close to the show's shot, plus its pitched and
-lengthened family for the other guns. Not yet in the game: ``pulse_fire`` stays until the maintainer's A/B (H) and the weapon
-table are approved; then ``sfx_combat`` builds these sounds.
+lengthened family for the other guns. Approved by the maintainer's A/B (v2, 2026-11-25); ``sfx_combat`` builds them as
+``pulse_fire``, ``raider_fire``, ``turret_fire`` and ``gun_*``.
 
 The shot is noise whose spectrum follows two level maps: ``LEVELS_DB`` per band (``BANDS_HZ``, 40 Hz to 1.9 kHz) and moment
 (``TIMES_S``, over 1.08 s), and ``HIGH_LEVELS_DB``, the top 2.5-11 kHz in finer bands and moments, plus sparkle
@@ -77,7 +77,7 @@ GRAIN_DB = -42.0
 GRAIN_HZ = (900.0, 10500.0)
 GRAIN_S = (0.015, 0.04)
 
-## The proposed family (M10-T87, for the maintainer's approval): (semitones, length factor, the guns it is for).
+## The family (M10-T87, approved): (semitones, length factor, the guns it is for).
 WEAPONS: dict[str, tuple[float, float, str]] = {
     "starfury": (0.0, 1.0, "the Starfury's pulse cannons (pulse_cannon_ef), the reference itself"),
     "raider": (3.0, 1.0, "the raiders' guns (Q82: +3 semitones, same length)"),

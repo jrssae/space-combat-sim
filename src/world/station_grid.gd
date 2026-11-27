@@ -57,8 +57,11 @@ const HEAVY_FLASH_SCALE: float = 9.0
 const MEET_FLASH_SCALE: float = 0.6
 ## Each mount's cone round its base's up, degrees (a hemisphere and a little below it).
 const ARC_DEG: float = 200.0
-## How the turret shot sounds per kind: pitch, and level (dB) on top of `turret_fire`'s `SoundMix` level.
-const SOUND_PITCH: Dictionary[Kind, float] = {Kind.LIGHT: 1.0, Kind.HEAVY: 0.55, Kind.INTERCEPTOR: 1.6}
+## How each kind's shot sounds (M10-T87): the sound, its pitch, and level (dB) on top of its `SoundMix` level. The light and
+## heavy guns play the Starfury shot's family (`GunSounds`, the pitch already in the sound); the batteries keep their own pulse.
+const SOUND_NAME: Dictionary[Kind, StringName] = {Kind.LIGHT: &"gun_light", Kind.HEAVY: &"gun_heavy",
+		Kind.INTERCEPTOR: &"interceptor_fire"}
+const SOUND_PITCH: Dictionary[Kind, float] = {Kind.LIGHT: 1.0, Kind.HEAVY: 1.0, Kind.INTERCEPTOR: 1.6}
 const SOUND_DB: Dictionary[Kind, float] = {Kind.LIGHT: 1.0, Kind.HEAVY: 6.0, Kind.INTERCEPTOR: -2.0}
 const PROVIDER: StringName = &"grid"
 const ACTIONS: Array[StringName] = [&"info", &"free", &"hold", &"repair"]

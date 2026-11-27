@@ -166,7 +166,7 @@ Arguments in `<angle brackets>` are required, `[square brackets]` optional, `a|b
 
 | Command | Arguments | Does | Where |
 |---|---|---|---|
-| `sfx` | `<pulse_fire\|raider_fire\|hit_hull\|explosion\|main_burst\|rcs_burst\|warning_beep\|target_blip>` | Play a sound at the player | front end, flight |
+| `sfx` | `<pulse_fire\|raider_fire\|turret_fire\|gun_light\|gun_medium\|gun_railgun\|gun_heavy\|interceptor_fire\|hit_hull\|explosion\|main_burst\|rcs_burst\|warning_beep\|target_blip>` | Play a sound at the player | front end, flight |
 
 ### Performance
 

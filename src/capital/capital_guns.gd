@@ -31,6 +31,8 @@ const MEET_FLASH_SCALE: float = 0.6
 ## A battery fired a pulse from `at` (World), or a pulse met a shot at `at` (`color` the shot's): for the sound.
 signal pulse_fired(at: Vector3)
 signal pulse_met(at: Vector3, color: Color)
+## A gun fired a bolt from `at` (World): its weapon id and its ship, for the shot's sound (M10-T87). Not a missile's launch.
+signal shot_fired(at: Vector3, weapon: String, ship_id: int)
 
 ## Readouts (wall clock, never gameplay): the last step's cost (and its kernel's alone), the shots since `reset_stats`.
 var step_us: float = 0.0
@@ -305,6 +307,7 @@ func step_now(sim: SimCore, now_s: float, delta: float) -> void:
 	if out.size() < 5:
 		return
 	var fired: PackedInt32Array = out[0]
+	var starts: PackedVector3Array = out[1]
 	var missile: PackedByteArray = out[3]
 	var targets: PackedInt64Array = out[4]
 	shots_last = fired.size()
@@ -314,6 +317,8 @@ func step_now(sim: SimCore, now_s: float, delta: float) -> void:
 		var shooter: CapitalShip = _owners[fired[k]]
 		if SimCore.is_disguised(shooter.get_instance_id()):
 			Transponder.note_shot_at(shooter.get_instance_id(), targets[k])
+		if missile[k] == 0:
+			shot_fired.emit(starts[k], str(_mounts[fired[k]]["weapon"]), shooter.get_instance_id())
 	if out.size() >= 14:
 		_show_pulses(out[5], out[6], out[7])
 		_show_meetings(sim, out[8], out[9], out[10], out[11], out[12], out[13])
