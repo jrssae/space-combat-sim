@@ -369,3 +369,8 @@ ui_cancel={
 3d/default_angular_damp=0.0
 common/physics_interpolation=true
 jolt_physics_3d/limits/max_linear_velocity=10000.0
+
+[rendering]
+
+rendering_device/driver.windows="vulkan"
+rendering_device/fallback_to_d3d12=true

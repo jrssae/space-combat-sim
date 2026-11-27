@@ -5,7 +5,8 @@ extends Node
 ##
 ## Main (M1-T15) adds one RenderStatus outside `World`. Console: provider `render`: `renderer` (`forward_plus`, or `headless` when
 ## there is no display: import, CI, GUT), `fps`, `frame_ms`, `draw_calls`, `triangles`, `vram_mb` (the game's own), `vram_used_gb`,
-## `vram_total_gb` and `vram_pct` (the whole card, from the driver; -1 when it gives none: M8-T20), `far_dots` (ships drawn as
+## `vram_total_gb` and `vram_pct` (the whole card, from the driver; -1 when it gives none: M8-T20), `driver` (`vulkan` or `d3d12`,
+## M9-T08), `far_dots` (ships drawn as
 ## dots, M4-T11), `gpu`, `gpu_ms`, `display` and `window` (M4-T41).
 
 const RENDERER_HEADLESS: StringName = &"headless"
@@ -28,6 +29,21 @@ static func renderer() -> StringName:
 	return StringName(RenderingServer.get_current_rendering_method())
 
 
+## The graphics driver under the rendering method (`vulkan`, `d3d12`), or `headless` when nothing is drawn (M9-T08).
+static func driver() -> StringName:
+	if DisplayServer.get_name() == "headless":
+		return RENDERER_HEADLESS
+	return StringName(RenderingServer.get_current_rendering_driver_name())
+
+
+## The driver project.godot asks for on this OS, or "" when the game configures none.
+static func configured_driver() -> String:
+	var key: String = RenderDriverReport.setting_key(OS.get_name())
+	if key.is_empty():
+		return ""
+	return String(ProjectSettings.get_setting(key, RenderDriverReport.DEFAULT_DRIVER))
+
+
 ## The display server drawing the window (`wayland`, `x11`, or `headless`): measured runs must say which (M4-T41).
 static func display_server() -> StringName:
 	return StringName(DisplayServer.get_name())
@@ -41,8 +57,13 @@ static func window_size() -> Vector2i:
 
 
 func _ready() -> void:
+	print(RenderDriverReport.line(String(renderer()), String(driver())))
+	var problem: String = RenderDriverReport.warning(configured_driver(), String(driver()))
+	if not problem.is_empty():
+		push_warning(problem)
 	DebugConsole.registry.register_provider(&"render", ConsoleVars.new({
 		&"renderer": {"get": renderer, "doc": "The rendering method: forward_plus, or headless when nothing is drawn"},
+		&"driver": {"get": driver, "doc": "The graphics driver: vulkan or d3d12, or headless when nothing is drawn (M9-T08)"},
 		&"fps": {"get": func() -> float: return Engine.get_frames_per_second(), "doc": "Frames per second"},
 		&"frame_ms": {"get": _frame_ms, "unit": "ms", "doc": "Mean frame time over the last second"},
 		&"draw_calls": {"get": func() -> int: return int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
