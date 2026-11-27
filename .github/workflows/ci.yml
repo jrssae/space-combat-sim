@@ -58,8 +58,8 @@ jobs:
         run: |
           python scripts/python_shards.py check
           python scripts/gut_shards.py check
-          echo "shards=$(python scripts/python_shards.py matrix)" >> "${GITHUB_OUTPUT}"
-          echo "gut_shards=$(python scripts/gut_shards.py matrix)" >> "${GITHUB_OUTPUT}"
+          echo "shards=$(python scripts/python_shards.py matrix | tr -d '\r')" >> "${GITHUB_OUTPUT}"
+          echo "gut_shards=$(python scripts/gut_shards.py matrix | tr -d '\r')" >> "${GITHUB_OUTPUT}"
 
       - name: Restore generated assets
         id: assets
@@ -110,7 +110,7 @@ jobs:
 
       - name: Python tests
         run: |
-          mapfile -t modules < <(python scripts/python_shards.py modules "${{ matrix.shard }}")
+          mapfile -t modules < <(python scripts/python_shards.py modules "${{ matrix.shard }}" | tr -d '\r')
           printf 'shard ${{ matrix.shard }}: %s\n' "${modules[@]}"
           python -m unittest -v "${modules[@]}"
 

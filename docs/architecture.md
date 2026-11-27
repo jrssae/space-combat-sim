@@ -2927,7 +2927,9 @@ src/perf/brain_batch.gd          BrainBatch: an internal child of SimCore at -9 
   `/sys/devices/cpu_core/cpus` and the CPU topology, at most the CPUs the process may use, so 6 on the i5-13600KF; 1: the
   main thread alone, no pool). `SimCore` hands it to the core when it is made and whenever the setting changes, and the
   next pass uses it. The count is not a placement: unpinned, the scheduler may run workers on efficiency cores. The
-  benches pin the process to cores 0 to 11 and the pool's threads inherit that.
+  benches pin the process to cores 0 to 11 and the pool's threads inherit that. On Windows there is no sysfs, so
+  `performance_cores()` falls back to the logical cores the process may use (SMT threads counted: about twice Linux's physical
+  count on the same chip); the results stay identical, but a run uses more threads and the bench numbers differ between platforms.
 - **When a pass stays on the main thread.** Below its threshold, where waking the workers costs more than they save:
   the brains run in parallel from 48 thinks a tick, the flight step from 1 024 ships (Cycle log, M4-T18: at `typical`, 19
   to 28 thinks, the threads took 0.1 ms off the think and added about 0.5 ms to the 1 % slowest ticks; at `battle` 100, 34

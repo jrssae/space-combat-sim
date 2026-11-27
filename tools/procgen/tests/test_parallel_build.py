@@ -55,6 +55,7 @@ class SameBytesTests(unittest.TestCase):
             self.assertEqual(raised.exception.code, 2)
 
 
+@unittest.skipUnless("fork" in multiprocessing.get_all_start_methods(), "needs the fork start method (not on Windows)")
 class ParallelFailureTests(unittest.TestCase):
     """Fake assets in forked workers (``fork`` carries the patched registry into them)."""
 

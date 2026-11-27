@@ -4,6 +4,7 @@
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 REPORTS="${ROOT}/reports"
+source "${ROOT}/scripts/lib_platform.sh"
 source "${ROOT}/scripts/native_lib_name.sh"
 SCRIPT_ERRORS="SCRIPT ERROR|Parse Error|Failed to load script"
 # Godot runs share the machine with other agents' runs (scripts/godot_lock.sh): the import writes .godot/, so it takes the lock
@@ -16,12 +17,22 @@ fail() {
     exit 1
 }
 
+# Godot's output has CRLF line ends on Windows, which would break the exact-line checks (expect_line): the logs are written without them.
+strip_cr() {
+    if is_windows; then tr -d '\r'; else cat; fi
+}
+strip_cr_file() {
+    is_windows || return 0
+    local tmp="$1.cr"
+    tr -d '\r' < "$1" > "${tmp}" && mv -f "${tmp}" "$1"
+}
+
 # run_logged <log file> <command...>: runs the command, mirrors its output into the log, returns its exit code.
 run_logged() {
     local log="$1"
     shift
     local status=0
-    "$@" 2>&1 | tee "${log}" || status=$?
+    "$@" 2>&1 | strip_cr | tee "${log}" || status=$?
     return "${status}"
 }
 
@@ -33,11 +44,7 @@ require_godot() {
 
 # The generator's tests need NumPy, which the project's virtualenv has and the system Python may not.
 python_bin() {
-    if [[ -x "${ROOT}/.venv/bin/python" ]]; then
-        echo "${ROOT}/.venv/bin/python"
-    else
-        echo python3
-    fi
+    find_python || true
 }
 
 # The library is required, so a failed build stops the run.
@@ -87,7 +94,11 @@ rust_tests() {
 # expected [console] lines and exit with the requested code. console_host.tscn is an empty scene, so only the
 # console's own providers (settings, debug, time) exist. `set` must not touch user://settings.cfg (only `save` does).
 CONSOLE_HOST="res://tests/fixtures/console_host.tscn"
-SETTINGS_CFG="${XDG_DATA_HOME:-${HOME}/.local/share}/godot/app_userdata/space-combat-sim/settings.cfg"
+if is_windows; then
+    SETTINGS_CFG="$(cygpath -u "${APPDATA}")/Godot/app_userdata/space-combat-sim/settings.cfg"
+else
+    SETTINGS_CFG="${XDG_DATA_HOME:-${HOME}/.local/share}/godot/app_userdata/space-combat-sim/settings.cfg"
+fi
 smoke_status=0
 
 settings_fingerprint() {
@@ -104,6 +115,7 @@ console_run() {
     shift 2
     local status=0
     "${GODOT_READ[@]}" timeout 120 "${GODOT}" --headless --path . "${CONSOLE_HOST}" -- "$@" > "${log}" 2>&1 || status=$?
+    strip_cr_file "${log}"
     cat "${log}"
     if (( status != expected )); then
         echo "run_tests.sh: console smoke run exited ${status}, expected ${expected} (see ${log})." >&2
@@ -156,6 +168,7 @@ main_run() {
     shift 4
     local status=0
     "${GODOT_READ[@]}" timeout "${limit}" "${GODOT}" --headless --path . "$@" > "${log}" 2>&1 || status=$?
+    strip_cr_file "${log}"
     cat "${log}"
     if (( status != expected )); then
         echo "run_tests.sh: ${label} smoke run exited ${status}, expected ${expected} (see ${log})." >&2
@@ -195,6 +208,7 @@ smoke_main_scene() {
 main_status=0
 "${GODOT_READ[@]}" timeout 180 "${GODOT}" --headless --path . -- --console-strict \
     --console-exec="wait 30; state; state ship; get render.renderer; quit" > "${log}" 2>&1 || main_status=$?
+strip_cr_file "${log}"
 cat "${log}"
 if (( main_status != 0 )); then
     echo "run_tests.sh: main scene smoke run exited ${main_status}, expected 0 (see ${log})." >&2

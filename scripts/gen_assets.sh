@@ -8,12 +8,14 @@
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
+source scripts/lib_platform.sh
+PY="$(find_python)" || { echo "gen_assets.sh: no working Python found (tried .venv, python3, python)" >&2; exit 1; }
 
-if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
-    echo "gen_assets.sh: Python 3.11 or newer is required (found $(python3 --version 2>&1))" >&2
+if ! "${PY}" -c 'import sys; sys.exit(sys.version_info < (3, 11))'; then
+    echo "gen_assets.sh: Python 3.11 or newer is required (found $("${PY}" --version 2>&1))" >&2
     exit 1
 fi
-if ! python3 -c 'import numpy' 2>/dev/null; then
+if ! "${PY}" -c 'import numpy' 2>/dev/null; then
     echo "gen_assets.sh: NumPy is missing (pip install numpy)" >&2
     exit 1
 fi
@@ -23,4 +25,4 @@ JOBS="${PROCGEN_JOBS:-$(nproc 2>/dev/null || echo 1)}"
 if (( JOBS > 4 )) && [[ -z "${PROCGEN_JOBS:-}" ]]; then JOBS=4; fi
 # end jobs
 
-exec python3 -m tools.procgen build all --jobs "${JOBS}" "$@"
+exec "${PY}" -m tools.procgen build all --jobs "${JOBS}" "$@"

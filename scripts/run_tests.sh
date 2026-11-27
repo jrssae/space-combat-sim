@@ -128,6 +128,7 @@ if [[ -n "${GUT_SHARD:-}" ]]; then
     (( shard >= 1 && shard <= shards )) || fail "GUT_SHARD ${GUT_SHARD}: k must be 1..n."
     # Weighted by measured time, every test file in exactly one shard (scripts/gut_shards.py); `n` is the shard count.
     picked_list="$("$(python_bin)" scripts/gut_shards.py files "${shard}" "${shards}")" || fail "scripts/gut_shards.py failed for GUT_SHARD ${GUT_SHARD}."
+    picked_list="${picked_list//$'\r'/}"  # Python on Windows ends its lines with CRLF
     [[ -n "${picked_list}" ]] || fail "GUT_SHARD ${GUT_SHARD} picks no script."
     IFS=, read -r -a picked <<< "${picked_list}"
     gut_select=("-gtest=${picked_list}")

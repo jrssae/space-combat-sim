@@ -12,7 +12,8 @@
 #   --bench  also take the bench lock (timing runs), after the GPU lock
 #   --timeout  give up waiting after this many seconds (exit 75); the holders are named every 30 s while waiting
 #   status   who holds and who waits right now, and the last 20 lines of the log
-# The command's exit code passes through. SCS_NO_LOCK=1 skips locking (CI). Hold a lock per command, never around a long script.
+# The command's exit code passes through. SCS_NO_LOCK=1 skips locking (CI); so does a missing flock (Git Bash).
+# Hold a lock per command, never around a long script.
 # SCS_LOCK_LABEL=<task id> names the run in the waiting messages, in status and in reports/locks.log (one line per finished run).
 # Environment: SCS_GODOT_LOCK, SCS_GPU_LOCK, SCS_BENCH_LOCK, SCS_LOCK_LOG override the paths.
 set -uo pipefail
@@ -112,7 +113,8 @@ while (( $# > 0 )); do
 done
 (( $# >= 1 )) || usage
 
-if [[ "${SCS_NO_LOCK:-0}" == "1" ]]; then
+# No flock (Git Bash on Windows has none): run unlocked, as with SCS_NO_LOCK=1.
+if [[ "${SCS_NO_LOCK:-0}" == "1" ]] || ! command -v flock > /dev/null 2>&1; then
     exec "$@"
 fi
 

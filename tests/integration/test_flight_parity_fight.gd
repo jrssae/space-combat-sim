@@ -46,7 +46,7 @@ func _fight(settings: String, measure_s: int, label: String) -> Dictionary:
 	var text: String = "\n".join(output)
 	var lines: Dictionary = {}
 	for line: String in text.split("\n"):
-		var m: RegExMatch = _LINE.search(line)
+		var m: RegExMatch = _LINE.search(line.trim_suffix("\r"))
 		if m != null:
 			lines[m.get_string(1)] = m.get_string(2)
 	assert_eq(code, 0, "%s: the fight's process exits cleanly (%s)" % [label, text.right(600) if code != 0 else "ok"])
