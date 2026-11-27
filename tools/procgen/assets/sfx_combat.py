@@ -156,7 +156,8 @@ def target_blip(_rng: np.random.Generator) -> np.ndarray:
 
 
 def _gun(weapon: str) -> Callable[[np.random.Generator], np.ndarray]:
-    return lambda rng: sfx_gun.weapon_shot(rng, weapon)
+    """A gun of the family, always from the approved noise (``sfx_gun.APPROVED_SEED``), whatever the build's seed."""
+    return lambda _rng: sfx_gun.weapon_shot(np.random.default_rng(sfx_gun.APPROVED_SEED), weapon)
 
 
 ## Each gun sound and the row of ``sfx_gun.WEAPONS`` it plays.

@@ -322,6 +322,13 @@ class GunTests(unittest.TestCase):
         self.assertGreaterEqual(m.envelope, 0.95)
         self.assertLessEqual(abs(m.length_ratio - 1.0), 0.05)
 
+    def test_the_guns_are_the_approved_noise_whatever_the_seed(self) -> None:
+        # The maintainer approved one take (sfx_gun.APPROVED_SEED, B_ours_starfury_v2.wav): a build ships exactly it.
+        with tempfile.TemporaryDirectory() as tmp:
+            sfx_combat.build(BuildContext(Path(tmp), seed=7))
+            for name in sfx_combat.GUNS:
+                np.testing.assert_array_equal(audio.read_wav(Path(tmp) / f"{name}.wav")[0], self.wav[name], err_msg=name)
+
     def test_every_gun_plays_its_row_of_the_family(self) -> None:
         for name, weapon in sfx_combat.GUNS.items():
             _, stretch, _ = sfx_gun.WEAPONS[weapon]

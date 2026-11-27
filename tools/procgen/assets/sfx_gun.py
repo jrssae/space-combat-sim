@@ -88,6 +88,8 @@ WEAPONS: dict[str, tuple[float, float, str]] = {
     "bolt_heavy": (-10.0, 1.8, "heavy plasma (bolt_heavy) and the grid's heavy cannon"),
 }
 FRAME = 1024  # synthesis frame at the reference pitch, samples
+## The noise the maintainer approved (B_ours_starfury_v2.wav, ``render_samples``' first shot): every gun is built from it.
+APPROVED_SEED = (87, 0)
 FADE_IN_S = 0.001
 PEAK_DBFS = -6.0
 FADE_OUT_S = 0.005
