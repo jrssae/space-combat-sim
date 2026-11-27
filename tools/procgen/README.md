@@ -107,6 +107,13 @@ tests/             unittest: core, parts, CLI, and every asset
    the same SHA-256 (see `test_nav_buoy.py` for a template).
 4. Run the tests and `scripts/gen_assets.sh`. Third-party dependencies need an entry in `docs/third-party.md`.
 
+## `app_icon`
+
+The game's application icon (M9-T07): a tilted orbit ring around a small swept-wing craft on a deep-space rounded square, drawn
+with NumPy and no franchise imagery. Outputs `icon.ico` (16 to 256 px; bitmaps below 128 px, PNG from 128 px) and `icon.png`
+(256 px), plus `manifest.json`. The seed and options do not change it. The Windows export preset reads
+`assets/generated/app_icon/icon.ico` (not committed, like every generated file), so the asset build must run before an export.
+
 ## `nav_buoy`
 
 The inert navigation buoy the M1 targeting cycles through (architecture section 9.3): an upright cylinder hull

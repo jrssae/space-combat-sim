@@ -9,13 +9,14 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from ..core.context import AssetOutputs, BuildContext
-from . import asteroids, b5_interior, babylon5_station, brakiri_bokmai, capital_hulls, cargo_pod_craft, centauri_brezebel
+from . import app_icon, asteroids, b5_interior, babylon5_station, brakiri_bokmai, capital_hulls, cargo_pod_craft, centauri_brezebel
 from . import grid_heavy_cannon
 from . import grid_interceptor_battery, jumpgate, planet, saturn_family, skylark_transport
 from . import maintenance_bot, narn_transport, nav_buoy, raider_fighter, raider_strike_carrier, sfx_combat, sfx_ui, sfx_world, sky_default
 from . import starfury_aurora
 
 ASSETS: dict[str, Callable[[BuildContext], AssetOutputs]] = {
+    "app_icon": app_icon.build,
     "asteroids": asteroids.build,
     "b5_interior": b5_interior.build,
     "babylon5_station": babylon5_station.build,

@@ -89,6 +89,8 @@ class AssetOutputs:
             return f"{len(self.manifest['sounds'])} sounds"
         if "star_field" in self.manifest:
             return f"{self.manifest['star_field']['count']} stars"
+        if "icon" in self.manifest:
+            return f"icon, {len(self.manifest['icon']['sizes'])} sizes"
         if "planet" in self.manifest:
             width, height = self.manifest["planet"]["maps"]["albedo"]["size"]
             return f"planet maps {width}x{height}"

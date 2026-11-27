@@ -43,6 +43,20 @@ unzip_member() {
     "${bsdtar}" -xf "$(cygpath -m "${zip}")" -C "$(cygpath -m "${dest}")" --strip-components="$(awk -F/ '{print NF-1}' <<< "${member}")" "${member}"
 }
 
+# zip_files <zip> <dir> <file>...: writes a zip of the named files (paths relative to dir, stored flat at the top). Uses zip where
+# there is one, else Windows' bsdtar, which writes zips from the .zip suffix (-a); Git Bash on a stock install has no zip.
+zip_files() {
+    local zip="$1" dir="$2" bsdtar
+    shift 2
+    rm -f "${zip}"
+    if command -v zip > /dev/null 2>&1; then
+        (cd "${dir}" && zip -q -X "${zip}" "$@")
+        return
+    fi
+    bsdtar="$(cygpath -u "${SYSTEMROOT:-C:\Windows}")/System32/tar.exe"
+    "${bsdtar}" -a -cf "$(cygpath -m "${zip}")" -C "$(cygpath -m "${dir}")" "$@"
+}
+
 # godot_default_bin: the project-local editor that setup_godot.sh installs (godot.exe on Windows, the godot symlink elsewhere).
 godot_default_bin() {
     local root

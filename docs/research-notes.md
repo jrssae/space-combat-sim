@@ -182,3 +182,27 @@ read/write lock (shared for readers, exclusive for writers, a gate so a waiting 
   project found the release template there. `XDG_DATA_HOME` is ignored by Godot on Windows.
 - Git Bash on a stock Git for Windows has no `unzip`; `unzip_member` (`scripts/lib_platform.sh`) falls back to Windows' bsdtar
   (`System32\tar.exe`), which reads zips (the GNU `tar` first on PATH does not).
+
+## Windows export: PE resources and the D3D12 fallback (M9-T07; verified 2026-11-27, Godot 4.7.2, RTX 3060)
+
+- **No `rcedit` needed.** Godot 4.7.2 edits the exe's PE resources itself (`application/modify_resources=true`; the editor binary
+  has no `rcedit` setting any more). A scratch export and the real one both show, through PowerShell's `(Get-Item exe).VersionInfo`,
+  `FileVersion` and `ProductVersion` `0.9.0.0` (from `application/config/version`, left empty in the preset's own fields),
+  `ProductName`, `FileDescription` and `LegalCopyright` from the preset, on the game exe and on the console wrapper alike (the
+  template itself says `4.7.2` and "Godot Engine"). The icon resources were read back out of the exe with a small PE resource
+  walker: the 16, 32, 48, 64, 128 and 256 px entries are byte-identical to those in our `icon.ico`; Godot drops the 24 px entry.
+  `ExtractAssociatedIcon` returns the icon as Windows reads it.
+- **The console wrapper needs `debug/export_console_wrapper=2`** ("Debug and Release"). The value 1 ("Debug Only", Godot's default)
+  writes no `space-combat-sim.console.exe` in a release export.
+- **Icon:** the preset points at `res://assets/generated/app_icon/icon.ico`, built by `tools/procgen/assets/app_icon.py` (so
+  `scripts/gen_assets.sh` must run before an export; `build_release.sh` stops with a message when the file is missing). The
+  preset excludes that folder from the pack.
+- **The D3D12 fallback needs nothing extra in the zip.** The template links Mesa's NIR to DXIL translation statically and loads the
+  system `d3d12.dll` and `dxgi.dll`; the Agility SDK files (`D3D12Core.dll`, `d3d12SDKLayers.dll`, `WinPixEventRuntime.dll`) are
+  optional and only copied by the export plugin when the project's Windows driver is `d3d12`. Proof: the unzipped release (the
+  four files only: exe, console exe, pck, `scs_native.dll`) run with `--rendering-driver d3d12` printed `D3D12 12_0 - Forward+ -
+  Using Device #0: NVIDIA GeForce RTX 3060`, `render.driver = d3d12`, 60 fps, and drew the tutorial's opening; the default run
+  printed `Vulkan 1.4.341 - Forward+`, `render.driver = vulkan`. `application/export_d3d12` and `application/export_angle` stay
+  at `0`; the three values 0, 1 and 2 of `export_d3d12` produced the same files here.
+- **Size:** the pack is 1.37 GB (`space-combat-sim.pck`), the zip 282 MB with the game exe (109 MB), the console wrapper (113 KB)
+  and `scs_native.dll` (7.8 MB). `tar.exe` (bsdtar) writes the zip; there is no `zip` in a stock Git Bash.

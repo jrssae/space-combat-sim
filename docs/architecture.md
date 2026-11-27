@@ -6942,3 +6942,8 @@ src/mission/control_hint_text.gd      ControlHintText: the live pad and keyboard
 - `scripts/release_smoke.sh` runs the binary headless with `--console-strict`, plays the tutorial's opening (`SMOKE_SCENARIO` for another scenario) for 600 ticks and quits: exit 0,
   no `ERROR:` lines. It is not part of `run_tests.sh` (it needs the build). The bench writes to `user://reports` in an export
   (T14, `BenchPaths`).
+- **Windows (M9-T07, Q3):** under Git Bash the same script exports the `Windows release` preset into `build/windows/`: `space-combat-sim.exe`,
+  `space-combat-sim.console.exe` (the wrapper the smoke runs, since the game exe prints nothing to a pipe), `space-combat-sim.pck` (the pack
+  is not embedded) and `scs_native.dll`, then zips those four, flat, as `space-combat-sim-<version>-windows-x86_64.zip` (version from
+  `application/config/version`). Godot edits the exe's icon and version info itself (no `rcedit`; `docs/research-notes.md`); the icon
+  is the generated `app_icon` asset. `build_release.sh --no-gen` skips the asset build when `assets/generated/` is current.
