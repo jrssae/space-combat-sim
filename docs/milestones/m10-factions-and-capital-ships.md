@@ -435,6 +435,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T86 | G | Babylon 5 Classic model review (maintainer 2026-11-24): the "Babylon 5 Classic" model offered for download by Chris Kuhn (artist/modeler) in https://www.facebook.com/100063622114904/posts/2433942860027157/ (the post needs a logged-in browser). The maintainer downloaded it to `references/Babylon5_Station_FBX/`: `Babylon5FBX.fbx` and its textures in `Textures/` (colour and specular maps per part: base assembly, chassis, Cobra bay, cylinder accessories, main cylinder, reactor, solar panels with a glass mask; `Babylon5_Station_FBX.zip` is the original download). Find its licence and terms (the post, any readme); compare it with `references/EA Babylon 5 Station.stl` and today's generator (silhouettes, per-part sections with `tools/refview`, detail the STL lacks, and what its textures show of the hull's paint and markings for our procedural textures); a short report with a recommendation: use it as a new reference in `references/` (never committed, never shipped, `DISCLAIMER.md`), as a second reference beside the STL, or not at all; nothing changes without the maintainer's OK; before T82 rebuilds the station at its new size | - | Opus | not started |
 | T87 | G | Our own Starfury gun sound (Q82): a synthesized match for `references/starfurybolt.wav` (log-mel similarity and envelope correlation >= 0.95, length within 5 %, then the maintainer's A/B (H)) as the Starfury's shot, its tail faded when the same ship fires again; raiders +3 semitones; a pitched-down, lengthened table for larger weapons proposed with samples first; tests | T13 | Opus | in progress |
 | T88 | A | Agamemnon-pattern skin on the existing hulls (Q98): the Hyperion, the Nova and the other capitals, then the stations, civilians, raiders and fighters as the maintainer orders, from the panel mosaic (and T74's pinned seams) to `styles/patch_skin.PatchSkin` in each hull's colours, paint layouts kept; before/after sheets for the maintainer, tests, VRAM unchanged. Supersedes T74's seam defaults for each hull it moves (a hull on the pattern has no seam lines to pin) | T68 | Opus | not started |
+| T89 | A | Far-mesh swap for capitals (maintainer 2026-11-26): Godot's import LODs cannot thin a hull built of many small boxes (a far Omega still draws 16 to 31 k triangles at 15 km); a generic far mesh for every capital, built from the finished hull by `core/capital.py` (about 3 k triangles for an Omega-size hull, scaled by class; outline IoU >= 0.95 against the full hull; its own small atlas baked from the hull's maps), swapped in by distance with hysteresis and a cross-fade (rotors, marks, lights, hulks; break-up keeps the full chunks); measured on the real renderer at 1, 3, 15 and 50 km and with a far fleet of 16; tests | T05, T07 | Opus | in progress |
 | T02 | G | Factions as data: the relation table, styles, the renegades' marking | - | Sonnet | done |
 | T03 | B | Weapons and balance concept: loadouts, blasts, the `capital` brain, balance fights (discussion with the maintainer) | T01 | controller | done |
 | T04 | B | Shadow, Vorlon and Minbari mechanics concept (Q6, Q13; discussion with the maintainer) | T01 | controller | not started |
@@ -1131,6 +1132,24 @@ comes from a pool with shared meshes and materials (roadmap L10).
   step for that hull is not needed (mark it so in T74's notes when it happens).
 - **Done when:** each moved hull's before/after sheet at 30 m and 150 m seen by the maintainer (H), its tests green, its texture
   budget unchanged.
+
+### M10-T89 Far-mesh swap for capitals (maintainer 2026-11-26)
+
+- **Why:** Godot's importer LODs cannot simplify a hull made of many small boxes, so a far Omega still draws 16 to 31 k
+  triangles at 15 km (T68's round 3 and 4 measurements). The 90 k LOD0 budget counts the drawn mesh only (maintainer).
+- **Build:** a generic post-process in `tools/procgen/core` run by `core/capital.py` for every capital piece (hull and rotors):
+  the built mesh at rest is voxelised, its outer skin extracted and thinned (`core/decimate.py`) to the class's far budget (about
+  3 k triangles for an Omega-size hull), with its own small atlas baked from the piece's maps (albedo, ORM, glow; per facing, so a
+  plate's two sides keep their colours). Manifest: each piece entry's `far` mesh (file, triangles, swap distance). Nothing in a
+  hull's own generator changes, so a rebuilt hull (T68's Omega) picks it up.
+- **Game:** `RenderPiece` draws the far mesh beyond the swap distance (about 15 km, tuned by measurement; an intermediate level
+  only if the measurements ask for one) with Godot's visibility ranges: hysteresis and a cross-fade at the boundary. A rotor's far
+  mesh turns with it; the hull marks and lamps sensible at range; a hulk's far mesh goes dark with its lights; the break-up keeps
+  the full chunks.
+- **Done when:** Python tests (far budget per class, outline IoU >= 0.95 against the full hull in top, side and front views) and GUT
+  tests (swap distances, hysteresis, rotors, hulk) green; triangles, draw calls and VRAM on the real renderer at 1, 3, 15 and 50 km
+  for the Omega, Nova, Hyperion and raider carrier, and for 16 capitals far away, before and after; `docs/assets-capital.md` and
+  `docs/architecture.md` updated.
 
 ### M10-T65 Subsystems targeted by kind (Q60)
 
