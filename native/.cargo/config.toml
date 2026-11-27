@@ -1,0 +1,4 @@
+# Link the C runtime statically on Windows, so scs_native.dll needs no vcruntime140.dll (M9-T03). Target-specific: the Linux
+# build's flags are unchanged. Cargo reads this from the working directory upward, so build_native.sh and lib_tests.sh run cargo from native/.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

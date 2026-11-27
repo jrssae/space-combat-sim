@@ -31,7 +31,17 @@ if ! command -v cargo > /dev/null; then
     exit 1
 fi
 
-# rustup reads rust-toolchain.toml from the working directory, so build from inside the crate.
+# Windows locks a DLL that a process has loaded, so the swap below would fail after the copy: name the holder up front instead.
+if is_windows && [[ -f "${LIB}" ]]; then
+    holders="$(tasklist //M "$(native_lib_name)" //FO CSV //NH 2> /dev/null | tr -d '\r' | grep '^"' | awk -F'","' '{gsub(/"/, ""); print $1 " (pid " $2 ")"}' || true)"
+    if [[ -n "${holders}" ]]; then
+        echo "build_native.sh: ${LIB#"${ROOT}"/} is loaded by a running Godot, so it cannot be replaced. Close it and run this script again:" >&2
+        echo "${holders}" | sed 's/^/  /' >&2
+        exit 1
+    fi
+fi
+
+# rustup reads rust-toolchain.toml and native/.cargo/config.toml (Windows: the static C runtime) from the working directory, so build from inside the crate.
 cd "${CRATE}"
 start="${SECONDS}"
 # Some rustup versions do not fetch the pinned toolchain on first use, so make sure it is there.
