@@ -14,8 +14,9 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 
 - `docs/architecture.md`: the design contract (stack, decisions, layout, flight model, input, rendering, assets,
   tests, conventions). Read it before writing code.
-- `docs/milestones/`: one file per milestone; the latest is the current one, with its acceptance criteria and the **ordered task list**.
-- `docs/roadmap.md`: what comes after, so you do not paint us into a corner.
+- `docs/milestones/`: one file per planned milestone, with its acceptance criteria and the **ordered task list**.
+- `docs/roadmap.md`: every milestone in two tables whose **Status** column says which one is current, and what comes after,
+  so you do not paint us into a corner.
 - `docs/playtest.md`: how the maintainer runs the game and the human (H) acceptance checklist.
 - `docs/design-references.md`: written descriptions of the reference designs (Starfury, station, raiders, bots).
   Reference images are not in the repo; if you need more detail, **ask the maintainer for references**.
@@ -27,9 +28,11 @@ official or ripped franchise assets (models, textures, audio, footage, logos). A
 1. `scripts/setup_godot.sh` (installs Godot 4.7.2 into `.tools/godot/`, verified by SHA-256).
 2. `scripts/gen_assets.sh` (runs `python3 -m tools.procgen build all` into `assets/generated/`; needs `numpy`).
 3. `scripts/run_tests.sh` (Python tests, `godot --headless --import`, GUT headless; must exit 0).
-4. Open the latest milestone entry in `docs/milestones/`, find the first task in its task table whose Status is not
-   `done` (or `not needed`) and whose "Done when" is not met, and do that one task as one PR-sized change. If none of the scripts exist yet, you are on **M1-T01**. Once a milestone is accepted
-   (its status line says so), the next milestone's file is the latest one.
+4. Find the current milestone in `docs/roadmap.md`'s milestone tables: the row whose Status is `in progress`. Open its file in
+   `docs/milestones/`, find the first task in its task table whose Status is not `done` (or `not needed`) and whose "Done
+   when" is not met, and do that one task as one PR-sized change. If no row is `in progress`, or more than one is, ask the
+   maintainer which milestone to work on; never pick one by its file's name or date. If none of the scripts exist yet, you
+   are on **M1-T01**.
 
 Until T01 lands, download/clone details are in `docs/research-notes.md` ("Container findings"): GitHub release
 assets and `git clone` work through the proxy; `archive/refs/tags/*.zip`, `api.github.com` and the Godot docs
@@ -40,6 +43,14 @@ site do not.
 Milestones were renumbered on 2026-11-18 (`docs/roadmap.md`, "After the tutorial", has the mapping): docs and code written
 before then use the old numbers, so an old "M12" means today's M10 (factions and capital ships), an old "M9" today's M26.
 M8.5 (Opus maintainability, `m8.5-opus-maintainability.md`) was added on 2026-11-19 between M8 and M9 without renumbering.
+M13.5 (fit and finish, `m13.5-fit-and-finish.md`) was added on 2026-11-27 between M13 and M14 the same way.
+
+Each milestone's row in `docs/roadmap.md`'s two milestone tables has a **Status**: `accepted` (the maintainer accepted it;
+with the date when known), `in progress` (its first task started), `planned` (its file is written, no task started), `not
+started` (a roadmap row only) or `not needed`. Update the row in the same commit that changes it: writing a milestone's file
+makes it `planned`, its first task's commit makes it `in progress`, the maintainer's acceptance makes it `accepted`. The
+milestone file's own status line says the same. A file can be written long before its milestone runs, so the roadmap's Status,
+not the files in `docs/milestones/`, says which milestone is current.
 
 Every milestone file in `docs/milestones/` has an ordered task table (`## Task breakdown (ordered)`) with a **Status**
 column: `done` (merged into the milestone branch, its "Done" notes written), `in progress`, `not started`, or `not
