@@ -7601,6 +7601,13 @@ data/capitals/capitals.json                `capital_brain`: the brain's numbers,
   ship's basis and velocity to `capital_helm_commands` once a tick and flies the commands it gives (`cruise_velocity` mirrors the
   helm's velocity for the tier); a disabled hull's is shaped by its wind-down in GDScript. `set_course` is orders: the helm holds
   them and the brain stops steering (Hold) until `release_helm`. A velocity rebase boosts the helms with the rows.
+  **Far capitals** (the maintainer, 2026-11-26): a capital that is a low-attention tier row (§17.14) is steered live too. At its
+  demotion `TierDirector` registers its drive as a tier type (`CapitalShip.tier_type`, its flight spec and nozzles) and marks
+  the row helmed (`capital_tier_helm`); each tick, before the tier's step, its helm's command is worked out from the row's
+  pose (`capital_tier_helms`) and the tier flies it through the flight kernel as it flies a fighter's row, instead of the
+  stand-ins' cruise law; its brain keeps its beat on its row. Back in play, `cruise_velocity` takes the helm's course. Cost:
+  24 far Omegas add about 0.2 us a capital to the tier's step and 0.7 us a tick a capital of brain (`test_capital_far_fleet`,
+  1 and 6 threads byte for byte).
 - **The brain.** It thinks in the AI job (`brain_step::think_capitals`, after the fighters' pass) on the job's frozen rows, at 5 Hz:
   each capital on its own beat (its age in flown ticks plus its place at joining, never the core's clock), once a tick at most. Its
   answer (state, target, aim, attitude, course, events) is applied at the join to the entry whose stamp it was thought for (a ship
@@ -7658,8 +7665,10 @@ data/capitals/capitals.json                `capital_brain`: the brain's numbers,
   `test_capital_brain` (the main scene: two Omegas approach and engage at range in their attitude, orders held, withdraw through
   its own point, for the gate, or fighting on, a fighter's runs and a raider leaving a warship alone, the console),
   `test_capital_brain_threads`, `test_capital_helm_parity`; `test_sim_core`'s guard holds the kernels to the kernels' rules.
-- **Known gaps.** A capital in the low-attention tier thinks but its row flies its last cruise (the tier's capital law), so it does
-  not manoeuvre far from the player; no Xill belly-on passes yet (no Xill hull); torpedo craft have
+- **Scenario capitals** (for mission authors). A scenario's `capitals[]` entry starts on orders, held where it stands with its
+  guns free (the line-up); `"helm": "free"` starts it under its brain instead, which fights it (`ScenarioLoader.CAPITAL_HELMS`,
+  `hold` or `free`). From a script, `set_course` gives a capital orders and `release_helm` hands it back.
+- **Known gaps.** A far capital's guns and beams fire nothing yet (T85); no Xill belly-on passes yet (no Xill hull); torpedo craft have
   no reactor runs (none fly); the fighters' abort counts a squadron's losses from its peak, not only those to a capital.
 
 ### 22.9 Mines and minefields (D12.9; T15, Q20)

@@ -89,6 +89,35 @@ impl ScsSimCore {
         job.raiders_ix = self.factions.iter().position(|f| *f == "raiders").map(|i| i as u32);
     }
 
+    /// The far capitals' helms (M10-T16): each low-attention tier row a capital's helm steers takes this tick's command from
+    /// its helm, flown by the tier like a fighter's, and its brain keeps its beat. Called before the tier's step.
+    pub(crate) fn capital_tier_helms(&mut self) {
+        let ScsSimCore { tier, capitals, .. } = self;
+        for i in 0..tier.len() {
+            if !tier.helmed[i] || tier.hulk[i] {
+                continue;
+            }
+            let Some(k) = capitals.index_of(tier.body_ids[i]) else {
+                continue;
+            };
+            let row = &mut capitals.rows[k];
+            row.entry.age += 1;
+            let c = ch::command(&row.entry.spec.helm, &mut row.entry.helm, &tier.bases[i], tier.velocities[i]);
+            tier.commands[i].cmd = [
+                c.main_left,
+                c.main_right,
+                c.retro_left,
+                c.retro_right,
+                f64::from(c.strafe_x),
+                f64::from(c.strafe_y),
+                f64::from(c.rot.x),
+                f64::from(c.rot.y),
+                f64::from(c.rot.z),
+                f64::from(u8::from(c.brake)),
+            ];
+        }
+    }
+
     /// A joined job's answers: each lands on its capital when the entry is still the one it was thought for.
     pub(crate) fn take_capital_answers(&mut self, job: &CapitalJob) {
         let t = &mut self.capitals;
@@ -318,6 +347,22 @@ impl ScsSimCore {
         if let Some(i) = self.capitals.index_of(body) {
             self.capitals.rows[i].entry.helm.velocity = velocity;
         }
+    }
+
+    /// Capital `body`'s tier row is steered live by its helm from now on (M10-T16), flown with tier type `type_ix` (its
+    /// thrusters, `tier_register_type`) and its assist on. False when it has no tier row or the type is unknown.
+    #[func]
+    fn capital_tier_helm(&mut self, body: i64, type_ix: i64) -> bool {
+        let (Some(i), Ok(ty)) = (self.tier.index_of(body), u32::try_from(type_ix)) else {
+            return false;
+        };
+        if ty as usize >= self.tier_types.len() || self.capitals.index_of(body).is_none() {
+            return false;
+        }
+        self.tier.type_ix[i] = ty;
+        self.tier.helmed[i] = true;
+        self.tier.assist_on[i] = true;
+        true
     }
 
     /// `body`'s brain steers again.

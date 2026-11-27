@@ -396,6 +396,9 @@ func _demote_capital(sim: SimCore, cap: CapitalBody) -> bool:
 	sim.core.tier_set_attrs(body_id, cap.targetable.get_instance_id(), cap.faction, cap.targetable.display_name,
 			cap.damageable.bounding_radius, cap.targetable.broadcast_range_m, cap.damageable.hull.fraction())
 	sim.core.tier_set_control(body_id, cap.cruise_velocity, PackedFloat64Array(), 0.0, false)
+	var ship := cap as CapitalShip
+	if ship != null and not ship.is_hulk():
+		sim.core.capital_tier_helm(body_id, ship.tier_type(sim.core))  # its helm and brain steer it live out there (M10-T16)
 	sim.core.tier_set_box(body_id, cap.half_extents())  # cleared of rocks by its hull, not its bounding sphere (fix round 1)
 	if cap.is_hulk():
 		sim.core.tier_set_hulk(body_id, true)

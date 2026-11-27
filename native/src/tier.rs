@@ -57,6 +57,9 @@ pub struct TierRows {
     pub assist_on: Vec<bool>,
     /// A hulk drifts: no force, no brain, never removed for being idle.
     pub hulk: Vec<bool>,
+    /// A capital its own helm steers live (M10-T16): flown like a fighter, by its type's thrusters, on the command its
+    /// helm writes into `commands` each tick, instead of the cruise law.
+    pub helmed: Vec<bool>,
     /// The row's place in the beat's stagger.
     pub ordinal: Vec<i64>,
     /// The row command's `seq` the last beat flew (fix round 1): a newer one gets a beat at once.
@@ -131,6 +134,7 @@ impl TierRows {
         self.pod_yaw.push(0.0);
         self.assist_on.push(true);
         self.hulk.push(false);
+        self.helmed.push(false);
         self.ordinal.push(ordinal);
         self.seen_seq.push(0);
         self.accel.push(Vector3::ZERO);
@@ -170,6 +174,7 @@ impl TierRows {
         self.pod_yaw.swap_remove(at);
         self.assist_on.swap_remove(at);
         self.hulk.swap_remove(at);
+        self.helmed.swap_remove(at);
         self.ordinal.swap_remove(at);
         self.seen_seq.swap_remove(at);
         self.accel.swap_remove(at);
@@ -349,7 +354,7 @@ fn beat(
         t.speed_limit[i] = 0.0;
         return;
     }
-    if t.kinds[i] == KIND_CAPITAL {
+    if t.kinds[i] == KIND_CAPITAL && !t.helmed[i] {
         // `CapitalStandin.cruise_force` divided by the mass: back toward the cruise, holding off the pull, 2 m/s^2 at most.
         let response = if dt_beat > CRUISE_RESPONSE_S {
             dt_beat

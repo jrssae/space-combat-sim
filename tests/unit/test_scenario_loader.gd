@@ -783,3 +783,13 @@ func test_capitals_are_read_for_the_line_up() -> void:
 	_assert_fails(data, "forward not zero")
 	data["capitals"] = {}
 	_assert_fails(data, "capitals must be an array")
+
+
+func test_a_scenario_capital_is_held_unless_its_helm_is_free() -> void:
+	var data: Dictionary = {"scenario_id": "t", "player": {"position": [0, 0, 0]}, "capitals": [{"type": "ea_omega"},
+			{"type": "ea_omega", "helm": "free"}]}
+	var made: Array = ScenarioLoader.from_data(data)["capitals"]
+	assert_eq(made[0]["helm"], ScenarioLoader.HELM_HOLD, "held where it stands by default (the line-up)")
+	assert_eq(made[1]["helm"], ScenarioLoader.HELM_FREE, "its brain fights it")
+	data["capitals"] = [{"type": "ea_omega", "helm": "loose"}]
+	_assert_fails(data, "helm must be one of hold, free")

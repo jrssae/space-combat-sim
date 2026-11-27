@@ -824,7 +824,8 @@ func _spawn_scenario_capitals() -> void:
 			var made: CapitalShip = CapitalShip.create(type, faction, label, world.rest_velocity())
 			if made != null:
 				world.spawn(made, at, basis)
-				made.set_course(Vector3.ZERO, world.rest_velocity())
+				if StringName(entry.get("helm", ScenarioLoader.HELM_HOLD)) != ScenarioLoader.HELM_FREE:
+					made.set_course(Vector3.ZERO, world.rest_velocity())  # held still; `helm: free` leaves it to its brain
 				if not bool(entry.get("hangar", true)) and made.hangar != null:
 					made.hangar.empty()  # a parked line-up ship carries no craft (M10-T17: full by default)
 				cap = made

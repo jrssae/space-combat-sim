@@ -845,9 +845,21 @@ fly attack runs on capitals; B10 and B1 run and reported (Q77). Launch (carriers
   and turns a half turn about its own up first. `test_capital_helm_turns` (new): the Nova and the Omega told 90, 180 and -90
   degrees settle on their heading within 2 degrees and level within 3, pitching under 10 on the way; Rust
   `a_half_turn_is_a_level_turn_and_a_rolled_hull_comes_back_level`. The parity recording still matches.
-- **Open for the maintainer.** A capital in the tier thinks but flies its last cruise (the tier's capital law); scenario capitals
-  (`capitals[]`) are spawned on orders (Hold), so a mission frees one with `release_helm()` (no scenario key yet); the squadron's
-  abort counts losses from its peak strength, not only those to a capital.
+- **Fix round 3 (the maintainer's answers, 2026-11-26).** `set_course` is Hold with the guns free, and scenario capitals start
+  held: kept. New scenario key `capitals[].helm` (`hold`, the default, or `free`: under its brain; `test_scenario_loader`,
+  `test_capital_far_helm` with `tests/fixtures/scenarios/capital_helm_free.json`). Far capitals steer live: the tier flies a
+  capital's row through the flight kernel on its native helm's command (its drive registered as a tier type at demotion,
+  `capital_tier_helm`) instead of the cruise law, its brain keeps thinking, and back in play it keeps its helm's course
+  (`test_capital_far_helm`: a far Omega turns onto a course, holds its speed and stays level; two far hostile Omegas close on
+  each other; promoted, it flies the helm's course). Raiders and the stand-ins: kept.
+  *Far fleet* (`test_capital_far_fleet`: 24 Omegas in two hostile groups 20 to 40 km off, every one a helmed tier row, compared
+  on the sim clock's ticks): 1 and 6 threads byte for byte; the tier's step median 3 to 4 us for all 24 (about 0.2 us a capital,
+  their helms included), the brains 8 to 9 us a think, 0.7 us a tick a capital. *Tests (staged copy):* GUT 145/145 over 15
+  files (the far helm 4, the far fleet 1, `test_scenario_loader` with the new helm key, the brain, brain threads, helm turns,
+  capital ship, tier handover, outcomes and proxies, hulks, strike carrier, the guard, the helm parity); the beam and blast
+  landing fixtures untouched.
+- **Open for the maintainer.** The squadron's abort counts losses from its peak strength, not only those to a capital; a far
+  capital's guns and beams fire nothing yet (T85).
 
 ### M10-T75 Beam hit landing in Rust (Q70, Q94)
 

@@ -77,6 +77,10 @@ extends RefCounted
 ## but not declared in `wings[]` is a group led by its first ship, engaging at will, in a finger-four.
 ## Errors are returned, not pushed: the caller decides how loud a broken scenario is.
 
+## A scenario capital's helm (M10-T16, `capitals[].helm`): held where it stands (its guns still free), or its brain's.
+const HELM_HOLD: StringName = &"hold"
+const HELM_FREE: StringName = &"free"
+const CAPITAL_HELMS: Array[StringName] = [HELM_HOLD, HELM_FREE]
 const FREE_FLIGHT_PATH: String = "res://data/scenarios/free_flight.json"
 ## A launch bay's name begins so (M7-T08): `cobra_bay_<wing>_<door>`.
 const LAUNCH_BAY_PREFIX: String = "cobra_bay_"
@@ -804,9 +808,12 @@ static func _capitals(raw: Variant, source: String) -> Variant:
 		var forward: Variant = _vector3(entry.get("forward", [0.0, 0.0, -1.0]))
 		if offset == null or forward == null or (forward as Vector3).is_zero_approx():
 			return "%s: offset and forward must be [x, y, z] (numbers), forward not zero" % where
+		var helm: Variant = entry.get("helm", String(HELM_HOLD))
+		if not (helm is String) or not CAPITAL_HELMS.has(StringName(helm as String)):
+			return "%s: helm must be one of %s, got %s" % [where, ", ".join(PackedStringArray(CAPITAL_HELMS)), JSON.stringify(helm)]
 		out.append({"type": StringName(type as String), "name": str(entry.get("name", "")),
 				"offset": offset as Vector3, "forward": forward as Vector3, "standin": bool(entry.get("standin", false)),
-				"hangar": bool(entry.get("hangar", true))})
+				"hangar": bool(entry.get("hangar", true)), "helm": StringName(helm as String)})
 	return out
 
 

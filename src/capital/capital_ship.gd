@@ -97,6 +97,9 @@ var _full_layout: ThrusterLayout = null  # every engine's nozzles, as built
 var _drive_power: float = 1.0  # the power the drive last had; kept while a disabled hull winds down
 var _lights: CapitalHulkLights = null  # its own glow, dimming, while disabled
 var _orders: Array = []  # [heading, velocity] given before its helm joined the core
+var _tier_type: int = -1  # its thrusters as the tier flies them, for `_tier_type_core` and `_tier_type_spec`
+var _tier_type_core: Object = null
+var _tier_type_spec: ShipSpec = null
 
 
 ## The capital ship of catalogue type `type`, for `p_faction`, called `display_name`, holding `velocity` (World frame). Null
@@ -238,6 +241,19 @@ func helm_state() -> Dictionary:
 	return {"heading": raw[0], "velocity": raw[1], "flipping": raw[2]}
 
 
+## The tier type its thrusters fly as when it is a far row (M10-T16: its helm steers it there live), registered with `core` once
+## per drive it has (a refit registers again); -1 without one.
+func tier_type(core: Object) -> int:
+	if core == null or flight_spec == null or layout == null:
+		return -1
+	if _tier_type < 0 or _tier_type_core != core or _tier_type_spec != flight_spec:
+		var a: Array = FlightBatch.type_arrays(flight_spec, layout)
+		_tier_type = int(core.tier_register_type(a[0], a[1], a[2], a[3], a[4], a[5], layout.center_of_mass))
+		_tier_type_core = core
+		_tier_type_spec = flight_spec
+	return _tier_type
+
+
 ## Whether its helm is mid-flip (a reaction hull with no retros turned to burn against its motion).
 func helm_flipping() -> bool:
 	return bool(helm_state().get("flipping", false))
@@ -312,8 +328,8 @@ func step_rotors(delta: float) -> void:
 
 func unpark_from_tier(xform: Transform3D, velocity: Vector3, spin: Vector3) -> void:
 	super.unpark_from_tier(xform, velocity, spin)
-	if _core != null and is_instance_valid(_core):
-		_core.capital_set_helm_velocity(get_instance_id(), cruise_velocity)  # the tier held its cruise
+	# Its helm steered it in the tier too (M10-T16): the mirror takes the helm's course back, never the other way.
+	cruise_velocity = helm_state().get("velocity", cruise_velocity)
 	for rotor: CapitalRotor in rotors:
 		rotor.snap()
 

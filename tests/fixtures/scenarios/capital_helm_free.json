@@ -1,0 +1,38 @@
+{
+ "scenario_id": "capital_helm_free",
+ "description": "M10-T16: two scenario capitals, one held (the default), one under its brain (helm: free).",
+ "system_id": "local",
+ "player": {
+  "position": [
+   0,
+   0,
+   0
+  ],
+  "forward": [
+   0,
+   0,
+   -1
+  ]
+ },
+ "capitals": [
+  {
+   "type": "ea_omega",
+   "name": "EAS HELD",
+   "offset": [
+    3000,
+    0,
+    -6000
+   ]
+  },
+  {
+   "type": "ea_omega",
+   "name": "EAS FREE",
+   "offset": [
+    -3000,
+    0,
+    -6000
+   ],
+   "helm": "free"
+  }
+ ]
+}
