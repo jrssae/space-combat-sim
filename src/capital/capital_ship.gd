@@ -467,6 +467,7 @@ func _build_hull(entry: Dictionary, display_name: String) -> void:
 	add_child(hull_piece)
 	_add_marks(display_name)
 	_add_doors()
+	hull_piece.hide_when_far()  # its marks and doors go with the full mesh past the swap (M10-T89)
 	_add_bay_interiors()
 	hangar = CapitalHangar.make(self)
 	if hangar != null:

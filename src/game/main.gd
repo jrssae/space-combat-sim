@@ -158,6 +158,7 @@ func _enter_tree() -> void:
 		# Each battle starts at sim time 0, also a scene loaded again in the same process (the `scenario` command), so its
 		# timers round as a first run's do (M4-T37). Before the children enter, so none reads the old time.
 		SimClock.reset()
+		_fresh_world()
 		return
 	_refused = true
 	process_mode = Node.PROCESS_MODE_DISABLED
@@ -165,6 +166,22 @@ func _enter_tree() -> void:
 	if DisplayServer.get_name() != "headless":
 		OS.alert(why, "Space Combat Sim")
 	get_tree().quit(1)
+
+
+# Each battle gets a physics space of its own (M10-T85 follow-up): Jolt's results hang on the order its bodies were made in,
+# which a space reused by a scene loaded again in the same process no longer repeats, so two overlapping hulls pushed apart
+# there came out differently. The world's environments carry over.
+func _fresh_world() -> void:
+	var viewport: Viewport = get_viewport()
+	if viewport == null:
+		return
+	var old: World3D = viewport.find_world_3d()
+	var fresh := World3D.new()
+	if old != null:
+		fresh.environment = old.environment
+		fresh.fallback_environment = old.fallback_environment
+		fresh.camera_attributes = old.camera_attributes
+	viewport.world_3d = fresh
 
 
 func _ready() -> void:
