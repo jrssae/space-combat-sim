@@ -2,14 +2,15 @@
 # Builds the Linux x86_64 release export (M8-T15, Q9) into build/release/ and smoke-tests it.
 # Steps: pinned export templates (SHA-512, setup_export_templates.sh), native library (release), generated assets, import, export,
 # then a headless run of the exported binary that plays free_flight a few ticks and quits. Usage: build_release.sh [--no-smoke]
-# Godot looks for templates under its data dir, so the build runs with XDG_DATA_HOME inside .tools/ and never touches ~/.local.
+# Godot runs in self-contained mode (a ._sc_ file beside the editor): its templates are copied under .tools/godot/editor_data/,
+# so nothing under the user's profile is touched. Linux also keeps its game data in .tools/xdg, as before.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
 source "${ROOT}/scripts/native_lib_name.sh"
 LIBNAME="$(native_lib_name)"
-GODOT="${ROOT}/.tools/godot/godot"
+GODOT="$(godot_default_bin)"
 VERSION="4.7.2.stable"
 OUT="${ROOT}/build/release"
 BIN="${OUT}/space-combat-sim.x86_64"
@@ -22,12 +23,15 @@ lock() { local mode="$1"; shift; "${ROOT}/scripts/godot_lock.sh" "${mode}" -- "$
 [[ -x "${GODOT}" ]] || "${ROOT}/scripts/setup_godot.sh"
 "${ROOT}/scripts/setup_export_templates.sh"
 
-# The export looks the templates up as <data dir>/godot/export_templates/<version>/.
-export XDG_DATA_HOME="${ROOT}/.tools/xdg"
-tdir="${XDG_DATA_HOME}/godot/export_templates/${VERSION}"
+# The export looks the templates up as <editor dir>/editor_data/export_templates/<version>/ (self-contained mode).
+touch "$(dirname "${GODOT}")/._sc_"
+tdir="$(dirname "${GODOT}")/editor_data/export_templates/${VERSION}"
 mkdir -p "${tdir}"
-for t in linux_release.x86_64 linux_debug.x86_64; do ln -sf "${ROOT}/.tools/godot/templates/${t}" "${tdir}/${t}"; done
+for t in "${ROOT}/.tools/godot/templates/"*; do
+    [[ "$(basename "${t}")" == version.txt ]] || cp -f "${t}" "${tdir}/"
+done
 echo "${VERSION}" > "${tdir}/version.txt"
+is_windows || export XDG_DATA_HOME="${ROOT}/.tools/xdg"
 
 lock write "${ROOT}/scripts/build_native.sh"
 lock write "${ROOT}/scripts/gen_assets.sh"

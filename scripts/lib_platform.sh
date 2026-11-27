@@ -30,3 +30,22 @@ find_python() {
     echo python3
     return 1
 }
+
+# unzip_member <zip> <dest dir> <member>: extracts one member flat into dest. Uses unzip where there is one (Linux; some Git
+# Bash installs lack it), else Windows' own bsdtar (System32\tar.exe, which reads zips; the GNU tar first on PATH does not).
+unzip_member() {
+    local zip="$1" dest="$2" member="$3" bsdtar
+    if command -v unzip > /dev/null 2>&1; then
+        unzip -q -o -j "${zip}" "${member}" -d "${dest}"
+        return
+    fi
+    bsdtar="$(cygpath -u "${SYSTEMROOT:-C:\Windows}")/System32/tar.exe"
+    "${bsdtar}" -xf "$(cygpath -m "${zip}")" -C "$(cygpath -m "${dest}")" --strip-components="$(awk -F/ '{print NF-1}' <<< "${member}")" "${member}"
+}
+
+# godot_default_bin: the project-local editor that setup_godot.sh installs (godot.exe on Windows, the godot symlink elsewhere).
+godot_default_bin() {
+    local root
+    root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+    if is_windows; then echo "${root}/.tools/godot/godot.exe"; else echo "${root}/.tools/godot/godot"; fi
+}

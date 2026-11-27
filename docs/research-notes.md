@@ -162,3 +162,23 @@ read/write lock (shared for readers, exclusive for writers, a gate so a waiting 
   `scripts/*`, `addons/gut/*`, `references/*`, `native/*`; `embed_pck`) to `build/release/` and runs `scripts/release_smoke.sh`.
 - Godot copies `libscs_native.so` beside the binary (the `.gdextension` is packed); ship both files together.
 - A release binary rejects `--path`; `--headless -- --console-exec=...` works. A headless export's `state render` shows `gpu = none`.
+
+## Godot editor and export templates on Windows (M9-T02; verified 2026-11-27)
+
+- Editor: `Godot_v4.7.2-stable_win64.exe.zip` (86,013,866 bytes) from the 4.7.2-stable GitHub release. Upstream publishes only
+  SHA-512 (`SHA512-SUMS.txt` in the release assets): `83decd58fdf67b9d657958a1ae6bf1929c20785315a81effe245874cdc57acb709bf868e00778a96984338c1b29dafdb453c6847747694621c6ecf5da2259993`.
+  The download matched it, and its SHA-256, which `scripts/setup_godot.sh` pins, is
+  `731980f9608d61333e5baf54a2ef17210acc7a538446c0cb9969f002aca1e953`. The zip holds `Godot_v4.7.2-stable_win64.exe` (the editor)
+  and `Godot_v4.7.2-stable_win64_console.exe` (a 198 KB wrapper). `--version` prints `4.7.2.stable.official.ed1daf0bf`.
+- The console wrapper only runs as `<name>_console.exe` beside `<name>.exe` (renamed to `godot.exe` alone it exits with "Invalid
+  wrapper executable name"). The script therefore installs `.tools/godot/godot.exe` (the editor; it prints to a pipe and passes
+  the script's exit code through, so `GODOT` points at it) and `.tools/godot/godot_console.exe` (the wrapper, for a plain console).
+- Templates come from the same `.tpz` and SHA-512 as Linux (that hash is the `export_templates.tpz` line of `SHA512-SUMS.txt`).
+  The Windows files are `templates/windows_release_x86_64.exe` (109 MB), `windows_debug_x86_64.exe` (103 MB) and the matching
+  `windows_release_x86_64_console.exe` and `windows_debug_x86_64_console.exe` (189 KB wrappers); `setup_export_templates.sh` keeps
+  those four under `.tools/godot/templates/`.
+- Both OSes export in self-contained mode: `build_release.sh` creates `.tools/godot/._sc_` and copies the templates to
+  `.tools/godot/editor_data/export_templates/4.7.2.stable/` (with `version.txt`). Checked on Windows: an export from a scratch
+  project found the release template there. `XDG_DATA_HOME` is ignored by Godot on Windows.
+- Git Bash on a stock Git for Windows has no `unzip`; `unzip_member` (`scripts/lib_platform.sh`) falls back to Windows' bsdtar
+  (`System32\tar.exe`), which reads zips (the GNU `tar` first on PATH does not).

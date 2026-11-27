@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Opt-in: installs Godot's Linux x86_64 export templates into .tools/godot/templates/ so the game can be measured as a
 # release build (editor builds are slower at GDScript). Not part of setup_godot.sh or CI. Idempotent; the 1.28 GB archive is
-# downloaded to a temporary folder, verified by SHA-512, and deleted again. Only the two Linux x86_64 templates are kept.
+# downloaded to a temporary folder, verified by SHA-512, and deleted again. Only the two Linux x86_64 templates are kept (on Windows,
+# the two windows_*_x86_64.exe templates and their _console.exe wrappers).
 #
 # Repeat a release run (M4-T03r). A template cannot open a project folder (it rejects --path), so measure an export:
 #   1. Snapshot the commit so working-tree edits never reach the numbers: git archive <commit> | tar -x -C <snap>, copy
@@ -30,9 +31,13 @@ GODOT_VERSION="4.7.2-stable"
 TPZ="Godot_v${GODOT_VERSION}_export_templates.tpz"
 TPZ_URL="https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}/${TPZ}"
 TPZ_SHA512="ca4d71c4d7b81dfc15d1a98baa07534aa95b03fdda78a0075b06672e1648d2e5f40980c9adc28d23e1b92e732ee7bf3461997aa804af74ec2fcd7a93ccb84079"
-KEEP=(linux_release.x86_64 linux_debug.x86_64)
-
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT}/scripts/lib_platform.sh"
+if is_windows; then
+    KEEP=(windows_release_x86_64.exe windows_debug_x86_64.exe windows_release_x86_64_console.exe windows_debug_x86_64_console.exe)
+else
+    KEEP=(linux_release.x86_64 linux_debug.x86_64)
+fi
 DEST="${ROOT}/.tools/godot/templates"
 
 have_all() {
@@ -57,9 +62,9 @@ echo "Downloading ${TPZ_URL} (1.28 GB)"
 curl -fsSL --retry 4 --retry-delay 2 -o "${TMP}/${TPZ}" "${TPZ_URL}"
 echo "${TPZ_SHA512}  ${TMP}/${TPZ}" | sha512sum -c -
 for t in "${KEEP[@]}"; do
-    unzip -q -o -j "${TMP}/${TPZ}" "templates/${t}" -d "${DEST}"
+    unzip_member "${TMP}/${TPZ}" "${DEST}" "templates/${t}"
     chmod +x "${DEST}/${t}"
 done
 echo "${GODOT_VERSION}" > "${DEST}/version.txt"
-"${DEST}/linux_release.x86_64" --version || true
+"${DEST}/${KEEP[0]}" --version || true
 echo "Installed export templates ${GODOT_VERSION} at ${DEST}"

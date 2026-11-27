@@ -2,9 +2,9 @@
 # Helpers shared by the tiers of scripts/run_tests.sh (sourced, never run): paths, logging, the compile check, the Rust tests
 # and the two console smokes that the quick tier shares with the standard one.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
-REPORTS="${ROOT}/reports"
 source "${ROOT}/scripts/lib_platform.sh"
+GODOT="${GODOT_BIN:-$(godot_default_bin)}"
+REPORTS="${ROOT}/reports"
 source "${ROOT}/scripts/native_lib_name.sh"
 SCRIPT_ERRORS="SCRIPT ERROR|Parse Error|Failed to load script"
 # Godot runs share the machine with other agents' runs (scripts/godot_lock.sh): the import writes .godot/, so it takes the lock
