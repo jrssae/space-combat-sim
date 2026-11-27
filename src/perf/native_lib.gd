@@ -26,14 +26,19 @@ static func missing(classes: Array[StringName] = []) -> PackedStringArray:
 	return out
 
 
+## The native library's file name in bin/ on this OS (cargo names a Windows DLL without the `lib` prefix).
+static func library_file() -> String:
+	return "scs_native.dll" if OS.get_name() == "Windows" else "libscs_native.so"
+
+
 ## Why the game cannot start (the missing classes and how to build the library), or "" when nothing is missing.
 static func refusal(classes: Array[StringName] = []) -> String:
 	var lacking: PackedStringArray = missing(classes)
 	if lacking.is_empty():
 		return ""
-	return ("The native library bin/libscs_native.so is missing or out of date (it lacks %s). The game needs it: build it "
+	return ("The native library bin/%s is missing or out of date (it lacks %s). The game needs it: build it "
 			+ "with scripts/build_native.sh (it needs Rust's cargo; install it with rustup, https://rustup.rs), run "
-			+ "godot --headless --path . --import once so Godot registers it, then start again.") % ", ".join(lacking)
+			+ "godot --headless --path . --import once so Godot registers it, then start again.") % [library_file(), ", ".join(lacking)]
 
 
 ## Whether `native_class` is registered in this process.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds the native library (native/, Rust with godot-rust gdext) into bin/libscs_native.so. The game needs it and
+# Builds the native library (native/, Rust with godot-rust gdext) into bin/ (the file name comes from scripts/native_lib_name.sh). The game needs it and
 # refuses to start without it (M4-T37).
 # Builds only when the library is missing or older than any file under native/; cargo then rebuilds what changed.
 # With no cargo it says so and exits 1. The Rust version comes from native/rust-toolchain.toml; rustup installs it on
@@ -8,8 +8,9 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+source "${ROOT}/scripts/native_lib_name.sh"
 CRATE="${ROOT}/native"
-LIB="${ROOT}/bin/libscs_native.so"
+LIB="${ROOT}/bin/$(native_lib_name)"
 export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-${ROOT}/.tools/native-target}"
 
 # Godot's import scan must never walk cargo's build files.
@@ -38,7 +39,7 @@ if command -v rustup > /dev/null && ! rustup show active-toolchain > /dev/null 2
     rustup toolchain install
 fi
 cargo build --release --locked
-built="${CARGO_TARGET_DIR}/release/libscs_native.so"
+built="${CARGO_TARGET_DIR}/release/$(native_lib_name)"
 [[ -f "${built}" ]] || { echo "build_native.sh: cargo did not produce ${built}" >&2; exit 1; }
 # Copy then rename, so a running Godot that has the old library mapped keeps its own copy.
 mkdir -p "$(dirname "${LIB}")"

@@ -17,6 +17,8 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 MARK=".scratch_project"
+source "${ROOT}/scripts/native_lib_name.sh"
+LIBNAME="$(native_lib_name)"
 
 usage() {
     echo "usage: scripts/scratch_project.sh <name|dir> [--staged [--build-native]] [--assets-from <dir>] | --clean <name|dir>" >&2
@@ -60,7 +62,7 @@ fi
 # The staged copy: real files from the index, so nothing untracked or unstaged from the shared checkout is present. The index is
 # shared by every agent, so another agent's staged files are in it too; unstage or commit them first if they would pollute a run.
 if (( staged == 1 )); then
-    lib="${ROOT}/bin/libscs_native.so"
+    lib="${ROOT}/bin/${LIBNAME}"
     (( build_native == 1 )) || [[ -f "${lib}" ]] || { echo "scratch_project.sh: no ${lib}; build it (scripts/build_native.sh) or pass --build-native." >&2; exit 1; }
     mkdir -p "${dir}"
     git -C "${ROOT}" checkout-index -a --prefix="${dir}/"
@@ -73,8 +75,8 @@ if (( staged == 1 )); then
         if [[ -d "$1/.godot" ]]; then cp -a --reflink=auto "$1/.godot" "$3/.godot"; fi
         rm -rf "$3/assets/generated"
         cp -a --reflink=auto "$2" "$3/assets/generated"
-        if [[ "$4" == 0 ]]; then cp -a --reflink=auto "$1/bin/libscs_native.so" "$3/bin/libscs_native.so"; fi
-    ' _ "${ROOT}" "${assets_from}" "${dir}" "${build_native}"
+        if [[ "$4" == 0 ]]; then cp -a --reflink=auto "$1/bin/$5" "$3/bin/$5"; fi
+    ' _ "${ROOT}" "${assets_from}" "${dir}" "${build_native}" "${LIBNAME}"
 
     native_staged="$(git -C "${ROOT}" diff --cached --name-only HEAD -- native bin/scs_native.gdextension | head -5)"
     if (( build_native == 1 )); then
@@ -86,7 +88,7 @@ if (( staged == 1 )); then
         echo "scratch_project.sh: WARNING staged changes touch native/ (e.g. ${native_staged%%$'\n'*}); the library copied from the main checkout was"
         echo "  built from its working tree, not the staged sources. Rerun with --build-native (or run scripts/build_native.sh in the copy)."
     else
-        echo "scratch_project.sh: note the native library is a copy of the main checkout's bin/libscs_native.so, built from its working tree;"
+        echo "scratch_project.sh: note the native library is a copy of the main checkout's bin/${LIBNAME}, built from its working tree;"
         echo "  if other agents have uncommitted native/ changes, add --build-native for a library that matches HEAD."
     fi
 

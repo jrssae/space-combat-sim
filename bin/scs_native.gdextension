@@ -1,4 +1,4 @@
-; The game's native library (docs/architecture.md, section 17.5). scripts/build_native.sh builds the .so; it is required
+; The game's native library (docs/architecture.md, section 17.5). scripts/build_native.sh builds the .so (Linux) or .dll (Windows); it is required
 ; (M4-T37): when it is missing, Godot logs that it cannot open it and the game refuses to start (NativeLib.refusal).
 [configuration]
 entry_symbol = "gdext_rust_init"
@@ -8,3 +8,5 @@ reloadable = false
 [libraries]
 linux.debug.x86_64 = "res://bin/libscs_native.so"
 linux.release.x86_64 = "res://bin/libscs_native.so"
+windows.debug.x86_64 = "res://bin/scs_native.dll"
+windows.release.x86_64 = "res://bin/scs_native.dll"

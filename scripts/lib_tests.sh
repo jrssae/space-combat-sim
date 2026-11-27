@@ -4,6 +4,7 @@
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GODOT="${GODOT_BIN:-${ROOT}/.tools/godot/godot}"
 REPORTS="${ROOT}/reports"
+source "${ROOT}/scripts/native_lib_name.sh"
 SCRIPT_ERRORS="SCRIPT ERROR|Parse Error|Failed to load script"
 # Godot runs share the machine with other agents' runs (scripts/godot_lock.sh): the import writes .godot/, so it takes the lock
 # alone; everything else only reads and shares it. The wait is outside `timeout`, so it does not eat the limit. Uncontended, the lock costs nothing.
@@ -43,7 +44,7 @@ python_bin() {
 build_native_or_fail() {
     echo "== Native library"
     scripts/build_native.sh || fail "The native library failed to build (see the output above)."
-    [[ -f bin/libscs_native.so ]] || fail "No native library at bin/libscs_native.so after the build."
+    [[ -f "bin/$(native_lib_name)" ]] || fail "No native library at bin/$(native_lib_name) after the build."
 }
 
 # Godot's import: the resources and the global class list (a new `class_name` is unknown to the compile check and to GUT

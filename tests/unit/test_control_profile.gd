@@ -123,6 +123,18 @@ func test_profile_names() -> void:
 		assert_false(ControlProfile.is_valid_name(bad), "'%s'" % bad)
 
 
+func test_windows_device_names_are_not_profile_names() -> void:
+	var devices: Array[String] = ["con", "nul", "aux", "prn"]
+	for digit: int in range(1, 10):
+		devices.append("com%d" % digit)
+		devices.append("lpt%d" % digit)
+	for device: String in devices:
+		assert_false(ControlProfile.is_valid_name(device), device)
+		assert_false(ControlProfile.is_valid_name(device.to_upper()), device.to_upper())
+	for ok: String in ["com", "com0", "com10", "lpt0", "lpt10", "console", "nul_2", "my_con", "prn1", "auxiliary"]:
+		assert_true(ControlProfile.is_valid_name(ok), ok)
+
+
 # --- Round trips (AC13) ---------------------------------------------------------------------------------------
 
 

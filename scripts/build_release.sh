@@ -7,6 +7,8 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "${ROOT}"
+source "${ROOT}/scripts/native_lib_name.sh"
+LIBNAME="$(native_lib_name)"
 GODOT="${ROOT}/.tools/godot/godot"
 VERSION="4.7.2.stable"
 OUT="${ROOT}/build/release"
@@ -35,7 +37,7 @@ rm -rf "${OUT}"
 mkdir -p "${OUT}"
 start="${SECONDS}"
 lock write "${GODOT}" --headless --path "${ROOT}" --export-release "Linux release" "${BIN}"
-[[ -x "${BIN}" && -f "${OUT}/libscs_native.so" ]] || { echo "build_release.sh: export is missing the binary or libscs_native.so" >&2; ls -la "${OUT}"; exit 1; }
+[[ -x "${BIN}" && -f "${OUT}/${LIBNAME}" ]] || { echo "build_release.sh: export is missing the binary or ${LIBNAME}" >&2; ls -la "${OUT}"; exit 1; }
 echo "build_release.sh: exported in $((SECONDS - start)) s: $(du -sh "${OUT}" | cut -f1) in ${OUT#"${ROOT}"/}"
 
 [[ "${1:-}" == "--no-smoke" ]] && exit 0

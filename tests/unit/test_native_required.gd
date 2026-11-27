@@ -19,7 +19,8 @@ func test_a_missing_class_is_named_with_how_to_build_the_library() -> void:
 	var why: String = NativeLib.refusal(classes)
 	assert_string_contains(why, String(FAKE_CLASS))
 	assert_string_contains(why, "scripts/build_native.sh")
-	assert_string_contains(why, "bin/libscs_native.so")
+	assert_string_contains(why, "bin/" + NativeLib.library_file())
+	assert_eq(NativeLib.library_file(), "scs_native.dll" if OS.get_name() == "Windows" else "libscs_native.so", "named per OS")
 	assert_string_contains(why, "rustup", "names what the build needs")
 	assert_string_contains(why, "--import", "and the import that registers the library")
 

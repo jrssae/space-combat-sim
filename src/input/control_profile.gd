@@ -21,6 +21,8 @@ const FORMAT_VERSION: int = 1
 const DEFAULT_NAME: String = "default"
 ## Profile names double as file names (`user://controls/<name>.cfg`) and as `settings.control_profile` values.
 const NAME_PATTERN: String = "^[a-z0-9_]{1,32}$"
+## Windows device names: `<name>.cfg` would open a device there, so they are refused on every OS (M9-T01).
+const RESERVED_NAME_PATTERN: String = "^(con|nul|aux|prn|com[1-9]|lpt[1-9])$"
 ## Actions that need no pad binding: no pad button is free for them, or the pad reaches the function another way. The roll
 ## keys add to the right stick's diagonal roll; target_next, target_prev and target_ahead are the keyboard's and the
 ## mouse's (the pad targets with B, `target_cycle`, which a layout that targets with another button, such as m1_classic's
@@ -75,6 +77,8 @@ var deadzones: Dictionary = {}
 
 
 static func is_valid_name(profile_name: String) -> bool:
+	if RegEx.create_from_string(RESERVED_NAME_PATTERN).search(profile_name.to_lower()) != null:
+		return false
 	return RegEx.create_from_string(NAME_PATTERN).search(profile_name) != null
 
 
