@@ -291,7 +291,8 @@ impl ScsCannons {
         let started = std::time::Instant::now();
         for &(slot, r) in &self.tier_slots {
             if let Some(cannon) = self.slots[slot].as_mut() {
-                Self::fire_in_tier(cannon, &mut c, r, now_s, &mut self.fired);
+                let tick = c.clock_tick();
+                Self::fire_in_tier(cannon, &mut c, r, now_s, tick, &mut self.fired);
             }
         }
         self.tier_us = started.elapsed().as_nanos() as f64 / 1000.0;
@@ -413,12 +414,14 @@ impl ScsCannons {
     }
 
     // A tier ship's shots (M4-T22): the gate as on its body, each shot rolled against the target its pilot wants from the
-    // shot's range and the pilot's skill; a hit is kept for GDScript to land through the target's `Damageable`.
+    // shot's range and the pilot's skill (rolled on the sim clock's `tick`); a hit is kept for GDScript to land through the target's
+    // `Damageable`.
     fn fire_in_tier(
         cannon: &mut Cannon,
         core: &mut ScsSimCore,
         r: usize,
         now_s: f64,
+        tick: i64,
         fired: &mut Vec<usize>,
     ) {
         if core.rows.flags[r] & FLAG_HULK != 0 {
@@ -483,7 +486,7 @@ impl ScsCannons {
                 cannon.muzzle_speed * cannon.lifetime_s,
                 excess,
             );
-            if tier_fire::roll(core.tier_seed, core.syncs(), ordinal, m as i64)
+            if tier_fire::roll(core.tier_seed, tick, ordinal, m as i64)
                 < chance * cannon.tier_scale
             {
                 core.tier_hits_total += 1;

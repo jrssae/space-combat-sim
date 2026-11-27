@@ -260,6 +260,8 @@ pub struct ScsSimCore {
     // The tier's fire (M4-T22): the seed every roll draws from, the fighters' hits rolled since GDScript took them, and the
     // shots and hits rolled so far.
     pub(crate) tier_seed: u64,
+    // The sim clock's tick count at this tick's sync (M10-T11 fix), when GDScript gives it: the beats and seeded rolls use it.
+    pub(crate) sim_tick: Option<i64>,
     pub(crate) tier_hits: crate::tier_fire::Hits,
     pub(crate) tier_shots_total: i64,
     pub(crate) tier_hits_total: i64,
@@ -548,6 +550,21 @@ impl ScsSimCore {
     #[func]
     pub fn syncs(&self) -> i64 {
         self.syncs as i64
+    }
+
+    /// The sim clock's tick count (`SimClock.ticks`, ticks since its last reset) for the coming sync: the tier's beat and the
+    /// seeded rolls and spreads count on it, so a scene plays the same however its first frames fell (M10-T11 fix). The core's
+    /// own sync count also holds whatever ticks a scene ran before its clock started, which differ with a slow load or a
+    /// process's first scene. Negative: back to the sync count.
+    #[func]
+    pub fn set_sim_tick(&mut self, tick: i64) {
+        self.sim_tick = (tick >= 0).then_some(tick);
+    }
+
+    /// The tick the beats and seeded rolls use now: the sim clock's, or the sync count when no clock was given (unit tests
+    /// driving the core by hand).
+    pub(crate) fn clock_tick(&self) -> i64 {
+        self.sim_tick.unwrap_or_else(|| self.syncs())
     }
 
     /// The tick's first sync point: builds this tick's rows from the bodies, the statics after the bodies, and keeps only

@@ -102,8 +102,8 @@ impl ScsSimCore {
         } else {
             DEFAULT_PERIOD
         };
-        // The core's own sync count, so the beat falls the same way in every run of a seeded fight.
-        let clock = self.syncs();
+        // The sim clock's ticks (the sync count without one), so the beat falls the same way in every run of a seeded fight.
+        let clock = self.clock_tick();
         // Gravity from the tick's one sample (D66), for every row at once.
         let pull_started = Instant::now();
         let pulled = frame_rows::residuals(

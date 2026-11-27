@@ -567,7 +567,7 @@ impl ScsSimCore {
         let mut ids: Vec<i64> = Vec::new();
         self.turrets.memory.prune(now_s);
         self.turrets.provoked_now_s = now_s;
-        let tick = self.syncs();
+        let tick = self.clock_tick();
         let mut surface_rows = std::mem::take(&mut self.turrets.surface_rows);
         self.grid_surface_rows(&mut surface_rows);
         let mut m = std::mem::take(&mut self.turrets.mounts);

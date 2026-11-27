@@ -663,6 +663,7 @@ func _sync_in() -> void:
 		reader.close_tick()
 	_tick_open = true
 	var before_core: int = Time.get_ticks_usec()
+	core.set_sim_tick(SimClock.ticks)  # the beats and seeded rolls count the sim clock's ticks (M10-T11 fix)
 	core.sync_in(frame, delta)
 	core_sync_us = Time.get_ticks_usec() - before_core
 	reader.read(core, tree.get_nodes_in_group(Projectile.GROUP), frame, delta, true, false)

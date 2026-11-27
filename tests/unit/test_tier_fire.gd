@@ -143,8 +143,8 @@ func test_the_rolls_are_seeded_one_thread_and_six_roll_the_same_hits() -> void:
 		var runs: Array = []
 		for threads: int in [1, 6]:
 			Settings.set_value(&"perf_threads", threads)
-			SimClock.reset()
 			await _world(4, 4)
+			SimClock.reset()  # the rolls count the sim clock's ticks (M10-T11): every run's clock starts with its fight
 			_use_schedule(schedule)
 			for i: int in 4:
 				w.fighter(ShipPool.DEFAULT_TYPE, "R%d" % i, Vector3(float(i) * 120.0, 0.0, -20000.0), 10 + i)
@@ -457,6 +457,7 @@ func test_the_rolls_follow_the_seed() -> void:
 	var runs: Array = []
 	for seed_value: int in [7, 7, 8]:
 		await _world(4, 4)
+		SimClock.reset()  # the rolls count the sim clock's ticks (M10-T11): every run's clock starts with its fight
 		w.tier.seed_value = seed_value
 		for i: int in 4:
 			w.fighter(ShipPool.DEFAULT_TYPE, "R%d" % i, Vector3(float(i) * 120.0, 0.0, -20000.0), 10 + i)

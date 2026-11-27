@@ -7,6 +7,9 @@ extends Node
 signal warp_changed(warp: float)
 
 var sim_time_s: float = 0.0
+## Physics ticks since the last `reset`: what the native core's beats and seeded rolls count on (M10-T11 fix), so a scene plays
+## the same whatever ran before its clock started; unlike `sim_time_s`, warp never makes it skip.
+var ticks: int = 0
 var warp: float = 1.0:
 	set = set_warp
 
@@ -21,6 +24,7 @@ func now() -> float:
 
 func advance(delta: float) -> void:
 	sim_time_s += delta * warp
+	ticks += 1
 
 
 func set_warp(value: float) -> void:
@@ -35,3 +39,4 @@ func set_warp(value: float) -> void:
 ## Test and respawn helper; gameplay never rewinds time.
 func reset(time_s: float = 0.0) -> void:
 	sim_time_s = time_s
+	ticks = 0
