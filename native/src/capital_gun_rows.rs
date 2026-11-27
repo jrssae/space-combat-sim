@@ -2,12 +2,20 @@
 // each capital's mounts once, tells the rows when a mount stops working or the rate of fire changes, and steps them once a
 // tick from `SimCore.step_now`, before the bolts move: the interceptors' pulses meet what they meet, the batteries fire, the
 // missiles in flight are steered, then every gun aims and fires, its shots added as owned bolt rows (with their toughness,
-// Q81) that the core's hit sweep lands like any other. The maths is `capital_gun_kernels` and `capital_intercepts`,
-// engine-free.
+// Q81) that the core's hit sweep lands like any other. A ship that is a far (tier) row fires as seeded rolls instead
+// (M10-T85, `capital_far_fire`), its hits landed here on the damage store in one batch. The maths is `capital_gun_kernels`,
+// `capital_intercepts` and `capital_far_fire`, engine-free.
 // gdext's `init` derive writes `base: base`, which clippy flags on the struct's `base` field.
 #![allow(clippy::redundant_field_names)]
 use godot::prelude::*;
 
+use std::collections::HashMap;
+
+use crate::beam_rows::ScsBeamRows;
+use crate::capital_far_fire::{self as cf, Clock, Far, FarHit, FarShot};
+use crate::damage_rows::ScsDamageStore;
+use crate::damage_store::landing::{self as dl, Ctx, LandHit, LandOut};
+use crate::rows::{FLAG_DISABLED, FLAG_HULK, FLAG_TIER};
 use crate::capital_gun_kernels::{self as ck, GunSpec, GunWorld, Missile, Mount, Owner, Shot, Tally};
 use crate::capital_intercepts::{GuardView, Guards, Met, PulseShot};
 use crate::grid_kernels::{KIND_INTERCEPT, KIND_MISSILE};
@@ -47,6 +55,21 @@ pub struct ScsCapitalGuns {
     missiles_total: i64,
     last_us: f64,
     kernel_us: f64,
+    // The far fire (M10-T85): its state, the tick's hits and the mounts that fired, each owner's far row, the relations
+    // (1 hostile, 2 friendly), each warhead's blast at its centre, the store the hits land on, the batch's buffers.
+    far: Far,
+    far_hits: Vec<FarHit>,
+    far_shots: Vec<FarShot>,
+    far_rows: Vec<i32>,
+    relation: Vec<u8>,
+    warheads: [f64; 3],
+    store: Option<Gd<ScsDamageStore>>,
+    land_hits: Vec<LandHit>,
+    land_out: LandOut,
+    far_us: f64,
+    land_us: f64,
+    log_on: bool,
+    hit_log: Vec<dl::Landed>,
 }
 
 #[godot_api]
@@ -75,7 +98,25 @@ impl ScsCapitalGuns {
         self.factions = n;
         self.hostile = matrix.as_slice().iter().map(|&b| b == 1).collect();
         self.friendly = matrix.as_slice().iter().map(|&b| b == 2).collect();
+        self.relation = matrix.as_slice().to_vec();
         true
+    }
+
+    /// The damage store the far fire's hits land on (M10-T85).
+    #[func]
+    fn attach_store(&mut self, store: Gd<ScsDamageStore>) -> bool {
+        self.store = Some(store);
+        true
+    }
+
+    /// Each warhead's blast at its centre (`[none, missile, torpedo]` hull points), which a far round adds to its own hit:
+    /// out there no blast row goes off.
+    #[func]
+    fn set_warheads(&mut self, damage: PackedFloat64Array) {
+        let d = damage.as_slice();
+        for (k, w) in self.warheads.iter_mut().enumerate() {
+            *w = d.get(k).copied().filter(|x| x.is_finite()).unwrap_or(0.0).max(0.0);
+        }
     }
 
     /// How many factions the core knows now (the hostility table must cover them all).
@@ -171,6 +212,9 @@ impl ScsCapitalGuns {
     /// flight fly on, guided as before (`capital_gun_kernels::remove_owner`).
     #[func]
     fn remove_owner(&mut self, body: i64) {
+        if let Some(o) = self.owners.iter().position(|w| w.body == body) {
+            self.far.remove_owner(o);
+        }
         ck::remove_owner(&mut self.mounts, &mut self.owners, &mut self.owner_of, &mut self.missiles, body);
         self.guards.forget(body);
     }
@@ -317,6 +361,124 @@ impl ScsCapitalGuns {
         h as i64
     }
 
+    /// Lands the last step's far hits from `start` on the damage store in one batch (M10-T85), with the friendly fire setting
+    /// and god mode as they are, at sim time `now_s`: until the end, or a hit that raises an event GDScript must answer first.
+    /// Returns what `ScsBeamRows.land` does: `[next hit, coalesced writes, events, summaries, the kill (a dictionary with the
+    /// hit's `mount`; empty for none), shooters revealed, the hit GDScript must land itself (-1 for none), hits landed, damage
+    /// landed]`.
+    #[func]
+    fn land_far(&mut self, start: i64, now_s: f64, friendly_fire: bool, god_mode: bool) -> VarArray {
+        let started = std::time::Instant::now();
+        let mut out = VarArray::new();
+        let (Some(core), Some(mut store)) = (self.core.clone(), self.store.clone()) else {
+            return out;
+        };
+        let start = usize::try_from(start).unwrap_or(0).min(self.far_hits.len());
+        self.gather(&core, &store, start);
+        let next = {
+            let mut guard = store.bind_mut();
+            let s = &mut *guard;
+            let ctx = Ctx {
+                blast: false,
+                friendly_fire,
+                god_mode,
+                relation: &self.relation,
+                factions: self.factions,
+            };
+            start + dl::land(&mut s.store, &s.targets, &self.land_hits, 0, &ctx, &mut self.land_out)
+        };
+        let o = &self.land_out;
+        if !o.attackers.is_empty() {
+            core.clone().bind_mut().note_attacker_pairs(&o.attackers, now_s);
+        }
+        if self.log_on {
+            self.hit_log.extend_from_slice(&o.landed);
+        }
+        let mut kill = VarDictionary::new();
+        if let Some((k, applied, section)) = o.kill {
+            let h = &self.land_hits[k];
+            kill.set("mount", i64::from(self.far_hits[start + k].mount));
+            kill.set("target", h.target);
+            kill.set("body", h.body);
+            kill.set("shooter", h.shooter);
+            kill.set("damage", h.damage);
+            kill.set("applied", applied);
+            kill.set("point", h.point);
+            kill.set("volume", i64::from(h.volume));
+            kill.set("section", i64::from(section));
+        }
+        out.push(&(next as i64).to_variant());
+        out.push(&PackedFloat64Array::from(o.sync.as_slice()).to_variant());
+        out.push(&PackedFloat64Array::from(o.events.as_slice()).to_variant());
+        out.push(&ScsBeamRows::summary_columns(&o.summaries).to_variant());
+        out.push(&kill.to_variant());
+        out.push(&PackedInt64Array::from(o.reveals.as_slice()).to_variant());
+        out.push(&o.deferred.map_or(-1, |d| (start + d) as i64).to_variant());
+        out.push(&i64::from(o.hits).to_variant());
+        out.push(&o.damage.to_variant());
+        self.land_us += started.elapsed().as_secs_f64() * 1e6;
+        out
+    }
+
+    /// Far hit `index` of the last step, for GDScript to land itself when the batch cannot: `[mount, hull (Damageable), body,
+    /// point, surface volume, damage, shooter body]`; empty when none.
+    #[func]
+    fn far_hit(&self, index: i64) -> VarArray {
+        let mut out = VarArray::new();
+        if let Some(h) = usize::try_from(index).ok().and_then(|i| self.far_hits.get(i)) {
+            out.push(&i64::from(h.mount).to_variant());
+            out.push(&h.hull.to_variant());
+            out.push(&h.body.to_variant());
+            out.push(&h.point.to_variant());
+            out.push(&i64::from(h.volume).to_variant());
+            out.push(&h.damage.to_variant());
+            out.push(&h.shooter.to_variant());
+        }
+        out
+    }
+
+    /// The far fire's counts since the rows were made: `[ships' rolls, bolts rolled, rounds launched, hits, rounds shot down,
+    /// bolts shot down, rounds lost (target gone or missed), rounds in flight]` (readouts).
+    #[func]
+    fn far_readouts(&self) -> PackedInt64Array {
+        let t = &self.far.tally;
+        PackedInt64Array::from(
+            &[t.rolls, t.bolts, t.rounds, t.hits, t.rounds_down, t.bolts_down, t.rounds_lost, self.far.rounds.len() as i64][..],
+        )
+    }
+
+    /// Wall-clock microseconds of the last step's far rolls, and of its far landings so far (readouts, never gameplay).
+    #[func]
+    fn far_us(&self) -> f64 {
+        self.far_us
+    }
+
+    #[func]
+    fn far_land_us(&self) -> f64 {
+        self.land_us
+    }
+
+    /// Keeps every far hit the batch lands (tests), or stops and clears.
+    #[func]
+    fn set_far_log(&mut self, on: bool) {
+        self.log_on = on;
+        self.hit_log.clear();
+    }
+
+    /// The far hits landed since `set_far_log`: `[Damageables, bodies, shooters, damage, points removed, points]`.
+    #[func]
+    fn far_log(&self) -> VarArray {
+        let l = &self.hit_log;
+        let mut out = VarArray::new();
+        out.push(&PackedInt64Array::from(l.iter().map(|h| h.target).collect::<Vec<_>>().as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(l.iter().map(|h| h.body).collect::<Vec<_>>().as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(l.iter().map(|h| h.shooter).collect::<Vec<_>>().as_slice()).to_variant());
+        out.push(&PackedFloat64Array::from(l.iter().map(|h| h.damage).collect::<Vec<_>>().as_slice()).to_variant());
+        out.push(&PackedFloat64Array::from(l.iter().map(|h| h.applied).collect::<Vec<_>>().as_slice()).to_variant());
+        out.push(&PackedVector3Array::from(l.iter().map(|h| h.point).collect::<Vec<_>>().as_slice()).to_variant());
+        out
+    }
+
     /// One tick at sim time `now_s` (from `SimCore.step_now`, after the sync and before the bolts move): the interceptors' pulses
     /// meet what their last move touched, the batteries fire at what comes at their ships and friends, the missiles in flight
     /// are steered, then every gun aims and fires; each pulse and shot an owned bolt row (a missile's of the missile kind, a
@@ -373,6 +535,7 @@ impl ScsCapitalGuns {
             factions: self.factions,
             row_of: |id: i64| usize::try_from(guard.row_for_kernel(id)).ok(),
             rest: guard.frame_rest().velocity,
+            tier_targets: true,
         };
         let tick = guard.clock_tick();
         if live {
@@ -407,6 +570,53 @@ impl ScsCapitalGuns {
             );
         }
         self.kernel_us = kernel_started.elapsed().as_secs_f64() * 1e6;
+        // The far ships (M10-T85): live tier rows only; a hulk or a disabled ship fires nothing.
+        let far_started = std::time::Instant::now();
+        self.far_hits.clear();
+        self.far_shots.clear();
+        self.land_us = 0.0;
+        self.far_rows.clear();
+        self.far_rows.extend(self.owners.iter().map(|o| {
+            let r = guard.row_for_kernel(o.body);
+            match usize::try_from(r) {
+                Ok(i) if i < rows.flags.len() && rows.flags[i] & FLAG_TIER != 0 && rows.flags[i] & (FLAG_HULK | FLAG_DISABLED) == 0 => {
+                    i as i32
+                }
+                _ => -1,
+            }
+        }));
+        if live && (self.far_rows.iter().any(|&r| r >= 0) || !self.far.rounds.is_empty()) {
+            let far_world = GunWorld {
+                rows,
+                hull_rows: &guard.sweep_rows,
+                owner_rows: &self.far_rows,
+                hostile: &self.hostile,
+                factions: self.factions,
+                row_of: |id: i64| usize::try_from(guard.row_for_kernel(id)).ok(),
+                rest: guard.frame_rest().velocity,
+                tier_targets: true,
+            };
+            let clock = Clock {
+                now_s,
+                tick,
+                ticks_per_s: (1.0 / delta).round().max(1.0) as i64,
+                seed: guard.tier_seed,
+            };
+            cf::step(
+                &mut self.far,
+                &mut self.mounts,
+                &self.owners,
+                &self.owner_of,
+                &far_world,
+                &clock,
+                &self.warheads,
+                &mut self.scratch,
+                &mut self.tally,
+                &mut self.far_hits,
+                &mut self.far_shots,
+            );
+        }
+        self.far_us = far_started.elapsed().as_secs_f64() * 1e6;
         let faction_of = |mount: u32| {
             let o = self.owner_of[mount as usize] as usize;
             usize::try_from(self.owner_rows[o]).map_or(0, |r| rows.faction_ix[r])
@@ -507,7 +717,41 @@ impl ScsCapitalGuns {
         out.push(&PackedColorArray::from(met_colors.as_slice()).to_variant());
         out.push(&PackedByteArray::from(met_down.as_slice()).to_variant());
         out.push(&PackedByteArray::from(met_kinds.as_slice()).to_variant());
+        let far_mounts: Vec<i32> = self.far_shots.iter().map(|f| f.mount as i32).collect();
+        let far_targets: Vec<i64> = self.far_shots.iter().map(|f| f.target).collect();
+        out.push(&PackedInt32Array::from(far_mounts.as_slice()).to_variant());
+        out.push(&PackedInt64Array::from(far_targets.as_slice()).to_variant());
+        out.push(&(self.far_hits.len() as i64).to_variant());
         self.last_us = started.elapsed().as_secs_f64() * 1e6;
         out
+    }
+}
+
+impl ScsCapitalGuns {
+    // The far hits from `start` as the batch takes them: each one's target, shooter and their factions, the shooter's disguise,
+    // and the point in the hit body's frame (from its row, which a far body has instead of a node in play).
+    fn gather(&mut self, core: &Gd<ScsSimCore>, store: &Gd<ScsDamageStore>, start: usize) {
+        self.land_hits.clear();
+        let core = core.bind();
+        let store = store.bind();
+        let index_of: HashMap<&StringName, u32> = core.factions.iter().enumerate().map(|(i, f)| (f, i as u32)).collect();
+        for h in &self.far_hits[start..] {
+            let shooter_faction = usize::try_from(core.row_of_id(h.shooter))
+                .ok()
+                .and_then(|r| core.rows.faction_ix.get(r).copied())
+                .unwrap_or(u32::MAX);
+            self.land_hits.push(LandHit {
+                target: h.hull,
+                body: h.body,
+                shooter: h.shooter,
+                shooter_faction,
+                target_faction: store.target_factions.get(&h.hull).and_then(|f| index_of.get(f)).copied(),
+                disguise: core.disguised.get(&h.shooter).copied(),
+                damage: h.damage,
+                point: h.point,
+                volume: h.volume,
+                local: Some(h.local),
+            });
+        }
     }
 }

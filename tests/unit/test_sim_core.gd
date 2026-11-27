@@ -676,6 +676,12 @@ const CAPITAL_GUN_KERNEL_FILE: String = "res://native/src/capital_gun_kernels.rs
 const CAPITAL_GUN_KERNEL_USER: String = "res://native/src/capital_gun_rows.rs"
 const CAPITAL_GUN_KERNEL_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::brain_maths::",
 		"use crate::intercept_kernels::", "use crate::rows::", "use crate::surface::", "use crate::turret_kernels::", "use crate::v3::", "use crate::weapon_kernels::"]
+## The far capitals' fire (M10-T85): a far ship's mounts as seeded rolls, held to the kernels' rules; it imports the capital gun
+## kernel, the row tables, the surfaces' maths, the tier's seeded roll, the turret kernels' cycle and the vector maths only. The
+## shell (`capital_gun_rows.rs`) is what GDScript reaches.
+const CAPITAL_FAR_FIRE_FILE: String = "res://native/src/capital_far_fire.rs"
+const CAPITAL_FAR_FIRE_USE_ALLOWED: Array[String] = ["use godot::builtin::{Basis, Vector3};", "use crate::capital_gun_kernels::",
+		"use crate::rows::", "use crate::surface::", "use crate::tier_fire::roll;", "use crate::turret_kernels as tk;", "use crate::v3::"]
 ## The mines and their layers (M10-T15): a mine's triggers, touches, flights and the battle's laying, held to the kernels' rules;
 ## they import the row tables, the surfaces' maths and the vector maths (and each other). The shell (`mine_rows.rs`) is what
 ## GDScript reaches.
@@ -787,6 +793,10 @@ func test_the_kernels_hold_no_engine_type() -> void:
 	assert_true(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_USER).contains("use crate::capital_gun_kernels"),
 			"the shell reads the capital gun kernel")
 	assert_false(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_FILE).contains("static mut"), "no shared state in the capital gun kernel")
+	violations.append_array(_engine_free_violations(CAPITAL_FAR_FIRE_FILE, KERNEL_FORBIDDEN, CAPITAL_FAR_FIRE_USE_ALLOWED))
+	assert_true(FileAccess.get_file_as_string(CAPITAL_GUN_KERNEL_USER).contains("use crate::capital_far_fire::"),
+			"the shell reads the far fire's kernel")
+	assert_false(FileAccess.get_file_as_string(CAPITAL_FAR_FIRE_FILE).contains("static mut"), "no shared state in the far fire's kernel")
 	violations.append_array(_engine_free_violations(INTERCEPT_KERNEL_FILE, KERNEL_FORBIDDEN, INTERCEPT_KERNEL_USE_ALLOWED))
 	for path: String in CAPITAL_BRAIN_FILES:
 		violations.append_array(_engine_free_violations(path, KERNEL_FORBIDDEN, CAPITAL_BRAIN_USE_ALLOWED))

@@ -145,6 +145,7 @@ impl Run {
             factions: 3,
             row_of: |id: i64| rows.body_ids.iter().position(|&b| b == id),
             rest: Vector3::ZERO,
+            tier_targets: false,
         };
         let mut shots = Vec::new();
         let mut tally = Tally::default();
@@ -410,6 +411,7 @@ fn a_missile_turns_toward_its_target_and_leaves_the_list_once_its_bolt_is_gone()
         factions: 3,
         row_of: |id: i64| rows.body_ids.iter().position(|&b| b == id),
         rest: Vector3::ZERO,
+        tier_targets: false,
     };
     // A still target off to the side: PN alone turns a missile flying straight at the line's start, so move the target.
     let mut moving = rows.clone();

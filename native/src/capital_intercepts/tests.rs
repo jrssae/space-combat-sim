@@ -186,6 +186,7 @@ impl Sim {
             factions: N,
             row_of: |id: i64| rows.body_ids.iter().position(|&b| b == id),
             rest: Vector3::ZERO,
+            tier_targets: false,
         };
         let view = GuardView { friendly: &friendly, shooter_rows: &shooter_rows };
         let mut fired = Vec::new();

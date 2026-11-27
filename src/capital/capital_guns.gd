@@ -13,6 +13,9 @@ extends Node
 ## headed for its ship or a friendly capital or station (`capital_intercepts.rs`); this node shows each pulse's muzzle flash and
 ## the grid's battery sound pitched up, a spark where a pulse meets a shot, and spends a shot down that a node draws.
 ##
+## Far capitals (M10-T85): a ship beyond the tier's radius fires the same mounts as seeded rolls on its tier row, its hits
+## landed on the damage store by `far` (`FarCapitalFire`).
+##
 ## Console: provider `capital_guns` and command `gun` (`GunConsole`); provider `interceptors` and command `intercept`
 ## (`InterceptConsole`).
 
@@ -43,6 +46,8 @@ var shots_last: int = 0
 ## Pulses the batteries fired and shots they brought down (by `SHOT_KINDS`) since `reset_stats`.
 var pulses: int = 0
 var downed: PackedInt64Array = PackedInt64Array([0, 0, 0, 0])
+## The far ships' fire and its readouts (M10-T85).
+var far := FarCapitalFire.new()
 
 var _rows: Object = null
 var _ships: Array[CapitalShip] = []
@@ -287,11 +292,23 @@ func readouts() -> PackedInt64Array:
 	return _rows.readouts() if _rows != null else PackedInt64Array([0, 0, 0, 0, 0])
 
 
+## The far fire's counts since the rows were made (M10-T85): `[ships' rolls, bolts rolled, rounds launched, hits, rounds taken
+## by batteries, bolts taken, rounds lost, rounds in flight]`.
+func far_readouts() -> PackedInt64Array:
+	return _rows.far_readouts() if _rows != null else PackedInt64Array([0, 0, 0, 0, 0, 0, 0, 0])
+
+
+## The last tick's far rolls' cost, us (wall clock; a readout).
+func far_us() -> float:
+	return float(_rows.far_us()) if _rows != null else 0.0
+
+
 func reset_stats() -> void:
 	shots = 0
 	missiles_launched = 0
 	pulses = 0
 	downed = PackedInt64Array([0, 0, 0, 0])
+	far.reset_stats()
 
 
 ## One tick (from `SimCore.step_now`, after the station turrets and before the bolts move): the rows' step, then each
@@ -322,6 +339,8 @@ func step_now(sim: SimCore, now_s: float, delta: float) -> void:
 	if out.size() >= 14:
 		_show_pulses(out[5], out[6], out[7])
 		_show_meetings(sim, out[8], out[9], out[10], out[11], out[12], out[13])
+	if out.size() >= 17:
+		far.take(_rows, out, _owners)
 
 
 # Each pulse a battery fired: a blue-white flash at its muzzle and the battery's sound.
@@ -373,5 +392,7 @@ func _native() -> Object:
 		_rows = NativeLib.instantiate(NATIVE_CLASS)
 		if _rows != null:
 			_rows.attach_core(sim.core)
+			_rows.attach_store(DamageStore.store)
+			_rows.set_warheads(PackedFloat64Array([0.0, BlastTable.spec(&"missile").d0, BlastTable.spec(&"torpedo").d0]))
 			sim.capital_guns = self
 	return _rows

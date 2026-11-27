@@ -242,7 +242,8 @@ pub struct Missile {
 
 /// What a step reads beside the rows: the hull rows in the sweep's order, each owner's row (-1: not in the rows this tick),
 /// the hostility table by the core's faction indices (`factions` square), how to find a body's row, and the local frame's
-/// own velocity against its anchor (missiles hold their speed against the anchor).
+/// own velocity against its anchor (missiles hold their speed against the anchor), and whether a far (tier) row is a target
+/// too (M10-T85: a fight across the tier's edge; the far rolls).
 pub struct GunWorld<'a, F: Fn(i64) -> Option<usize>> {
     pub rows: &'a Rows,
     pub hull_rows: &'a [u32],
@@ -251,6 +252,7 @@ pub struct GunWorld<'a, F: Fn(i64) -> Option<usize>> {
     pub factions: usize,
     pub row_of: F,
     pub rest: Vector3,
+    pub tier_targets: bool,
 }
 
 /// Buffers a pick reuses from tick to tick, so a pick allocates nothing.
@@ -640,7 +642,7 @@ pub fn is_capital(rows: &Rows, j: usize) -> bool {
 }
 
 // A row's velocity as a lead reads it: a moving hull's own, the frame's rest for one with no body of its own.
-fn target_velocity<F: Fn(i64) -> Option<usize>>(world: &GunWorld<'_, F>, j: usize) -> Vector3 {
+pub(crate) fn target_velocity<F: Fn(i64) -> Option<usize>>(world: &GunWorld<'_, F>, j: usize) -> Vector3 {
     if world.rows.rigid[j] {
         world.rows.velocities[j]
     } else {
@@ -654,9 +656,14 @@ pub fn live_hull(rows: &Rows, j: usize) -> bool {
     flags & FLAG_HULL_ACTIVE != 0 && flags & FLAG_TIER == 0 && !rows.is_mine[j]
 }
 
+/// Whether row `j` is a hull a gun may take: one in play, or with `tier` also a far (tier) row (M10-T85).
+pub fn target_hull(rows: &Rows, j: usize, tier: bool) -> bool {
+    live_hull(rows, j) || (tier && rows.flags[j] & FLAG_TIER != 0 && !rows.is_mine[j])
+}
+
 // Where a mount's line of fire starts for the own-hull test: a turret's just over its base, a fixed gun's at its muzzle (its
 // bolt starts there, so the pod around its barrel never hides the target). `up` is the mount's axis in World.
-fn line_from(m: &Mount, pivot: Vector3, up: Vector3) -> Vector3 {
+pub(crate) fn line_from(m: &Mount, pivot: Vector3, up: Vector3) -> Vector3 {
     let lift = if m.fixed { m.barrel_m } else { LINE_LIFT_M };
     add(pivot, scale(up, lift as f32))
 }
@@ -677,7 +684,7 @@ pub fn own_hull_blocks<F: Fn(i64) -> Option<usize>>(world: &GunWorld<'_, F>, own
 // Whether mount `m` of the ship at row `r` can hold body `target`: a live hostile ship or capital its ship perceives as
 // hostile, within `reach` times its range and inside its cone.
 #[allow(clippy::too_many_arguments)]
-fn bears<F: Fn(i64) -> Option<usize>>(
+pub(crate) fn bears<F: Fn(i64) -> Option<usize>>(
     m: &Mount,
     owner: &Owner,
     world: &GunWorld<'_, F>,
@@ -703,7 +710,7 @@ fn takes<F: Fn(i64) -> Option<usize>>(
     reach: f64,
 ) -> bool {
     let rows = world.rows;
-    if j >= rows.positions.len() || !live_hull(rows, j) || rows.flags[j] & FLAG_SHELTERED != 0 || rows.is_static[j] {
+    if j >= rows.positions.len() || !target_hull(rows, j, world.tier_targets) || rows.flags[j] & FLAG_SHELTERED != 0 || rows.is_static[j] {
         return false;
     }
     let kind = rows.kinds[j];
@@ -757,7 +764,7 @@ fn rank(m: &Mount, rows: &Rows, j: usize) -> u8 {
 // for a nearer fighter. None: it keeps what it holds (or nothing) and looks again `PICK_EVERY` ticks later, `HIDDEN_WAIT`
 // when its own hull hid every candidate and it holds nothing.
 #[allow(clippy::too_many_arguments)]
-fn choose<F: Fn(i64) -> Option<usize>>(
+pub(crate) fn choose<F: Fn(i64) -> Option<usize>>(
     m: &mut Mount,
     owner: &Owner,
     world: &GunWorld<'_, F>,
@@ -864,7 +871,7 @@ fn visible_point<F: Fn(i64) -> Option<usize>>(
 }
 
 // The World point a gun aims at on row `j`: `aim_local` in its body frame.
-fn aim_point(rows: &Rows, j: usize, aim_local: Vector3) -> Vector3 {
+pub(crate) fn aim_point(rows: &Rows, j: usize, aim_local: Vector3) -> Vector3 {
     add(rows.positions[j], xform(&rows.bases[j], aim_local))
 }
 

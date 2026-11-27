@@ -7519,9 +7519,8 @@ src/capital/native_hostility.gd     the hostility table by the core's faction in
   engaged only with nothing live in reach; a ship's own bolt through its drum; the console), `test_capital_gun_threads`.
 - **Known gaps.** The `capital` brain (T16, §22.10) orders the anti-capital and dual mounts onto its target (the heavy ones at a
   subsystem when it names one, `set_order_at`) and turns the hull to bring its mounts to bear; mounts on a rotating piece would aim from the piece at rest; no muzzle flash or
-  sound per shot; the far tier's own fire (`tier_fire`, the stand-ins) stays until T45, and a real capital that is a tier row
-  (beyond `tier_radius_m`) fires nothing yet: its guns, beams and launchers would need the far capitals' group rolls
-  (`ScsWeaponRows`) fed from its own mounts before T45 drops the stand-ins; renegade capitals show the red X marks
+  sound per shot; the far tier's own fire (`tier_fire`, the stand-ins) stays until T45; a real capital that is a tier row
+  (beyond `tier_radius_m`) fires its guns and launchers as seeded rolls from these mounts (T85, §22.14); renegade capitals show the red X marks
   but not yet red engines (capitals are not on the livery shader).
 
 ### 22.8 Interceptors (D12.9; T13, Q81)
@@ -7924,3 +7923,40 @@ until T45 replaces it).
   `Main` sets the engine's catch-up from it (8 by default), and after a slow frame two ticks could pass between the script's
   steps while the tier rows flew both. The capital guns' and interceptors' seeded spread is hashed on sim-time ticks
   (`now_s / delta`), not the core's sync count, which also holds the ticks a scene ran before its clock started.
+
+### 22.14 Far capitals fire (T85, Q55, Q72, Q78)
+
+A `CapitalShip` beyond `tier_radius_m` is a tier row (§17.14) with no body in play; its native helm and brain still fly and think
+for it (T16). Its guns and launchers fire there as seeded rolls, its beams by their own kernel.
+
+- **Where.** `native/src/capital_far_fire.rs` (engine-free, under the guard) is stepped by `ScsCapitalGuns.step` after the near
+  mounts, over the same mounts: a ship whose row is a live tier row (not a hulk, not `FLAG_DISABLED`: no power, no fire, Q72/Q78)
+  rolls once a second, staggered by ship (`STAGGER_TICKS`), on the sim clock's ticks and `tier_seed` (fe249a2a).
+- **The model.** Each mount keeps or picks its target as near (`capital_gun_kernels::bears`/`choose`: the brain's order for the
+  anti-capital and dual mounts, rank by role, what the ship perceives, so a disguised renegade is passed by, Q55; its arc; its own
+  hull hiding the target). A fixed gun fires only with the target in its own cone (the helm's job). The shots are those its own
+  cycle gives since the last roll (`turret_kernels::next_ready`: bursts, spacing, its ship's rate of fire), never shots it was
+  already owed, so a ship crossing the tier's edge either way neither bursts nor pauses: the near step and the rolls share the
+  mounts' timers. Each bolt's line is thrown off its aim by a uniform cone (the weapon's spread), a Gaussian of half the gate's
+  allowance and the target's unforeseen manoeuvres over the flight (`FIGHTER_DODGE_MPS2`, `CAPITAL_DODGE_MPS2`), then met on the
+  target's surface (§22.6's volumes; the point names its section) or on 0.7 of a fighter's sphere. The aim is the brain's subsystem,
+  else where the line to the centre meets the hull, else its largest volume (an Omega's centre is its drum, a body of its own).
+  A launcher's salvo is rounds that arrive after their flight (`Round`), with the warhead's blast at its centre added to the hit
+  (`set_warheads`, from `BlastTable`): out there no blast row goes off. The target's batteries take a share of what comes at its
+  hull: `PD_SHARE` (0.88, fitted to two Omegas broadside in play) to the power of the shot's toughness, scaled by the batteries
+  still working; friendly fire and a disguised shooter's shots are not taken (Q81).
+- **Tier rows keep their surface.** A capital's tier row has `ROLE_SURFACE` (`tier_add`), so beams and the far rolls meet its
+  volumes and name a section; before, far beam hits met a sphere and fell to the per-hit GDScript path.
+- **Landing.** Far hits land on the damage store in one batch (`ScsCapitalGuns.land_far`, T75's `landing::land`, the point in the
+  body's frame from its row), with one `HitSummary` (cause `bolt`) a damaged ship a tick, the turrets' attacker memory and the
+  disguise given away by a hit; `FarCapitalFire` (GDScript) takes the batches as `CapitalBeams` does, and a far shooter's shot at
+  the player or its broadcast faction's side reveals it (`Transponder.note_shot_at`). Near guns take far rows as targets too
+  (`GunWorld.tier_targets`), so a fight across the tier's edge is fought from both ends.
+- **Readouts.** `ScsCapitalGuns.far_readouts`, `far_us`, `far_land_us`, `set_far_log`/`far_log`; provider `capital_guns` (`far_*`).
+- **Tests.** Rust `capital_far_fire::tests` (the line on a surface and a sphere, the cycle and its hits, the hand-over's timers, seeded,
+  the disguise, a ship out of the far rows, the brain's order, the batteries' share, a round's flight and warhead, a lost round);
+  GUT `test_capital_far_fire` (broadside far against in play, the disguise, a hulk, the hand-over), `test_capital_far_fire_threads`
+  (24 far Omegas, 1 against 6 threads byte for byte, the cost); `test_sim_core`'s guard holds the kernel.
+- **Known gaps.** Far interceptors take the far rolls' shots only; a far capital's batteries do not shoot near bolts in flight (a
+  near ship's shots crossing the edge are rare), and they guard their own hull, not friends. Far beams fire by their kernel, as in
+  play. The stand-ins' far rolls (`ScsWeaponRows`, `tier_fire`) stay until T45.

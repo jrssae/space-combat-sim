@@ -431,7 +431,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T82 | A | Babylon 5 at 11 miles long (Q75): the station scaled to **17 703 m** (from 8 000 m; x 2.213); the STL (`references/EA Babylon 5 Station.stl`) checked again at the new size with horizontal and vertical slice comparisons (`tools/refview` sections, T66's sweeps) per part, the 90 % rule; what scales with it and what keeps its size (bays, docks and doors sized for fighters and shuttles, the gate run, routes, cinematic shots, the tutorial's distances, far props) settled with the maintainer before building; the lighting (floods, running lights, bay lights, the interior layer) reviewed at the new size; tests, before/after sheets | - | Opus | not started |
 | T83 | G | Godot 4.8 evaluation (Q75): when 4.8 is released, list what it brings and what it would cost to move (texture streaming, contact shadows, `Trail3D`, multi-bounce ambient occlusion, and the rest), measured on a scratch copy on the maintainer's GPU (fps, draw calls, VRAM, the visual change); a report with a recommendation; no switch without the maintainer's OK (`scripts/setup_godot.sh` pins the version) | - | Opus | not started |
 | T84 | A | Hyperion follow-up (Q75): the conning tower's dome and forward dish taken from `references/EA Hyperion Class Heavy Cruiser.stl`, in plain medium grey metal (no mosaic, no seams); the conning tower's underside carries **two gun turrets** as that STL has them, replacing the two cylinders with badly placed turrets; the midship's vertically facing turrets removed (not in the model); the **beam weapons sit in the stubby side wings**, the mid-bow flank pods (Q77; a small recessed opening in each for the emitter), and the **nose antenna array holds no weapons** (maintainer 2026-11-24); loadout and hardpoints updated; a report explaining each remaining gun and weapon's place and capability (arc, range, damage, target kind); the 90 % rule and sections kept; look sheet; tests | T22 | Opus | not started |
-| T85 | D | Far capitals fire (found in T14's review): a real capital beyond the 10 km tier radius fires nothing, since the far group's rolls serve only the stand-ins; feed real capitals' mounts (guns, missiles, beams) into the low-attention tier's fire, native, 1 and 6 threads identical, parity kept, the disguise respected (Q55); before T45 removes the stand-ins | T14 | Opus | not started |
+| T85 | D | Far capitals fire (found in T14's review): a real capital beyond the 10 km tier radius fires nothing, since the far group's rolls serve only the stand-ins; feed real capitals' mounts (guns, missiles, beams) into the low-attention tier's fire, native, 1 and 6 threads identical, parity kept, the disguise respected (Q55); before T45 removes the stand-ins | T14 | Opus | in progress |
 | T86 | G | Babylon 5 Classic model review (maintainer 2026-11-24): the "Babylon 5 Classic" model offered for download by Chris Kuhn (artist/modeler) in https://www.facebook.com/100063622114904/posts/2433942860027157/ (the post needs a logged-in browser). The maintainer downloaded it to `references/Babylon5_Station_FBX/`: `Babylon5FBX.fbx` and its textures in `Textures/` (colour and specular maps per part: base assembly, chassis, Cobra bay, cylinder accessories, main cylinder, reactor, solar panels with a glass mask; `Babylon5_Station_FBX.zip` is the original download). Find its licence and terms (the post, any readme); compare it with `references/EA Babylon 5 Station.stl` and today's generator (silhouettes, per-part sections with `tools/refview`, detail the STL lacks, and what its textures show of the hull's paint and markings for our procedural textures); a short report with a recommendation: use it as a new reference in `references/` (never committed, never shipped, `DISCLAIMER.md`), as a second reference beside the STL, or not at all; nothing changes without the maintainer's OK; before T82 rebuilds the station at its new size | - | Opus | not started |
 | T87 | G | Our own Starfury gun sound (Q82): a synthesized match for `references/starfurybolt.wav` (log-mel similarity and envelope correlation >= 0.95, length within 5 %, then the maintainer's A/B (H)) as the Starfury's shot, its tail faded when the same ship fires again; raiders +3 semitones; a pitched-down, lengthened table for larger weapons proposed with samples first; tests | T13 | Opus | in progress |
 | T88 | A | Agamemnon-pattern skin on the existing hulls (Q98): the Hyperion, the Nova and the other capitals, then the stations, civilians, raiders and fighters as the maintainer orders, from the panel mosaic (and T74's pinned seams) to `styles/patch_skin.PatchSkin` in each hull's colours, paint layouts kept; before/after sheets for the maintainer, tests, VRAM unchanged. Supersedes T74's seam defaults for each hull it moves (a hull on the pattern has no seam lines to pin) | T68 | Opus | not started |
@@ -860,6 +860,60 @@ fly attack runs on capitals; B10 and B1 run and reported (Q77). Launch (carriers
   landing fixtures untouched.
 - **Open for the maintainer.** The squadron's abort counts losses from its peak strength, not only those to a capital; a far
   capital's guns and beams fire nothing yet (T85).
+
+### M10-T85 Far capitals fire (Q55, Q72, Q78, Q81)
+
+**Goal.** A real capital beyond `tier_radius_m` (a tier row, flown by its helm and brain since T16) fires its guns and launchers
+at about the rate and damage it would up close, native, 1 and 6 threads identical, the disguise and the hulk rules kept, its hits
+on T75's damage store; a ship crossing the tier's edge neither bursts nor pauses.
+
+- **Done (2026-11-26, awaiting the maintainer).** *Found first:* a far capital's **beams already fired** from its tier row (the beam
+  kernel reads tier rows since T12; T16's note was wrong), but on a far target's bounding sphere, so every far beam hit fell to the
+  per-hit GDScript path (24 far Omegas: 6.6 ms a tick of beam landing); its guns and launchers fired nothing. *Tier rows keep their
+  surface:* a capital's tier row is `ROLE_SURFACE` (`tier_add`), so beams and the far rolls meet its volumes and name a section; the
+  same fleet's beam landing is now about 55 us a tick, all native. *The far rolls* (`native/src/capital_far_fire.rs`, engine-free,
+  under the guard; stepped by `ScsCapitalGuns.step` after the near mounts, over the same mounts): a ship whose row is a live tier
+  row (not a hulk, not disabled: Q72/Q78) rolls once a second, staggered by ship, on the sim clock's ticks and the tier's seed. Each
+  mount keeps or picks its target exactly as near (`capital_gun_kernels::bears`/`choose`: the brain's order for the anti-capital and
+  dual mounts, rank by role, the perceived faction so a disguised renegade is passed by (Q55), its arc, its own hull); a fixed gun
+  only with the target in its own cone. Its shots are what its own cycle gives since the last roll (bursts, spacing, its ship's rate
+  of fire), never shots already owed, and a turret stays laid on its target, so the near step and the rolls share the mounts'
+  timers and aim: the hand-over is seamless both ways. Each bolt's line is thrown off by the weapon's spread (a cone), half the gate's
+  allowance and the target's manoeuvres over the flight (fighters 10 m/s^2, capitals 0.5), then met on the target's surface (its
+  section) or 0.7 of a fighter's sphere; the aim is the brain's subsystem, else where the centre line meets the hull, else its largest
+  volume (an Omega's centre is its drum, a body of its own). A salvo is rounds that arrive after their flight with the warhead's
+  blast centre added (`BlastTable` `missile` 20, `torpedo` 100; no blast row goes off out there); a fighter is reached with 0.8
+  falling off over 12 km. *Interceptors (natural, so in):* the target's batteries take each hostile shot at its hull with `PD_SHARE`
+  0.88 (fitted to two Omegas broadside in play: 980 of 1 113 bolts) to the power of its toughness (heavy 0.77, torpedo 0.68), scaled
+  by the batteries still working, missiles by the same rule (Q81, missiles first); friendly fire and a disguised shooter's shots are
+  not taken. *Landing:* one batch on the store a tick (`ScsCapitalGuns.land_far`, T75's `landing::land`, the point in the body's
+  frame from its row), one `HitSummary` (cause `bolt`) a damaged ship, the attacker memory, a disguise given away by a hit, a kill's
+  `destroyed`; `FarCapitalFire` takes the batches as `CapitalBeams` does, and a disguised far shooter's shot at the player or its
+  broadcast side reveals it (`Transponder.note_shot_at`). Near guns take far rows as targets too (`GunWorld.tier_targets`), so a
+  fight across the edge is fought from both ends. Provider `capital_guns` adds `far_hits`, `far_damage`, `far_rolls`, `far_taken`,
+  `far_us`, `far_land_us` (`info.md`); architecture §22.14 (and §22.7's gap).
+  *Measured (GUT, the main scene, 16x):* two Omegas broadside 2.4 km apart, beams held, 60 s: 1 935 hull points lost in play, 2 825
+  far (x1.46; far gun bolts land about 1.4 times as many: no slew, no blocked lines but the pick's); a ship's shots a second far
+  11.6, over the 3 s of a promotion 14.7, in play 10.4, far again 12.5. *Cost* (release library): 24 far Omegas broadside 2.4 km
+  apart firing: the rolls median 3 us a tick, mean 72, p99 373 (about 3 us a tick a capital); their landing (batch and GDScript) mean
+  11 us, p99 69. `bench_quick`: furball 400 ships, spread 400 (its time budget ran out before 500), battle 100, every count in
+  budget (`reports/perf/t85_after`).
+  *Parity:* every recording unchanged (`beam_landing`, `blast_landing`, `weapon_rows_battle`, the flight, helm, damage-rules and
+  turret recordings); no re-record. *Tests (staged copy):* Rust 428/428 (new: `capital_far_fire` 11), clippy clean in the
+  touched files; compile check 1 192 scripts clean; GUT_SLOW 205/205 over 32 files: `test_capital_far_fire` 4 and
+  `test_capital_far_fire_threads` 1 (new; 1 against 6 threads byte for byte: 4 653 bolts rolled, 344 far hits, 2 039 taken by
+  batteries), `test_sim_core` (the guard holds the new kernel), the capital guns, mounts, gun and interceptor threads, interceptors,
+  beams, hulks, brain and brain threads, far helm, far fleet, the tier's files, the beam and blast landing parity and threads, the
+  weapon rows battle, flight, helm and damage-rules parity, the stand-ins, turret kernel, core threads, damage store and the console
+  list.
+- **Open for the maintainer.** (1) In play, a capital's missiles at a capital did not strike in the duel: two Omegas broadside 2.4 km
+  apart launched 32 in 90 s, the batteries downed 2, and the target took no warhead (its hits were 49 bolts): far rounds strike (less
+  the batteries' share), so the far fight is a little harder than the near one until the near missiles are looked at (T14's
+  guidance). (2) Far beams stay on their own kernel (exact), and the far helm turns ships differently from the near one, so beams were
+  held in the comparison. (3) Far batteries take the far rolls' shots only: a near ship's real bolts crossing the edge at a far
+  capital are not shot, and the far batteries guard their own hull, not friends. (4) Two capitals spawned with overlapping hulls (an
+  Omega line rotated 90 degrees at 1.5 km spacing) fly differently from one scene to the next even with every gun held, on HEAD too
+  (T16's helm or the contacts); the thread test spaces them 3 km. (5) The stand-ins' far rolls (`ScsWeaponRows`) stay until T45.
 
 ### M10-T75 Beam hit landing in Rust (Q70, Q94)
 

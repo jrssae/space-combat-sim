@@ -95,6 +95,8 @@ mod beam_kernels;
 mod beam_rows;
 
 // M10-T14: the capital turrets and missile launchers, an engine-free kernel and its rows for GDScript.
+// M10-T85: far capitals fire as seeded rolls on the tier rows, stepped by the capital guns' shell.
+mod capital_far_fire;
 mod capital_gun_kernels;
 mod capital_gun_rows;
 // M10-T13: the capitals' interceptor batteries, an engine-free kernel stepped by the capital guns' shell.

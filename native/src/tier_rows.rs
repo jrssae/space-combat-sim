@@ -246,6 +246,8 @@ impl ScsSimCore {
         };
         if self.turrets.civilians.contains(&body_id) {
             self.tier.roles[at] = crate::rows::ROLE_CIVILIAN;  // a civilian stays one in the tier (M5-T16)
+        } else if kind == KIND_CAPITAL && self.surfaces.contains_key(&body_id) {
+            self.tier.roles[at] = crate::rows::ROLE_SURFACE; // its hull stays its surface, so far hits name a section (M10-T85)
         }
         self.tier_name_ids.push(0);
         handle
