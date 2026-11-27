@@ -917,11 +917,20 @@ on T75's damage store; a ship crossing the tier's edge neither bursts nor pauses
   0.95; far against near went from x3.95 (on the old fit, without wings) to x1.52 (the thread test's fleet: 152 far hits, 2 230 taken,
   1 and 6 threads still byte for byte). Rust 428/428; GUT `test_capital_missile_strikes` 3, `test_capital_far_fire` 4,
   `test_capital_far_fire_threads` 1, `test_sim_core` 21 (this copy: HEAD and the change).
+- **Follow-up (2026-11-27): a scene loaded again.** Two capitals spawned with their hulls overlapping (an Omega line rotated 90
+  degrees, 1.5 km apart) flew differently in a second scene of the same process, even with every gun held. Not a counter: Jolt,
+  in the root viewport's physics space that every `Main` shared. Jolt's results hang on the order its bodies were made in, and a
+  reused space makes them in another order, so the first tick's push apart differed by millimetres and the helms took it from
+  there (plain overlapping boxes show the same; a fresh `World3D` does not). Each `Main` now takes a `World3D` of its own on
+  entering the tree, beside `SimClock.reset` (`Main._fresh_world`, the old world's environments carried over), so the `scenario`
+  command's reload and a test's second run play as the first. `test_scene_repeat` (new): three overlapping Omegas in play and
+  20 km off, a first scene, a second with one thread and a third with six, the same rows every tick. Architecture §17.13. Tests (this copy:
+  HEAD and the change): `run_tests.sh --quick` passed (GUT 2 261, Python 398, Rust 428); GUT_SLOW 63/63 over 23 files (the new
+  test, the beam and blast landing, flight, helm, damage-rules and weapon-rows recordings, every thread test, the tier's outcomes
+  and hand-over, the far fire and the missile strikes): no recording moved.
 - **Open for the maintainer.** (1) Far beams stay on their own kernel (exact), and the far helm turns ships differently from the near one, so beams were
   held in the comparison. (2) Far batteries take the far rolls' shots only: a near ship's real bolts crossing the edge at a far
-  capital are not shot, and the far batteries guard their own hull, not friends. (3) Two capitals spawned with overlapping hulls (an
-  Omega line rotated 90 degrees at 1.5 km spacing) fly differently from one scene to the next even with every gun held, on HEAD too
-  (T16's helm or the contacts); the thread test spaces them 3 km. (4) The stand-ins' far rolls (`ScsWeaponRows`) stay until T45.
+  capital are not shot, and the far batteries guard their own hull, not friends. (3) The stand-ins' far rolls (`ScsWeaponRows`) stay until T45.
 
 ### M10-T75 Beam hit landing in Rust (Q70, Q94)
 

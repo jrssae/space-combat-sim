@@ -3332,6 +3332,10 @@ scripts/input_latency.gd         the input latency probe: a pad press on the fak
   tick for tick (rows, commands, hits, thinks; one thread and six) and the order of the results' application is the
   batch's order on the main thread, as before. The delay itself changes outcomes against today: the seeded references
   the Cycle log records are the delayed step's.
+- **A scene loaded again** (M10-T85 follow-up). Each `Main` starts at sim time 0 (`SimClock.reset`) and takes a `World3D` of its
+  own (`Main._fresh_world`, the old world's environments carried over): Jolt's results hang on the order its bodies were made in,
+  and a physics space reused by a second scene in the same process (the `scenario` command's reload, a test's second run) made
+  them in another order, so overlapping hulls pushed apart there came out differently. `test_scene_repeat` holds it.
 - **The catch-up cap.** `physics_max_steps_per_frame` (3; Godot's default is 8) caps the ticks a frame may run to catch
   up, so a tick slower than a frame lowers the simulation rate instead of the frame rate (refactor finding 15); applied
   live by `Main` beside the jitter fix. Measured at `battle` 500: 3 had the best 1 % low and p99 frame against 2 and 8
