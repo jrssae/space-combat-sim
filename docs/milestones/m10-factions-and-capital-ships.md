@@ -480,7 +480,7 @@ D12.12 (the player at a capital's helm) moved to M11 with T49 (`docs/roadmap.md`
 | T50 | F | EA Thunderbolt fighter, model only | T01, T62; the Starfury's generator and style | Fable | done |
 | T51 | F | EA Panama class, civilian cargo vessel | T19, T62 | Fable | done |
 | T52 | F | EA Explorer class | T19, T62 | Fable | not started |
-| T53 | F | EA Asimov liner (Q84): the hull, its rotating band, a shuttle bay for two and four docking collars, AI shuttles docking and a player test scenario; liners in free-flight traffic (Q85) | T19, T62 | Fable | in progress |
+| T53 | F | EA Asimov liner (Q84): the hull, its rotating band, a shuttle bay for two and four docking collars, AI shuttles docking and a player test scenario; liners in free-flight traffic (Q85) | T19, T62 | Fable | done |
 | T54 | F | not needed: reference removed by the maintainer, 2026-11-20 | - | - | not needed |
 | T55 | F | EA construction tender | T19, T62 | Fable | done |
 | T56 | F | EA mining transport (Q43): the mining variant of T53's generator | T53 | Fable | not started |
@@ -1987,7 +1987,7 @@ On top of it:
   699 s from the gate to the spot, 1 117 s for both shuttles' two trips (about 19 min; with the shipped waits about 23), 550 s
   from the spot through the gate; so a liner is in the system about 45 to 50 min (a stay under 23 min runs on until both
   trips are flown) and gate arrival to gate arrival runs about 55 to 62 min on average, longer than Q85's 35 to 50 (its
-  stay is counted at the spot, the gap from its leaving the spot, and the hull brakes and gathers way at 0.3 m/s2). Cost: `LinerTraffic`'s own tick 3 to 6 us with a liner and both shuttles in play (debug build),
+  stay is counted at the spot, the gap from its leaving the spot, and the hull brakes and gathers way at 0.3 m/s2). The maintainer kept this cadence as built (2026-11-26). Cost: `LinerTraffic`'s own tick 3 to 6 us with a liner and both shuttles in play (debug build),
   nothing with none; the three hulls fly on the native rows as any capital and pooled ship.
   **Verified on a staged copy (f34e64ad and T53's files only; the two commits since touch nothing under `src/` or these
   tests):** import and the compile check clean (1 177 scripts). GUT: `test_liner_schedule` 7 (the mean gap, the first visit,
