@@ -9,6 +9,11 @@ maintainer's choice: `m9` therefore carries M10's work in progress. `m10` is mer
 portability review and a parity and `libm` study (the controller's scratchpad, not in the repo; their findings are cited below
 by file and line, checked against `af5492c9`). The maintainer answered their questions on 2026-11-25 and 2026-11-26 (Q1 to Q8).
 
+**Windows session (2026-11-27, maintainer):** work continues on the RTX 3060 PC (Windows 11, Ryzen 9 5900X), which overrides
+D9.3 for this session: agents build and verify the Windows side locally, with CI as the later confirmation (T09, T10). Rust
+(MSVC), the VS Build Tools, Godot 4.7.2 and `gh` may be installed there; assets are generated on that PC for local use only (D9.1
+stands for CI). The Linux-side tasks (T04, T05, T13) wait for the Linux machine. Agents commit on `m9` and ask before every push.
+
 Read `CLAUDE.md` first, then only the files a task names. Grep the big docs (`docs/architecture.md`, the M4 and M10 milestone
 files); never read them whole. No agent machine runs Windows: everything Windows-only is proven on GitHub's Windows runner
 (D9.3), so those tasks say so. Each task is one PR-sized unit and names a recommended agent model.
