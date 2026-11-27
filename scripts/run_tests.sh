@@ -14,6 +14,9 @@
 # GUT_SLOW=1 (the default here, and CI) runs the slow GUT files too (M4-T36, Q58: the long seeded parity fights,
 # `tests/fixtures/slow_tests.gd`); GUT_SLOW=0 leaves them out. GUT_BALANCE=1 runs the balance tests (`tests/fixtures/balance_tests.gd`);
 # only --balance and --full set it. A focused GUT run without this script leaves both out.
+# GUT_EXCLUDE=<list file> (--quick only) leaves the GUT files that list names out of the quick tier. GUT_QUICK_TIMEOUT and
+# GODOT_IMPORT_TIMEOUT (seconds, 600 each by default) are the limits of the quick GUT run and of the import (the Windows runner
+# is slower).
 set -euo pipefail
 
 usage() {
@@ -75,8 +78,26 @@ if [[ "${mode}" == "quick" ]]; then
     for f in "${quick_files[@]}"; do
         [[ -f "${f#res://}" ]] || fail "tests/quick_suite.txt lists ${f}, which does not exist."
     done
+    # GUT_EXCLUDE=<list file> leaves the files it lists out of this tier (unset by default; the Windows CI job sets it to
+    # tests/windows_quick_exclude.txt, M9-T09).
+    if [[ -n "${GUT_EXCLUDE:-}" ]]; then
+        [[ -f "${GUT_EXCLUDE}" ]] || fail "GUT_EXCLUDE names ${GUT_EXCLUDE}, which does not exist."
+        mapfile -t excluded < <(test_paths "${GUT_EXCLUDE}")
+        for x in "${excluded[@]}"; do
+            [[ -f "${x#res://}" ]] || fail "${GUT_EXCLUDE} lists ${x}, which does not exist."
+        done
+        kept=()
+        for f in "${quick_files[@]}"; do
+            if [[ " ${excluded[*]} " == *" ${f} "* ]]; then
+                echo "run_tests.sh: ${f} left out (${GUT_EXCLUDE})."
+            else
+                kept+=("${f}")
+            fi
+        done
+        quick_files=("${kept[@]}")
+    fi
     gut_status=0
-    GUT_SLOW=0 GUT_BALANCE=0 run_gut "${REPORTS}/quick_gut.log" reports/gut_quick.xml 600 \
+    GUT_SLOW=0 GUT_BALANCE=0 run_gut "${REPORTS}/quick_gut.log" reports/gut_quick.xml "${GUT_QUICK_TIMEOUT:-600}" \
         "-gtest=$(IFS=,; echo "${quick_files[*]}")" || gut_status=$?
     (( gut_status == 0 )) || fail "GUT failed with exit code ${gut_status} (see reports/quick_gut.log)."
 

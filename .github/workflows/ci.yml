@@ -19,14 +19,20 @@ on:
       - "!docs/**"
       - "!**/*.md"
       - "info.md"
+  # The Windows full GUT run (job windows-full, M9 Q4) runs on these two only. GitHub runs a schedule on the default branch with
+  # its workflow, so until M9 merges to main the full run on m9 is the manual trigger.
+  workflow_dispatch:
+  schedule:
+    - cron: "23 2 * * *"
 
 permissions:
   contents: read
 
 # A newer push to the same branch replaces the run still going for an older commit: the newest commit carries every older
-# change, and a superseded run would only time out or fail on something already fixed (and send a failure email).
+# change, and a superseded run would only time out or fail on something already fixed (and send a failure email). A manual or
+# nightly run (the Windows full run) has a group of its own, so a push neither cancels it nor is cancelled by it.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}${{ (github.event_name == 'workflow_dispatch' || github.event_name == 'schedule') && '-full' || '' }}
   cancel-in-progress: true
 
 jobs:
@@ -61,13 +67,15 @@ jobs:
           echo "shards=$(python scripts/python_shards.py matrix | tr -d '\r')" >> "${GITHUB_OUTPUT}"
           echo "gut_shards=$(python scripts/gut_shards.py matrix | tr -d '\r')" >> "${GITHUB_OUTPUT}"
 
+      # The key names Linux, not runner.os (M9 D9.1): the assets are only ever built on Linux, and the Windows jobs take them
+      # as an artifact (job assets-artifact), so no other OS looks up or fills an asset cache of its own.
       - name: Restore generated assets
         id: assets
         uses: actions/cache@v4
         with:
           path: assets/generated
           lookup-only: true
-          key: assets-${{ runner.os }}-py3.12-${{ hashFiles('tools/procgen/**') }}
+          key: assets-Linux-py3.12-${{ hashFiles('tools/procgen/**') }}
 
       - name: Generate assets
         if: steps.assets.outputs.cache-hit != 'true'
@@ -101,7 +109,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: assets/generated
-          key: assets-${{ runner.os }}-py3.12-${{ hashFiles('tools/procgen/**') }}
+          key: assets-Linux-py3.12-${{ hashFiles('tools/procgen/**') }}
 
       # Only if the entry was evicted between the jobs.
       - name: Generate assets
@@ -179,7 +187,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: assets/generated
-          key: assets-${{ runner.os }}-py3.12-${{ hashFiles('tools/procgen/**') }}
+          key: assets-Linux-py3.12-${{ hashFiles('tools/procgen/**') }}
 
       # The assets job has filled the cache; this only runs if the entry was evicted since.
       - name: Generate assets
@@ -199,5 +207,304 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: reports-${{ matrix.shard }}
+          path: reports/
+          if-no-files-found: ignore
+
+  # The Windows jobs take the generated assets from here as an artifact (M9 D9.1: the generator never runs on Windows). A job
+  # of its own, so the Linux jobs above still start the moment the assets job has filled the cache; on a hit (the usual case)
+  # it restores the entry the assets job looked up.
+  assets-artifact:
+    name: generated assets for Windows
+    needs: assets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Restore generated assets
+        id: assets
+        uses: actions/cache/restore@v4
+        with:
+          path: assets/generated
+          key: assets-Linux-py3.12-${{ hashFiles('tools/procgen/**') }}
+
+      # Only if the entry was evicted since (or the assets job could not save it).
+      - name: Set up Python
+        if: steps.assets.outputs.cache-hit != 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate assets
+        if: steps.assets.outputs.cache-hit != 'true'
+        run: |
+          python -m pip install numpy
+          scripts/gen_assets.sh
+
+      - name: Upload generated assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: generated-assets
+          path: assets/generated/
+          if-no-files-found: error
+          retention-days: 3
+
+  # Windows on every push (M9-T09, Q4): the quick tier (the native DLL built with MSVC and its Rust tests, the import, the
+  # compile check, the quick Python modules, the quick GUT files, two console smokes), then the release zip (Q3) and its smoke.
+  # Git Bash runs every step, so the scripts are the Linux ones (M9-T06); there is no lock to share on a runner (SCS_NO_LOCK).
+  windows:
+    name: windows (quick tier, release zip)
+    needs: assets-artifact
+    runs-on: windows-2025
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+    env:
+      SCS_NO_LOCK: "1"
+    steps:
+      # Cargo's and Godot's deep build paths; set before the checkout so git uses it too.
+      - name: Allow long paths in git
+        run: git config --global core.longpaths true
+
+      # Real-time scanning of every file the import and cargo write is the usual cause of a slow Windows runner; best effort.
+      - name: Keep Defender off the build folders
+        shell: pwsh
+        run: |
+          try {
+            Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, "$env:USERPROFILE\.cargo", "$env:USERPROFILE\.rustup" -ErrorAction Stop
+          } catch {
+            Write-Host "Defender exclusions not set: $_"
+          }
+
+      - name: Check out
+        uses: actions/checkout@v4
+
+      # Python 3.11 or newer (the generator's max_tasks_per_child). The runner may have no python3 that works; the scripts
+      # fall back to `python` (find_python, scripts/lib_platform.sh).
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install numpy
+
+      # The pinned version lives in scripts/setup_godot.sh only; the cache keys follow it.
+      - name: Read pinned Godot version
+        id: godot
+        run: |
+          version="$(sed -n 's/^GODOT_VERSION="\(.*\)"$/\1/p' scripts/setup_godot.sh)"
+          if [[ -z "${version}" ]]; then
+            echo "Could not read GODOT_VERSION from scripts/setup_godot.sh" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      # Only the two executables: build_release.sh later writes a self-contained editor_data/ (with a second copy of the
+      # templates) into .tools/godot, which is not worth caching.
+      - name: Cache Godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            .tools/godot/godot.exe
+            .tools/godot/godot_console.exe
+          key: godot-${{ runner.os }}-${{ steps.godot.outputs.version }}
+
+      - name: Install Godot
+        run: scripts/setup_godot.sh
+
+      # The four Windows templates from the 1.28 GB archive (scripts/setup_export_templates.sh).
+      - name: Cache export templates
+        uses: actions/cache@v4
+        with:
+          path: .tools/godot/templates
+          key: godot-templates-${{ runner.os }}-${{ steps.godot.outputs.version }}
+
+      - name: Install export templates
+        run: scripts/setup_export_templates.sh
+
+      # MSVC (x86_64-pc-windows-msvc, Q2) comes with the runner's Visual Studio; rustup installs the version
+      # native/rust-toolchain.toml pins. native/.cargo/config.toml links the C runtime statically.
+      - name: Set up Rust
+        working-directory: native
+        run: |
+          command -v rustup > /dev/null || export PATH="${HOME}/.cargo/bin:${PATH}"
+          channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+          rustup toolchain install "${channel}" --profile minimal
+          rustc -vV
+          rustc -vV | tr -d '\r' | grep -qx 'host: x86_64-pc-windows-msvc'
+
+      - name: Cache native build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .tools/native-target
+          key: native-${{ runner.os }}-${{ hashFiles('native/Cargo.lock', 'native/rust-toolchain.toml') }}
+
+      - name: Build native library
+        run: time scripts/build_native.sh
+
+      - name: Download generated assets
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-assets
+          path: assets/generated
+
+      # The two parity files that fail on Windows until libm (M9-T04) and their Windows mode (M9-T05) are left out
+      # (tests/windows_quick_exclude.txt); the full run below still runs them. The Rust tests here pick up maths_golden once
+      # T04 adds it. A first import took about 8 minutes on a desktop, so the limits are wider than Linux's 600 s.
+      - name: Quick tier
+        run: scripts/run_tests.sh --quick
+        env:
+          GUT_EXCLUDE: tests/windows_quick_exclude.txt
+          GODOT_IMPORT_TIMEOUT: "1800"
+          GUT_QUICK_TIMEOUT: "1500"
+
+      # The preset reads the icon at export time. The assets artifact has it; building the one item covers an artifact made
+      # before app_icon existed.
+      - name: Build the release zip
+        run: |
+          if [[ ! -f assets/generated/app_icon/icon.ico ]]; then
+            python -m tools.procgen build app_icon
+          fi
+          time scripts/build_release.sh --no-gen --no-smoke
+
+      # The smoke runs what a player unzips, not the export folder, and the console wrapper, since the game exe prints nothing
+      # to a pipe. Windows' own bsdtar reads the zip (Git Bash may have no unzip).
+      - name: Smoke the release zip
+        run: |
+          shopt -s nullglob
+          zips=(build/windows/space-combat-sim-*-windows-x86_64.zip)
+          (( ${#zips[@]} == 1 )) || { echo "Expected one release zip, found ${#zips[@]}" >&2; exit 1; }
+          dest="$(cygpath -u "${RUNNER_TEMP}")/release"
+          rm -rf "${dest}"
+          mkdir -p "${dest}"
+          "$(cygpath -u "${SYSTEMROOT}")/System32/tar.exe" -xf "$(cygpath -m "${zips[0]}")" -C "$(cygpath -m "${dest}")"
+          ls -la "${dest}"
+          scripts/release_smoke.sh "${dest}/space-combat-sim.console.exe"
+
+      - name: Upload the release zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: build/windows/space-combat-sim-*-windows-x86_64.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-windows
+          path: reports/
+          if-no-files-found: ignore
+
+  # The whole GUT suite on Windows with the slow files (Q4), sharded like the Linux test job (scripts/gut_shards.py), on the
+  # manual trigger and the nightly schedule only. Nothing is left out: until M9-T04 and T05 land, some parity files are expected
+  # to fail here (which of the slow ones is not known yet).
+  windows-full:
+    name: windows full run (GUT shard ${{ matrix.shard }} of ${{ strategy.job-total }})
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    needs: [assets, assets-artifact]
+    runs-on: windows-2025
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.assets.outputs.gut_shards) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      SCS_NO_LOCK: "1"
+    steps:
+      - name: Allow long paths in git
+        run: git config --global core.longpaths true
+
+      - name: Keep Defender off the build folders
+        shell: pwsh
+        run: |
+          try {
+            Add-MpPreference -ExclusionPath $env:GITHUB_WORKSPACE, "$env:USERPROFILE\.cargo", "$env:USERPROFILE\.rustup" -ErrorAction Stop
+          } catch {
+            Write-Host "Defender exclusions not set: $_"
+          }
+
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Python dependencies
+        run: python -m pip install numpy
+
+      - name: Read pinned Godot version
+        id: godot
+        run: |
+          version="$(sed -n 's/^GODOT_VERSION="\(.*\)"$/\1/p' scripts/setup_godot.sh)"
+          if [[ -z "${version}" ]]; then
+            echo "Could not read GODOT_VERSION from scripts/setup_godot.sh" >&2
+            exit 1
+          fi
+          echo "version=${version}" >> "${GITHUB_OUTPUT}"
+
+      - name: Cache Godot
+        uses: actions/cache@v4
+        with:
+          path: |
+            .tools/godot/godot.exe
+            .tools/godot/godot_console.exe
+          key: godot-${{ runner.os }}-${{ steps.godot.outputs.version }}
+
+      - name: Install Godot
+        run: scripts/setup_godot.sh
+
+      - name: Set up Rust
+        working-directory: native
+        run: |
+          command -v rustup > /dev/null || export PATH="${HOME}/.cargo/bin:${PATH}"
+          channel="$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)"
+          rustup toolchain install "${channel}" --profile minimal
+          rustc -vV
+          rustc -vV | tr -d '\r' | grep -qx 'host: x86_64-pc-windows-msvc'
+
+      - name: Cache native build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            .tools/native-target
+          key: native-${{ runner.os }}-${{ hashFiles('native/Cargo.lock', 'native/rust-toolchain.toml') }}
+
+      - name: Build native library
+        run: time scripts/build_native.sh
+
+      - name: Download generated assets
+        uses: actions/download-artifact@v4
+        with:
+          name: generated-assets
+          path: assets/generated
+
+      - name: Run tests
+        run: scripts/run_tests.sh
+        env:
+          PYTHON_TESTS: "0"
+          GUT_SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          GUT_SLOW: "1"
+          GODOT_IMPORT_TIMEOUT: "1800"
+
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: reports-windows-full-${{ matrix.shard }}
           path: reports/
           if-no-files-found: ignore

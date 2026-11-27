@@ -1,0 +1,10 @@
+# GUT files the Windows CI job's quick tier leaves out (M9-T09; scripts/run_tests.sh --quick with GUT_EXCLUDE set to this file).
+# Each compares against a recording in tests/fixtures/parity/ bit for bit, and fails on Windows because maths differ in the last
+# bit from Linux (the milestone's Design table, docs/milestones/m9-windows-build.md). Both stay bit-exact on Linux, unchanged.
+# Only the files that failed in a quick run on Windows are here (2026-11-27, the RTX 3060 PC: every other recorded file in the
+# quick tier passed bit for bit). Remove a line once its file passes on Windows. The Windows full run (GUT_SLOW=1) leaves
+# nothing out; which of its slow parity files fail there is not known yet.
+# Pure native, exact once the kernels use libm (M9-T04): the avoidance filter and the dead-centre ties against GDScript
+res://tests/unit/test_pilot_kernels.gd
+# Jolt in the run, gets its Windows mode in M9-T05: test_the_battle_flies_as_the_old_paths_did
+res://tests/unit/test_core_state.gd

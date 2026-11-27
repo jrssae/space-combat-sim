@@ -58,7 +58,7 @@ build_native_or_fail() {
 # until it has run). A current cache takes about 3 s. <log> names where the output goes.
 godot_import() {
     echo "== Godot import"
-    run_logged "$1" "${GODOT_WRITE[@]}" timeout 600 "${GODOT}" --headless --path . --import \
+    run_logged "$1" "${GODOT_WRITE[@]}" timeout "${GODOT_IMPORT_TIMEOUT:-600}" "${GODOT}" --headless --path . --import \
         || fail "Godot import failed (see $1)."
     if grep -E "${SCRIPT_ERRORS}" "$1"; then
         fail "Import reported script errors (see $1)."
