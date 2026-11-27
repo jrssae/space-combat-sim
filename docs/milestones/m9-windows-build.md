@@ -2,10 +2,9 @@
 
 > "A second platform." (`docs/roadmap.md`)
 
-**Status:** **planned** (2026-11-26). Every task is `not started`. Branch `m9` was cut from `m10` at `af5492c9` (Q7), the
-maintainer's choice: `m9` therefore carries M10's work in progress. `m10` is merged into `m9` as it moves, `m9` is merged into
-`m10` once after T04 (libm in the kernels) so M10's new native code and recordings follow the same maths, and **M9 merges to
-`main` only after M10 is accepted and merged** (never before it). Planned from two read-only reviews of `af5492c9`: a Windows
+**Status:** **in progress** (2026-11-27). Branch `m9` was first cut from `m10` at `af5492c9`; on 2026-11-27 the maintainer
+rebased it onto `main` (`02aeec99`, M8 accepted) and dropped M10's work (Q7, revised): M9's purpose is a Windows build of `main`,
+and M10's changes are out of scope. M9 merges to `main` when accepted; `m10` picks up M9 from `main` afterwards. Planned from two read-only reviews of `af5492c9`: a Windows
 portability review and a parity and `libm` study (the controller's scratchpad, not in the repo; their findings are cited below
 by file and line, checked against `af5492c9`). The maintainer answered their questions on 2026-11-25 and 2026-11-26 (Q1 to Q8).
 
@@ -40,7 +39,7 @@ the native maths moves to the pure-Rust `libm` crate, and the tests that also de
 | Q4 | How much runs on Windows CI per push | All six GUT shards with `GUT_SLOW=1`, or a subset with the full run less often | Maintainer: **every push** runs Python, Rust, the import, the fast GUT files, the Windows export and a smoke run; **the full GUT run** (`GUT_SLOW=1`) runs on the milestone branch on manual trigger (`workflow_dispatch`) or nightly. Linux CI unchanged |
 | Q5 | Renderer policy | Pin Vulkan, or allow Godot's D3D12 fallback | Maintainer: **Forward+ on Vulkan by default**; the D3D12 fallback stays allowed but is never silent: `state render` and the log name the driver in use |
 | Q6 | The (H) play-test machine | | Maintainer: **another PC with an NVIDIA RTX 3060** (not the RX 6950 XT reference machine); results are labelled with that machine; the (H) checks are the tutorial with the gamepad and with the keyboard |
-| Q7 | Base branch | `m9` from `main` once M10 merges | Maintainer: **`m9` from `m10`** (`af5492c9`), with the consequence in the status line |
+| Q7 | Base branch | `m9` from `main` once M10 merges | Maintainer: **`m9` from `m10`** (`af5492c9`). **Revised 2026-11-27: `m9` rebased onto `main` (`02aeec99`), M10's work dropped; see the status line** |
 | Q8 | Where the plan is committed | | Maintainer: on `m9`, not pushed |
 
 ## Decisions
@@ -151,8 +150,10 @@ Only a Windows machine settles these; T10 (confirm on the runner) or T12 (the pl
   (`native/src/threads.rs:130-158`) would show in the smoke.
 - **Nightly runs use `main`'s workflow and code:** GitHub schedules run on the default branch, so until M9 merges the full run on
   `m9` is the manual trigger.
-- **M10 moves underneath:** new kernels on `m10` written with std trig fail T04's guard at the next merge, and fixtures
-  re-recorded on `m10` collide with T04's re-record; hence the merge of `m9` into `m10` after T04 (status line).
+- **M10 after M9:** new kernels on `m10` written with std trig will fail T04's guard once `m10` takes M9 from `main`, and fixtures
+  re-recorded on `m10` collide with T04's re-record; `m10` resolves both when it merges `main` after M9.
+- **The plan's counts were taken on `af5492c9` (M10):** T04's call-site list and the Design table name M10-only files
+  (`capital_helm_parity`, `beam_landing_parity`, the capital, beam and mine kernels). T04 and T05 recount them on `main` first.
 
 ## Play-test results
 
@@ -170,7 +171,7 @@ None yet. Results from the RTX 3060 PC are labelled with that machine (Q6).
   Linux.
 - **Native changes** keep the parity recordings green on Linux; T04's re-record is the only one, with its README section. No
   GDScript fallback, no switch back to the C runtime's maths.
-- **Merges (Q7).** `m10` into `m9` as it moves, each merge with the parity tests run; `m9` into `m10` once after T04.
+- **Merges (Q7, revised).** `m9` is based on `main`; no `m10` merges. M9 merges to `main` once accepted.
 - **Models.** Sonnet for mechanical script and doc work; Opus for the `libm` and parity work (T04, T05), the CI job and the
   Windows diagnosis. High effort, never max.
 - **One working copy** on branch `m9` in its worktree (`/media/bonnet/Code/space-combat-sim-m9`), no task branches; locks as
@@ -380,6 +381,5 @@ None yet. Results from the RTX 3060 PC are labelled with that machine (Q6).
 ### M9-T13 Close-out
 
 - **Steps:** the standard suite on Linux once (AC4) and the Linux release built and smoked; the roadmap row as built; this file's
-  status line and every row; acceptance asked of the maintainer; then, per Q7, `m9` waits for M10's merge to `main` and merges
-  after it.
+  status line and every row; acceptance asked of the maintainer; then, per Q7 (revised), `m9` merges to `main`.
 - **Done when:** AC4; the maintainer accepts.
